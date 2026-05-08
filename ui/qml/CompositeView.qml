@@ -1,4 +1,3 @@
-import AviQtl 1.0
 import QtQuick
 
 // CompositeViewはSceneRendererを内包するコンテナ。
@@ -11,6 +10,7 @@ Item {
     property int currentFrame: 0
     property int projectWidth: 1920
     property int projectHeight: 1080
+    property var layerStates: ({})
 
     width: projectWidth
     height: projectHeight

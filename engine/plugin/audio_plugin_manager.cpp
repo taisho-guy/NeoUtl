@@ -314,9 +314,20 @@ class CarlaHostedPlugin final : public IAudioPlugin {
 };
 
 auto discoverySearchPaths() -> const QStringList & {
-    static const QStringList paths = {
+    static QStringList paths = {
         "/usr/lib/carla/carla-discovery-native", "/usr/local/lib/carla/carla-discovery-native", "/usr/lib64/carla/carla-discovery-native", "/usr/bin/carla-discovery-native", "/usr/local/bin/carla-discovery-native",
     };
+#if defined(__APPLE__) && !defined(Q_OS_IOS)
+    // macOS App Bundle 内の検索パスを追加
+    static bool appended = false;
+    if (!appended) {
+        QString appDir = QCoreApplication::applicationDirPath();
+        if (!paths.contains(appDir)) {
+            paths.prepend(appDir);
+        }
+        appended = true;
+    }
+#endif
     return paths;
 }
 

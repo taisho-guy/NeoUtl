@@ -3,6 +3,7 @@
 #include <filament/Viewport.h>
 
 #if defined(__APPLE__)
+#include <QtGui/qpa/qplatformwindow_p.h>
 #include <TargetConditionals.h>
 #endif
 
@@ -30,20 +31,32 @@ void FilamentCanvas::setCurrentFrame(int frame) {
 }
 
 void FilamentCanvas::handleWindowChanged(QQuickWindow *win) {
+    if (m_window) {
+        disconnect(m_beforeRenderingConnection);
+        disconnect(m_sceneGraphInvalidatedConnection);
+        m_beforeRenderingConnection = {};
+        m_sceneGraphInvalidatedConnection = {};
+    }
+
+    m_window = win;
     if (win) {
-        connect(win, &QQuickWindow::beforeRendering, this, &FilamentCanvas::renderFrame, Qt::DirectConnection);
+        m_beforeRenderingConnection = connect(win, &QQuickWindow::beforeRendering, this, &FilamentCanvas::renderFrame, Qt::DirectConnection);
+        m_sceneGraphInvalidatedConnection = connect(win, &QQuickWindow::sceneGraphInvalidated, this, &FilamentCanvas::destroyFilament, Qt::DirectConnection);
         win->update();
-        initFilament(win);
     } else {
         destroyFilament();
     }
 }
 
-void FilamentCanvas::initFilament(QQuickWindow *win) {
+void FilamentCanvas::initFilament() {
     if (m_engine)
         return;
-    void *nativeWindow = reinterpret_cast<void *>(win->winId());
+    if (!m_window)
+        return;
+    void *nativeWindow = reinterpret_cast<void *>(m_window->winId());
 #if defined(__APPLE__) && TARGET_OS_OSX
+    if (auto *cocoaWindow = m_window->nativeInterface<QNativeInterface::Private::QCocoaWindow>())
+        nativeWindow = cocoaWindow->contentLayer();
     m_engine = filament::Engine::create(filament::Engine::Backend::METAL);
 #else
     m_engine = filament::Engine::create(filament::Engine::Backend::VULKAN);
@@ -99,6 +112,7 @@ void FilamentCanvas::updateViewport(int w, int h) {
 }
 
 void FilamentCanvas::renderFrame() {
+    initFilament();
     if (!m_engine || !m_renderer || !m_swapChain || !m_view)
         return;
     if (m_renderer->beginFrame(m_swapChain)) {

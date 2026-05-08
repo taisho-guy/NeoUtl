@@ -1,4 +1,4 @@
-import AviQtl 1.0
+import AviQtl.Rendering 1.0
 import QtQuick
 
 // SceneRendererはFilamentCanvasの薄いラッパー。
