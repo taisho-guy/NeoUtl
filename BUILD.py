@@ -184,7 +184,7 @@ class PlatformBuilder:
         plugins_src = self.config.source_dir / "plugins"
         if plugins_src.exists() and any(plugins_src.iterdir()):
             shutil.copytree(plugins_src, self.config.output_dir / "plugins", dirs_exist_ok=True)
-        i18n_dest = self.config.output_dir / "i18n"
+        i18n_dest = asset_dest / "i18n"
         i18n_dest.mkdir(parents=True, exist_ok=True)
         for qm in self.config.work_dir.rglob("*.qm"):
             if "CMakeFiles" not in qm.parts:
