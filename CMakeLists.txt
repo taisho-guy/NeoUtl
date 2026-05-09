@@ -55,7 +55,7 @@ pkg_check_modules(FFMPEG IMPORTED_TARGET REQUIRED libavcodec libavformat libavut
 if(WIN32)
     # BUILD.py が生成するパスを優先
     if(NOT CARLA_SDK_DIR)
-        set(CARLA_SDK_DIR "${CMAKE_SOURCE_DIR}/carla-sdk")
+        set(CARLA_SDK_DIR "${CMAKE_SOURCE_DIR}/vendor/carla")
     endif()
 
     # Windowsでは手動指定を優先し、なければpkg-configを試す

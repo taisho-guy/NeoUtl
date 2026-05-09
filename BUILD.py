@@ -140,10 +140,14 @@ class PlatformBuilder:
         return "AviQtl-Archive"
 
     def create_zip(self, archive_name: str):
+        # Windows の場合、既存の zip があるとエラーになる場合があるため削除
+        zip_file = self.config.dist_dir / (archive_name + ".zip")
+        if zip_file.exists():
+            zip_file.unlink()
         shutil.make_archive(str(self.config.dist_dir / archive_name), "zip", root_dir=self.config.output_dir)
 
     def setup_carla_sdk(self, is_windows: bool = False):
-        sdk_dir = self.config.source_dir / "carla-sdk"
+        sdk_dir = self.config.source_dir / "vendor" / "carla"
         inc_dir = sdk_dir / "include"
         lib_dir = sdk_dir / "lib"
 
@@ -161,13 +165,53 @@ class PlatformBuilder:
             self.logger.log("Carla Windows バイナリをダウンロード中...")
             lib_dir.mkdir(parents=True, exist_ok=True)
             version = "2.6.0"
-            carla_zip_url = f"https://github.com/falkTX/Carla/releases/download/v{version}/Carla_{version}-win64.zip"
-            zip_path = sdk_dir / "carla.zip"
-            urllib.request.urlretrieve(carla_zip_url, zip_path)
-            shutil.unpack_archive(zip_path, sdk_dir)
+            url = f"https://github.com/falkTX/Carla/releases/download/v{version}/Carla_{version}-win64.zip"
+            self.download_and_extract(url, sdk_dir)
             for lib_file in sdk_dir.rglob("*.dll"):
                 shutil.move(str(lib_file), lib_dir / lib_file.name)
-            zip_path.unlink()
+
+    def setup_filament_sdk(self, platform_suffix: str, lib_arch: str):
+        filament_dir = self.config.source_dir / "vendor" / "filament"
+        if (filament_dir / "include" / "filament" / "Engine.h").exists():
+            return
+
+        self.logger.log(f"Filament バイナリ ({platform_suffix}) を取得中...")
+        version = "1.51.0"
+        ext = "zip" if "windows" in platform_suffix else "tgz"
+        url = f"https://github.com/google/filament/releases/download/v{version}/filament-v{version}-{platform_suffix}.{ext}"
+        
+        filament_dir.mkdir(parents=True, exist_ok=True)
+        self.download_and_extract(url, filament_dir)
+
+        # CMakeLists.txt の期待する構造 (lib/x86_64 or lib/arm64) に合わせる
+        src_lib = filament_dir / "lib"
+        dest_lib = filament_dir / "lib" / lib_arch
+        
+        if src_lib.exists() and not dest_lib.exists():
+            temp_lib = filament_dir / "_lib_tmp"
+            shutil.move(str(src_lib), str(temp_lib))
+            dest_lib.mkdir(parents=True, exist_ok=True)
+            for item in temp_lib.iterdir():
+                shutil.move(str(item), str(dest_lib / item.name))
+            shutil.rmtree(temp_lib)
+
+    def download_and_extract(self, url: str, dest_dir: Path):
+        tmp_file = dest_dir / "download.tmp"
+        try:
+            self.logger.log(f"  Download: {url}")
+            urllib.request.urlretrieve(url, tmp_file)
+            self.logger.log(f"  Extracting to {dest_dir}...")
+            
+            # .tgz (tar.gz) の場合は shutil.unpack_archive が自動判別するが、
+            # 環境によって .tgz を認識しない場合があるためフォーマットを明示
+            fmt = None
+            if url.endswith(".tgz"):
+                fmt = "gztar"
+            
+            shutil.unpack_archive(str(tmp_file), str(dest_dir), format=fmt)
+        finally:
+            if tmp_file.exists():
+                tmp_file.unlink()
 
     def copy_assets(self, asset_dest: Path):
         for d in ["effects", "objects"]:
@@ -318,8 +362,8 @@ class Msys2Builder(PlatformBuilder):
     def get_cmake_config_cmd(self) -> List[str]:
         cmd = super().get_cmake_config_cmd()
         cmd.append("-DCMAKE_BUILD_TYPE=Release")
-        if (self.config.source_dir / "carla-sdk").exists():
-            cmd.append(f"-DCARLA_SDK_DIR={self.config.source_dir / 'carla-sdk'}")
+        if (self.config.source_dir / "vendor" / "carla").exists():
+            cmd.append(f"-DCARLA_SDK_DIR={self.config.source_dir / 'vendor' / 'carla'}")
         cmd.append(str(self.config.source_dir))
         return cmd
 

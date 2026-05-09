@@ -3,9 +3,9 @@
 #include <filament/Viewport.h>
 
 #if defined(__APPLE__)
+#include <QtGui/qpa/qplatformwindow_p.h>
 #include <QuartzCore/CAMetalLayer.h>
 #include <QuartzCore/CATransaction.h>
-#include <QtGui/qpa/qplatformwindow_p.h>
 #include <TargetConditionals.h>
 #endif
 

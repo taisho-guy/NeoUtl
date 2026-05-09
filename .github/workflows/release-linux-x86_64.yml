@@ -2,8 +2,6 @@ name: Build and Release Linux (x86_64)
 
 on:
   push:
-    branches:
-      - main
     tags:
       - '**'
 
@@ -24,7 +22,7 @@ jobs:
           pacman-key --init
           pacman-key --populate archlinux
           pacman -Sy --noconfirm archlinux-keyring
-          pacman -S --noconfirm python-pyside6 git sudo
+          pacman -S --noconfirm pyside6 git sudo
 
       - name: Setup ccache
         uses: hendrikmuhs/ccache-action@v1.2

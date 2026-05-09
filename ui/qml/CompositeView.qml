@@ -10,7 +10,8 @@ Item {
     property int currentFrame: 0
     property int projectWidth: 1920
     property int projectHeight: 1080
-    property var layerStates: ({})
+    property var layerStates: ({
+    })
 
     width: projectWidth
     height: projectHeight
