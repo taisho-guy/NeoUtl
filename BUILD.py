@@ -104,8 +104,12 @@ class PlatformBuilder:
     def run_cmd(self, cmd: List[str], shell: bool = False, force_host: bool = False):
         in_container = self.use_container and not force_host
         display_cmd = ' '.join(cmd) if isinstance(cmd, list) else cmd
-        tag = "[Container]" if in_container else "[Host]"
-        self.logger.log(f"{tag} {display_cmd}")
+
+        if self.use_container:
+            tag = "[Container]" if in_container else "[Host]"
+            self.logger.log(f"{tag} {display_cmd}")
+        else:
+            self.logger.log(display_cmd)
 
         actual_cmd = cmd
         if in_container:
@@ -186,18 +190,36 @@ class PlatformBuilder:
         filament_dir.mkdir(parents=True, exist_ok=True)
         self.download_and_extract(url, filament_dir)
 
+        # 階層が一段深い場合 (filament-v1.71.3-mac/... 等) の平坦化
+        # 配布元やOSによって 'filament' だったり圧縮ファイル名そのものだったりするため、
+        # 存在する方を nested_dir として処理する。
+        archive_root = f"filament-v{version}-{suffix}"
+        nested_dir = filament_dir / "filament"
+        if not nested_dir.is_dir():
+            nested_dir = filament_dir / archive_root
+
+        if nested_dir.is_dir():
+            for item in nested_dir.iterdir():
+                dest_path = filament_dir / item.name
+                if dest_path.exists():
+                    if dest_path.is_dir(): shutil.rmtree(dest_path)
+                    else: dest_path.unlink()
+                shutil.move(str(item), str(dest_path))
+            nested_dir.rmdir()
+
         # CMakeLists.txt の期待する構造 (lib/x86_64 or lib/arm64) に合わせる
         dest_lib = filament_dir / "lib" / lib_arch
         if not dest_lib.exists():
             src_lib = filament_dir / "lib" / lib_arch if is_universal else filament_dir / "lib"
             if not src_lib.exists(): src_lib = filament_dir / "lib" # 構造が直下の場合
             
-            temp_lib = filament_dir / "_lib_tmp"
-            shutil.move(str(src_lib), str(temp_lib))
-            dest_lib.mkdir(parents=True, exist_ok=True)
-            for item in temp_lib.iterdir():
-                shutil.move(str(item), str(dest_lib / item.name))
-            shutil.rmtree(temp_lib)
+            if src_lib.exists():
+                temp_lib = filament_dir / "_lib_tmp"
+                shutil.move(str(src_lib), str(temp_lib))
+                dest_lib.mkdir(parents=True, exist_ok=True)
+                for item in temp_lib.iterdir():
+                    shutil.move(str(item), str(dest_lib / item.name))
+                shutil.rmtree(temp_lib)
 
     def download_and_extract(self, url: str, dest_dir: Path):
         tmp_file = dest_dir / "download.tmp"
@@ -266,7 +288,6 @@ class LinuxBuilderBase(PlatformBuilder):
 
     def install_dependencies(self):
         if not self.use_container:
-            self.logger.log("ホスト環境でビルドするため、コンテナ作成をスキップします")
             return
         if self.config.is_offline:
             self.logger.log("依存関係インストールをスキップします (--offline)")
@@ -307,8 +328,11 @@ class ArchBuilder(LinuxBuilderBase):
         self.image_name = "archlinux:latest"
 
     def install_dependencies(self):
+        # 共通の SDK セットアップ (コンテナ内外問わずビルドに必須)
+        self.setup_filament_sdk("linux", "x86_64")
+
         if not self.use_container:
-            self.logger.log("ホスト環境（CI等）でのビルドのため、システムパッケージのインストールをスキップします")
+            self.logger.log("No Container モード: システムパッケージのインストールをスキップ")
             return
             
         super().install_dependencies()
@@ -421,7 +445,6 @@ class XcodeBuilder(PlatformBuilder):
         ]
         self.run_cmd(["brew", "install"] + deps)
         self.logger.log("macOS 依存関係インストール完了")
-        self.setup_carla_sdk()
         
         # macOS は Universal バイナリを使用
         self.setup_filament_sdk("mac", "arm64" if platform.machine() == "arm64" else "x86_64", is_universal=True)
@@ -580,13 +603,13 @@ def parse_args() -> argparse.Namespace:
 def main():
     args = parse_args()
 
-    # ターゲットの決定: --no-container は Linux 専用なので暗黙的に arch とみなす
-    if args.arch or args.no_container:
-        target = "arch"
+    # ターゲットの決定
+    target = None
+    if args.arch: target = "arch"
     elif args.msys2: target = "msys2"
     elif args.xcode: target = "xcode"
     else:
-        # フラグによる指定がない場合のみ OS 判別を実施
+        # フラグがない場合は現在の OS から判定
         target = {
             "linux": "arch",
             "windows": "msys2",
@@ -613,6 +636,7 @@ def main():
     worker = BuildWorker(config)
     worker.log_signal.connect(print)
     worker.progress_signal.connect(lambda val, msg: print(f"[{val}%] {msg}"))
+    mode = "Container" if config.use_container else "No Container"
 
     def on_finished(success: bool, msg: str):
         if success:
@@ -622,7 +646,7 @@ def main():
             app.exit(1)
 
     worker.finished_signal.connect(on_finished)
-    print(f"ビルド開始 | ターゲット={target} | {config.build_type} | オフライン={config.is_offline}")
+    print(f"ビルド開始 | ターゲット={target} | {config.build_type} | {mode} | オフライン={config.is_offline}")
     worker.start()
     sys.exit(app.exec())
 
