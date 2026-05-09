@@ -51,6 +51,8 @@ jobs:
       - name: Create Codeberg Release
         if: startsWith(github.ref, 'refs/tags/')
         uses: akkuman/gitea-release-action@v1
+        env:
+          GITEA_TOKEN: ${{ secrets.CODEBERG_TOKEN }}
         with:
           server_url: https://codeberg.org
           token: ${{ secrets.CODEBERG_TOKEN }}
@@ -62,3 +64,9 @@ jobs:
           body: ""
           files: |
             dist/AviQtl-Arch-Linux-x86_64.zip
+
+      - name: Delete GitHub Actions Artifact
+        if: success()
+        uses: geekyeggo/delete-artifact@v2
+        with:
+          name: AviQtl-Arch-Linux-x86_64
