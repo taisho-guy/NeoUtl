@@ -22,6 +22,7 @@ jobs:
           pacman-key --init
           pacman-key --populate archlinux
           pacman -Sy --noconfirm archlinux-keyring
+
           pacman -S --needed --noconfirm \
             base-devel git cmake ninja clang mold zip mesa vulkan-devel \
             libxkbcommon wayland wayland-protocols libffi ffmpeg luajit fftw \
@@ -37,7 +38,7 @@ jobs:
           key: linux-ccache
 
       - name: Build and Package
-        run: python3 BUILD.py --arch --no-container
+        run: python3 BUILD.py --no-container
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4

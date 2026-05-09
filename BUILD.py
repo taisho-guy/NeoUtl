@@ -171,24 +171,27 @@ class PlatformBuilder:
             for lib_file in sdk_dir.rglob("*.dll"):
                 shutil.move(str(lib_file), lib_dir / lib_file.name)
 
-    def setup_filament_sdk(self, platform_suffix: str, lib_arch: str):
+    def setup_filament_sdk(self, platform_suffix: str, lib_arch: str, is_universal: bool = False):
         filament_dir = self.config.source_dir / "vendor" / "filament"
         if (filament_dir / "include" / "filament" / "Engine.h").exists():
             return
 
         self.logger.log(f"Filament バイナリ ({platform_suffix}) を取得中...")
-        version = "1.51.0"
+        version = "1.71.3"
         ext = "zip" if "windows" in platform_suffix else "tgz"
-        url = f"https://github.com/google/filament/releases/download/v{version}/filament-v{version}-{platform_suffix}.{ext}"
+        
+        suffix = "mac" if is_universal else platform_suffix
+        url = f"https://github.com/google/filament/releases/download/v{version}/filament-v{version}-{suffix}.{ext}"
         
         filament_dir.mkdir(parents=True, exist_ok=True)
         self.download_and_extract(url, filament_dir)
 
         # CMakeLists.txt の期待する構造 (lib/x86_64 or lib/arm64) に合わせる
-        src_lib = filament_dir / "lib"
         dest_lib = filament_dir / "lib" / lib_arch
-        
-        if src_lib.exists() and not dest_lib.exists():
+        if not dest_lib.exists():
+            src_lib = filament_dir / "lib" / lib_arch if is_universal else filament_dir / "lib"
+            if not src_lib.exists(): src_lib = filament_dir / "lib" # 構造が直下の場合
+            
             temp_lib = filament_dir / "_lib_tmp"
             shutil.move(str(src_lib), str(temp_lib))
             dest_lib.mkdir(parents=True, exist_ok=True)
@@ -262,6 +265,9 @@ class LinuxBuilderBase(PlatformBuilder):
         self.warmup_container()
 
     def install_dependencies(self):
+        if not self.use_container:
+            self.logger.log("ホスト環境でビルドするため、コンテナ作成をスキップします")
+            return
         if self.config.is_offline:
             self.logger.log("依存関係インストールをスキップします (--offline)")
             self.warmup_container()
@@ -301,6 +307,10 @@ class ArchBuilder(LinuxBuilderBase):
         self.image_name = "archlinux:latest"
 
     def install_dependencies(self):
+        if not self.use_container:
+            self.logger.log("ホスト環境（CI等）でのビルドのため、システムパッケージのインストールをスキップします")
+            return
+            
         super().install_dependencies()
         if self.config.is_offline:
             return
@@ -412,11 +422,9 @@ class XcodeBuilder(PlatformBuilder):
         self.run_cmd(["brew", "install"] + deps)
         self.logger.log("macOS 依存関係インストール完了")
         self.setup_carla_sdk()
-
-        # macOS のアーキテクチャ判定に基づき Filament を取得
-        is_arm = platform.machine() == "arm64"
-        suffix = "mac-arm64" if is_arm else "mac-x86_64"
-        self.setup_filament_sdk(suffix, "arm64" if is_arm else "x86_64")
+        
+        # macOS は Universal バイナリを使用
+        self.setup_filament_sdk("mac", "arm64" if platform.machine() == "arm64" else "x86_64", is_universal=True)
 
     def get_cmake_config_cmd(self) -> List[str]:
         cmd = super().get_cmake_config_cmd()
@@ -541,18 +549,18 @@ def parse_args() -> argparse.Namespace:
             "  python BUILD.py --xcode --offline\n"
         ),
     )
-    target_group = parser.add_mutually_exclusive_group(required=True)
+    target_group = parser.add_mutually_exclusive_group(required=False)
     target_group.add_argument(
         "--arch", action="store_true",
-        help="Arch Linux 向けビルド。distrobox コンテナ (archlinux-aviqtl) 内で pacman により依存関係を管理します。",
+        help="Linux (Arch) 向けビルド",
     )
     target_group.add_argument(
         "--msys2", action="store_true",
-        help="Windows (MSYS2 UCRT64) 向けビルド。pacman により依存関係を管理します。",
+        help="Windows (MSYS2) 向けビルド",
     )
     target_group.add_argument(
         "--xcode", action="store_true",
-        help="macOS 向けビルド。Homebrew により依存関係を管理します。",
+        help="macOS (Xcode) 向けビルド",
     )
     parser.add_argument(
         "--offline", action="store_true",
@@ -572,7 +580,22 @@ def parse_args() -> argparse.Namespace:
 def main():
     args = parse_args()
 
-    target = next(t for t in ("arch", "msys2", "xcode") if getattr(args, t))
+    # ターゲットの決定: --no-container は Linux 専用なので暗黙的に arch とみなす
+    if args.arch or args.no_container:
+        target = "arch"
+    elif args.msys2: target = "msys2"
+    elif args.xcode: target = "xcode"
+    else:
+        # フラグによる指定がない場合のみ OS 判別を実施
+        target = {
+            "linux": "arch",
+            "windows": "msys2",
+            "darwin": "xcode"
+        }.get(platform.system().lower())
+
+    if not target:
+        print("エラー: ビルドターゲットを特定できません。--arch, --msys2, --xcode のいずれかを指定してください。")
+        sys.exit(1)
 
     source_dir = Path.cwd()
     config = BuildConfig(
@@ -581,7 +604,8 @@ def main():
         output_dir=source_dir / "build",
         target=target,
         is_debug=args.debug,
-        use_container=not args.no_container,
+        # コンテナ利用は Linux かつ --no-container が指定されていない場合のみ
+        use_container=(target == "arch" and not args.no_container),
         is_offline=args.offline,
     )
 
