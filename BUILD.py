@@ -6,6 +6,7 @@ import multiprocessing
 import argparse
 import shlex
 import urllib.request
+import platform
 from pathlib import Path
 from dataclasses import dataclass
 from typing import Callable, List, Type
@@ -238,9 +239,8 @@ class PlatformBuilder:
 class LinuxBuilderBase(PlatformBuilder):
     def __init__(self, config: BuildConfig, logger: Logger):
         super().__init__(config, logger)
-        if not self.config.use_container:
-            raise RuntimeError("Linux ターゲットではコンテナビルドが必須です")
-        self.use_container = True
+        # コンテナが使えない環境（CI内など）でも実行できるように、チェックを緩和
+        self.use_container = config.use_container
         self.image_name = ""
 
     def warmup_container(self):
@@ -358,6 +358,7 @@ class Msys2Builder(PlatformBuilder):
         self.run_cmd(["pacman", "-Syu", "--needed", "--noconfirm"] + deps)
         self.logger.log("MSYS2 依存関係インストール完了")
         self.setup_carla_sdk(is_windows=True)
+        self.setup_filament_sdk("windows", "x86_64")
 
     def get_cmake_config_cmd(self) -> List[str]:
         cmd = super().get_cmake_config_cmd()
@@ -411,6 +412,11 @@ class XcodeBuilder(PlatformBuilder):
         self.run_cmd(["brew", "install"] + deps)
         self.logger.log("macOS 依存関係インストール完了")
         self.setup_carla_sdk()
+
+        # macOS のアーキテクチャ判定に基づき Filament を取得
+        is_arm = platform.machine() == "arm64"
+        suffix = "mac-arm64" if is_arm else "mac-x86_64"
+        self.setup_filament_sdk(suffix, "arm64" if is_arm else "x86_64")
 
     def get_cmake_config_cmd(self) -> List[str]:
         cmd = super().get_cmake_config_cmd()
@@ -469,10 +475,19 @@ class XcodeBuilder(PlatformBuilder):
 
         # carla-discovery-native をバイナリ同梱
         self.logger.log("carla-discovery-native を同梱中...")
-        carla_bin_src = Path("/opt/homebrew/Cellar/carla/2.5.10_1/lib/carla/carla-discovery-native")
-        carla_bin_dst = dest_app / "Contents/MacOS/carla-discovery-native"
-        if carla_bin_src.exists() and not carla_bin_dst.exists():
-            shutil.copy2(carla_bin_src, carla_bin_dst)
+        try:
+            carla_prefix = subprocess.check_output(["brew", "--prefix", "carla"], text=True).strip()
+            # Homebrew の構造に合わせてパスを探索
+            carla_bin_src = Path(carla_prefix) / "lib/carla/carla-discovery-native"
+            if not carla_bin_src.exists():
+                 carla_bin_src = next(Path(carla_prefix).glob("**/carla-discovery-native"), None)
+            
+            carla_bin_dst = dest_app / "Contents/MacOS/carla-discovery-native"
+            if carla_bin_src and carla_bin_src.exists():
+                shutil.copy2(carla_bin_src, carla_bin_dst)
+                self.logger.log(f"  同梱完了: {carla_bin_src}")
+        except Exception as e:
+            self.logger.log(f"  警告: carla-discovery-native の特定に失敗しました: {e}")
 
         self.logger.log("codesign を実行中...")
         self.run_cmd(["codesign", "--deep", "--force", "--sign", "-", str(dest_app)])

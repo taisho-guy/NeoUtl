@@ -22,7 +22,13 @@ jobs:
           pacman-key --init
           pacman-key --populate archlinux
           pacman -Sy --noconfirm archlinux-keyring
-          pacman -S --noconfirm pyside6 git sudo
+          pacman -S --needed --noconfirm \
+            base-devel git cmake ninja clang mold zip mesa vulkan-devel \
+            libxkbcommon wayland wayland-protocols libffi ffmpeg luajit fftw \
+            qt6-base qt6-declarative qt6-quick3d qt6-multimedia qt6-shadertools \
+            qt6-svg qt6-5compat qt6-tools lilv ladspa carla openmp \
+            extra-cmake-modules libc++ fluidsynth \
+            pyside6 sudo ccache
 
       - name: Setup ccache
         uses: hendrikmuhs/ccache-action@v1.2

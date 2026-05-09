@@ -37,8 +37,8 @@ jobs:
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: AviQtl-Windows-x64
-          path: dist/AviQtl-Windows-x64.zip
+          name: AviQtl-MSYS2-UCRT64-x86_64
+          path: dist/AviQtl-MSYS2-UCRT64-x86_64.zip
           retention-days: 1
           if-no-files-found: error
 
@@ -55,4 +55,4 @@ jobs:
           name: ${{ github.ref_name }}
           body: ""
           files: |
-            dist/AviQtl-Windows-x64.zip
+            dist/AviQtl-MSYS2-UCRT64-x86_64.zip
