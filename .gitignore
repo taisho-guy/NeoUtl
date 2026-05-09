@@ -2,6 +2,8 @@ push.fish
 vendor
 
 # Builds
+vcpkg/
+vcpkg_installed/
 build/
 .build_tmp/
 dist
@@ -57,6 +59,9 @@ project_context.json
 *.exe
 *.out
 *.app
+
+# --> Python
+__pycache__
 
 # ---> Qt
 # C++ objects and libs

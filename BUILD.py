@@ -584,6 +584,46 @@ class MsvcBuilder(PlatformBuilder):
             raise RuntimeError("vcpkg のブートストラップに失敗しました。vcpkg.exe が生成されていません。ネットワーク接続を確認してください。")
         self.logger.log("vcpkg の準備完了")
 
+    def ensure_vcpkg(self):
+        self.vcpkg_root = self.find_vcpkg_root(need_executable=True)
+        if self.vcpkg_root:
+            self.logger.log(f"vcpkg 発見: {self.vcpkg_root}")
+            self.env["VCPKG_ROOT"] = str(self.vcpkg_root)
+            return
+
+        incomplete = self.find_vcpkg_root(need_executable=False)
+        if incomplete and (incomplete / "bootstrap-vcpkg.bat").exists():
+            self.vcpkg_root = incomplete
+            self.logger.log(f"vcpkg ディレクトリを検出 (vcpkg.exe なし)。ブートストラップを試みます: {self.vcpkg_root}")
+            self._bootstrap_vcpkg()
+            self.env["VCPKG_ROOT"] = str(self.vcpkg_root)
+            return
+
+        self.vcpkg_root = self.config.source_dir / "vcpkg"
+        self.logger.log(f"vcpkg が見つかりません。{self.vcpkg_root} にクローン中...")
+        self.run_cmd(["git", "clone", "--depth", "1", "https://github.com/microsoft/vcpkg.git", str(self.vcpkg_root)], force_host=True)
+        self._bootstrap_vcpkg()
+        self.env["VCPKG_ROOT"] = str(self.vcpkg_root)
+
+    def _bootstrap_vcpkg(self):
+        bootstrap = self.vcpkg_root / "bootstrap-vcpkg.bat"
+        if not bootstrap.exists():
+            raise RuntimeError(f"vcpkg のブートストラップスクリプトが見つかりません: {bootstrap}")
+        self.logger.log("vcpkg をブートストラップ中...")
+        self.run_cmd([str(bootstrap)], force_host=True)
+        if not (self.vcpkg_root / "vcpkg.exe").exists():
+            raise RuntimeError("vcpkg のブートストラップに失敗しました。vcpkg.exe が生成されていません。ネットワーク接続を確認してください。")
+        self.logger.log("vcpkg の準備完了")
+
+    def vcpkg_install(self):
+        if not self.vcpkg_root:
+            return
+        vcpkg_exe = self.vcpkg_root / "vcpkg.exe"
+        self.logger.log("vcpkg で依存関係をインストール中 (初回は時間がかかります)...")
+        cmd = [str(vcpkg_exe), "install"] + self.VCPKG_PACKAGES + ["--triplet", self.vcpkg_triplet]
+        self.run_cmd(cmd, force_host=True)
+        self.logger.log("vcpkg 依存関係インストール完了")
+
     def configure(self):
         self.run_cmd(self.get_cmake_config_cmd())
 
