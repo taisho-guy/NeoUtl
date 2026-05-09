@@ -14,14 +14,17 @@ jobs:
   build-linux:
     name: Linux (x86_64)
     runs-on: ubuntu-latest
+    container:
+      image: archlinux:latest
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install Distrobox and Podman
+      - name: Initialize Pacman Keys and Install Runner Dependencies
         run: |
-          sudo apt-get update
-          sudo apt-get install -y distrobox podman python3-pip
-          pip3 install PySide6 --break-system-packages || pip3 install PySide6
+          pacman-key --init
+          pacman-key --populate archlinux
+          pacman -Sy --noconfirm archlinux-keyring
+          pacman -S --noconfirm python-pyside6 git sudo
 
       - name: Setup ccache
         uses: hendrikmuhs/ccache-action@v1.2
@@ -30,13 +33,13 @@ jobs:
           key: linux-ccache
 
       - name: Build and Package
-        run: python3 BUILD.py --arch
+        run: python3 BUILD.py --arch --no-container
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: AviQtl-Linux-x86_64-v3
-          path: dist/AviQtl-Linux-x86_64-v3.zip
+          name: AviQtl-Arch-Linux-x86_64
+          path: dist/AviQtl-Arch-Linux-x86_64.zip
           retention-days: 1
           if-no-files-found: error
 
@@ -53,4 +56,4 @@ jobs:
           name: ${{ github.ref_name }}
           body: ""
           files: |
-            dist/AviQtl-Linux-x86_64-v3.zip
+            dist/AviQtl-Arch-Linux-x86_64.zip
