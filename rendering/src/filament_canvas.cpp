@@ -1,4 +1,5 @@
 #include "filament_canvas.hpp"
+#include <QDebug>
 #include <QQuickWindow>
 #include <filament/Camera.h>
 #include <filament/Engine.h>
@@ -52,15 +53,20 @@ void FilamentCanvas::initFilament() {
     if (m_engine || !m_window)
         return;
 
-    // ウィンドウが作成され、有効なネイティブハンドルを持っているか確認
-    m_window->create();
+    // ウィンドウハンドルの取得
     WId wid = m_window->winId();
 
-    // Qtが内部的なダミーID（0x40000001等）を返している間は初期化をスキップ
-    if (wid == 0 || wid > 0x40000000)
+    // デバッグログの追加
+    qDebug() << "[FilamentCanvas] Attempting init. WId:" << Qt::hex << wid << Qt::dec << "Width:" << width() << "Height:" << height();
+
+    // Qtが内部的なダミーID（0x40000001等）を返している間は初期化を待機
+    if (wid == 0 || wid > 0x40000000) {
+        qDebug() << "[FilamentCanvas] Waiting for valid native window handle...";
         return;
+    }
 
     void *nativeWindow = reinterpret_cast<void *>(wid);
+    qDebug() << "[FilamentCanvas] Native handle verified. Initializing Filament engine...";
 
 #if defined(__APPLE__)
     // macOS/Metal のセットアップ
@@ -85,6 +91,10 @@ void FilamentCanvas::initFilament() {
 
     m_view->setScene(m_scene);
     m_view->setCamera(m_camera);
+
+    // 【重要】トーンマッピングを無効化して、クリアカラーを「生」で表示する
+    // これにより、ライティング設定がなくても指定した色がそのまま画面に出る
+    m_view->setPostProcessingEnabled(false);
 
     // 仕様書に基づき、クリアカラーを紺色 (#001A33 相当) に設定
     m_skybox = filament::Skybox::Builder().color({0.0f, 0.1f, 0.2f, 1.0f}).build(*m_engine);
