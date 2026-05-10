@@ -4,13 +4,6 @@
 #include <QQuickItem>
 #include <utils/Entity.h>
 
-#include <memory>
-
-// Wayland 型の前方宣言 (wayland-client-core.h 不要)
-#if defined(Q_OS_LINUX)
-struct FilamentWaylandNative;
-#endif
-
 namespace filament {
 class Engine;
 class Renderer;
@@ -26,6 +19,12 @@ namespace AviQtl::Rendering {
 // QMLから "FilamentCanvas" として利用可能なFilament統合ウィジェット。
 // Filamentの初期化・描画ループ・リサイズをカプセル化し、
 // 外部(QML/ECS)にはsceneId/currentFrameプロパティのみを公開する。
+//
+// 実装メモ:
+//   vendor/filament は Linux で X11 Window (XID) のみをサポートし、
+//   Wayland ネイティブハンドルには対応していない。
+//   そのため createSwapChain(uint32_t w, uint32_t h) のヘッドレス版を使用する。
+//
 // 注: QML登録は main.cpp で qmlRegisterType により手動実施する。
 class FilamentCanvas : public QQuickItem {
     Q_OBJECT
@@ -81,13 +80,6 @@ class FilamentCanvas : public QQuickItem {
 
     // Native surface pointer (e.g. CAMetalLayer* for Apple/Metal)
     void *m_nativeSurface = nullptr;
-
-#if defined(Q_OS_LINUX)
-    // Wayland: { wl_display*, wl_surface* } の組を SwapChain 生存期間中保持する。
-    // wl_surface* 単体を Filament に渡すと "enumerate size error" でクラッシュする。
-    // unique_ptr で管理し、wayland-client-core.h への依存をヘッダから排除する。
-    std::unique_ptr<FilamentWaylandNative> m_waylandNative;
-#endif
 };
 
 } // namespace AviQtl::Rendering

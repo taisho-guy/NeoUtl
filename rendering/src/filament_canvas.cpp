@@ -1,7 +1,5 @@
 #include "filament_canvas.hpp"
 #include <QDebug>
-#include <QGuiApplication>
-#include <qpa/qplatformnativeinterface.h>
 
 #include <QQuickWindow>
 #include <QSGRendererInterface>
@@ -20,22 +18,23 @@
 #include <QuartzCore/CAMetalLayer.h>
 #endif
 
-// Wayland 型の前方宣言。
-// wayland-client-core.h は CMake の include パスに含まれない場合があるため、
-// ヘッダに依存せず opaque pointer として扱う。
-// Filament の Vulkan バックエンドが要求する構造体レイアウトは
-//   { void* display, void* surface } の順であることが仕様で保証されている。
-#if defined(Q_OS_LINUX)
-struct wl_display;
-struct wl_surface;
-
-struct FilamentWaylandNative {
-    wl_display *display = nullptr;
-    wl_surface *surface = nullptr;
-};
-#endif
-
 namespace AviQtl::Rendering {
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 設計メモ:
+//   vendor/filament の SwapChain.h を確認した結果、このビルドがサポートする
+//   Linux ネイティブウィンドウは "X11 Window (XID)" のみであり、
+//   Wayland (wl_surface) への対応は含まれていない。
+//
+//   Wayland セッションで wl_surface* や { wl_display*, wl_surface* } 構造体を
+//   createSwapChain(void*) に渡すと、Filament は XID として誤解釈し
+//   "enumerate size error" でクラッシュする。
+//
+//   解決策: createSwapChain(uint32_t width, uint32_t height) の
+//   ヘッドレス版を使用する。ヘッドレス SwapChain は OS ウィンドウハンドルを
+//   一切必要とせず、GPU 上のオフスクリーンバッファとして機能する。
+//   描画結果の QQuickWindow への合成は将来の実装フェーズで対応する。
+// ─────────────────────────────────────────────────────────────────────────────
 
 FilamentCanvas::FilamentCanvas(QQuickItem *parent) : QQuickItem(parent) {
     setFlag(ItemHasContents, true);
@@ -62,8 +61,12 @@ void FilamentCanvas::setCurrentFrame(int frame) {
 void FilamentCanvas::handleWindowChanged(QQuickWindow *win) {
     if (win) {
         m_window = win;
-        m_beforeRenderingConnection = connect(win, &QQuickWindow::beforeRendering, this, &FilamentCanvas::renderFrame, Qt::DirectConnection);
-        m_sceneGraphInvalidatedConnection = connect(win, &QQuickWindow::sceneGraphInvalidated, this, &FilamentCanvas::destroyFilament, Qt::DirectConnection);
+        m_beforeRenderingConnection = connect(
+            win, &QQuickWindow::beforeRendering,
+            this, &FilamentCanvas::renderFrame, Qt::DirectConnection);
+        m_sceneGraphInvalidatedConnection = connect(
+            win, &QQuickWindow::sceneGraphInvalidated,
+            this, &FilamentCanvas::destroyFilament, Qt::DirectConnection);
     }
 }
 
@@ -74,56 +77,17 @@ void FilamentCanvas::initFilament() {
     if (!m_window->isExposed())
         return;
 
-    void *swapChainNative = nullptr;
-
-#if defined(Q_OS_LINUX)
-    QPlatformNativeInterface *ni = QGuiApplication::platformNativeInterface();
-    if (!ni) {
-        qWarning() << "[FilamentCanvas] QPlatformNativeInterface unavailable.";
+    // アイテム・ウィンドウ両方のサイズが確定するまで待つ
+    const int logicalW = static_cast<int>(width());
+    const int logicalH = static_cast<int>(height());
+    if (logicalW <= 0 || logicalH <= 0)
         return;
-    }
 
-    // QPlatformNativeInterface は void* を返すため、
-    // wayland-client-core.h のインクルードなしに前方宣言型へキャストできる。
-    auto *wlSurface = static_cast<wl_surface *>(ni->nativeResourceForWindow(QByteArrayLiteral("surface"), m_window));
-    auto *wlDisplay = static_cast<wl_display *>(ni->nativeResourceForIntegration(QByteArrayLiteral("wl_display")));
+    const double dpr = m_window->devicePixelRatio();
+    const uint32_t pw = static_cast<uint32_t>(logicalW * dpr);
+    const uint32_t ph = static_cast<uint32_t>(logicalH * dpr);
 
-    if (wlSurface && wlDisplay) {
-        // Filament Vulkan バックエンドは wl_surface* 単体ではなく
-        // { wl_display*, wl_surface* } の構造体ポインタを要求する。
-        // wl_surface* 単体を渡すと "enumerate size error" でクラッシュする。
-        // この構造体は SwapChain が破棄されるまで生存させる必要があるため
-        // メンバ変数 m_waylandNative として保持する。
-        m_waylandNative = std::make_unique<FilamentWaylandNative>();
-        m_waylandNative->display = wlDisplay;
-        m_waylandNative->surface = wlSurface;
-        swapChainNative = m_waylandNative.get();
-        qDebug() << "[FilamentCanvas] Wayland: display=" << wlDisplay << "surface=" << wlSurface;
-    } else {
-        // X11 フォールバック
-        void *x11Handle = ni->nativeResourceForWindow(QByteArrayLiteral("handle"), m_window);
-        if (x11Handle) {
-            swapChainNative = x11Handle;
-            qDebug() << "[FilamentCanvas] X11: handle=" << x11Handle;
-        }
-    }
-#elif defined(Q_OS_WIN)
-    if (QPlatformNativeInterface *ni = QGuiApplication::platformNativeInterface()) {
-        swapChainNative = ni->nativeResourceForWindow(QByteArrayLiteral("handle"), m_window);
-    }
-#endif
-
-    // 最終フォールバック
-    if (!swapChainNative) {
-        swapChainNative = reinterpret_cast<void *>(m_window->winId());
-    }
-
-    if (!swapChainNative) {
-        qWarning() << "[FilamentCanvas] Failed to obtain native window handle.";
-        return;
-    }
-
-    qDebug() << "[FilamentCanvas] Native bridge established. SwapChain ptr:" << swapChainNative;
+    qDebug() << "[FilamentCanvas] Initializing headless SwapChain" << pw << "x" << ph;
 
 #if defined(Q_OS_MACOS)
     m_engine = filament::Engine::create(filament::Engine::Backend::METAL);
@@ -131,10 +95,16 @@ void FilamentCanvas::initFilament() {
     m_engine = filament::Engine::create(filament::Engine::Backend::VULKAN);
 #endif
 
-    if (!m_engine)
+    if (!m_engine) {
+        qWarning() << "[FilamentCanvas] Engine::create() failed.";
         return;
+    }
 
-    m_swapChain = m_engine->createSwapChain(swapChainNative);
+    // ヘッドレス SwapChain: OS ウィンドウハンドル不要。
+    // vendor/filament の SwapChain.h が Wayland をサポートしないため
+    // createSwapChain(void*) に wl_surface 系を渡すことは不可。
+    m_swapChain = m_engine->createSwapChain(pw, ph);
+
     m_renderer = m_engine->createRenderer();
     m_scene = m_engine->createScene();
     m_view = m_engine->createView();
@@ -145,13 +115,18 @@ void FilamentCanvas::initFilament() {
     m_view->setScene(m_scene);
     m_view->setCamera(m_camera);
 
+    // トーンマッピングを無効化してクリアカラーを生のまま表示する
     m_view->setPostProcessingEnabled(false);
 
     // 仕様書に基づき、クリアカラーを紺色 (#001A33 相当) に設定
-    m_skybox = filament::Skybox::Builder().color({0.0f, 0.1f, 0.2f, 1.0f}).build(*m_engine);
+    m_skybox = filament::Skybox::Builder()
+                   .color({0.0f, 0.1f, 0.2f, 1.0f})
+                   .build(*m_engine);
     m_scene->setSkybox(m_skybox);
 
-    updateViewport(width(), height());
+    updateViewport(logicalW, logicalH);
+
+    qDebug() << "[FilamentCanvas] Headless SwapChain initialized successfully.";
 }
 
 void FilamentCanvas::destroyFilament() {
@@ -172,15 +147,13 @@ void FilamentCanvas::destroyFilament() {
 
     filament::Engine::destroy(&m_engine);
     m_engine = nullptr;
-
-#if defined(Q_OS_LINUX)
-    m_waylandNative.reset();
-#endif
 }
 
 void FilamentCanvas::renderFrame() {
     if (!m_engine) {
         initFilament();
+        if (!m_engine)
+            return;
     }
 
     if (m_renderer && m_swapChain && m_view) {
@@ -194,6 +167,20 @@ void FilamentCanvas::renderFrame() {
 void FilamentCanvas::geometryChange(const QRectF &newGeometry, const QRectF &oldGeometry) {
     QQuickItem::geometryChange(newGeometry, oldGeometry);
     updateViewport(newGeometry.width(), newGeometry.height());
+
+    // ジオメトリ変更時に SwapChain を再生成する (ヘッドレスは固定サイズのため)
+    if (m_engine && newGeometry.width() > 0 && newGeometry.height() > 0) {
+        if (newGeometry.size() != oldGeometry.size()) {
+            const double dpr = m_window ? m_window->devicePixelRatio() : 1.0;
+            const uint32_t pw = static_cast<uint32_t>(newGeometry.width() * dpr);
+            const uint32_t ph = static_cast<uint32_t>(newGeometry.height() * dpr);
+
+            m_engine->destroy(m_swapChain);
+            m_swapChain = m_engine->createSwapChain(pw, ph);
+            qDebug() << "[FilamentCanvas] SwapChain resized to" << pw << "x" << ph;
+        }
+    }
+
 #if defined(Q_OS_MACOS)
     updateNativeSurfaceGeometry();
 #endif
@@ -210,7 +197,8 @@ void FilamentCanvas::updateViewport(int w, int h) {
     m_view->setViewport({0, 0, pw, ph});
 
     // AviUtl互換の正投影 (Z=0をピクセル等倍)
-    m_camera->setProjection(filament::Camera::Projection::ORTHO, 0, (double)w, (double)h, 0, -1.0, 1.0);
+    m_camera->setProjection(
+        filament::Camera::Projection::ORTHO, 0, (double)w, (double)h, 0, -1.0, 1.0);
 }
 
 void FilamentCanvas::updateNativeSurfaceGeometry() {
