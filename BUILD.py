@@ -533,7 +533,8 @@ class MsvcBuilder(PlatformBuilder):
         if os.name != "nt":
             raise RuntimeError("MSVC ビルドは Windows でのみ実行できます")
         self.vcpkg_root: Path | None = None
-        self.vcpkg_triplet = os.environ.get("VCPKG_DEFAULT_TRIPLET", "x64-windows")
+        default_triplet = "x64-windows" if self.config.is_debug else "x64-windows-release"
+        self.vcpkg_triplet = os.environ.get("VCPKG_DEFAULT_TRIPLET", default_triplet)
         self.vs_install_dir: Path | None = None
         self.cmake_path: str | None = None
         self.ninja_path: str | None = None
@@ -785,7 +786,7 @@ class MsvcBuilder(PlatformBuilder):
         return None
 
     def vcpkg_installed_dir(self) -> Path:
-        return self.config.source_dir / "vcpkg_installed" / self.vcpkg_triplet
+        return self.config.work_dir / "vcpkg_installed" / self.vcpkg_triplet
 
     def setup_vcpkg_environment(self):
         if not self.vcpkg_root:
@@ -835,9 +836,8 @@ class MsvcBuilder(PlatformBuilder):
             cmd.extend([
                 f"-DCMAKE_TOOLCHAIN_FILE={self.vcpkg_root / 'scripts/buildsystems/vcpkg.cmake'}",
                 f"-DVCPKG_TARGET_TRIPLET={self.vcpkg_triplet}",
+                f"-DVCPKG_OVERLAY_TRIPLETS={self.config.source_dir / 'triplets'}",
             ])
-            if not self.config.is_debug:
-                cmd.append("-DVCPKG_BUILD_TYPE=release")
         qt_prefix = self.find_qt_prefix()
         if qt_prefix:
             cmd.append(f"-DCMAKE_PREFIX_PATH={qt_prefix}")
