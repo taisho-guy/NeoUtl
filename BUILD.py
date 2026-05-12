@@ -535,6 +535,8 @@ class MsvcBuilder(PlatformBuilder):
         self.vcpkg_root: Path | None = None
         default_triplet = "x64-windows" if self.config.is_debug else "x64-windows-release"
         self.vcpkg_triplet = os.environ.get("VCPKG_DEFAULT_TRIPLET", default_triplet)
+        default_host_triplet = "x64-windows" if self.config.is_debug else self.vcpkg_triplet
+        self.vcpkg_host_triplet = os.environ.get("VCPKG_DEFAULT_HOST_TRIPLET", default_host_triplet)
         self.vs_install_dir: Path | None = None
         self.cmake_path: str | None = None
         self.ninja_path: str | None = None
@@ -542,6 +544,7 @@ class MsvcBuilder(PlatformBuilder):
     def install_dependencies(self):
         self.setup_msvc_environment()
         self.ensure_vcpkg()
+        self.prepare_vcpkg_installed_tree()
         self.setup_vcpkg_environment()
         self.cmake_path = self.find_msvc_tool("cmake")
         self.ninja_path = self.find_msvc_tool("ninja")
@@ -585,43 +588,41 @@ class MsvcBuilder(PlatformBuilder):
             raise RuntimeError("vcpkg のブートストラップに失敗しました。vcpkg.exe が生成されていません。ネットワーク接続を確認してください。")
         self.logger.log("vcpkg の準備完了")
 
-    def ensure_vcpkg(self):
-        self.vcpkg_root = self.find_vcpkg_root(need_executable=True)
-        if self.vcpkg_root:
-            self.logger.log(f"vcpkg 発見: {self.vcpkg_root}")
-            self.env["VCPKG_ROOT"] = str(self.vcpkg_root)
+    def prepare_vcpkg_installed_tree(self):
+        installed_root = self.config.work_dir / "vcpkg_installed"
+        marker = self.config.work_dir / ".vcpkg-triplets"
+        expected = (
+            f"target={self.vcpkg_triplet}\n"
+            f"host={self.vcpkg_host_triplet}\n"
+        )
+        status_file = installed_root / "vcpkg" / "status"
+        info_dir = installed_root / "vcpkg" / "info"
+        has_installed_status = (
+            status_file.exists()
+            and "Status: install ok installed" in status_file.read_text(encoding="utf-8", errors="ignore")
+        )
+        has_package_lists = info_dir.exists() and any(info_dir.glob("*.list"))
+        is_consistent = not has_installed_status or has_package_lists
+        if marker.exists() and marker.read_text(encoding="utf-8") == expected and is_consistent:
             return
 
-        incomplete = self.find_vcpkg_root(need_executable=False)
-        if incomplete and (incomplete / "bootstrap-vcpkg.bat").exists():
-            self.vcpkg_root = incomplete
-            self.logger.log(f"vcpkg ディレクトリを検出 (vcpkg.exe なし)。ブートストラップを試みます: {self.vcpkg_root}")
-            self._bootstrap_vcpkg()
-            self.env["VCPKG_ROOT"] = str(self.vcpkg_root)
-            return
-
-        self.vcpkg_root = self.config.source_dir / "vcpkg"
-        self.logger.log(f"vcpkg が見つかりません。{self.vcpkg_root} にクローン中...")
-        self.run_cmd(["git", "clone", "--depth", "1", "https://github.com/microsoft/vcpkg.git", str(self.vcpkg_root)], force_host=True)
-        self._bootstrap_vcpkg()
-        self.env["VCPKG_ROOT"] = str(self.vcpkg_root)
-
-    def _bootstrap_vcpkg(self):
-        bootstrap = self.vcpkg_root / "bootstrap-vcpkg.bat"
-        if not bootstrap.exists():
-            raise RuntimeError(f"vcpkg のブートストラップスクリプトが見つかりません: {bootstrap}")
-        self.logger.log("vcpkg をブートストラップ中...")
-        self.run_cmd([str(bootstrap)], force_host=True)
-        if not (self.vcpkg_root / "vcpkg.exe").exists():
-            raise RuntimeError("vcpkg のブートストラップに失敗しました。vcpkg.exe が生成されていません。ネットワーク接続を確認してください。")
-        self.logger.log("vcpkg の準備完了")
+        if installed_root.exists():
+            self.logger.log("古い、または不完全な vcpkg_installed を削除します")
+            shutil.rmtree(installed_root)
+        self.config.work_dir.mkdir(parents=True, exist_ok=True)
+        marker.write_text(expected, encoding="utf-8")
 
     def vcpkg_install(self):
         if not self.vcpkg_root:
             return
         vcpkg_exe = self.vcpkg_root / "vcpkg.exe"
         self.logger.log("vcpkg で依存関係をインストール中 (初回は時間がかかります)...")
-        cmd = [str(vcpkg_exe), "install"] + self.VCPKG_PACKAGES + ["--triplet", self.vcpkg_triplet]
+        cmd = [
+            str(vcpkg_exe), "install", *self.VCPKG_PACKAGES,
+            "--triplet", self.vcpkg_triplet,
+            "--host-triplet", self.vcpkg_host_triplet,
+            "--overlay-triplets", str(self.config.source_dir / "triplets"),
+        ]
         self.run_cmd(cmd, force_host=True)
         self.logger.log("vcpkg 依存関係インストール完了")
 
@@ -792,6 +793,8 @@ class MsvcBuilder(PlatformBuilder):
         if not self.vcpkg_root:
             return
         installed = self.vcpkg_installed_dir()
+        self.env["VCPKG_DEFAULT_TRIPLET"] = self.vcpkg_triplet
+        self.env["VCPKG_DEFAULT_HOST_TRIPLET"] = self.vcpkg_host_triplet
         paths = [
             installed / "bin",
             installed / "tools" / "pkgconf",
@@ -800,10 +803,12 @@ class MsvcBuilder(PlatformBuilder):
         ]
         self.env["PATH"] = os.pathsep.join([str(path) for path in paths if path.exists()] + [self.env.get("PATH", "")])
         self.env["Path"] = self.env["PATH"]
-        pkg_paths = [installed / "lib" / "pkgconfig", installed / "debug" / "lib" / "pkgconfig"]
+        pkg_paths = [installed / "lib" / "pkgconfig"]
+        if self.config.is_debug:
+            pkg_paths.append(installed / "debug" / "lib" / "pkgconfig")
         existing_pkg_path = self.env.get("PKG_CONFIG_PATH", "")
         self.env["PKG_CONFIG_PATH"] = os.pathsep.join([str(path) for path in pkg_paths if path.exists()] + ([existing_pkg_path] if existing_pkg_path else []))
-        self.logger.log(f"vcpkg: {self.vcpkg_root} ({self.vcpkg_triplet}), installed: {installed}")
+        self.logger.log(f"vcpkg: {self.vcpkg_root} (target={self.vcpkg_triplet}, host={self.vcpkg_host_triplet}), installed: {installed}")
 
     def find_qt_prefix(self) -> Path | None:
         for name in ("QT_MSVC_DIR", "QT_DIR"):
@@ -836,6 +841,7 @@ class MsvcBuilder(PlatformBuilder):
             cmd.extend([
                 f"-DCMAKE_TOOLCHAIN_FILE={self.vcpkg_root / 'scripts/buildsystems/vcpkg.cmake'}",
                 f"-DVCPKG_TARGET_TRIPLET={self.vcpkg_triplet}",
+                f"-DVCPKG_HOST_TRIPLET={self.vcpkg_host_triplet}",
                 f"-DVCPKG_OVERLAY_TRIPLETS={self.config.source_dir / 'triplets'}",
             ])
         qt_prefix = self.find_qt_prefix()
