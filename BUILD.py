@@ -10,6 +10,8 @@ import platform
 import locale
 import signal
 import tempfile
+import json
+import stat
 from pathlib import Path
 from dataclasses import dataclass
 from typing import Callable, List, Optional, Type
@@ -25,6 +27,7 @@ class BuildConfig:
     is_debug: bool
     use_container: bool
     is_offline: bool
+    qt_dir: Optional[Path] = None
 
     @property
     def build_type(self) -> str:
@@ -176,6 +179,21 @@ class PlatformBuilder:
         if proc.returncode != 0:
             raise subprocess.CalledProcessError(proc.returncode, actual_cmd)
 
+    def remove_tree(self, path: Path):
+        def make_writable_and_retry(function, target, excinfo):
+            try:
+                os.chmod(target, stat.S_IWRITE)
+                function(target)
+            except Exception:
+                raise excinfo[1]
+
+        try:
+            shutil.rmtree(path, onexc=make_writable_and_retry)
+        except TypeError:
+            def onerror(function, target, excinfo):
+                make_writable_and_retry(function, target, excinfo)
+            shutil.rmtree(path, onerror=onerror)
+
     def get_cmake_config_cmd(self) -> List[str]:
         return [
             "cmake", "-B", str(self.config.work_dir), "-G", "Ninja",
@@ -204,11 +222,11 @@ class PlatformBuilder:
             self.logger.log("Carla ヘッダーを取得中...")
             temp_clone = self.config.source_dir / ".carla_tmp"
             if temp_clone.exists():
-                shutil.rmtree(temp_clone)
+                self.remove_tree(temp_clone)
             self.run_cmd(["git", "clone", "--depth", "1", "https://github.com/falkTX/Carla.git", str(temp_clone)], force_host=True)
             inc_dir.mkdir(parents=True, exist_ok=True)
             shutil.copytree(temp_clone / "source/includes", inc_dir, dirs_exist_ok=True)
-            shutil.rmtree(temp_clone)
+            self.remove_tree(temp_clone)
 
         if is_windows and not (lib_dir / "carla-standalone.dll").exists():
             if self.config.is_offline:
@@ -259,7 +277,7 @@ class PlatformBuilder:
             for item in nested_dir.iterdir():
                 dest_path = filament_dir / item.name
                 if dest_path.exists():
-                    if dest_path.is_dir(): shutil.rmtree(dest_path)
+                    if dest_path.is_dir(): self.remove_tree(dest_path)
                     else: dest_path.unlink()
                 shutil.move(str(item), str(dest_path))
             nested_dir.rmdir()
@@ -276,7 +294,7 @@ class PlatformBuilder:
                 dest_lib.mkdir(parents=True, exist_ok=True)
                 for item in temp_lib.iterdir():
                     shutil.move(str(item), str(dest_lib / item.name))
-                shutil.rmtree(temp_lib)
+                self.remove_tree(temp_lib)
 
         # --- bluevk-gen.py のダウンロードと実行 ---
         # BlueVK.h が存在しない場合のみ生成
@@ -308,7 +326,7 @@ class PlatformBuilder:
                     "-o", str(dummy_bluevk_cpp_dir) # BlueVK.cpp を一時ディレクトリに出力
                 ], force_host=True) # ホスト環境で実行 (ネットワークアクセスと Python 環境が必要なため)
 
-                shutil.rmtree(dummy_bluevk_cpp_dir) # 一時ディレクトリをクリーンアップ
+                self.remove_tree(dummy_bluevk_cpp_dir) # 一時ディレクトリをクリーンアップ
                 bluevk_gen_script_path.unlink() # スクリプトファイルを削除
 
                 if not (bluevk_include_dir / "BlueVK.h").exists():
@@ -540,10 +558,18 @@ class MsvcBuilder(PlatformBuilder):
         self.vs_install_dir: Path | None = None
         self.cmake_path: str | None = None
         self.ninja_path: str | None = None
+        self.qt_prefix: Path | None = None
+        self.vcpkg_manifest_dir: Path | None = None
 
     def install_dependencies(self):
         self.setup_msvc_environment()
         self.ensure_vcpkg()
+        self.qt_prefix = self.find_qt_prefix()
+        if self.qt_prefix:
+            self.logger.log(f"Qt: {self.qt_prefix}")
+            self.prepare_external_qt_vcpkg_manifest()
+        else:
+            self.logger.log("Qt MSVC が見つかりません。vcpkg から Qt を取得します。")
         self.prepare_vcpkg_installed_tree()
         self.setup_vcpkg_environment()
         self.cmake_path = self.find_msvc_tool("cmake")
@@ -594,6 +620,7 @@ class MsvcBuilder(PlatformBuilder):
         expected = (
             f"target={self.vcpkg_triplet}\n"
             f"host={self.vcpkg_host_triplet}\n"
+            f"qt={self.qt_prefix or 'vcpkg'}\n"
         )
         status_file = installed_root / "vcpkg" / "status"
         info_dir = installed_root / "vcpkg" / "info"
@@ -608,9 +635,33 @@ class MsvcBuilder(PlatformBuilder):
 
         if installed_root.exists():
             self.logger.log("古い、または不完全な vcpkg_installed を削除します")
-            shutil.rmtree(installed_root)
+            self.remove_tree(installed_root)
         self.config.work_dir.mkdir(parents=True, exist_ok=True)
         marker.write_text(expected, encoding="utf-8")
+
+    def prepare_external_qt_vcpkg_manifest(self):
+        manifest_in = self.config.source_dir / "vcpkg.json"
+        manifest_out_dir = self.config.work_dir / "vcpkg-manifest"
+        manifest_out = manifest_out_dir / "vcpkg.json"
+        qt_packages = {
+            "qtbase",
+            "qtdeclarative",
+            "qtquick3d",
+            "qtmultimedia",
+            "qtshadertools",
+            "qtsvg",
+            "qt5compat",
+            "qttools",
+        }
+        data = json.loads(manifest_in.read_text(encoding="utf-8"))
+        data["name"] = f"{data.get('name', 'aviqtl')}-msvc-external-qt"
+        data["dependencies"] = [
+            dep for dep in data.get("dependencies", [])
+            if (dep if isinstance(dep, str) else dep.get("name")) not in qt_packages
+        ]
+        manifest_out_dir.mkdir(parents=True, exist_ok=True)
+        manifest_out.write_text(json.dumps(data, indent=4) + "\n", encoding="utf-8")
+        self.vcpkg_manifest_dir = manifest_out_dir
 
     def vcpkg_install(self):
         if not self.vcpkg_root:
@@ -810,24 +861,37 @@ class MsvcBuilder(PlatformBuilder):
         self.env["PKG_CONFIG_PATH"] = os.pathsep.join([str(path) for path in pkg_paths if path.exists()] + ([existing_pkg_path] if existing_pkg_path else []))
         self.logger.log(f"vcpkg: {self.vcpkg_root} (target={self.vcpkg_triplet}, host={self.vcpkg_host_triplet}), installed: {installed}")
 
+    def resolve_qt_prefix(self, path: Path) -> Path | None:
+        if (path / "bin" / "windeployqt.exe").exists():
+            return path
+        candidates = sorted(path.glob("*/*msvc*_64/bin/windeployqt.exe"), reverse=True)
+        if candidates:
+            return candidates[0].parent.parent
+        return None
+
     def find_qt_prefix(self) -> Path | None:
-        for name in ("QT_MSVC_DIR", "QT_DIR"):
-            value = self.env.get(name)
-            if value and (Path(value) / "bin" / "windeployqt.exe").exists():
-                return Path(value)
-        if self.vcpkg_root:
-            qt_prefix = self.vcpkg_installed_dir()
-            if (qt_prefix / "tools" / "Qt6" / "bin" / "windeployqt.exe").exists() or (qt_prefix / "bin" / "windeployqt.exe").exists():
+        if self.config.qt_dir:
+            qt_prefix = self.resolve_qt_prefix(self.config.qt_dir)
+            if qt_prefix:
                 return qt_prefix
+            raise RuntimeError(f"指定された Qt ディレクトリから MSVC 版 Qt を検出できません: {self.config.qt_dir}")
+
+        for name in ("QT_MSVC_DIR", "QT_DIR", "QTDIR"):
+            value = self.env.get(name) or os.environ.get(name)
+            if value:
+                qt_prefix = self.resolve_qt_prefix(Path(value))
+                if qt_prefix:
+                    return qt_prefix
         deployqt = shutil.which("windeployqt", path=self.env.get("PATH"))
         if deployqt and not self.is_msys_path(deployqt):
             return Path(deployqt).parent.parent
         if deployqt:
             self.logger.log(f"警告: MSYS2/MinGW の windeployqt を検出したため MSVC ビルドでは使用しません: {deployqt}")
-        qt_root = Path(r"C:\Qt")
-        if qt_root.exists():
-            for deployqt_path in sorted(qt_root.glob("*/*msvc*_64/bin/windeployqt.exe"), reverse=True):
-                return deployqt_path.parent.parent
+        for qt_root in (Path(r"C:\Qt"),):
+            if qt_root.exists():
+                qt_prefix = self.resolve_qt_prefix(qt_root)
+                if qt_prefix:
+                    return qt_prefix
         return None
 
     def get_cmake_config_cmd(self) -> List[str]:
@@ -844,7 +908,9 @@ class MsvcBuilder(PlatformBuilder):
                 f"-DVCPKG_HOST_TRIPLET={self.vcpkg_host_triplet}",
                 f"-DVCPKG_OVERLAY_TRIPLETS={self.config.source_dir / 'triplets'}",
             ])
-        qt_prefix = self.find_qt_prefix()
+            if self.vcpkg_manifest_dir:
+                cmd.append(f"-DVCPKG_MANIFEST_DIR={self.vcpkg_manifest_dir}")
+        qt_prefix = self.qt_prefix or self.find_qt_prefix()
         if qt_prefix:
             cmd.append(f"-DCMAKE_PREFIX_PATH={qt_prefix}")
         if (self.config.source_dir / "vendor" / "carla").exists():
@@ -923,7 +989,7 @@ class XcodeBuilder(PlatformBuilder):
         src_app = self.config.work_dir / "bin" / "AviQtl.app"
         dest_app = self.config.output_dir / "AviQtl.app"
         if dest_app.exists():
-            shutil.rmtree(dest_app)
+            self.remove_tree(dest_app)
         if not src_app.exists():
             raise FileNotFoundError(f"App バンドルが見つかりません: {src_app}")
         shutil.copytree(src_app, dest_app)
@@ -959,7 +1025,7 @@ class XcodeBuilder(PlatformBuilder):
         ]
         for d in duplicate_qml_dirs:
             if d.exists():
-                shutil.rmtree(d)
+                self.remove_tree(d)
                 self.logger.log(f"  削除: {d}")
 
         # carla-discovery-native をバイナリ同梱
@@ -1071,6 +1137,10 @@ def parse_args() -> argparse.Namespace:
         "--no-container", action="store_true",
         help="Linux ターゲットでコンテナを使わずホスト環境でビルドします (非推奨)。",
     )
+    parser.add_argument(
+        "--qt-dir", type=Path,
+        help="MSVC ビルドで使用する公式 Qt のディレクトリ。Qt ルート (例: F:\\Qt) または kit ディレクトリ (例: F:\\Qt\\6.11.0\\msvc2022_64) を指定できます。",
+    )
     return parser.parse_args()
 
 
@@ -1110,6 +1180,7 @@ def main():
         # コンテナ利用は Linux かつ --no-container が指定されていない場合のみ
         use_container=(target == "arch" and not args.no_container),
         is_offline=args.offline,
+        qt_dir=args.qt_dir,
     )
 
     app = QtCore.QCoreApplication(sys.argv)
