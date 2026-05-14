@@ -51,6 +51,12 @@
 #include <vulkan/vulkan.h>
 #endif
 
+// Workaround for Vulkan 1.4+ (Homebrew) renaming ARM extensions used by Filament 1.71.3
+// PFN_vkCmdSetDispatchParametersARM was renamed to PFN_vkCmdDispatchDataGraphARM
+#if defined(VK_HEADER_VERSION) && VK_HEADER_VERSION >= 304
+typedef PFN_vkCmdDispatchDataGraphARM PFN_vkCmdSetDispatchParametersARM;
+#endif
+
 namespace AviQtl::Rendering {
 
 // Filament v1.71.3 の Vulkan バックエンドが期待する外部共有コンテキストのレイアウト。
