@@ -10,6 +10,12 @@ ApplicationWindow {
 
     id: mainWin
 
+    function syncCompositeView() {
+        if (Workspace.currentTimeline)
+            Workspace.currentTimeline.setCompositeView(compositeViewLoader.item);
+
+    }
+
     // 全タブ横断で未保存確認し、全て処理済みになってから finalAction を実行
     function checkAllUnsavedAndExecute(finalAction) {
         if (!Workspace || !Workspace.tabs) {
@@ -64,8 +70,7 @@ ApplicationWindow {
     }
     // 起動時に自分自身(Window)をコントローラーに渡す
     Component.onCompleted: {
-        if (Workspace.currentTimeline)
-            Workspace.currentTimeline.setCompositeView(compositeView);
+        syncCompositeView();
 
     }
 

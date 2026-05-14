@@ -61,7 +61,7 @@ auto main(int argc, char *argv[]) -> int {
 #if defined(__APPLE__)
     qputenv("QSG_RHI_BACKEND", "metal");
 #else
-    // システムの既定バックエンド（Vulkan等）を使用させる
+    // Filament は Vulkan バックエンドを使用するため、Qt SceneGraph も Vulkan に揃える。
     qputenv("QSG_RHI_BACKEND", "vulkan");
 #endif
 

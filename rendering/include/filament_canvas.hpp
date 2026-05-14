@@ -10,10 +10,9 @@
 
 #include <QMetaObject>
 #include <QQuickItem>
-#include <QSGSimpleTextureNode>
+#include <QQuickWindow>
 
 #include <atomic>
-#include <cstdint>
 #include <memory>
 
 namespace AviQtl::Rendering {
@@ -71,11 +70,8 @@ class FilamentCanvas : public QQuickItem {
     QQuickWindow *m_window = nullptr;
     QMetaObject::Connection m_beforeRenderingConn;
     QMetaObject::Connection m_sceneGraphInvalidatedConn;
-    QMetaObject::Connection m_sgInitializedConn;
 
     std::atomic<bool> m_frameDirty{false};
-    uint32_t m_targetW = 0;
-    uint32_t m_targetH = 0;
 };
 
 } // namespace AviQtl::Rendering
