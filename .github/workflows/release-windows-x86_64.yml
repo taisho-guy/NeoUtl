@@ -12,33 +12,47 @@ jobs:
   build-windows:
     name: Windows (x86_64)
     runs-on: windows-latest
-    defaults:
-      run:
-        shell: msys2 {0}
     steps:
       - uses: actions/checkout@v4
       
-      - uses: msys2/setup-msys2@v2
+      - name: Setup Python
+        uses: actions/setup-python@v5
         with:
-          msystem: UCRT64
-          update: true
-          cache: true
-          install: >-
-            mingw-w64-ucrt-x86_64-toolchain
-            mingw-w64-ucrt-x86_64-cmake
-            mingw-w64-ucrt-x86_64-ninja
-            python
-            mingw-w64-ucrt-x86_64-pyside6
-            zip
+          python-version: '3.x'
+
+      - name: Install PySide6
+        run: pip install PySide6
+
+      - name: Setup Qt 6
+        uses: jurplel/setup-qt@v3
+        with:
+          version: '6.x'
+          arch: 'win64_msvc2019_64'
+          # プロジェクトに必要な追加モジュール
+          modules: 'qtmultimedia qtshadertools qt5compat qtsvg'
+
+      - name: Cache vcpkg dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ${{ github.workspace }}/.build_tmp/msvc/Release/vcpkg_installed
+          key: vcpkg-msvc-${{ runner.os }}-${{ hashFiles('vcpkg.json') }}
+          restore-keys: |
+            vcpkg-msvc-${{ runner.os }}-
 
       - name: Build and Package
-        run: python3 BUILD.py --msys2
+        # BUILD.py は自動的に msvc ターゲットを選択し、env.QT_ROOT を参照します。
+        # VCPKG_ROOT を設定してシステム既定の vcpkg を使用可能にします。
+        run: python BUILD.py --msvc --qt-dir "${{ env.QT_ROOT }}"
+        env:
+          VCPKG_ROOT: ${{ env.VCPKG_INSTALLATION_ROOT }}
+          GIT_TERMINAL_PROMPT: 0
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
-        with:
-          name: AviQtl-MSYS2-UCRT64-x86_64
-          path: dist/AviQtl-MSYS2-UCRT64-x86_64.zip
+        with: # アーティファクト名をMSVC用に更新
+          name: AviQtl-MSVC-x86_64
+          path: dist/AviQtl-MSVC-x86_64.zip
           retention-days: 1
           if-no-files-found: error
 
@@ -56,11 +70,11 @@ jobs:
           tag_name: ${{ github.ref_name }}
           name: ${{ github.ref_name }}
           body: ""
-          files: |
-            dist/AviQtl-MSYS2-UCRT64-x86_64.zip
+          files: | # アーティファクトパスをMSVC用に更新
+            dist/AviQtl-MSVC-x86_64.zip
 
       - name: Delete GitHub Actions Artifact
         if: success()
         uses: geekyeggo/delete-artifact@v2
         with:
-          name: AviQtl-MSYS2-UCRT64-x86_64
+          name: AviQtl-MSVC-x86_64 # アーティファクト名をMSVC用に更新
