@@ -47,13 +47,12 @@ ApplicationWindow {
 
     // 修正: 有効なプロジェクト（タブ）が存在しない場合はメインウィンドウを非表示にする。
     // これにより、不必要なレンダリングコンテキストの生成とそれによるクラッシュを抑制する。
-    visible: Workspace && Workspace.tabs && Workspace.tabs.length > 0
+    visible: Workspace && Workspace.tabs ? Workspace.tabs.length > 0 : false
     width: 640
     height: 360
     x: 100
     y: 100
     title: qsTr("AviQtl - プレビュー")
-    // お前はこれで死ねぇ！！！！！
     onClosing: (close) => {
         // 一旦クローズをキャンセルし、全タブの未保存確認を行ってから終了する
         close.accepted = false;
@@ -505,6 +504,14 @@ ApplicationWindow {
         target: Workspace.currentTimeline ? Workspace.currentTimeline.project : null
     }
 
+    Connections {
+        function onCurrentTimelineChanged() {
+            syncCompositeView();
+        }
+
+        target: Workspace
+    }
+
     Platform.FileDialog {
         id: saveDialog
 
@@ -666,24 +673,44 @@ ApplicationWindow {
 
         }
 
-        CompositeView {
-            id: compositeView
+        Item {
+            id: previewHost
 
-            projectWidth: (Workspace.currentTimeline && Workspace.currentTimeline.project) ? Workspace.currentTimeline.project.width : 1920
-            projectHeight: (Workspace.currentTimeline && Workspace.currentTimeline.project) ? Workspace.currentTimeline.project.height : 1080
+            readonly property bool hasProject: Workspace.currentTimeline && Workspace.currentTimeline.project
+            readonly property int projectWidth: hasProject ? Workspace.currentTimeline.project.width : 0
+            readonly property int projectHeight: hasProject ? Workspace.currentTimeline.project.height : 0
+            readonly property real previewScale: projectWidth > 0 && projectHeight > 0 ? Math.min(width / projectWidth, height / projectHeight) : 1
+
             Layout.fillWidth: true
             Layout.fillHeight: true
-            layerStates: {
-                // WindowManager.timelineVisible を依存関係に含めることでタイムライン生成後に再評価させる
-                var dummy = WindowManager.timelineVisible;
-                var tlWin = WindowManager.getWindow("timeline");
-                return tlWin ? tlWin.globalLayerStates : ({
-                });
+            clip: true
+
+            Loader {
+                id: compositeViewLoader
+
+                active: previewHost.hasProject
+                width: previewHost.projectWidth
+                height: previewHost.projectHeight
+                scale: previewHost.previewScale
+                transformOrigin: Item.TopLeft
+                x: (previewHost.width - width * scale) / 2
+                y: (previewHost.height - height * scale) / 2
+                onItemChanged: syncCompositeView()
+
+                sourceComponent: CompositeView {
+                    projectWidth: previewHost.projectWidth
+                    projectHeight: previewHost.projectHeight
+                    sceneId: Workspace.currentTimeline ? Workspace.currentTimeline.currentSceneId : -1
+                    currentFrame: (Workspace.currentTimeline && Workspace.currentTimeline.transport) ? Workspace.currentTimeline.transport.currentFrame : 0
+                }
+
             }
 
             Connections {
                 function onGlobalLayerStatesChanged() {
-                    compositeView.layerStates = WindowManager.getWindow("timeline").globalLayerStates;
+                    if (compositeViewLoader.item)
+                        compositeViewLoader.item.layerStates = WindowManager.getWindow("timeline").globalLayerStates;
+
                 }
 
                 target: WindowManager.getWindow("timeline")

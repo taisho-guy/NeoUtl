@@ -776,211 +776,211 @@ This software is released under the GNU Affero General Public License Version 3.
         <translation>AviQtl - Preview</translation>
     </message>
     <message>
-        <location filename="../ui/qml/MainWindow.qml" line="96"/>
+        <location filename="../ui/qml/MainWindow.qml" line="95"/>
         <source>新規プロジェクト</source>
         <translation>New Project</translation>
     </message>
     <message>
-        <location filename="../ui/qml/MainWindow.qml" line="108"/>
+        <location filename="../ui/qml/MainWindow.qml" line="107"/>
         <source>プロジェクトの上書き保存</source>
         <translation>Save Project</translation>
     </message>
     <message>
-        <location filename="../ui/qml/MainWindow.qml" line="125"/>
-        <location filename="../ui/qml/MainWindow.qml" line="534"/>
+        <location filename="../ui/qml/MainWindow.qml" line="124"/>
+        <location filename="../ui/qml/MainWindow.qml" line="541"/>
         <source>プロジェクトを開く</source>
         <translation>Open Project</translation>
     </message>
     <message>
-        <location filename="../ui/qml/MainWindow.qml" line="136"/>
+        <location filename="../ui/qml/MainWindow.qml" line="135"/>
         <source>プロジェクトを名前を付けて保存...</source>
         <translation>Save Project As...</translation>
     </message>
     <message>
-        <location filename="../ui/qml/MainWindow.qml" line="145"/>
-        <location filename="../ui/qml/MainWindow.qml" line="1068"/>
+        <location filename="../ui/qml/MainWindow.qml" line="144"/>
+        <location filename="../ui/qml/MainWindow.qml" line="1095"/>
         <source>終了</source>
         <translation>Exit</translation>
     </message>
     <message>
-        <location filename="../ui/qml/MainWindow.qml" line="160"/>
+        <location filename="../ui/qml/MainWindow.qml" line="159"/>
         <source>元に戻す</source>
         <translation>Undo</translation>
     </message>
     <message>
-        <location filename="../ui/qml/MainWindow.qml" line="173"/>
+        <location filename="../ui/qml/MainWindow.qml" line="172"/>
         <source>やり直す</source>
         <translation>Redo</translation>
     </message>
     <message>
-        <location filename="../ui/qml/MainWindow.qml" line="186"/>
+        <location filename="../ui/qml/MainWindow.qml" line="185"/>
         <source>再生 / 一時停止</source>
         <translation>Play / Pause</translation>
     </message>
     <message>
-        <location filename="../ui/qml/MainWindow.qml" line="199"/>
+        <location filename="../ui/qml/MainWindow.qml" line="198"/>
         <source>クリップを分割</source>
         <translation>Split Clip</translation>
     </message>
     <message>
-        <location filename="../ui/qml/MainWindow.qml" line="221"/>
+        <location filename="../ui/qml/MainWindow.qml" line="220"/>
         <source>削除</source>
         <translation>Delete</translation>
     </message>
     <message>
-        <location filename="../ui/qml/MainWindow.qml" line="234"/>
+        <location filename="../ui/qml/MainWindow.qml" line="233"/>
         <source>コピー</source>
         <translation>Copy</translation>
     </message>
     <message>
-        <location filename="../ui/qml/MainWindow.qml" line="247"/>
+        <location filename="../ui/qml/MainWindow.qml" line="246"/>
         <source>カット</source>
         <translation>Cut</translation>
     </message>
     <message>
-        <location filename="../ui/qml/MainWindow.qml" line="260"/>
+        <location filename="../ui/qml/MainWindow.qml" line="259"/>
         <source>貼り付け</source>
         <translation>Paste</translation>
     </message>
     <message>
-        <location filename="../ui/qml/MainWindow.qml" line="275"/>
+        <location filename="../ui/qml/MainWindow.qml" line="274"/>
         <source>複製</source>
         <translation>Duplicate</translation>
     </message>
     <message>
-        <location filename="../ui/qml/MainWindow.qml" line="291"/>
+        <location filename="../ui/qml/MainWindow.qml" line="290"/>
         <source>1フレーム進む</source>
         <translation>Forward 1 Frame</translation>
     </message>
     <message>
-        <location filename="../ui/qml/MainWindow.qml" line="304"/>
+        <location filename="../ui/qml/MainWindow.qml" line="303"/>
         <source>1フレーム戻る</source>
         <translation>Back 1 Frame</translation>
     </message>
     <message>
-        <location filename="../ui/qml/MainWindow.qml" line="317"/>
+        <location filename="../ui/qml/MainWindow.qml" line="316"/>
         <source>先頭へ移動</source>
         <translation>Go to Start</translation>
     </message>
     <message>
-        <location filename="../ui/qml/MainWindow.qml" line="330"/>
+        <location filename="../ui/qml/MainWindow.qml" line="329"/>
         <source>末尾へ移動</source>
         <translation>Go to End</translation>
     </message>
     <message>
-        <location filename="../ui/qml/MainWindow.qml" line="343"/>
+        <location filename="../ui/qml/MainWindow.qml" line="342"/>
         <source>ズームイン</source>
         <translation>Zoom In</translation>
     </message>
     <message>
-        <location filename="../ui/qml/MainWindow.qml" line="358"/>
+        <location filename="../ui/qml/MainWindow.qml" line="357"/>
         <source>ズームアウト</source>
         <translation>Zoom Out</translation>
     </message>
     <message>
-        <location filename="../ui/qml/MainWindow.qml" line="373"/>
+        <location filename="../ui/qml/MainWindow.qml" line="372"/>
         <source>レイヤーを上へ移動</source>
         <translation>Move Layer Up</translation>
     </message>
     <message>
-        <location filename="../ui/qml/MainWindow.qml" line="386"/>
+        <location filename="../ui/qml/MainWindow.qml" line="385"/>
         <source>レイヤーを下へ移動</source>
         <translation>Move Layer Down</translation>
     </message>
     <message>
-        <location filename="../ui/qml/MainWindow.qml" line="399"/>
+        <location filename="../ui/qml/MainWindow.qml" line="398"/>
         <source>1フレーム左へ移動</source>
         <translation>Move Left 1 Frame</translation>
     </message>
     <message>
-        <location filename="../ui/qml/MainWindow.qml" line="412"/>
+        <location filename="../ui/qml/MainWindow.qml" line="411"/>
         <source>1フレーム右へ移動</source>
         <translation>Move Right 1 Frame</translation>
     </message>
     <message>
-        <location filename="../ui/qml/MainWindow.qml" line="423"/>
+        <location filename="../ui/qml/MainWindow.qml" line="422"/>
         <source>エラー</source>
         <translation>Error</translation>
     </message>
     <message>
-        <location filename="../ui/qml/MainWindow.qml" line="432"/>
+        <location filename="../ui/qml/MainWindow.qml" line="431"/>
         <source>保存の確認</source>
         <translation>Confirm Save</translation>
     </message>
     <message>
-        <location filename="../ui/qml/MainWindow.qml" line="466"/>
+        <location filename="../ui/qml/MainWindow.qml" line="465"/>
         <source>プロジェクトに保存されていない変更があります。
 続行する前に保存しますか？</source>
         <translation>The project has unsaved changes.
 Save before continuing?</translation>
     </message>
     <message>
-        <location filename="../ui/qml/MainWindow.qml" line="513"/>
+        <location filename="../ui/qml/MainWindow.qml" line="520"/>
         <source>名前を付けて保存</source>
         <translation>Save As</translation>
     </message>
     <message>
-        <location filename="../ui/qml/MainWindow.qml" line="836"/>
+        <location filename="../ui/qml/MainWindow.qml" line="863"/>
         <source>速度</source>
         <translation>Speed</translation>
     </message>
     <message>
-        <location filename="../ui/qml/MainWindow.qml" line="1025"/>
+        <location filename="../ui/qml/MainWindow.qml" line="1052"/>
         <source>ファイル</source>
         <translation>File</translation>
     </message>
     <message>
-        <location filename="../ui/qml/MainWindow.qml" line="1054"/>
+        <location filename="../ui/qml/MainWindow.qml" line="1081"/>
         <source>メディアの書き出し...</source>
         <translation>Export Media...</translation>
     </message>
     <message>
-        <location filename="../ui/qml/MainWindow.qml" line="1096"/>
+        <location filename="../ui/qml/MainWindow.qml" line="1123"/>
         <source>プロジェクト設定</source>
         <translation>Project Settings</translation>
     </message>
     <message>
-        <location filename="../ui/qml/MainWindow.qml" line="1109"/>
+        <location filename="../ui/qml/MainWindow.qml" line="1136"/>
         <source>環境設定</source>
         <translation>Preferences</translation>
     </message>
     <message>
-        <location filename="../ui/qml/MainWindow.qml" line="1148"/>
+        <location filename="../ui/qml/MainWindow.qml" line="1175"/>
         <source>ツール</source>
         <translation>Tools</translation>
     </message>
     <message>
-        <location filename="../ui/qml/MainWindow.qml" line="1151"/>
+        <location filename="../ui/qml/MainWindow.qml" line="1178"/>
         <source>パッケージマネージャー</source>
         <translation>Package Manager</translation>
     </message>
     <message>
-        <location filename="../ui/qml/MainWindow.qml" line="1093"/>
+        <location filename="../ui/qml/MainWindow.qml" line="1120"/>
         <source>設定</source>
         <translation>Settings</translation>
     </message>
     <message>
-        <location filename="../ui/qml/MainWindow.qml" line="1077"/>
+        <location filename="../ui/qml/MainWindow.qml" line="1104"/>
         <source>編集</source>
         <translation>Edit</translation>
     </message>
     <message>
-        <location filename="../ui/qml/MainWindow.qml" line="1122"/>
+        <location filename="../ui/qml/MainWindow.qml" line="1149"/>
         <source>表示</source>
         <translation>View</translation>
     </message>
     <message>
-        <location filename="../ui/qml/MainWindow.qml" line="1125"/>
+        <location filename="../ui/qml/MainWindow.qml" line="1152"/>
         <source>タイムラインの表示</source>
         <translation>Show Timeline</translation>
     </message>
     <message>
-        <location filename="../ui/qml/MainWindow.qml" line="1135"/>
+        <location filename="../ui/qml/MainWindow.qml" line="1162"/>
         <source>設定ダイアログの表示</source>
         <translation>Show Settings Dialog</translation>
     </message>
     <message>
-        <location filename="../ui/qml/MainWindow.qml" line="1162"/>
+        <location filename="../ui/qml/MainWindow.qml" line="1189"/>
         <source>バージョン情報</source>
         <translation>About</translation>
     </message>

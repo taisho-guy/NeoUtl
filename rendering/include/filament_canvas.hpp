@@ -65,8 +65,8 @@ class FilamentCanvas : public QQuickItem {
 
     int m_sceneId = -1;
     int m_currentFrame = 0;
-    int m_projectWidth = 1920;
-    int m_projectHeight = 1080;
+    int m_renderWidth = 1920;
+    int m_renderHeight = 1080;
 
     QQuickWindow *m_window = nullptr;
     QMetaObject::Connection m_beforeRenderingConn;

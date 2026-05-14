@@ -110,9 +110,9 @@ struct FilamentCanvasImpl {
     QSGTexture *sgTexture = nullptr;
     VkImage lastBoundImage = VK_NULL_HANDLE;
 
-    // Filament 固定レンダリング解像度 (プロジェクト解像度)
-    uint32_t projectW = 1920;
-    uint32_t projectH = 1080;
+    // Filament 内部での描画解解像度
+    uint32_t renderW = 1920;
+    uint32_t renderH = 1080;
 
     bool engineReady() const noexcept { return engine != nullptr; }
 };
@@ -143,6 +143,8 @@ FilamentCanvas::~FilamentCanvas() {
 
 int FilamentCanvas::sceneId() const noexcept { return m_sceneId; }
 int FilamentCanvas::currentFrame() const noexcept { return m_currentFrame; }
+int FilamentCanvas::projectWidth() const noexcept { return m_renderWidth; }
+int FilamentCanvas::projectHeight() const noexcept { return m_renderHeight; }
 
 void FilamentCanvas::setSceneId(int id) {
     if (m_sceneId == id)
@@ -160,37 +162,42 @@ void FilamentCanvas::setCurrentFrame(int frame) {
     update();
 }
 
-int FilamentCanvas::projectWidth() const noexcept { return m_projectWidth; }
-int FilamentCanvas::projectHeight() const noexcept { return m_projectHeight; }
-
-void FilamentCanvas::setProjectWidth(int w) {
-    if (m_projectWidth == w)
+void FilamentCanvas::setProjectWidth(int width) {
+    if (m_renderWidth == width)
         return;
-    m_projectWidth = w;
-    emit projectWidthChanged(w);
-    // プロジェクト解像度変更時は Filament の RenderTarget を再生成する
+    m_renderWidth = width;
+
     auto *d = m_impl.get();
+    d->renderW = static_cast<uint32_t>(width);
+
+    // プロジェクト解像度変更時は Filament の RenderTarget を再生成させるためテクスチャを無効化
     if (d->engineReady()) {
-        d->projectW = static_cast<uint32_t>(w);
         // sgTexture を無効化して次フレームで再生成させる
         delete d->sgTexture;
         d->sgTexture = nullptr;
         d->lastBoundImage = VK_NULL_HANDLE;
     }
+
+    emit projectWidthChanged(width);
+    update();
 }
 
-void FilamentCanvas::setProjectHeight(int h) {
-    if (m_projectHeight == h)
+void FilamentCanvas::setProjectHeight(int height) {
+    if (m_renderHeight == height)
         return;
-    m_projectHeight = h;
-    emit projectHeightChanged(h);
+    m_renderHeight = height;
+
     auto *d = m_impl.get();
+    d->renderH = static_cast<uint32_t>(height);
+
     if (d->engineReady()) {
-        d->projectH = static_cast<uint32_t>(h);
         delete d->sgTexture;
         d->sgTexture = nullptr;
         d->lastBoundImage = VK_NULL_HANDLE;
     }
+
+    emit projectHeightChanged(height);
+    update();
 }
 
 // ─── ウィンドウ接続 ───────────────────────────────────────────────────────────
@@ -336,8 +343,8 @@ static VkImage getFilamentSwapChainImage(FilamentCanvasImpl *d) {
 // プロジェクト解像度で Filament の RenderTarget を生成/再生成する。
 // ウィンドウリサイズ時には呼ばれない。
 static bool recreateOffscreenTarget(FilamentCanvasImpl *d) {
-    const uint32_t w = d->projectW;
-    const uint32_t h = d->projectH;
+    const uint32_t w = d->renderW;
+    const uint32_t h = d->renderH;
 
     if (!d->engineReady() || w == 0 || h == 0)
         return false;
@@ -530,7 +537,7 @@ QSGNode *FilamentCanvas::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *
     if (!d->sgTexture) {
         // headless SwapChain の最終レイアウトは VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL。
         // Filament Vulkan バックエンドは headless の場合 COLOR_ATTACHMENT_OPTIMAL を使用する。
-        d->sgTexture = QNativeInterface::QSGVulkanTexture::fromNative(filamentImage, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, m_window, QSize(static_cast<int>(d->projectW), static_cast<int>(d->projectH)));
+        d->sgTexture = QNativeInterface::QSGVulkanTexture::fromNative(filamentImage, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, m_window, QSize(static_cast<int>(d->renderW), static_cast<int>(d->renderH)));
 
         if (!d->sgTexture) {
             qWarning("[FilamentCanvas] QSGVulkanTexture::fromNative() 失敗。");

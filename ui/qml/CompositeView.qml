@@ -19,7 +19,7 @@ Item {
     SceneRenderer {
         anchors.fill: parent
         sceneId: root.sceneId
-        currentFrame: root.currentFrame
+        currentFrame: root.currentFrame // Line 23
         projectWidth: root.projectWidth
         projectHeight: root.projectHeight
     }
