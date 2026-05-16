@@ -1,4 +1,7 @@
-name: Build and Release Windows (x86_64)
+with open(".github/workflows/release-windows-x86_64.yml", "r", encoding="utf-8") as f:
+    content = f.read()
+
+new_content = """name: Build and Release Windows (x86_64)
 
 on:
   push:
@@ -60,3 +63,7 @@ jobs:
         uses: geekyeggo/delete-artifact@v5
         with:
           name: AviQtl-MSYS2-UCRT64-x86_64
+"""
+
+with open(".github/workflows/release-windows-x86_64.yml", "w", encoding="utf-8") as f:
+    f.write(new_content)

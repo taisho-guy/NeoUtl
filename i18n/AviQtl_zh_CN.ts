@@ -201,6 +201,7 @@
     <message>
         <location filename="../ui/qml/common/ControlLoader.qml" line="30"/>
         <location filename="../ui/qml/common/ControlLoader.qml" line="32"/>
+        <location filename="../ui/qml/common/ControlLoader.qml" line="32"/>
         <source>パラメータ</source>
         <translation>参数</translation>
     </message>
@@ -323,6 +324,7 @@
     <message>
         <location filename="../ui/qml/common/EasingConfigWindow.qml" line="775"/>
         <location filename="../ui/qml/common/EasingConfigWindow.qml" line="979"/>
+        <location filename="../ui/qml/common/EasingConfigWindow.qml" line="979"/>
         <source>直線</source>
         <translation>直线</translation>
     </message>
@@ -378,6 +380,7 @@
     </message>
     <message>
         <location filename="../ui/qml/common/EasingConfigWindow.qml" line="808"/>
+        <location filename="../ui/qml/common/EasingConfigWindow.qml" line="982"/>
         <location filename="../ui/qml/common/EasingConfigWindow.qml" line="982"/>
         <source>カスタム</source>
         <translation>自定义</translation>
@@ -473,6 +476,7 @@
     <message>
         <location filename="../ui/qml/ExportDialog.qml" line="74"/>
         <location filename="../ui/qml/ExportDialog.qml" line="496"/>
+        <location filename="../ui/qml/ExportDialog.qml" line="496"/>
         <source>キャンセル</source>
         <translation>取消</translation>
     </message>
@@ -519,6 +523,7 @@
     <message>
         <location filename="../ui/qml/ExportDialog.qml" line="172"/>
         <location filename="../ui/qml/ExportDialog.qml" line="342"/>
+        <location filename="../ui/qml/ExportDialog.qml" line="342"/>
         <source>コーデック:</source>
         <translation>编解码器：</translation>
     </message>
@@ -559,6 +564,7 @@
     </message>
     <message>
         <location filename="../ui/qml/ExportDialog.qml" line="300"/>
+        <location filename="../ui/qml/ExportDialog.qml" line="383"/>
         <location filename="../ui/qml/ExportDialog.qml" line="383"/>
         <source>ビットレート:</source>
         <translation>比特率：</translation>
@@ -788,6 +794,7 @@
     <message>
         <location filename="../ui/qml/MainWindow.qml" line="130"/>
         <location filename="../ui/qml/MainWindow.qml" line="547"/>
+        <location filename="../ui/qml/MainWindow.qml" line="547"/>
         <source>プロジェクトを開く</source>
         <translation>打开项目</translation>
     </message>
@@ -798,6 +805,7 @@
     </message>
     <message>
         <location filename="../ui/qml/MainWindow.qml" line="150"/>
+        <location filename="../ui/qml/MainWindow.qml" line="1105"/>
         <location filename="../ui/qml/MainWindow.qml" line="1105"/>
         <source>終了</source>
         <translation>退出</translation>
@@ -1561,6 +1569,7 @@
     </message>
     <message>
         <location filename="../ui/qml/SystemSettingsWindow.qml" line="29"/>
+        <location filename="../ui/qml/SystemSettingsWindow.qml" line="219"/>
         <location filename="../ui/qml/SystemSettingsWindow.qml" line="219"/>
         <source>新規プロジェクト</source>
         <translation>新建项目</translation>

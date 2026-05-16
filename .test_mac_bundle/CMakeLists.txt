@@ -1,0 +1,5 @@
+cmake_minimum_required(VERSION 3.20)
+project(test_bundle)
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
+add_executable(test_app MACOSX_BUNDLE main.cpp)
+set_target_properties(test_app PROPERTIES MACOSX_BUNDLE TRUE)
