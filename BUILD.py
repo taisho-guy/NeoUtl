@@ -226,6 +226,12 @@ class PlatformBuilder:
             self.run_cmd(["git", "clone", "--depth", "1", "https://github.com/falkTX/Carla.git", str(temp_clone)], force_host=True)
             inc_dir.mkdir(parents=True, exist_ok=True)
             shutil.copytree(temp_clone / "source/includes", inc_dir, dirs_exist_ok=True)
+            # CarlaNativePlugin.h が依存する CarlaHost.h / CarlaUtils.h / CarlaBackend.h は
+            # source/backend/ に存在するため、フラットに include/ へ追加コピーする
+            backend_src = temp_clone / "source" / "backend"
+            if backend_src.exists():
+                for _hdr in list(backend_src.glob("*.h")) + list(backend_src.glob("*.hpp")):
+                    shutil.copy2(str(_hdr), str(inc_dir / _hdr.name))
             self.remove_tree(temp_clone)
 
         windows_dlls = [

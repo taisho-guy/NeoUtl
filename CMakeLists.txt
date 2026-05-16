@@ -41,7 +41,8 @@ if(WIN32)
         set(CARLA_SDK_DIR "${CMAKE_SOURCE_DIR}/vendor/carla")
     endif()
     # インクルードパスはライブラリ検出と独立して設定
-    if(EXISTS "${CARLA_SDK_DIR}/include/CarlaBackend.h")
+    # CarlaBackend.h は source/backend/ 由来、CarlaNativePlugin.h は source/includes/ 由来
+    if(EXISTS "${CARLA_SDK_DIR}/include/CarlaNativePlugin.h")
         set(CARLA_INCLUDE_DIRS "${CARLA_SDK_DIR}/include")
     endif()
     # MSYS2/MinGW では .dll を直接リンクする (.lib/.dll.a が不在のため)
