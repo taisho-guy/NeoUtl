@@ -229,10 +229,10 @@ class PlatformBuilder:
             self.remove_tree(temp_clone)
 
         windows_libs = [
-            lib_dir / "libcarla_standalone2.lib",
-            lib_dir / "libcarla_native-plugin.lib",
-            lib_dir / "libcarla_host-plugin.lib",
-            lib_dir / "libcarla_utils.lib",
+            lib_dir / "libcarla_standalone2.dll",
+            lib_dir / "libcarla_native-plugin.dll",
+            lib_dir / "libcarla_host-plugin.dll",
+            lib_dir / "libcarla_utils.dll",
         ]
         has_windows_runtime = (lib_dir / "carla-standalone.dll").exists() or (lib_dir / "libcarla_standalone2.dll").exists()
         has_windows_link_libs = all(path.exists() for path in windows_libs)
