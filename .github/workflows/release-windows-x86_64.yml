@@ -27,7 +27,7 @@ jobs:
         uses: jurplel/install-qt-action@v4
         with:
           version: '6.11.0'
-          arch: 'win64_msvc2019_64'
+          arch: 'win64_msvc2022_64'
           # プロジェクトに必要な追加モジュール
           modules: 'qtmultimedia qtshadertools qt5compat qtsvg'
 
