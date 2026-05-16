@@ -58,6 +58,7 @@ inline constexpr int MAX_CLIP_ID = 4096;
 
 struct DirtyFlags {
     std::bitset<MAX_CLIP_ID> dirty;
+    std::vector<int> dirtyIds; // 最適化: 変更された ID を直接保持
     bool fullSync = false;
 };
 

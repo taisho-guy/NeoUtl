@@ -1377,7 +1377,7 @@ Save before continuing?</translation>
         <translation>Scene settings change: %1</translation>
     </message>
     <message>
-        <location filename="../ui/src/timeline/timeline_scene.cpp" line="60"/>
+        <location filename="../ui/src/timeline/timeline_scene.cpp" line="71"/>
         <location filename="../ui/src/timeline_service.cpp" line="17"/>
         <source>ルート</source>
         <translation>Root</translation>
@@ -1408,12 +1408,12 @@ Save before continuing?</translation>
         <translation>Delete multiple clips: %1</translation>
     </message>
     <message>
-        <location filename="../ui/src/timeline/timeline_clip.cpp" line="746"/>
+        <location filename="../ui/src/timeline/timeline_clip.cpp" line="745"/>
         <source>複数クリップ分割: %1</source>
         <translation>Split multiple clips: %1</translation>
     </message>
     <message>
-        <location filename="../ui/src/timeline/timeline_clip.cpp" line="799"/>
+        <location filename="../ui/src/timeline/timeline_clip.cpp" line="798"/>
         <source>複数クリップ貼り付け: %1</source>
         <translation>Paste multiple clips: %1</translation>
     </message>

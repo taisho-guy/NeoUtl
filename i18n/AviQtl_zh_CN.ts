@@ -1377,7 +1377,7 @@
         <translation>场景设置更改：%1</translation>
     </message>
     <message>
-        <location filename="../ui/src/timeline/timeline_scene.cpp" line="60"/>
+        <location filename="../ui/src/timeline/timeline_scene.cpp" line="71"/>
         <location filename="../ui/src/timeline_service.cpp" line="17"/>
         <source>ルート</source>
         <translation>根</translation>
@@ -1408,12 +1408,12 @@
         <translation>删除多个片段：%1</translation>
     </message>
     <message>
-        <location filename="../ui/src/timeline/timeline_clip.cpp" line="746"/>
+        <location filename="../ui/src/timeline/timeline_clip.cpp" line="745"/>
         <source>複数クリップ分割: %1</source>
         <translation>分割多个片段：%1</translation>
     </message>
     <message>
-        <location filename="../ui/src/timeline/timeline_clip.cpp" line="799"/>
+        <location filename="../ui/src/timeline/timeline_clip.cpp" line="798"/>
         <source>複数クリップ貼り付け: %1</source>
         <translation>粘贴多个片段：%1</translation>
     </message>

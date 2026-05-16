@@ -22,6 +22,24 @@ TimelineService::TimelineService(SelectionService *selection, QObject *parent) :
     m_scenes.append(rootScene);
 }
 
+TimelineService::~TimelineService() {
+    // すべてのエフェクトモデルを解放
+    for (auto &scene : m_scenes) {
+        for (auto &clip : scene.clips) {
+            for (auto *eff : clip.effects) {
+                if (eff)
+                    eff->deleteLater();
+            }
+        }
+    }
+    for (auto &clip : m_clipboard) {
+        for (auto *eff : clip.effects) {
+            if (eff)
+                eff->deleteLater();
+        }
+    }
+}
+
 void TimelineService::undo() { m_undoStack->undo(); }
 void TimelineService::redo() { m_undoStack->redo(); }
 

@@ -57,10 +57,21 @@ QRhiCommandBuffer *ComputeRenderNode::resolveCommandBuffer() const {
 }
 
 bool ComputeRenderNode::ensureBuffers(QRhi *rhi) {
-    if (!m_bufferLayoutDirty)
+    // 1. レイアウト変更 (個数/バインディング) または バッファサイズ増大のチェック
+    bool needsRebuild = m_bufferLayoutDirty;
+    if (!needsRebuild && m_gpuBuffers.size() == m_pendingSSBOs.size()) {
+        for (int i = 0; i < m_pendingSSBOs.size(); ++i) {
+            if (m_gpuBuffers[i].size < static_cast<quint32>(m_pendingSSBOs[i].data.size())) {
+                needsRebuild = true;
+                break;
+            }
+        }
+    }
+
+    if (!needsRebuild)
         return !m_gpuBuffers.isEmpty();
 
-    // 既存 GPU バッファと SRB を破棄
+    // 既存 GPU バッファと SRB を安全に破棄
     for (auto &gb : m_gpuBuffers) {
         delete gb.buf;
         gb.buf = nullptr;
@@ -74,18 +85,19 @@ bool ComputeRenderNode::ensureBuffers(QRhi *rhi) {
         return false;
     }
 
-    // 各 SSBO エントリに対応する Dynamic StorageBuffer を確保
+    // 各 SSBO エントリに対応するバッファを確保
     for (const auto &entry : std::as_const(m_pendingSSBOs)) {
         const qsizetype sz = entry.data.size();
         if (sz == 0)
             continue;
+        // 頻繁な再確保を避けるため、少し余裕を持って確保
         auto *buf = rhi->newBuffer(QRhiBuffer::Dynamic, QRhiBuffer::StorageBuffer, static_cast<quint32>(sz));
         if (!buf->create()) {
             qCWarning(lcComputeRenderNode) << "QRhiBuffer::create() 失敗 binding=" << entry.binding;
             delete buf;
             return false;
         }
-        m_gpuBuffers.push_back({entry.binding, buf, sz});
+        m_gpuBuffers.push_back({entry.binding, buf, static_cast<quint32>(sz)});
     }
 
     // SRB 構築: GpuClipSoA は Compute Shader からの読み取り専用なので bufferLoad を使用
@@ -111,7 +123,8 @@ bool ComputeRenderNode::ensurePipeline(QRhi *rhi) {
     if (!m_shaderDirty)
         return m_pipeline != nullptr;
 
-    delete m_pipeline;
+    if (m_pipeline)
+        delete m_pipeline;
     m_pipeline = nullptr;
 
     if (m_shaderPath.isEmpty()) {
@@ -201,12 +214,15 @@ void ComputeRenderNode::render(const RenderState *) {
 void ComputeRenderNode::releaseResources() { destroyResources(); }
 
 void ComputeRenderNode::destroyResources() {
-    delete m_pipeline;
+    if (m_pipeline)
+        delete m_pipeline;
     m_pipeline = nullptr;
-    delete m_srb;
+    if (m_srb)
+        delete m_srb;
     m_srb = nullptr;
     for (auto &gb : m_gpuBuffers) {
-        delete gb.buf;
+        if (gb.buf)
+            delete gb.buf;
         gb.buf = nullptr;
     }
     m_gpuBuffers.clear();

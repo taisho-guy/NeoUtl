@@ -40,6 +40,7 @@ struct ClipData {
     // ハイブリッド設計: EffectModelは振る舞いを持つためポインタで保持する
     QList<EffectModel *> effects;
     QList<AudioPluginState> audioPlugins;
+    QVariantMap params; // 各クリップ固有のパラメータ（ファイルパス等）
 };
 
 struct SceneData {

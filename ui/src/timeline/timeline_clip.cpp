@@ -679,8 +679,7 @@ void TimelineService::copyClip(int clipId) {
         return;
     }
 
-    m_clipboard.clear();
-    m_clipboard.append(deepCopyClip(*it));
+    setClipboard(*it);
 }
 
 void TimelineService::copySelectedClips() {
@@ -881,13 +880,19 @@ auto TimelineService::findVacantFrame(int layer, int startFrame, int duration, i
     return candidateStart;
 }
 
-void TimelineService::setClipboard(const ClipData &clip) {
-    m_clipboard.clear();
-    m_clipboard.append(deepCopyClip(clip));
-}
+void TimelineService::setClipboard(const ClipData &clip) { setClipboard(QList<ClipData>{clip}); }
 
 void TimelineService::setClipboard(const QList<ClipData> &clips) {
+    // 既存のエフェクトを解放
+    for (auto &c : m_clipboard) {
+        for (auto *eff : std::as_const(c.effects)) {
+            if (eff)
+                eff->deleteLater();
+        }
+        c.effects.clear();
+    }
     m_clipboard.clear();
+
     for (const auto &clip : std::as_const(clips)) {
         m_clipboard.append(deepCopyClip(clip));
     }

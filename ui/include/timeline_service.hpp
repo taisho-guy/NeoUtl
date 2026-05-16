@@ -14,6 +14,7 @@ class TimelineService : public QObject {
     Q_OBJECT
   public:
     explicit TimelineService(SelectionService *selection, QObject *parent = nullptr);
+    virtual ~TimelineService();
 
     // データアクセス
     const QList<ClipData> &clips() const;

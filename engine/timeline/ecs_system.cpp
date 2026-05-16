@@ -87,9 +87,14 @@ void ECS::updateClipState(int clipId, int layer, double time, int startFrame, in
         render.needsUpdate = true;
         editState.renderGraphDirty = true;
     }
-    const auto cidx = static_cast<std::size_t>(clipId);
-    m_dirtyFlags[(m_editIndex + 1) % 3].dirty.set(cidx);
-    m_dirtyFlags[(m_editIndex + 2) % 3].dirty.set(cidx);
+
+    for (int i = 1; i <= 2; ++i) {
+        auto &df = m_dirtyFlags[(m_editIndex + i) % 3];
+        if (!df.dirty.test(static_cast<std::size_t>(clipId))) {
+            df.dirty.set(static_cast<std::size_t>(clipId));
+            df.dirtyIds.push_back(clipId);
+        }
+    }
     ECS_PROF_INC(dirtyBitSetCount);
 }
 
@@ -109,9 +114,14 @@ void ECS::updateAudioClipState(int clipId, int startFrame, int durationFrames, f
     audio.volume = volume;
     audio.pan = pan;
     audio.mute = mute;
-    const auto cidx = static_cast<std::size_t>(clipId);
-    m_dirtyFlags[(m_editIndex + 1) % 3].dirty.set(cidx);
-    m_dirtyFlags[(m_editIndex + 2) % 3].dirty.set(cidx);
+
+    for (int i = 1; i <= 2; ++i) {
+        auto &df = m_dirtyFlags[(m_editIndex + i) % 3];
+        if (!df.dirty.test(static_cast<std::size_t>(clipId))) {
+            df.dirty.set(static_cast<std::size_t>(clipId));
+            df.dirtyIds.push_back(clipId);
+        }
+    }
     ECS_PROF_INC(dirtyBitSetCount);
 }
 
@@ -149,9 +159,14 @@ void ECS::updateMetadata(int clipId, const QString &name, const QString &source,
         meta.typeId = tId;
         meta.colorRGBA = cRGBA;
     }
-    const auto cidx = static_cast<std::size_t>(clipId);
-    m_dirtyFlags[(m_editIndex + 1) % 3].dirty.set(cidx);
-    m_dirtyFlags[(m_editIndex + 2) % 3].dirty.set(cidx);
+
+    for (int i = 1; i <= 2; ++i) {
+        auto &df = m_dirtyFlags[(m_editIndex + i) % 3];
+        if (!df.dirty.test(static_cast<std::size_t>(clipId))) {
+            df.dirty.set(static_cast<std::size_t>(clipId));
+            df.dirtyIds.push_back(clipId);
+        }
+    }
 }
 
 // ─── commit ───────────────────────────────────────────────────────────────────
@@ -163,31 +178,33 @@ void ECS::commit() {
     const int active = m_activeIndex.load(std::memory_order_acquire);
     const int pending = m_pendingIndex.load(std::memory_order_acquire);
 
+    // 次に書き込むバッファを選択 (justWritten, active, pending を避ける)
     int next = -1;
     for (int c = 0; c < 3; ++c) {
-        if (c == justWritten || c == active || c == pending)
+        if (c == justWritten || c == active || (pending != -1 && c == pending))
             continue;
         next = c;
         break;
     }
+    // 全て埋まっている場合（理論上稀）は、pending を上書きする
     if (next == -1)
         next = (pending != -1) ? pending : (justWritten + 1) % 3;
 
     m_editIndex = next;
 
-    if (m_dirtyFlags[m_editIndex].fullSync) {
+    auto &df = m_dirtyFlags[m_editIndex];
+    if (df.fullSync) {
         m_buffers[m_editIndex] = m_buffers[justWritten];
-        m_dirtyFlags[m_editIndex].fullSync = false;
-        m_dirtyFlags[m_editIndex].dirty.reset();
+        df.fullSync = false;
+        df.dirty.reset();
+        df.dirtyIds.clear();
     } else {
         const auto &src = m_buffers[justWritten];
         auto &dst = m_buffers[m_editIndex];
         dst.renderGraphDirty = src.renderGraphDirty;
-        const auto &dirtyBits = m_dirtyFlags[m_editIndex].dirty;
-        for (std::size_t i = 0; i < MAX_CLIP_ID; ++i) {
-            if (!dirtyBits.test(i))
-                continue;
-            const int id = static_cast<int>(i);
+
+        // dirtyIds を使ってピンポイントで同期
+        for (int id : df.dirtyIds) {
             if (const auto *s = src.transforms.find(id))
                 dst.transforms[id] = *s;
             if (const auto *s = src.renderStates.find(id))
@@ -197,7 +214,8 @@ void ECS::commit() {
             if (const auto *s = src.metadataStates.find(id))
                 dst.metadataStates[id] = *s;
         }
-        m_dirtyFlags[m_editIndex].dirty.reset();
+        df.dirty.reset();
+        df.dirtyIds.clear();
     }
 
     m_pendingIndex.store(justWritten, std::memory_order_release);
