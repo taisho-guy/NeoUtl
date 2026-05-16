@@ -169,11 +169,21 @@ add_custom_target(AviQtl_ExternalShaders ALL DEPENDS ${EXTERNAL_QSB_FILES})
 
 # --- Executable ---
 qt_add_executable(AviQtl
+    MACOSX_BUNDLE
     core/src/main.cpp
     ui/resources.qrc
     ${QML_FILES}
     ${COMMON_SHADERS}
 )
+
+if(APPLE)
+    set_target_properties(AviQtl PROPERTIES
+        MACOSX_BUNDLE_BUNDLE_NAME "AviQtl"
+        MACOSX_BUNDLE_GUI_IDENTIFIER "org.aviqtl.AviQtl"
+        MACOSX_BUNDLE_BUNDLE_VERSION "${PROJECT_VERSION}"
+        MACOSX_BUNDLE_SHORT_VERSION_STRING "${PROJECT_VERSION}"
+    )
+endif()
 
 # 外部シェーダー生成の依存関係を登録
 add_dependencies(AviQtl AviQtl_ExternalShaders)
