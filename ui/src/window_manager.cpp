@@ -56,13 +56,22 @@ void WindowManager::showLauncher(QQmlEngine *engine) {
     }
 
     QQmlComponent component(m_engine, QUrl(QStringLiteral("qrc:/qt/qml/AviQtl/ui/qml/ProjectLauncherWindow.qml")));
+    if (component.status() != QQmlComponent::Ready) {
+        qWarning() << "ProjectLauncherWindow コンポーネントエラー:" << component.errorString();
+        return;
+    }
     QObject *obj = component.create();
     auto *launcher = qobject_cast<QQuickWindow *>(obj);
     if (launcher != nullptr) {
         registerWindow(QStringLiteral("launcher"), launcher);
         launcher->show();
     } else {
-        qWarning() << "ProjectLauncherWindowはQQuickWindowではありません";
+        if (obj) {
+            qWarning() << "ProjectLauncherWindow は QQuickWindow ではありません。実際の型:" << obj->metaObject()->className();
+            delete obj;
+        } else {
+            qWarning() << "ProjectLauncherWindow の生成に失敗しました";
+        }
     }
 }
 

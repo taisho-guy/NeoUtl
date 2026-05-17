@@ -215,7 +215,9 @@ class PlatformBuilder:
         inc_dir = sdk_dir / "include"
         lib_dir = sdk_dir / "lib"
 
-        if not inc_dir.exists():
+        # CarlaNativePlugin.h が依存する CarlaHost.h が含まれているかを判定する
+        carla_host_header = inc_dir / "CarlaHost.h"
+        if not carla_host_header.exists():
             if self.config.is_offline:
                 self.logger.log("Carla SDK が見つかりませんが、オフラインモードのため取得をスキップします")
                 return
@@ -225,6 +227,7 @@ class PlatformBuilder:
                 self.remove_tree(temp_clone)
             self.run_cmd(["git", "clone", "--depth", "1", "https://github.com/falkTX/Carla.git", str(temp_clone)], force_host=True)
             inc_dir.mkdir(parents=True, exist_ok=True)
+            # source/includes は既に存在していた場合も merge する
             shutil.copytree(temp_clone / "source/includes", inc_dir, dirs_exist_ok=True)
             # CarlaNativePlugin.h が依存する CarlaHost.h / CarlaUtils.h / CarlaBackend.h は
             # source/backend/ に存在するため、フラットに include/ へ追加コピーする
@@ -434,9 +437,11 @@ class Msys2Builder(PlatformBuilder):
     def install_dependencies(self):
         if self.config.is_offline:
             self.logger.log("依存関係インストールをスキップします (--offline)")
+            self.setup_carla_sdk(is_windows=True)
             return
         if "MSYSTEM" not in os.environ:
             self.logger.log("警告: MSYS2 環境外です。依存関係インストールをスキップします。")
+            self.setup_carla_sdk(is_windows=True)
             return
         if os.environ["MSYSTEM"] != "UCRT64":
             self.logger.log("警告: UCRT64 以外の環境が検出されました。UCRT64 を推奨します。")
@@ -460,7 +465,7 @@ class Msys2Builder(PlatformBuilder):
         cmd = super().get_cmake_config_cmd()
         cmd.append("-DCMAKE_BUILD_TYPE=Release")
         if (self.config.source_dir / "vendor" / "carla").exists():
-            cmd.append(f"-DCARLA_SDK_DIR={self.config.source_dir / 'vendor' / 'carla'}")
+            cmd.append(f"-DCARLA_SDK_DIR={Path(self.config.source_dir / 'vendor' / 'carla').as_posix()}")
         cmd.append(str(self.config.source_dir))
         return cmd
 
@@ -486,26 +491,26 @@ class Msys2Builder(PlatformBuilder):
         deploy_tool = "windeployqt6" if shutil.which("windeployqt6") else "windeployqt"
 
         # windeployqt6 は QML スキャン時に内部で qmlimportscanner を QProcess 経由で
-        # 子プロセス起動する。MSYS2 CI 環境では Windows ネイティブな QProcess が
-        # PATH を正しく解決できず "Process failed to start" になるため、
-        # windeployqt6 が存在する bin ディレクトリを PATH の先頭に明示的に追加する。
+        # 子プロセス起動する。MSYS2 では qmlimportscanner.exe が share/qt6/bin/ にあるため、
+        # そちらも PATH に追加する。
         deploy_exe = shutil.which(deploy_tool)
         if deploy_exe:
             qt_bin_dir = str(Path(deploy_exe).resolve().parent)
+            qt_share_bin_dir = str(Path(deploy_exe).resolve().parent.parent / "share" / "qt6" / "bin")
             current_path = self.env.get("PATH", os.environ.get("PATH", ""))
+            extra_dirs = []
             if qt_bin_dir not in current_path.split(os.pathsep):
-                self.env["PATH"] = qt_bin_dir + os.pathsep + current_path
-                self.logger.log(f"Qt bin を PATH に追加: {qt_bin_dir}")
+                extra_dirs.append(qt_bin_dir)
+            if qt_share_bin_dir not in current_path.split(os.pathsep):
+                extra_dirs.append(qt_share_bin_dir)
+            if extra_dirs:
+                self.env["PATH"] = os.pathsep.join(extra_dirs + [current_path])
+                self.logger.log(f"Qt bin を PATH に追加: {', '.join(extra_dirs)}")
 
         self.logger.log(f"{deploy_tool} を実行中...")
         self.run_cmd([
             deploy_tool,
-            # --qmldir を使うと windeployqt6 が qmlimportscanner.exe を自身と
-            # 同じディレクトリから探すが、MSYS2 ucrt64 には存在しないためエラーになる。
-            # --no-quick-import で QML スキャンをスキップし、PE インポートテーブルから
-            # Qt Quick DLL を自動検出する方式に切り替える。
-            # QML ファイル自体は copy_assets() で配置済み。
-            "--no-quick-import",
+            "--qmldir", str(self.config.source_dir / "ui" / "qml"),
             "--no-translations",
             "--release" if not self.config.is_debug else "--debug",
             str(dest_bin),
@@ -924,7 +929,7 @@ class MsvcBuilder(PlatformBuilder):
         if self.qt_prefix:
             cmd.append(f"-DCMAKE_PREFIX_PATH={self.qt_prefix}")
         if (self.config.source_dir / "vendor" / "carla").exists():
-            cmd.append(f"-DCARLA_SDK_DIR={self.config.source_dir / 'vendor' / 'carla'}")
+            cmd.append(f"-DCARLA_SDK_DIR={Path(self.config.source_dir / 'vendor' / 'carla').as_posix()}")
         cmd.append(str(self.config.source_dir))
         return cmd
 

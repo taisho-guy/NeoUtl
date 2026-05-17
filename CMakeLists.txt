@@ -39,6 +39,8 @@ pkg_check_modules(LUAJIT IMPORTED_TARGET REQUIRED luajit)
 if(WIN32)
     if(NOT CARLA_SDK_DIR)
         set(CARLA_SDK_DIR "${CMAKE_SOURCE_DIR}/vendor/carla")
+    else()
+        file(TO_CMAKE_PATH "${CARLA_SDK_DIR}" CARLA_SDK_DIR)
     endif()
     # インクルードパスはライブラリ検出と独立して設定
     # CarlaBackend.h は source/backend/ 由来、CarlaNativePlugin.h は source/includes/ 由来
