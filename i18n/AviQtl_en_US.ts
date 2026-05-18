@@ -1093,87 +1093,81 @@ Save before continuing?</translation>
         <translation>AviQtl - Project Launcher</translation>
     </message>
     <message>
-        <location filename="../ui/qml/ProjectLauncherWindow.qml" line="54"/>
+        <location filename="../ui/qml/ProjectLauncherWindow.qml" line="50"/>
         <source>新規プロジェクト</source>
         <translation>New Project</translation>
     </message>
     <message>
-        <location filename="../ui/qml/ProjectLauncherWindow.qml" line="60"/>
+        <location filename="../ui/qml/ProjectLauncherWindow.qml" line="56"/>
         <source>プロジェクト設定</source>
         <translation>Project Settings</translation>
     </message>
     <message>
-        <location filename="../ui/qml/ProjectLauncherWindow.qml" line="70"/>
         <source>テンプレート:</source>
-        <translation>Template:</translation>
+        <translation type="vanished">Template:</translation>
     </message>
     <message>
-        <location filename="../ui/qml/ProjectLauncherWindow.qml" line="77"/>
         <source>HD 1080p (1920x1080, 30fps)</source>
-        <translation>HD 1080p (1920x1080, 30fps)</translation>
+        <translation type="vanished">HD 1080p (1920x1080, 30fps)</translation>
     </message>
     <message>
-        <location filename="../ui/qml/ProjectLauncherWindow.qml" line="77"/>
         <source>HD 720p (1280x720, 30fps)</source>
-        <translation>HD 720p (1280x720, 30fps)</translation>
+        <translation type="vanished">HD 720p (1280x720, 30fps)</translation>
     </message>
     <message>
-        <location filename="../ui/qml/ProjectLauncherWindow.qml" line="77"/>
         <source>Full HD (1920x1080, 60fps)</source>
-        <translation>Full HD (1920x1080, 60fps)</translation>
+        <translation type="vanished">Full HD (1920x1080, 60fps)</translation>
     </message>
     <message>
-        <location filename="../ui/qml/ProjectLauncherWindow.qml" line="77"/>
         <source>4K UHD (3840x2160, 30fps)</source>
-        <translation>4K UHD (3840x2160, 30fps)</translation>
+        <translation type="vanished">4K UHD (3840x2160, 30fps)</translation>
     </message>
     <message>
-        <location filename="../ui/qml/ProjectLauncherWindow.qml" line="77"/>
         <source>カスタム</source>
-        <translation>Custom</translation>
+        <translation type="vanished">Custom</translation>
     </message>
     <message>
-        <location filename="../ui/qml/ProjectLauncherWindow.qml" line="111"/>
+        <location filename="../ui/qml/ProjectLauncherWindow.qml" line="67"/>
         <source>幅 (横):</source>
         <translation>Width:</translation>
     </message>
     <message>
-        <location filename="../ui/qml/ProjectLauncherWindow.qml" line="127"/>
+        <location filename="../ui/qml/ProjectLauncherWindow.qml" line="83"/>
         <source>高さ (縦):</source>
         <translation>Height:</translation>
     </message>
     <message>
-        <location filename="../ui/qml/ProjectLauncherWindow.qml" line="143"/>
+        <location filename="../ui/qml/ProjectLauncherWindow.qml" line="99"/>
         <source>フレームレート (FPS):</source>
         <translation>Frame Rate (FPS):</translation>
     </message>
     <message>
-        <location filename="../ui/qml/ProjectLauncherWindow.qml" line="159"/>
+        <location filename="../ui/qml/ProjectLauncherWindow.qml" line="115"/>
         <source>サンプリングレート:</source>
         <translation>Sample Rate:</translation>
     </message>
     <message>
-        <location filename="../ui/qml/ProjectLauncherWindow.qml" line="207"/>
+        <location filename="../ui/qml/ProjectLauncherWindow.qml" line="163"/>
         <source>新規プロジェクトを作成</source>
         <translation>Create New Project</translation>
     </message>
     <message>
-        <location filename="../ui/qml/ProjectLauncherWindow.qml" line="229"/>
+        <location filename="../ui/qml/ProjectLauncherWindow.qml" line="185"/>
         <source>最近使ったプロジェクト</source>
         <translation>Recent Projects</translation>
     </message>
     <message>
-        <location filename="../ui/qml/ProjectLauncherWindow.qml" line="258"/>
+        <location filename="../ui/qml/ProjectLauncherWindow.qml" line="214"/>
         <source>無題のプロジェクト</source>
         <translation>Untitled Project</translation>
     </message>
     <message>
-        <location filename="../ui/qml/ProjectLauncherWindow.qml" line="296"/>
+        <location filename="../ui/qml/ProjectLauncherWindow.qml" line="252"/>
         <source>既存プロジェクトを開く...</source>
         <translation>Open Existing Project...</translation>
     </message>
     <message>
-        <location filename="../ui/qml/ProjectLauncherWindow.qml" line="312"/>
+        <location filename="../ui/qml/ProjectLauncherWindow.qml" line="268"/>
         <source>プロジェクトファイルを開く</source>
         <translation>Open Project File</translation>
     </message>

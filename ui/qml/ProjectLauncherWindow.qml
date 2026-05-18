@@ -24,10 +24,6 @@ Common.AviQtlWindow {
             heightField.text = SettingsManager.settings.defaultProjectHeight || "1080";
             fpsField.text = SettingsManager.settings.defaultProjectFps || "60";
             sampleRateField.text = SettingsManager.settings.defaultProjectSampleRate || "48000";
-            // テンプレートに応じて更新
-            if (templateCombo.currentIndex !== 4)
-                templateCombo.activated(templateCombo.currentIndex);
-
         }
     }
 
@@ -65,47 +61,6 @@ Common.AviQtlWindow {
                     rowSpacing: 10
                     columnSpacing: 10
                     anchors.fill: parent
-
-                    Label {
-                        text: qsTr("テンプレート:")
-                    }
-
-                    ComboBox {
-                        id: templateCombo
-
-                        Layout.fillWidth: true
-                        model: [qsTr("HD 1080p (1920x1080, 30fps)"), qsTr("HD 720p (1280x720, 30fps)"), qsTr("Full HD (1920x1080, 60fps)"), qsTr("4K UHD (3840x2160, 30fps)"), qsTr("カスタム")]
-                        onActivated: (index) => {
-                            switch (index) {
-                            case 0:
-                                widthField.text = "1920";
-                                heightField.text = "1080";
-                                fpsField.text = "30";
-                                break;
-                            case 1:
-                                widthField.text = "1280";
-                                heightField.text = "720";
-                                fpsField.text = "30";
-                                break;
-                            case 2:
-                                widthField.text = "1920";
-                                heightField.text = "1080";
-                                fpsField.text = "60";
-                                break;
-                            case 3:
-                                widthField.text = "3840";
-                                heightField.text = "2160";
-                                fpsField.text = "30";
-                                break;
-                            default:
-                                // カスタム
-                                widthField.text = SettingsManager.settings.defaultProjectWidth || "1920";
-                                heightField.text = SettingsManager.settings.defaultProjectHeight || "1080";
-                                fpsField.text = SettingsManager.settings.defaultProjectFps || "60";
-                                break;
-                            }
-                        }
-                    }
 
                     Label {
                         text: qsTr("幅 (横):")
