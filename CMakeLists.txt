@@ -53,13 +53,16 @@ if(WIN32)
     endif()
     # MSYS2/MinGW では .dll を直接リンクする (.lib/.dll.a が不在のため)
     set(_carla_dll_dir "${CARLA_SDK_DIR}/lib")
-    foreach(_carla_dll
-            libcarla_standalone2.dll
-            libcarla_native-plugin.dll
-            libcarla_host-plugin.dll
-            libcarla_utils.dll)
-        if(EXISTS "${_carla_dll_dir}/${_carla_dll}")
-            list(APPEND CARLA_LIBRARIES "${_carla_dll_dir}/${_carla_dll}")
+    foreach(_carla_name
+            libcarla_standalone2
+            libcarla_native-plugin
+            libcarla_host-plugin
+            libcarla_utils)
+        # MSVC では .lib import library を優先、他環境では .dll にフォールバック
+        if(EXISTS "${_carla_dll_dir}/${_carla_name}.lib")
+            list(APPEND CARLA_LIBRARIES "${_carla_dll_dir}/${_carla_name}.lib")
+        elseif(EXISTS "${_carla_dll_dir}/${_carla_name}.dll")
+            list(APPEND CARLA_LIBRARIES "${_carla_dll_dir}/${_carla_name}.dll")
         endif()
     endforeach()
 else()

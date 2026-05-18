@@ -58,6 +58,15 @@ class Logger:
 
 
 class PlatformBuilder:
+    CARLA_DLL_PATTERNS = (
+        "carla*.dll",
+        "libcarla*.dll",
+        "CarlaVst*.dll",
+    )
+    CARLA_DLL_ALIASES = {
+        "libcarla_native-plugin.dll": "CarlaNativePlugin.dll",
+    }
+
     def __init__(self, config: BuildConfig, logger: Logger):
         self.config = config
         self.logger = logger
@@ -111,6 +120,9 @@ class PlatformBuilder:
             except Exception:
                 proc.terminate()
 
+    def get_cmake_cmd(self) -> str:
+        return "cmake"
+
     def install_dependencies(self):
         pass
 
@@ -118,12 +130,12 @@ class PlatformBuilder:
         self.run_cmd(self.get_cmake_config_cmd())
 
     def update_translations(self):
-        self.run_cmd(["cmake", "--build", str(self.config.work_dir), "--target", "AviQtl_lupdate"])
+        self.run_cmd([self.get_cmake_cmd(), "--build", str(self.config.work_dir), "--target", "AviQtl_lupdate"])
 
     def compile(self):
         j = multiprocessing.cpu_count()
         self.logger.log(f"並列ジョブ数: {j}")
-        self.run_cmd(["cmake", "--build", str(self.config.work_dir), "-j", str(j)])
+        self.run_cmd([self.get_cmake_cmd(), "--build", str(self.config.work_dir), "-j", str(j)])
 
     def package(self):
         pass
@@ -288,9 +300,20 @@ class PlatformBuilder:
         tmp_file = dest_dir / "download.tmp"
         try:
             self.logger.log(f"  Download: {url}")
-            urllib.request.urlretrieve(url, tmp_file)
+            req = urllib.request.Request(
+                url,
+                headers={"User-Agent": "AviQtl-BUILD/1.0"},
+            )
+            timeout_seconds = 120
+            with urllib.request.urlopen(req, timeout=timeout_seconds) as resp:
+                with open(tmp_file, "wb") as out:
+                    while True:
+                        chunk = resp.read(65536)
+                        if not chunk:
+                            break
+                        out.write(chunk)
             self.logger.log(f"  Extracting to {dest_dir}...")
-            
+
             # .tgz (tar.gz) の場合は shutil.unpack_archive が自動判別するが、
             # 環境によって .tgz を認識しない場合があるためフォーマットを明示
             fmt = None
@@ -298,7 +321,7 @@ class PlatformBuilder:
                 fmt = "gztar"
             elif url.endswith(".zip"):
                 fmt = "zip"
-            
+
             shutil.unpack_archive(str(tmp_file), str(dest_dir), format=fmt)
         finally:
             if tmp_file.exists():
@@ -425,14 +448,6 @@ class ArchBuilder(LinuxBuilderBase):
 
 
 class Msys2Builder(PlatformBuilder):
-    CARLA_DLL_PATTERNS = (
-        "carla*.dll",
-        "libcarla*.dll",
-        "CarlaVst*.dll",
-    )
-    CARLA_DLL_ALIASES = {
-        "libcarla_native-plugin.dll": "CarlaNativePlugin.dll",
-    }
 
     def install_dependencies(self):
         if self.config.is_offline:
@@ -556,14 +571,6 @@ class MsvcBuilder(PlatformBuilder):
         "qt5compat",
         "qttools",
     }
-    CARLA_DLL_PATTERNS = (
-        "carla*.dll",
-        "libcarla*.dll",
-        "CarlaVst*.dll",
-    )
-    CARLA_DLL_ALIASES = {
-        "libcarla_native-plugin.dll": "CarlaNativePlugin.dll",
-    }
 
     def __init__(self, config: BuildConfig, logger: Logger):
         super().__init__(config, logger)
@@ -591,6 +598,7 @@ class MsvcBuilder(PlatformBuilder):
             )
         self.logger.log(f"Qt: {self.qt_prefix}")
         self.write_external_qt_manifest()
+        self.ensure_vcpkg_triplets()
         self.prepare_vcpkg_installed_tree()
         self.setup_vcpkg_environment()
         self.cmake_path = self.find_msvc_tool("cmake")
@@ -602,6 +610,7 @@ class MsvcBuilder(PlatformBuilder):
         if not shutil.which("cl", path=self.env.get("PATH")):
             raise RuntimeError("cl.exe が見つかりません。vcvarsall.bat の読み込みに失敗した可能性があります")
         self.setup_carla_sdk(is_windows=True)
+        self.generate_carla_import_libs()
 
     def ensure_vcpkg(self):
         vcpkg_root_env = self.env.get("VCPKG_ROOT") or os.environ.get("VCPKG_ROOT")
@@ -678,7 +687,15 @@ class MsvcBuilder(PlatformBuilder):
         manifest_in = self.config.source_dir / "vcpkg.json"
         manifest_out_dir = self.config.work_dir / "vcpkg-manifest"
         manifest_out = manifest_out_dir / "vcpkg.json"
-        data = json.loads(manifest_in.read_text(encoding="utf-8"))
+        if manifest_in.exists():
+            data = json.loads(manifest_in.read_text(encoding="utf-8"))
+        else:
+            self.logger.log(f"警告: {manifest_in} が見つかりません。フォールバック設定を使用します。")
+            data = {
+                "name": "aviqtl",
+                "dependencies": ["ffmpeg", "luajit", "vulkan", "ecm", "pkgconf"],
+                "builtin-baseline": "99a97de2cb371449d4fb9dc970f2ac562d689ec2",
+            }
         data["name"] = f"{data.get('name', 'aviqtl')}-msvc-external-qt"
         data["dependencies"] = [
             dep for dep in data.get("dependencies", [])
@@ -688,16 +705,83 @@ class MsvcBuilder(PlatformBuilder):
         manifest_out.write_text(json.dumps(data, indent=4) + "\n", encoding="utf-8")
         self.vcpkg_manifest_dir = manifest_out_dir
 
-    def configure(self):
-        self.run_cmd(self.get_cmake_config_cmd())
+    def ensure_vcpkg_triplets(self):
+        triplets_dir = self.config.source_dir / "triplets"
+        triplets_content = "set(VCPKG_TARGET_ARCHITECTURE x64)\nset(VCPKG_CRT_LINKAGE dynamic)\nset(VCPKG_LIBRARY_LINKAGE dynamic)\nset(VCPKG_BUILD_TYPE release)\n"
+        for name in ("x64-windows-release.cmake", "x64-windows.cmake"):
+            path = triplets_dir / name
+            if not path.exists():
+                triplets_dir.mkdir(parents=True, exist_ok=True)
+                path.write_text(triplets_content, encoding="utf-8")
+                self.logger.log(f"vcpkg triplet を生成: {path}")
 
-    def update_translations(self):
-        self.run_cmd([self.cmake_path or "cmake", "--build", str(self.config.work_dir), "--target", "AviQtl_lupdate"])
+    def get_cmake_cmd(self) -> str:
+        return self.cmake_path or "cmake"
 
-    def compile(self):
-        j = multiprocessing.cpu_count()
-        self.logger.log(f"並列ジョブ数: {j}")
-        self.run_cmd([self.cmake_path or "cmake", "--build", str(self.config.work_dir), "-j", str(j)])
+    def generate_carla_import_libs(self):
+        """MSVCではMinGWビルドのCarla DLLを直接リンクできないため、\n        dumpbin /exports と lib.exe /DEF でimport lib (.lib + .def) を生成する。"""
+        carla_lib_dir = self.config.source_dir / "vendor" / "carla" / "lib"
+        carla_def_dir = self.config.source_dir / "vendor" / "carla" / "def"
+        if not carla_lib_dir.exists():
+            return
+        dumpbin_exe = shutil.which("dumpbin", path=self.env.get("PATH"))
+        lib_exe = shutil.which("lib", path=self.env.get("PATH"))
+        if not dumpbin_exe or not lib_exe:
+            self.logger.log("dumpbin.exe または lib.exe が見つからないため、Carla import lib を生成しません")
+            self.logger.log(f"  dumpbin={dumpbin_exe}, lib={lib_exe}")
+            return
+        generated = 0
+        for dll_name in [
+            "libcarla_standalone2.dll",
+            "libcarla_native-plugin.dll",
+            "libcarla_host-plugin.dll",
+            "libcarla_utils.dll",
+        ]:
+            dll_path = carla_lib_dir / dll_name
+            if not dll_path.exists():
+                continue
+            lib_name = dll_name.replace(".dll", ".lib")
+            def_name = dll_name.replace(".dll", ".def")
+            lib_path = carla_lib_dir / lib_name
+            def_path = carla_def_dir / def_name
+            # .lib がすでに存在し、DLLより新しければスキップ
+            if lib_path.exists() and lib_path.stat().st_mtime >= dll_path.stat().st_mtime:
+                continue
+            self.logger.log(f"  Generating import lib for {dll_name}")
+            # 1. dumpbin /exports
+            carla_def_dir.mkdir(parents=True, exist_ok=True)
+            def_content = ["LIBRARY " + dll_name, "EXPORTS"]
+            proc = subprocess.run(
+                [dumpbin_exe, "/exports", str(dll_path)],
+                capture_output=True, text=True, encoding="utf-8", errors="replace",
+                env=self.env,
+            )
+            if proc.returncode != 0:
+                self.logger.log(f"    dumpbin failed: {proc.stderr}")
+                continue
+            for line in proc.stdout.splitlines():
+                # Format: [ordinal] [hint] [RVA] [name]
+                parts = line.split()
+                if len(parts) >= 4 and parts[0].isdigit():
+                    symbol = parts[3]
+                    # Skip forwarders (contain '=')
+                    if "=" in symbol:
+                        continue
+                    # Heuristic: exported function names
+                    if not symbol.startswith("_"):
+                        def_content.append(f"    {symbol}")
+            def_path.write_text("\n".join(def_content) + "\n", encoding="utf-8")
+            # 2. lib /DEF:... /MACHINE:X64 /OUT:...
+            proc2 = subprocess.run(
+                [lib_exe, f"/DEF:{def_path}", "/MACHINE:X64", f"/OUT:{lib_path}", "/NOLOGO"],
+                capture_output=True, text=True, encoding="utf-8", errors="replace",
+            )
+            if proc2.returncode != 0:
+                self.logger.log(f"    lib.exe failed: {proc2.stderr}")
+                continue
+            generated += 1
+        if generated:
+            self.logger.log(f"Carla import lib 生成完了: {generated} file(s)")
 
     def find_vcvarsall(self) -> Path | None:
         candidates = []
