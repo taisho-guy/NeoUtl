@@ -1,3 +1,4 @@
+#include "core/include/interpolation_engine.hpp"
 #include "ecs.hpp"
 #include "ecs_profiler.hpp"
 #include "engine/plugin/audio_plugin_manager.hpp"
@@ -61,6 +62,12 @@ void ECS::syncClipIds(const std::bitset<MAX_CLIP_ID> &aliveFlags) {
     changed |= editState.renderStates.syncAlive(aliveFlags);
     changed |= editState.audioStates.syncAlive(aliveFlags);
     changed |= editState.metadataStates.syncAlive(aliveFlags);
+
+    // Phase 4 同期
+    changed |= editState.keyframeRefs.syncAlive(aliveFlags);
+    changed |= editState.ecsTransforms.syncAlive(aliveFlags);
+    changed |= editState.globalMatrices.syncAlive(aliveFlags);
+
     if (changed) {
         m_dirtyFlags[(m_editIndex + 1) % 3].fullSync = true;
         m_dirtyFlags[(m_editIndex + 2) % 3].fullSync = true;
@@ -213,6 +220,14 @@ void ECS::commit() {
                 dst.audioStates[id] = *s;
             if (const auto *s = src.metadataStates.find(id))
                 dst.metadataStates[id] = *s;
+
+            // Phase 4 同期
+            if (const auto *s = src.keyframeRefs.find(id))
+                dst.keyframeRefs[id] = *s;
+            if (const auto *s = src.ecsTransforms.find(id))
+                dst.ecsTransforms[id] = *s;
+            if (const auto *s = src.globalMatrices.find(id))
+                dst.globalMatrices[id] = *s;
         }
         df.dirty.reset();
         df.dirtyIds.clear();
@@ -257,6 +272,125 @@ void ECS::writeSSBOLayout(GpuClipSoA &out) const {
             out.pans[idx] = 0.0f;
             out.mutes[idx] = 0;
         }
+    });
+}
+
+// ─── Phase 4 サポート API & Systems ──────────────────────────────────────────
+
+void ECS::updateKeyframeRef(int clipId, uint32_t effectId) {
+    assert(clipId >= 0 && clipId < MAX_CLIP_ID);
+    auto &editState = m_buffers[m_editIndex];
+    if (!editState.keyframeRefs.contains(clipId)) {
+        m_dirtyFlags[(m_editIndex + 1) % 3].fullSync = true;
+        m_dirtyFlags[(m_editIndex + 2) % 3].fullSync = true;
+    }
+    auto &kr = editState.keyframeRefs[clipId];
+    kr.clipId = static_cast<uint32_t>(clipId);
+    kr.effectId = effectId;
+
+    for (int i = 1; i <= 2; ++i) {
+        auto &df = m_dirtyFlags[(m_editIndex + i) % 3];
+        if (!df.dirty.test(static_cast<std::size_t>(clipId))) {
+            df.dirty.set(static_cast<std::size_t>(clipId));
+            df.dirtyIds.push_back(clipId);
+        }
+    }
+}
+
+void ECS::updateEcsTransform(int clipId, float x, float y, float z, float scaleX, float scaleY, float rotX, float rotY, float rotZ, float opacity) {
+    assert(clipId >= 0 && clipId < MAX_CLIP_ID);
+    auto &editState = m_buffers[m_editIndex];
+    if (!editState.ecsTransforms.contains(clipId)) {
+        m_dirtyFlags[(m_editIndex + 1) % 3].fullSync = true;
+        m_dirtyFlags[(m_editIndex + 2) % 3].fullSync = true;
+    }
+    auto &et = editState.ecsTransforms[clipId];
+    et.x = x;
+    et.y = y;
+    et.z = z;
+    et.scaleX = scaleX;
+    et.scaleY = scaleY;
+    et.rotX = rotX;
+    et.rotY = rotY;
+    et.rotZ = rotZ;
+    et.opacity = opacity;
+
+    for (int i = 1; i <= 2; ++i) {
+        auto &df = m_dirtyFlags[(m_editIndex + i) % 3];
+        if (!df.dirty.test(static_cast<std::size_t>(clipId))) {
+            df.dirty.set(static_cast<std::size_t>(clipId));
+            df.dirtyIds.push_back(clipId);
+        }
+    }
+}
+
+void ECS::runInterpolationSystem() {
+    auto &editState = m_buffers[m_editIndex];
+    const auto &scenes = AviQtl::Core::DocumentModel::instance().scenes();
+    if (scenes.empty())
+        return;
+    const int sceneId = scenes.front().id;
+
+    editState.keyframeRefs.forEach([&](int clipId, const AviQtl::ECS::KeyframeRefComponent &) {
+        const auto *clip = AviQtl::Core::DocumentModel::instance().findClip(sceneId, clipId);
+        if (!clip)
+            return;
+
+        const int relFrame = m_currentFrame - clip->startFrame;
+        auto &et = editState.ecsTransforms[clipId];
+
+        // "transform" という特殊IDを持つエフェクトまたは標準的な補間トラックを検索
+        for (const auto &effect : clip->effects) {
+            if (effect.id == QStringLiteral("transform")) {
+                auto eval = [&](const QString &paramName, float fallback) {
+                    auto it = effect.keyframes.find(paramName);
+                    if (it != effect.keyframes.end()) {
+                        return AviQtl::Core::InterpolationEngine::instance().evaluate(it->second, relFrame, fallback);
+                    }
+                    return fallback;
+                };
+
+                et.x = eval(QStringLiteral("x"), 0.0f);
+                et.y = eval(QStringLiteral("y"), 0.0f);
+                et.z = eval(QStringLiteral("z"), 0.0f);
+                et.scaleX = eval(QStringLiteral("scaleX"), 1.0f);
+                et.scaleY = eval(QStringLiteral("scaleY"), 1.0f);
+                et.rotX = eval(QStringLiteral("rotX"), 0.0f);
+                et.rotY = eval(QStringLiteral("rotY"), 0.0f);
+                et.rotZ = eval(QStringLiteral("rotZ"), 0.0f);
+                et.opacity = eval(QStringLiteral("opacity"), 1.0f);
+                break;
+            }
+        }
+    });
+}
+
+void ECS::runTransformSystem() {
+    auto &editState = m_buffers[m_editIndex];
+    editState.ecsTransforms.forEach([&](int clipId, const AviQtl::ECS::TransformComponent &et) {
+        auto &gm = editState.globalMatrices[clipId];
+
+        // Z=0 等倍正投影の 4x4 アフィン行列計算 (Row-Major)
+        const float rad = et.rotZ * 3.14159265f / 180.0f;
+        const float c = std::cos(rad);
+        const float s = std::sin(rad);
+
+        gm.m[0] = et.scaleX * c;
+        gm.m[1] = -s;
+        gm.m[2] = 0.0f;
+        gm.m[3] = et.x;
+        gm.m[4] = s;
+        gm.m[5] = et.scaleY * c;
+        gm.m[6] = 0.0f;
+        gm.m[7] = et.y;
+        gm.m[8] = 0.0f;
+        gm.m[9] = 0.0f;
+        gm.m[10] = 1.0f;
+        gm.m[11] = et.z;
+        gm.m[12] = 0.0f;
+        gm.m[13] = 0.0f;
+        gm.m[14] = 0.0f;
+        gm.m[15] = 1.0f;
     });
 }
 

@@ -364,10 +364,12 @@ Item {
 
                 // 根本的修正: 個別のパラメータ変更を clipsChanged なしで検知する
                 Connections {
+                    // これにより tParams や BaseObject 内部が再評価される
+
                     function onEffectParamChanged(clipId, effIdx, name, val) {
                         if (clipId === clipNode.clipIdRole)
                             clipNode._tmRev++;
- // これにより tParams や BaseObject 内部が再評価される
+
                     }
 
                     target: Workspace.currentTimeline

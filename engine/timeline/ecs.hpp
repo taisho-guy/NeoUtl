@@ -188,6 +188,11 @@ struct ECSState {
     DenseComponentMap<RenderComponent> renderStates;
     DenseComponentMap<AudioComponent> audioStates;
     DenseComponentMap<MetadataComponent> metadataStates;
+
+    // Phase 4 拡張: 座標・補間管理
+    DenseComponentMap<AviQtl::ECS::KeyframeRefComponent> keyframeRefs;
+    DenseComponentMap<AviQtl::ECS::TransformComponent> ecsTransforms;
+    DenseComponentMap<AviQtl::ECS::GlobalMatrixComponent> globalMatrices;
 };
 
 class ECS {
@@ -199,14 +204,22 @@ class ECS {
     // TimelineController の毎フレーム先頭 (onTick 相当) から呼び出すこと。
     void runCommandSystem(AviQtl::UI::CoreBridge &bridge);
 
+    // ── Phase 4: Interpolation & Transform Systems ────────────────────────────
+    void runInterpolationSystem();
+    void runTransformSystem();
+    // ─────────────────────────────────────────────────────────────────────────
+
     int currentFrame() const { return m_currentFrame; }
     bool isPlaying() const { return m_isPlaying; }
-    // ─────────────────────────────────────────────────────────────────────────
 
     void syncClipIds(const std::bitset<MAX_CLIP_ID> &aliveFlags);
     void updateClipState(int clipId, int layer, double time, int startFrame, int durationFrames);
     void updateAudioClipState(int clipId, int startFrame, int durationFrames, float volume, float pan, bool mute);
     void updateMetadata(int clipId, const QString &name, const QString &source, const QString &type, const QString &color);
+
+    // Phase 4 サポート API
+    void updateKeyframeRef(int clipId, uint32_t effectId);
+    void updateEcsTransform(int clipId, float x, float y, float z, float scaleX, float scaleY, float rotX, float rotY, float rotZ, float opacity);
 
     void commit();
 
