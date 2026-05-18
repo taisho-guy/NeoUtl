@@ -238,8 +238,8 @@ Node {
     Item {
         id: _fbCaptureItemImpl
 
-        // 🚀 外部のブレンド合成用にプロパティを公開
-        readonly property int blendMode: {
+        // 🚀 外部のブレンド合成用にプロパティを公開 (名前衝突回避のため fb* 接頭辞を使用)
+        readonly property int fbBlendMode: {
             const tModel = base.transformModel;
             if (!tModel)
                 return 0;
@@ -266,9 +266,33 @@ Node {
             if (m === "比較（暗）")
                 return 7;
 
+            if (m === "色反転")
+                return 8;
+
+            if (m === "ソフトライト")
+                return 9;
+
+            if (m === "ハードライト")
+                return 10;
+
+            if (m === "差の絶対値")
+                return 11;
+
+            if (m === "色相")
+                return 12;
+
+            if (m === "彩度")
+                return 13;
+
+            if (m === "カラー")
+                return 14;
+
+            if (m === "輝度")
+                return 15;
+
             return 0; // 通常
         }
-        readonly property real opacityValue: base.hasTransform ? transformLoader.item.outputOpacity : 1
+        readonly property real fbOpacityValue: base.hasTransform ? transformLoader.item.outputOpacity : 1
 
         width: (Workspace.currentTimeline && Workspace.currentTimeline.project) ? Workspace.currentTimeline.project.width : 1920
         height: (Workspace.currentTimeline && Workspace.currentTimeline.project) ? Workspace.currentTimeline.project.height : 1080

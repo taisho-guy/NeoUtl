@@ -108,8 +108,13 @@ Common.BaseObject {
                     if (index === 0)
                         return dummyBackground;
 
-                    var prev = blendChain.itemAt(index - 1);
-                    return prev ? prev.item.output : dummyBackground;
+                    if (blendChain && index - 1 >= 0 && index - 1 < blendChain.count) {
+                        var prev = blendChain.itemAt(index - 1);
+                        if (prev && prev.status === Loader.Ready && prev.item)
+                            return prev.item.output;
+
+                    }
+                    return dummyBackground;
                 }
 
                 anchors.fill: parent
@@ -138,6 +143,13 @@ Common.BaseObject {
                 id: effect
 
                 property variant background
+                property variant source
+                // 前景（レイヤー）が公開しているブレンドパラメータを注入
+                property int blendMode: foregroundItem ? (foregroundItem.fbBlendMode || 0) : 0
+                property real opacityValue: foregroundItem ? (foregroundItem.fbOpacityValue !== undefined ? foregroundItem.fbOpacityValue : 1) : 1
+
+                anchors.fill: parent
+                fragmentShader: "../effects/blend_layer.frag.qsb"
 
                 background: ShaderEffectSource {
                     sourceItem: backgroundItem
@@ -145,20 +157,12 @@ Common.BaseObject {
                     hideSource: false
                 }
 
-                property variant source
-
                 source: ShaderEffectSource {
                     sourceItem: foregroundItem
                     live: true
                     hideSource: false
                 }
 
-                // 前景（レイヤー）が公開しているブレンドパラメータを注入
-                property int blendMode: foregroundItem ? (foregroundItem.blendMode || 0) : 0
-                property real opacityValue: foregroundItem ? (foregroundItem.opacityValue !== undefined ? foregroundItem.opacityValue : 1) : 1
-
-                anchors.fill: parent
-                fragmentShader: "../effects/blend_layer.frag.qsb"
             }
 
             ShaderEffectSource {
