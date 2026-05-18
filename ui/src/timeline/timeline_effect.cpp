@@ -17,34 +17,28 @@ void TimelineService::addEffect(int clipId, const QString &effectId) {
 }
 
 void TimelineService::addEffectInternal(int clipId, const QString &effectId) {
-    for (auto &clip : clipsMutable()) {
-        if (clip.id == clipId) {
-            auto meta = AviQtl::Core::EffectRegistry::instance().getEffect(effectId);
-            auto *model = new EffectModel(meta.id, meta.name, meta.kind, meta.categories, meta.defaultParams, meta.qmlSource, meta.uiDefinition, this);
-            model->syncTrackEndpoints(clip.durationFrames);
-            connect(model, &EffectModel::keyframeTracksChanged, this, &TimelineService::clipsChanged);
-            clip.effects.append(model);
-            emit clipsChanged();
-            emit clipEffectsChanged(clipId);
-            break;
-        }
+    auto *clip = findClipById(clipId);
+    if (clip != nullptr) {
+        auto meta = AviQtl::Core::EffectRegistry::instance().getEffect(effectId);
+        auto *model = new EffectModel(meta.id, meta.name, meta.kind, meta.categories, meta.defaultParams, meta.qmlSource, meta.uiDefinition, this);
+        model->syncTrackEndpoints(clip->durationFrames);
+        clip->effects.append(model);
+        emit clipsChanged();
+        emit clipEffectsChanged(clipId);
     }
 }
 
 void TimelineService::restoreEffectInternal(int clipId, const QVariantMap &data) {
-    for (auto &clip : clipsMutable()) {
-        if (clip.id == clipId) {
-            auto meta = AviQtl::Core::EffectRegistry::instance().getEffect(data.value(QStringLiteral("id")).toString());
-            auto *model = new EffectModel(data.value(QStringLiteral("id")).toString(), data.value(QStringLiteral("name")).toString(), meta.kind, meta.categories, data.value(QStringLiteral("params")).toMap(),
-                                          data.value(QStringLiteral("qmlSource")).toString(), data.value(QStringLiteral("uiDefinition")).toMap(), this);
-            model->setEnabled(data.value(QStringLiteral("enabled")).toBool());
-            model->setKeyframeTracks(data.value(QStringLiteral("keyframes")).toMap());
-            connect(model, &EffectModel::keyframeTracksChanged, this, &TimelineService::clipsChanged);
-            clip.effects.append(model);
-            emit clipsChanged();
-            emit clipEffectsChanged(clipId);
-            break;
-        }
+    auto *clip = findClipById(clipId);
+    if (clip != nullptr) {
+        auto meta = AviQtl::Core::EffectRegistry::instance().getEffect(data.value(QStringLiteral("id")).toString());
+        auto *model = new EffectModel(data.value(QStringLiteral("id")).toString(), data.value(QStringLiteral("name")).toString(), meta.kind, meta.categories, data.value(QStringLiteral("params")).toMap(), data.value(QStringLiteral("qmlSource")).toString(),
+                                      data.value(QStringLiteral("uiDefinition")).toMap(), this);
+        model->setEnabled(data.value(QStringLiteral("enabled")).toBool());
+        model->setKeyframeTracks(data.value(QStringLiteral("keyframes")).toMap());
+        clip->effects.append(model);
+        emit clipsChanged();
+        emit clipEffectsChanged(clipId);
     }
 }
 
@@ -158,7 +152,6 @@ void TimelineService::restoreMultipleEffectsInternal(int clipId, const QList<QVa
                                               d.value(QStringLiteral("uiDefinition")).toMap(), this);
                 model->setEnabled(d.value(QStringLiteral("enabled")).toBool());
                 model->setKeyframeTracks(d.value(QStringLiteral("keyframes")).toMap());
-                connect(model, &EffectModel::keyframeTracksChanged, this, &TimelineService::clipsChanged);
                 clip.effects.append(model);
             }
             emit clipsChanged();
@@ -271,20 +264,18 @@ void TimelineService::reorderMultipleEffects(int clipId, const QVariantList &ind
 }
 
 void TimelineService::applyPermutationInternal(int clipId, const QList<int> &perm) {
-    for (auto &clip : clipsMutable()) {
-        if (clip.id == clipId) {
-            // サイズ不一致は Undo スタックと実際のエフェクト数が乖離した状態 → 安全のため無視
-            if (perm.size() != clip.effects.size())
-                break;
-            QList<EffectModel *> reordered;
-            reordered.reserve(perm.size());
-            for (int idx : perm)
-                reordered.append(clip.effects.at(idx));
-            clip.effects = std::move(reordered);
-            emit clipEffectsChanged(clipId);
-            emit clipsChanged();
-            break;
-        }
+    auto *clip = findClipById(clipId);
+    if (clip != nullptr) {
+        // サイズ不一致は Undo スタックと実際のエフェクト数が乖離した状態 → 安全のため無視
+        if (perm.size() != clip->effects.size())
+            return;
+        QList<EffectModel *> reordered;
+        reordered.reserve(perm.size());
+        for (int idx : perm)
+            reordered.append(clip->effects.at(idx));
+        clip->effects = std::move(reordered);
+        emit clipEffectsChanged(clipId);
+        emit clipsChanged();
     }
 }
 
@@ -381,28 +372,23 @@ void TimelineService::updateEffectParam(int clipId, int effectIndex, const QStri
 }
 
 void TimelineService::updateEffectParamInternal(int clipId, int effectIndex, const QString &paramName, const QVariant &value) {
-    for (auto &clip : clipsMutable()) {
-        if (clip.id == clipId) {
-            if (effectIndex >= 0 && effectIndex < static_cast<int>(clip.effects.size())) {
-                clip.effects.value(effectIndex)->setParam(paramName, value);
+    auto *clip = findClipById(clipId);
+    if (clip != nullptr) {
+        if (effectIndex >= 0 && effectIndex < static_cast<int>(clip->effects.size())) {
+            clip->effects.value(effectIndex)->setParam(paramName, value);
 
-                // メディアの再読み込みが必要なパラメータ（ファイルパスや参照シーン）が変更された場合、
-                // clipsChanged シグナルを発火させて MediaManager 等に通知する
-                if (paramName == QLatin1String("path") || paramName == QLatin1String("source") || paramName == QStringLiteral("targetSceneId")) {
-                    emit clipsChanged();
-                }
+            emit effectParamChanged(clipId, effectIndex, paramName, value);
 
-                emit effectParamChanged(clipId, effectIndex, paramName, value);
-                if (m_selection->selectedClipId() == clipId) {
-                    QVariantMap data = m_selection->selectedClipData();
-                    data.insert(paramName, value);
-                    // select() は単一選択にリセットしてしまうため、
-                    // 既存の複数選択リストを破壊しない refreshSelectionData を使用する。
-                    // これにより UI からの意図しない書き戻しによる選択解除を防ぐ。
-                    m_selection->refreshSelectionData(clipId, data);
-                }
+            // 素材の再読み込みが必要な場合のみ、重い全体リフレッシュを発行
+            if (paramName == QLatin1String("path") || paramName == QLatin1String("source") || paramName == QStringLiteral("targetSceneId")) {
+                emit clipsChanged();
             }
-            break;
+
+            if (m_selection->selectedClipId() == clipId) {
+                QVariantMap data = m_selection->selectedClipData();
+                data.insert(paramName, value);
+                m_selection->refreshSelectionData(clipId, data);
+            }
         }
     }
 }
@@ -455,6 +441,13 @@ void TimelineService::setKeyframeInternal(int clipId, int effectIndex, const QSt
     const auto *clip = findClipById(clipId);
     if ((clip != nullptr) && effectIndex < clip->effects.size()) {
         clip->effects.value(effectIndex)->setKeyframe(paramName, frame, value, options);
+
+        // ECSエンジンの更新を促す
+        emit effectParamChanged(clipId, effectIndex, paramName, value);
+
+        if (paramName == QLatin1String("path") || paramName == QLatin1String("source") || paramName == QStringLiteral("targetSceneId")) {
+            emit clipsChanged();
+        }
     }
 }
 
@@ -462,6 +455,11 @@ void TimelineService::removeKeyframeInternal(int clipId, int effectIndex, const 
     const auto *clip = findClipById(clipId);
     if ((clip != nullptr) && effectIndex < clip->effects.size()) {
         clip->effects.value(effectIndex)->removeKeyframe(paramName, frame);
+
+        emit effectParamChanged(clipId, effectIndex, paramName, QVariant());
+        if (paramName == QLatin1String("path") || paramName == QLatin1String("source") || paramName == QStringLiteral("targetSceneId")) {
+            emit clipsChanged();
+        }
     }
 }
 

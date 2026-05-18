@@ -74,7 +74,9 @@ void TimelineController::setupConnections() {
         updateActiveClipsList();
         emit clipEffectsChanged(id);
     });
-    connect(m_timeline, &TimelineService::effectParamChanged, this, [this]() -> void {
+    // 引数付きのシグナルを QML へ転送
+    connect(m_timeline, &TimelineService::effectParamChanged, this, &TimelineController::effectParamChanged);
+    connect(m_timeline, &TimelineService::effectParamChanged, this, [this]() {
         m_mediaManager->onCurrentFrameChanged();
         updateActiveClipsList();
     });

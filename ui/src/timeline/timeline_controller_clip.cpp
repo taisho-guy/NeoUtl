@@ -212,6 +212,7 @@ auto TimelineController::clips() const -> QVariantList {
     for (const auto &clip : m_timeline->clips()) {
         QVariantMap map;
         map.insert(QStringLiteral("id"), clip.id);
+        map.insert(QStringLiteral("sceneId"), clip.sceneId);
         map.insert(QStringLiteral("type"), clip.type);
         map.insert(QStringLiteral("startFrame"), clip.startFrame);
         map.insert(QStringLiteral("durationFrames"), clip.durationFrames);
@@ -703,9 +704,21 @@ void TimelineController::splitSelectedClips(int frame) {
 
 auto TimelineController::evaluateClipParams(int clipId, int relFrame) const -> QVariantMap {
     QVariantMap out;
-    if (const auto *clip = m_timeline->findClipById(clipId)) {
-        for (auto *eff : clip->effects) {
-            out.insert(eff->id(), eff->evaluatedParams(relFrame));
+    const auto *clip = m_timeline->findClipById(clipId);
+    if (clip == nullptr) {
+        return out;
+    }
+
+    const double fps = project() ? project()->fps() : 60.0;
+
+    for (auto *eff : clip->effects) {
+        // 各エフェクトの評価済みパラメータを取得
+        QVariantMap p = eff->evaluatedParams(relFrame, fps);
+        // 1. エフェクトIDをキーにしてネスト状態で保持（高度なアクセス用）
+        out.insert(eff->id(), p);
+        // 2. トップレベルにフラットにマージ（BaseObjectや既存のQMLコンポーネント用）
+        for (auto it = p.begin(); it != p.end(); ++it) {
+            out.insert(it.key(), it.value());
         }
     }
     return out;

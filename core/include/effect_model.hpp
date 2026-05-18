@@ -582,6 +582,23 @@ class EffectModel : public QObject {
         invalidateCache(key);
         if (m_params[key] != val) {
             m_params[key] = val;
+
+            // アニメーショントラックと同期させ、evaluatedParam() 等が常に最新の静値を返すようにする
+            if (m_keyframeTracks.contains(key)) {
+                QVariant trackVar = m_keyframeTracks.value(key);
+                if (isStructuredTrack(trackVar)) {
+                    QVariantMap trackMap = trackVar.toMap();
+                    QVariantMap startPoint = trackMap.value(QStringLiteral("start")).toMap();
+                    // 開始フレーム(0)の値を更新
+                    if (startPoint.value(QStringLiteral("frame")).toInt() == 0) {
+                        startPoint[QStringLiteral("value")] = val;
+                        trackMap[QStringLiteral("start")] = startPoint;
+                        m_keyframeTracks[key] = trackMap;
+                        emit keyframeTracksChanged();
+                    }
+                }
+            }
+
             emit paramsChanged();
             emit paramChanged(key, val);
         }
@@ -601,6 +618,9 @@ class EffectModel : public QObject {
         if (frame <= startFrame) {
             start[QStringLiteral("value")] = value;
             start[QStringLiteral("interp")] = options.value(QStringLiteral("interp"), start.value(QStringLiteral("interp"), QStringLiteral("none")));
+
+            m_params[paramName] = value; // ベース値も同期
+
             track[QStringLiteral("start")] = start;
             m_keyframeTracks[paramName] = track;
             emit keyframeTracksChanged();
@@ -650,11 +670,12 @@ class EffectModel : public QObject {
         emit keyframeTracksChanged();
     }
 
-    Q_INVOKABLE QVariantMap evaluatedParams(int frame) const {
-        QVariantMap out = m_params;
-        for (auto it = m_keyframeTracks.begin(); it != m_keyframeTracks.end(); ++it) {
-            const QString paramName = it.key();
-            out[paramName] = evaluatedParam(paramName, frame);
+    Q_INVOKABLE QVariantMap evaluatedParams(int frame, double fps = 60.0) const {
+        QVariantMap out;
+        // 全てのキーを網羅するために m_params から開始
+        auto keys = m_params.keys();
+        for (const QString &paramName : std::as_const(keys)) {
+            out[paramName] = evaluatedParam(paramName, frame, fps);
         }
         return out;
     }

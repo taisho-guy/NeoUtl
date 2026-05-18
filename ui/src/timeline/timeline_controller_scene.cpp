@@ -29,6 +29,7 @@ auto TimelineController::getSceneClips(int sceneId) const -> QVariantList {
     for (const auto &clip : clips) {
         QVariantMap map;
         map.insert(QStringLiteral("id"), clip.id);
+        map.insert(QStringLiteral("sceneId"), clip.sceneId);
         map.insert(QStringLiteral("type"), clip.type);
         map.insert(QStringLiteral("startFrame"), clip.startFrame);
         map.insert(QStringLiteral("durationFrames"), clip.durationFrames);

@@ -162,10 +162,10 @@ set(EXTERNAL_QSB_FILES "")
 foreach(DIR "effects" "objects")
     file(GLOB_RECURSE SHADERS RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} "ui/qml/${DIR}/*.frag" "ui/qml/${DIR}/*.vert" "ui/qml/${DIR}/*.comp")
     foreach(SH ${SHADERS})
-        get_filename_component(SH_NAME ${SH} NAME_WLE)
+        get_filename_component(SH_FILE_NAME ${SH} NAME)
         get_filename_component(SH_EXT ${SH} EXT)
         
-        set(OUTPUT_QSB "${CMAKE_BINARY_DIR}/${DIR}/${SH_NAME}.qsb")
+        set(OUTPUT_QSB "${CMAKE_BINARY_DIR}/${DIR}/${SH_FILE_NAME}.qsb")
         list(APPEND EXTERNAL_QSB_FILES ${OUTPUT_QSB})
 
         set(QSB_ARGS "--glsl" "100es,120,150" "--hlsl" "50" "--msl" "12")

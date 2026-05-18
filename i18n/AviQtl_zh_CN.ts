@@ -82,7 +82,7 @@
         <translation>图层更改</translation>
     </message>
     <message>
-        <location filename="../ui/src/timeline/timeline_controller_clip.cpp" line="316"/>
+        <location filename="../ui/src/timeline/timeline_controller_clip.cpp" line="317"/>
         <source>複数クリップリサイズ: %1</source>
         <translation>调整多个片段大小：%1</translation>
     </message>
@@ -166,32 +166,32 @@
 <context>
     <name>BaseObject</name>
     <message>
-        <location filename="../ui/qml/common/BaseObject.qml" line="43"/>
+        <location filename="../ui/qml/common/BaseObject.qml" line="44"/>
         <source>通常</source>
         <translation>正常</translation>
     </message>
     <message>
-        <location filename="../ui/qml/common/BaseObject.qml" line="44"/>
+        <location filename="../ui/qml/common/BaseObject.qml" line="45"/>
         <source>スクリーン</source>
         <translation>滤色</translation>
     </message>
     <message>
-        <location filename="../ui/qml/common/BaseObject.qml" line="47"/>
+        <location filename="../ui/qml/common/BaseObject.qml" line="48"/>
         <source>乗算</source>
         <translation>正片叠底</translation>
     </message>
     <message>
-        <location filename="../ui/qml/common/BaseObject.qml" line="50"/>
+        <location filename="../ui/qml/common/BaseObject.qml" line="51"/>
         <source>オーバーレイ</source>
         <translation>叠加</translation>
     </message>
     <message>
-        <location filename="../ui/qml/common/BaseObject.qml" line="53"/>
+        <location filename="../ui/qml/common/BaseObject.qml" line="54"/>
         <source>焼き込み</source>
         <translation>颜色加深</translation>
     </message>
     <message>
-        <location filename="../ui/qml/common/BaseObject.qml" line="56"/>
+        <location filename="../ui/qml/common/BaseObject.qml" line="57"/>
         <source>覆い焼き</source>
         <translation>颜色减淡</translation>
     </message>
@@ -1408,22 +1408,22 @@
         <translation>删除多个片段：%1</translation>
     </message>
     <message>
-        <location filename="../ui/src/timeline/timeline_clip.cpp" line="745"/>
+        <location filename="../ui/src/timeline/timeline_clip.cpp" line="750"/>
         <source>複数クリップ分割: %1</source>
         <translation>分割多个片段：%1</translation>
     </message>
     <message>
-        <location filename="../ui/src/timeline/timeline_clip.cpp" line="798"/>
+        <location filename="../ui/src/timeline/timeline_clip.cpp" line="803"/>
         <source>複数クリップ貼り付け: %1</source>
         <translation>粘贴多个片段：%1</translation>
     </message>
     <message>
-        <location filename="../ui/src/timeline/timeline_effect.cpp" line="114"/>
+        <location filename="../ui/src/timeline/timeline_effect.cpp" line="108"/>
         <source>エフェクト削除 (%1件)</source>
         <translation>删除效果（%1 项）</translation>
     </message>
     <message>
-        <location filename="../ui/src/timeline/timeline_effect.cpp" line="270"/>
+        <location filename="../ui/src/timeline/timeline_effect.cpp" line="263"/>
         <source>エフェクト順序変更 (%1件)</source>
         <translation>更改效果顺序（%1 项）</translation>
     </message>

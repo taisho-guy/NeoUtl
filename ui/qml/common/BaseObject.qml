@@ -37,6 +37,7 @@ Node {
     // transformLoader.item (Transform.qmlのインスタンス) が存在するか
     readonly property bool hasTransform: transformLoader.status === Loader.Ready && transformLoader.item
     // transformModelの変更検知用
+    property alias revision: base._tmRev
     property int _tmRev: 0
     // 合成モードの計算 (Transform.qmlを変更できないためここで処理)
     readonly property int blendMode: {

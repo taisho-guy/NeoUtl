@@ -198,6 +198,16 @@ Item {
                 property var clipEffectModelsRole: _clipData.effectModels || []
                 property Item fbRendererOutput: null // NodeLoader 完了後に接続
                 property int _tmRev: 0
+                // 根本的修正: 個別のパラメータ変更とフレーム移動の両方に反応する reactive なプロパティ
+                readonly property var evaluatedParams: {
+                    var _trig = clipNode._tmRev; // 変更検知トリガー
+                    if (!Workspace.currentTimeline)
+                        return {
+                    };
+
+                    // C++ から最新の計算済み（フラット化された）パラメータを取得
+                    return Workspace.currentTimeline.evaluateClipParams(clipIdRole, root.currentFrame - clipStartFrameRole);
+                }
                 readonly property var tParams: {
                     var _ = clipNode._tmRev;
                     var tModel = null;
@@ -352,6 +362,17 @@ Item {
                 onAspectYChanged: objectContainer._syncTransformToItem()
                 onPOpacityChanged: objectContainer._syncTransformToItem()
 
+                // 根本的修正: 個別のパラメータ変更を clipsChanged なしで検知する
+                Connections {
+                    function onEffectParamChanged(clipId, effIdx, name, val) {
+                        if (clipId === clipNode.clipIdRole)
+                            clipNode._tmRev++;
+ // これにより tParams や BaseObject 内部が再評価される
+                    }
+
+                    target: Workspace.currentTimeline
+                }
+
                 Instantiator {
                     model: clipNode.clipEffectModelsRole
 
@@ -374,6 +395,8 @@ Item {
                 // Loader (2D) は 3D シーン内では機能しないため、
                 // Qt.createComponent を使用して Node 派生クラスを動的に生成する
                 Common.NodeLoader {
+                    // 内部の evaluatedParams() 等の再計算を強制するトリガー
+
                     id: objectContainer
 
                     // clipNode の transform が変わるたびに BaseObject へ同期
@@ -407,6 +430,7 @@ Item {
                         "clipId": clipNode.clipIdRole,
                         "clipStartFrame": clipNode.clipStartFrameRole,
                         "clipDurationFrames": clipNode.clipDurationFramesRole,
+                        "revision": clipNode._tmRev,
                         "currentFrame": Qt.binding(function() {
                             return root.currentFrame;
                         }),

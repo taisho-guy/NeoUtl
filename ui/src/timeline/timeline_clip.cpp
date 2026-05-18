@@ -642,15 +642,21 @@ void TimelineService::addClipDirectInternal(const ClipData &clip, bool emitSigna
 }
 
 auto TimelineService::findClipById(int clipId) -> ClipData * {
-    auto &currentClips = clipsMutable();
-    auto it = std::ranges::find_if(currentClips, [clipId](const ClipData &c) -> bool { return c.id == clipId; });
-    return (it != currentClips.end()) ? &(*it) : nullptr;
+    for (auto &scene : m_scenes) {
+        auto it = std::ranges::find_if(scene.clips, [clipId](const ClipData &c) -> bool { return c.id == clipId; });
+        if (it != scene.clips.end())
+            return &(*it);
+    }
+    return nullptr;
 }
 
 auto TimelineService::findClipById(int clipId) const -> const ClipData * {
-    const auto &currentClips = clips();
-    auto it = std::ranges::find_if(currentClips, [clipId](const ClipData &c) -> bool { return c.id == clipId; });
-    return (it != currentClips.end()) ? &(*it) : nullptr;
+    for (const auto &scene : std::as_const(m_scenes)) {
+        auto it = std::ranges::find_if(scene.clips, [clipId](const ClipData &c) -> bool { return c.id == clipId; });
+        if (it != scene.clips.end())
+            return &(*it);
+    }
+    return nullptr;
 }
 
 auto TimelineService::deepCopyClip(const ClipData &source) -> ClipData {
@@ -666,7 +672,6 @@ auto TimelineService::deepCopyClip(const ClipData &source) -> ClipData {
         newEffect->setEnabled(oldEffect->isEnabled());
         newEffect->setKeyframeTracks(oldEffect->keyframeTracks());
         newEffect->syncTrackEndpoints(source.durationFrames);
-        connect(newEffect, &EffectModel::keyframeTracksChanged, this, &TimelineService::clipsChanged);
         newClip.effects.append(newEffect);
     }
     return newClip;

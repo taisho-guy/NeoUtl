@@ -597,7 +597,7 @@ ApplicationWindow {
                     height: parent ? parent.height : 0
 
                     sourceComponent: TabBar {
-                        width: (parent && parent.width > 0) ? Math.max(parent.width, contentWidth || 0) : 0
+                        width: (parent && typeof parent.width !== "undefined" && parent.width > 0) ? Math.max(parent.width, contentWidth || 0) : 0
 
                         Repeater {
                             id: projectRepeater
