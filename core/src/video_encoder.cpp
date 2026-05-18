@@ -24,6 +24,7 @@ void VideoEncoder::cleanup() {
         sws_freeContext(m_swsCtx);
         m_swsCtx = nullptr;
     }
+    m_swsSrcFmt = -1;
     if (m_swrCtx != nullptr) {
         swr_free(&m_swrCtx);
         m_swrCtx = nullptr;
@@ -347,6 +348,36 @@ auto VideoEncoder::pushFrame(const QImage &img, int64_t pts) -> bool {
 }
 
 auto VideoEncoder::processVideo(const QImage &img, int64_t pts) -> bool {
+    // 入力QImageのフォーマットを直接FFmpegのAVPixelFormatにマッピングし、
+    // 不要なconvertToFormatによるフレームコピーを回避する。
+    // プラットフォームやグラフィックスAPIによって異なるピクセルレイアウトを正確に扱う。
+    QImage sourceImg = img;
+    AVPixelFormat srcPixFmt = AV_PIX_FMT_NONE;
+    switch (img.format()) {
+    case QImage::Format_RGBA8888:
+    case QImage::Format_RGBX8888:
+        srcPixFmt = AV_PIX_FMT_RGBA;
+        break;
+    case QImage::Format_ARGB32:
+#if Q_BYTE_ORDER == Q_LITTLE_ENDIAN
+        // QtのFormat_ARGB32はリトルエンド環境ではB-G-R-Aの順序(BGRA)
+        srcPixFmt = AV_PIX_FMT_BGRA;
+#else
+        // ビッグエンド環境では正確なマッピングが複雑なためフォールバック
+        sourceImg = img.convertToFormat(QImage::Format_RGBA8888);
+        srcPixFmt = AV_PIX_FMT_RGBA;
+#endif
+        break;
+    case QImage::Format_RGB888:
+        srcPixFmt = AV_PIX_FMT_RGB24;
+        break;
+    default:
+        // 未対応/プレマルチプライドフォーマットはRGBA8888に変換してフォールバック
+        sourceImg = img.convertToFormat(QImage::Format_RGBA8888);
+        srcPixFmt = AV_PIX_FMT_RGBA;
+        break;
+    }
+
     // 内部スレッドで実行される実際の映像エンコード処理
     std::scoped_lock lock(m_mutex);
     if (m_encCtx == nullptr) {
@@ -357,17 +388,14 @@ auto VideoEncoder::processVideo(const QImage &img, int64_t pts) -> bool {
         return false;
     }
 
-    // 色味修正: 入力画像を RGBA8888 (R-G-B-A) に統一
-    // ARGB32 (B-G-R-A on LE) のままだと sws_scale で赤青が反転するため
-    QImage sourceImg = img;
-    if (sourceImg.format() != QImage::Format_RGBA8888) {
-        sourceImg = sourceImg.convertToFormat(QImage::Format_RGBA8888);
-    }
-
-    // 1. QImage (ARGB32) -> SW Frame (NV12) 変換
-    if (m_swsCtx == nullptr) {
-        m_swsCtx = sws_getContext(sourceImg.width(), sourceImg.height(), AV_PIX_FMT_RGBA, // 【重要】入力はRGBA
+    // 1. QImage -> SW Frame (NV12) 変換
+    if (m_swsCtx == nullptr || m_swsSrcFmt != static_cast<int>(srcPixFmt)) {
+        if (m_swsCtx != nullptr) {
+            sws_freeContext(m_swsCtx);
+        }
+        m_swsCtx = sws_getContext(sourceImg.width(), sourceImg.height(), srcPixFmt,
                                   m_config.width, m_config.height, AV_PIX_FMT_NV12, SWS_BILINEAR, nullptr, nullptr, nullptr);
+        m_swsSrcFmt = static_cast<int>(srcPixFmt);
     }
 
     // SWフレームを書き込み可能にする

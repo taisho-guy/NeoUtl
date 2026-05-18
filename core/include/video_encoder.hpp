@@ -65,6 +65,7 @@ class VideoEncoder : public QObject {
     AVFrame *m_hwFrame = nullptr; // For VA-API
     AVFrame *m_swFrame = nullptr; // For CPU staging
     SwsContext *m_swsCtx = nullptr;
+    int m_swsSrcFmt = -1; // AVPixelFormat cached source format (-1 = none)
     AVBufferRef *m_hwDeviceCtx = nullptr;
 
     // Audio
