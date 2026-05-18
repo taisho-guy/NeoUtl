@@ -238,6 +238,38 @@ Node {
     Item {
         id: _fbCaptureItemImpl
 
+        // 🚀 外部のブレンド合成用にプロパティを公開
+        readonly property int blendMode: {
+            const tModel = base.transformModel;
+            if (!tModel)
+                return 0;
+
+            const m = tModel.params["blendMode"] || "通常";
+            if (m === "スクリーン")
+                return 1;
+
+            if (m === "乗算")
+                return 2;
+
+            if (m === "オーバーレイ")
+                return 3;
+
+            if (m === "加算")
+                return 4;
+
+            if (m === "減算")
+                return 5;
+
+            if (m === "比較（明）")
+                return 6;
+
+            if (m === "比較（暗）")
+                return 7;
+
+            return 0; // 通常
+        }
+        readonly property real opacityValue: base.hasTransform ? transformLoader.item.outputOpacity : 1
+
         width: (Workspace.currentTimeline && Workspace.currentTimeline.project) ? Workspace.currentTimeline.project.width : 1920
         height: (Workspace.currentTimeline && Workspace.currentTimeline.project) ? Workspace.currentTimeline.project.height : 1080
         visible: true // SceneGraph に残すため true (opacity は renderHost 側で 0)

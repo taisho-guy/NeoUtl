@@ -248,6 +248,7 @@ class TimelineController : public QObject {
     // Initialization Helpers
     void initializeServices();
     void setupConnections();
+    void syncTimelineToDocumentModel();
 
     // Internal Slots
     void onPlayingChanged();

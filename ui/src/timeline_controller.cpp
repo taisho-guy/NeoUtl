@@ -28,6 +28,7 @@ TimelineController::TimelineController(QObject *parent) : QObject(parent) {
 
     // 初期状態の設定
     m_selection->select(-1, QVariantMap());
+    syncTimelineToDocumentModel();
     AviQtl::Engine::Timeline::BakeController::instance().bake(currentSceneId(), m_transport->currentFrame());
     updateClipActiveState();
 }
@@ -136,7 +137,10 @@ void TimelineController::setTimelineScale(double scale) {
     }
 }
 
-void TimelineController::updateActiveClipsList() { AviQtl::Engine::Timeline::BakeController::instance().bake(currentSceneId(), m_transport->currentFrame()); }
+void TimelineController::updateActiveClipsList() {
+    syncTimelineToDocumentModel();
+    AviQtl::Engine::Timeline::BakeController::instance().bake(currentSceneId(), m_transport->currentFrame());
+}
 
 int TimelineController::timelineDuration() const {
     const auto *scene = AviQtl::Core::DocumentModel::instance().findScene(currentSceneId());
@@ -197,6 +201,98 @@ bool TimelineController::hasUnsavedChanges() const {
         return !m_timeline->undoStack()->isClean();
     }
     return false;
+}
+
+void TimelineController::syncTimelineToDocumentModel() {
+    auto &doc = AviQtl::Core::DocumentModel::instance();
+    doc.clear();
+
+    // 1. プロジェクト設定の同期
+    AviQtl::Core::ProjectSettings projSettings;
+    if (m_project) {
+        projSettings.defaultSceneWidth = m_project->width();
+        projSettings.defaultSceneHeight = m_project->height();
+        projSettings.defaultFps = m_project->fps();
+        projSettings.audioSampleRate = m_project->sampleRate();
+    }
+    doc.setProjectSettings(projSettings);
+
+    // 2. シーンデータの同期
+    if (!m_timeline)
+        return;
+
+    for (const auto &uiScene : m_timeline->getAllScenes()) {
+        AviQtl::Core::SceneSettings sceneSettings;
+        sceneSettings.id = uiScene.id;
+        sceneSettings.name = uiScene.name;
+        sceneSettings.width = uiScene.width;
+        sceneSettings.height = uiScene.height;
+        sceneSettings.fps = uiScene.fps;
+        sceneSettings.totalFrames = uiScene.totalFrames;
+        sceneSettings.enableSnap = uiScene.enableSnap;
+        sceneSettings.gridMode = uiScene.gridMode;
+
+        // レイヤー状態
+        for (int layer : uiScene.lockedLayers) {
+            sceneSettings.lockedLayers.push_back(layer);
+        }
+        for (int layer : uiScene.hiddenLayers) {
+            sceneSettings.hiddenLayers.push_back(layer);
+        }
+
+        // クリップ
+        for (const auto &uiClip : uiScene.clips) {
+            AviQtl::Core::Clip clip;
+            clip.id = uiClip.id;
+            clip.sceneId = uiClip.sceneId;
+            clip.type = uiClip.type;
+            clip.layer = uiClip.layer;
+            clip.startFrame = uiClip.startFrame;
+            clip.durationFrames = uiClip.durationFrames;
+            clip.params = uiClip.params;
+
+            // エフェクト
+            for (const auto *uiEff : uiClip.effects) {
+                if (!uiEff)
+                    continue;
+
+                AviQtl::Core::Effect effect;
+                effect.id = uiEff->id();
+                effect.enabled = uiEff->isEnabled();
+                effect.params = uiEff->params();
+
+                // キーフレーム
+                QVariantMap tracks = uiEff->keyframeTracks();
+                for (auto it = tracks.begin(); it != tracks.end(); ++it) {
+                    const QString &paramName = it.key();
+                    std::vector<AviQtl::Core::Keyframe> kfs;
+
+                    QVariantList flatPoints = uiEff->keyframeListForUi(paramName);
+                    for (const auto &ptVar : std::as_const(flatPoints)) {
+                        QVariantMap ptMap = ptVar.toMap();
+                        AviQtl::Core::Keyframe kf;
+                        kf.frame = ptMap.value(QStringLiteral("frame")).toInt();
+                        kf.value = static_cast<float>(ptMap.value(QStringLiteral("value")).toDouble());
+                        kf.interpolation = ptMap.value(QStringLiteral("interp"), QStringLiteral("linear")).toString();
+                        kf.bzx1 = static_cast<float>(ptMap.value(QStringLiteral("bzx1"), 0.33).toDouble());
+                        kf.bzy1 = static_cast<float>(ptMap.value(QStringLiteral("bzy1"), 0.0).toDouble());
+                        kf.bzx2 = static_cast<float>(ptMap.value(QStringLiteral("bzx2"), 0.66).toDouble());
+                        kf.bzy2 = static_cast<float>(ptMap.value(QStringLiteral("bzy2"), 1.0).toDouble());
+                        kf.expression = ptMap.value(QStringLiteral("expression")).toString();
+                        kfs.push_back(kf);
+                    }
+
+                    effect.keyframes[paramName] = std::move(kfs);
+                }
+
+                clip.effects.push_back(std::move(effect));
+            }
+
+            sceneSettings.clips.push_back(std::move(clip));
+        }
+
+        doc.addScene(sceneSettings);
+    }
 }
 
 } // namespace AviQtl::UI

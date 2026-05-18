@@ -87,16 +87,87 @@ Common.BaseObject {
         height: (Workspace.currentTimeline && Workspace.currentTimeline.project) ? Workspace.currentTimeline.project.height : 1080
         visible: true // SceneGraph に残す (renderHost 側の opacity:0 で非表示にする)
 
-        // 収集した各レイヤーの output をレイヤー順に重ねる
+        // ダミーの透明背景
+        Item {
+            id: dummyBackground
+
+            anchors.fill: parent
+            visible: false
+        }
+
+        // 連鎖的ブレンド合成チェーン
         Repeater {
+            id: blendChain
+
             model: root._capturedOutputs
 
-            ShaderEffectSource {
+            Loader {
+                id: layerLoader
+
+                property Item prevOutput: {
+                    if (index === 0)
+                        return dummyBackground;
+
+                    var prev = blendChain.itemAt(index - 1);
+                    return prev ? prev.item.output : dummyBackground;
+                }
+
                 anchors.fill: parent
-                sourceItem: modelData
+                active: true
+                sourceComponent: blendEffectComponent
+            }
+
+        }
+
+    }
+
+    Component {
+        id: blendEffectComponent
+
+        Item {
+            id: blendEffectItem
+
+            // この段階の合成結果テクスチャを公開
+            property alias output: resultCapture
+            property Item backgroundItem: prevOutput
+            property Item foregroundItem: modelData
+
+            anchors.fill: parent
+
+            ShaderEffect {
+                id: effect
+
+                property variant background
+
+                background: ShaderEffectSource {
+                    sourceItem: backgroundItem
+                    live: true
+                    hideSource: false
+                }
+
+                property variant source
+
+                source: ShaderEffectSource {
+                    sourceItem: foregroundItem
+                    live: true
+                    hideSource: false
+                }
+
+                // 前景（レイヤー）が公開しているブレンドパラメータを注入
+                property int blendMode: foregroundItem ? (foregroundItem.blendMode || 0) : 0
+                property real opacityValue: foregroundItem ? (foregroundItem.opacityValue !== undefined ? foregroundItem.opacityValue : 1) : 1
+
+                anchors.fill: parent
+                fragmentShader: "../effects/blend_layer.frag.qsb"
+            }
+
+            ShaderEffectSource {
+                id: resultCapture
+
+                anchors.fill: parent
+                sourceItem: effect
                 live: true
-                hideSource: false // View3D 側の描画はそのまま残す
-                z: index
+                hideSource: true
             }
 
         }
@@ -129,7 +200,7 @@ Common.BaseObject {
         z: -1
     }
 
-    // flattenHost を1枚のテクスチャに焼く → sourceItem
+    // flattenHost またはブレンドチェーンの最終結果を1枚のテクスチャに焼く → sourceItem
     sourceItem: Item {
         id: fbSourceWrapper
 
@@ -139,7 +210,13 @@ Common.BaseObject {
 
         ShaderEffectSource {
             anchors.fill: parent
-            sourceItem: flattenHost
+            sourceItem: {
+                if (blendChain.count > 0) {
+                    var last = blendChain.itemAt(blendChain.count - 1);
+                    return last ? last.item.output : flattenHost;
+                }
+                return flattenHost;
+            }
             live: true
             hideSource: true
         }

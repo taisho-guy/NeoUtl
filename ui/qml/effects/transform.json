@@ -18,7 +18,7 @@
         "backfaceVisible": true
     },
     "ui": {
-        "group": "object",
+        "group": "effect",
         "controls": [
             {
                 "type": "float",
@@ -107,8 +107,10 @@
                     "スクリーン",
                     "乗算",
                     "オーバーレイ",
-                    "焼き込み",
-                    "覆い焼き"
+                    "加算",
+                    "減算",
+                    "比較（明）",
+                    "比較（暗）"
                 ]
             },
             {
@@ -119,8 +121,8 @@
         ]
     },
     "version": "1.0.0",
-    "kind": "object",
+    "kind": "effect",
     "categories": [
-        "その他"
+        "標準"
     ]
 }
