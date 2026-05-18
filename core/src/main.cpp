@@ -69,9 +69,16 @@ auto main(int argc, char *argv[]) -> int {
     av_log_set_callback(aviqtl_ffmpeg_log_callback);
     QApplication::setWindowIcon(QIcon(QStringLiteral(":/assets/icon.svg")));
 
+    // macOS .app bundle では Resources が ../Resources にある
+    const QString appDir = QApplication::applicationDirPath();
+    QString resourceDir = QDir(appDir + QStringLiteral("/../Resources")).canonicalPath();
+    if (resourceDir.isEmpty()) {
+        resourceDir = appDir;
+    }
+
     // 翻訳
     QTranslator translator;
-    if (translator.load(QLocale::system(), QStringLiteral("AviQtl"), QStringLiteral("_"), QApplication::applicationDirPath() + QStringLiteral("/i18n"))) {
+    if (translator.load(QLocale::system(), QStringLiteral("AviQtl"), QStringLiteral("_"), resourceDir + QStringLiteral("/i18n"))) {
         app.installTranslator(&translator);
     }
 
@@ -114,9 +121,8 @@ auto main(int argc, char *argv[]) -> int {
         modEngine.initialize(nullptr);
         modEngine.loadPlugins();
 
-        const QString appDir = QApplication::applicationDirPath();
-        Core::EffectRegistry::instance().loadEffectsFromDirectory(appDir + QStringLiteral("/effects"));
-        Core::EffectRegistry::instance().loadEffectsFromDirectory(appDir + QStringLiteral("/objects"));
+        Core::EffectRegistry::instance().loadEffectsFromDirectory(resourceDir + QStringLiteral("/effects"));
+        Core::EffectRegistry::instance().loadEffectsFromDirectory(resourceDir + QStringLiteral("/objects"));
 
         // シグナル発行がバックグラウンドスレッドからのため、
         // 第三引数に &app (メインスレッド所属) を渡してメインスレッドで実行されるようにする
