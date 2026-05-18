@@ -1,8 +1,10 @@
 #include "timeline_controller.hpp"
 #include "audio_decoder.hpp"
 #include "commands.hpp"
+#include "core/include/document_model.hpp"
 #include "effect_registry.hpp"
 #include "engine/plugin/audio_plugin_manager.hpp"
+#include "engine/timeline/bake_controller.hpp"
 #include "project_serializer.hpp"
 #include "project_service.hpp"
 #include "scripting/lua_host.hpp"
@@ -26,7 +28,7 @@ TimelineController::TimelineController(QObject *parent) : QObject(parent) {
 
     // 初期状態の設定
     m_selection->select(-1, QVariantMap());
-    m_engineSync->rebuildClipIndex();
+    AviQtl::Engine::Timeline::BakeController::instance().bake(currentSceneId(), m_transport->currentFrame());
     updateClipActiveState();
 }
 
@@ -37,7 +39,6 @@ void TimelineController::initializeServices() {
     m_timeline = new TimelineService(m_selection, this);
 
     m_mediaManager = new TimelineMediaManager(this, this);
-    m_engineSync = new TimelineEngineSynchronizer(this, this);
     m_exportManager = new TimelineExportManager(this, this);
 }
 
@@ -45,7 +46,7 @@ void TimelineController::setupConnections() {
     connect(
         m_timeline, &TimelineService::clipsChanged, this,
         [this]() -> void {
-            m_engineSync->rebuildClipIndex();
+            AviQtl::Engine::Timeline::BakeController::instance().bake(currentSceneId(), m_transport->currentFrame());
             emit clipsChanged();
             m_mediaManager->updateMediaDecoders();
             m_mediaManager->onCurrentFrameChanged();
@@ -135,7 +136,15 @@ void TimelineController::setTimelineScale(double scale) {
     }
 }
 
-void TimelineController::updateActiveClipsList() { m_engineSync->updateActiveClipsList(); }
+void TimelineController::updateActiveClipsList() { AviQtl::Engine::Timeline::BakeController::instance().bake(currentSceneId(), m_transport->currentFrame()); }
+
+int TimelineController::timelineDuration() const {
+    const auto *scene = AviQtl::Core::DocumentModel::instance().findScene(currentSceneId());
+    if (scene) {
+        return scene->totalFrames;
+    }
+    return 300;
+}
 
 void TimelineController::log(const QString &msg) { qDebug() << "[TimelineBridge] " << msg; }
 

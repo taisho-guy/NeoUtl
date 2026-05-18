@@ -3,7 +3,6 @@
 #include "effect_model.hpp"
 #include "project_service.hpp"
 #include "selection_service.hpp"
-#include "timeline_engine_synchronizer.hpp"
 #include "timeline_export_manager.hpp"
 #include "timeline_media_manager.hpp"
 #include "timeline_service.hpp"
@@ -219,7 +218,7 @@ class TimelineController : public QObject {
     Q_INVOKABLE void updateAudioSampleRate() { m_mediaManager->updateAudioSampleRate(); }
 
     // 動的に計算されたタイムラインの長さ（最後のクリップの末尾フレーム）
-    int timelineDuration() const { return m_engineSync->timelineDuration(); }
+    int timelineDuration() const;
 
   signals:
     void videoFrameRequested(int clipId, int relFrame);
@@ -271,7 +270,6 @@ class TimelineController : public QObject {
     TimelineService *m_timeline{};
 
     TimelineMediaManager *m_mediaManager{};
-    TimelineEngineSynchronizer *m_engineSync{};
     TimelineExportManager *m_exportManager{};
 
     QVariantList m_previewSelectionIds;
