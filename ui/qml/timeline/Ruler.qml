@@ -102,7 +102,7 @@ Rectangle {
                         return ;
 
                     var ctx = getContext("2d");
-                    ctx.clearRect(0, 0, width, height);
+                    ctx.clearRect(-1, -1, width + 2, height + 2);
                     if (!Workspace.currentTimeline)
                         return ;
 

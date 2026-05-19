@@ -82,7 +82,7 @@ This software is released under the GNU Affero General Public License Version 3.
         <translation>Layer change</translation>
     </message>
     <message>
-        <location filename="../ui/src/timeline/timeline_controller_clip.cpp" line="317"/>
+        <location filename="../ui/src/timeline/timeline_controller_clip.cpp" line="314"/>
         <source>複数クリップリサイズ: %1</source>
         <translation>Resize multiple clips: %1</translation>
     </message>
@@ -95,17 +95,17 @@ This software is released under the GNU Affero General Public License Version 3.
 <context>
     <name>AviQtl::UI::TimelineExportManager</name>
     <message>
-        <location filename="../ui/src/timeline/timeline_export_manager.cpp" line="95"/>
+        <location filename="../ui/src/timeline/timeline_export_manager.cpp" line="96"/>
         <source>エンコーダーの初期化に失敗しました</source>
         <translation>Failed to initialize encoder</translation>
     </message>
     <message>
-        <location filename="../ui/src/timeline/timeline_export_manager.cpp" line="119"/>
+        <location filename="../ui/src/timeline/timeline_export_manager.cpp" line="124"/>
         <source>キャンセルされました</source>
         <translation>Canceled</translation>
     </message>
     <message>
-        <location filename="../ui/src/timeline/timeline_export_manager.cpp" line="153"/>
+        <location filename="../ui/src/timeline/timeline_export_manager.cpp" line="156"/>
         <source>書き出し完了</source>
         <translation>Export complete</translation>
     </message>
@@ -1967,57 +1967,57 @@ Save before continuing?</translation>
 <context>
     <name>TimelineView</name>
     <message>
-        <location filename="../ui/qml/timeline/TimelineView.qml" line="651"/>
+        <location filename="../ui/qml/timeline/TimelineView.qml" line="655"/>
         <source>オブジェクトを追加</source>
         <translation>Add Object</translation>
     </message>
     <message>
-        <location filename="../ui/qml/timeline/TimelineView.qml" line="656"/>
+        <location filename="../ui/qml/timeline/TimelineView.qml" line="660"/>
         <source>元に戻す</source>
         <translation>Undo</translation>
     </message>
     <message>
-        <location filename="../ui/qml/timeline/TimelineView.qml" line="657"/>
+        <location filename="../ui/qml/timeline/TimelineView.qml" line="661"/>
         <source>やり直す</source>
         <translation>Redo</translation>
     </message>
     <message>
-        <location filename="../ui/qml/timeline/TimelineView.qml" line="658"/>
+        <location filename="../ui/qml/timeline/TimelineView.qml" line="662"/>
         <source>貼り付け</source>
         <translation>Paste</translation>
     </message>
     <message>
-        <location filename="../ui/qml/timeline/TimelineView.qml" line="660"/>
+        <location filename="../ui/qml/timeline/TimelineView.qml" line="664"/>
         <source>シーン設定...</source>
         <translation>Scene Settings...</translation>
     </message>
     <message>
-        <location filename="../ui/qml/timeline/TimelineView.qml" line="661"/>
+        <location filename="../ui/qml/timeline/TimelineView.qml" line="665"/>
         <source>プロジェクト設定...</source>
         <translation>Project Settings...</translation>
     </message>
     <message>
-        <location filename="../ui/qml/timeline/TimelineView.qml" line="662"/>
+        <location filename="../ui/qml/timeline/TimelineView.qml" line="666"/>
         <source>環境設定...</source>
         <translation>Preferences...</translation>
     </message>
     <message>
-        <location filename="../ui/qml/timeline/TimelineView.qml" line="664"/>
+        <location filename="../ui/qml/timeline/TimelineView.qml" line="668"/>
         <source>削除</source>
         <translation>Delete</translation>
     </message>
     <message>
-        <location filename="../ui/qml/timeline/TimelineView.qml" line="665"/>
+        <location filename="../ui/qml/timeline/TimelineView.qml" line="669"/>
         <source>分割</source>
         <translation>Split</translation>
     </message>
     <message>
-        <location filename="../ui/qml/timeline/TimelineView.qml" line="667"/>
+        <location filename="../ui/qml/timeline/TimelineView.qml" line="671"/>
         <source>切り取り</source>
         <translation>Cut</translation>
     </message>
     <message>
-        <location filename="../ui/qml/timeline/TimelineView.qml" line="668"/>
+        <location filename="../ui/qml/timeline/TimelineView.qml" line="672"/>
         <source>コピー</source>
         <translation>Copy</translation>
     </message>

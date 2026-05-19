@@ -26,17 +26,19 @@ Canvas {
     onHeightChanged: requestPaint()
     anchors.fill: parent
     onPaint: {
-        if (width <= 0 || height <= 0 || scale <= 0)
+        if (width < 1 || height <= 0 || scale <= 0)
             return ;
 
         var ctx = getContext("2d");
-        ctx.clearRect(0, 0, width, height);
+        // 境界の1px残りを防ぐため、クリア範囲を広めにとる
+        ctx.clearRect(-1, -1, width + 2, height + 2);
         ctx.lineWidth = 1;
         // 水平区切り線
         ctx.strokeStyle = Qt.rgba(0.5, 0.5, 0.5, 0.2);
         var startY = contentY;
         for (var i = 0; i < layerCount; i++) {
-            var ly = i * layerHeight - startY;
+            // 整数座標で描画
+            var ly = Math.round(i * layerHeight - startY);
             if (ly < -layerHeight || ly > height)
                 continue;
 

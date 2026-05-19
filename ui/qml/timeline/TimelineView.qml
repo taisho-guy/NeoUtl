@@ -148,11 +148,14 @@ ScrollView {
     }
 
     clip: true
+    ScrollBar.horizontal.policy: ScrollBar.AlwaysOn
+    ScrollBar.vertical.policy: ScrollBar.AlwaysOn
 
     Flickable {
         // unified loop handles viewport updates now
         id: timelineFlickable
 
+        clip: true
         contentWidth: Math.max(width, timelineLengthFrames * (Workspace.currentTimeline ? Workspace.currentTimeline.timelineScale : 1))
         contentHeight: layerCount * layerHeight
         interactive: true
@@ -236,8 +239,9 @@ ScrollView {
         }
 
         Item {
-            x: timelineFlickable.contentX
-            y: timelineFlickable.contentY
+            // 描画位置をピクセルにスナップさせてサブピクセル描画によるゴミを防ぐ
+            x: Math.floor(timelineFlickable.contentX)
+            y: Math.floor(timelineFlickable.contentY)
             width: timelineFlickable.width
             height: timelineFlickable.height
             z: -1
@@ -689,48 +693,6 @@ ScrollView {
             id: menuSeparatorComp
 
             MenuSeparator {
-            }
-
-        }
-
-    }
-
-    ScrollBar.horizontal: ScrollBar {
-        id: hbar
-
-        policy: ScrollBar.AlwaysOn
-
-        contentItem: Rectangle {
-            implicitHeight: 6
-            radius: 3
-            color: hbar.pressed ? palette.highlight : palette.mid
-            opacity: hbar.hovered || hbar.pressed ? 1 : 0.5
-
-            MouseArea {
-                anchors.fill: parent
-                acceptedButtons: Qt.NoButton
-                cursorShape: hbar.pressed ? Qt.ClosedHandCursor : Qt.OpenHandCursor
-            }
-
-        }
-
-    }
-
-    ScrollBar.vertical: ScrollBar {
-        id: vbar
-
-        policy: ScrollBar.AlwaysOn
-
-        contentItem: Rectangle {
-            implicitWidth: 6
-            radius: 3
-            color: vbar.pressed ? palette.highlight : palette.mid
-            opacity: vbar.hovered || vbar.pressed ? 1 : 0.5
-
-            MouseArea {
-                anchors.fill: parent
-                acceptedButtons: Qt.NoButton
-                cursorShape: vbar.pressed ? Qt.ClosedHandCursor : Qt.OpenHandCursor
             }
 
         }
