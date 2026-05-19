@@ -34,8 +34,7 @@ struct ECSProfiler {
 
     void dump() const {
         qDebug() << "[ECSProfiler]"
-                 << "commit=" << commitCount.load() << "mapHit=" << denseMapHit.load() << "mapMiss=" << denseMapMiss.load() << "syncRemoved=" << syncAliveRemoved.load()
-                 << "dirtyBits=" << dirtyBitSetCount.load() << "ssboWrite=" << ssboWriteCount.load();
+                 << "commit=" << commitCount.load() << "mapHit=" << denseMapHit.load() << "mapMiss=" << denseMapMiss.load() << "syncRemoved=" << syncAliveRemoved.load() << "dirtyBits=" << dirtyBitSetCount.load() << "ssboWrite=" << ssboWriteCount.load();
     }
 
   private:

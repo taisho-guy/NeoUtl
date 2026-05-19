@@ -201,7 +201,6 @@ This software is released under the GNU Affero General Public License Version 3.
     <message>
         <location filename="../ui/qml/common/ControlLoader.qml" line="30"/>
         <location filename="../ui/qml/common/ControlLoader.qml" line="32"/>
-        <location filename="../ui/qml/common/ControlLoader.qml" line="32"/>
         <source>パラメータ</source>
         <translation>Parameters</translation>
     </message>
@@ -324,7 +323,6 @@ This software is released under the GNU Affero General Public License Version 3.
     <message>
         <location filename="../ui/qml/common/EasingConfigWindow.qml" line="775"/>
         <location filename="../ui/qml/common/EasingConfigWindow.qml" line="979"/>
-        <location filename="../ui/qml/common/EasingConfigWindow.qml" line="979"/>
         <source>直線</source>
         <translation>Linear</translation>
     </message>
@@ -380,7 +378,6 @@ This software is released under the GNU Affero General Public License Version 3.
     </message>
     <message>
         <location filename="../ui/qml/common/EasingConfigWindow.qml" line="808"/>
-        <location filename="../ui/qml/common/EasingConfigWindow.qml" line="982"/>
         <location filename="../ui/qml/common/EasingConfigWindow.qml" line="982"/>
         <source>カスタム</source>
         <translation>Custom</translation>
@@ -476,7 +473,6 @@ This software is released under the GNU Affero General Public License Version 3.
     <message>
         <location filename="../ui/qml/ExportDialog.qml" line="74"/>
         <location filename="../ui/qml/ExportDialog.qml" line="496"/>
-        <location filename="../ui/qml/ExportDialog.qml" line="496"/>
         <source>キャンセル</source>
         <translation>Cancel</translation>
     </message>
@@ -523,7 +519,6 @@ This software is released under the GNU Affero General Public License Version 3.
     <message>
         <location filename="../ui/qml/ExportDialog.qml" line="172"/>
         <location filename="../ui/qml/ExportDialog.qml" line="342"/>
-        <location filename="../ui/qml/ExportDialog.qml" line="342"/>
         <source>コーデック:</source>
         <translation>Codec:</translation>
     </message>
@@ -564,7 +559,6 @@ This software is released under the GNU Affero General Public License Version 3.
     </message>
     <message>
         <location filename="../ui/qml/ExportDialog.qml" line="300"/>
-        <location filename="../ui/qml/ExportDialog.qml" line="383"/>
         <location filename="../ui/qml/ExportDialog.qml" line="383"/>
         <source>ビットレート:</source>
         <translation>Bitrate:</translation>
@@ -794,7 +788,6 @@ This software is released under the GNU Affero General Public License Version 3.
     <message>
         <location filename="../ui/qml/MainWindow.qml" line="142"/>
         <location filename="../ui/qml/MainWindow.qml" line="699"/>
-        <location filename="../ui/qml/MainWindow.qml" line="699"/>
         <source>プロジェクトを開く</source>
         <translation>Open Project</translation>
     </message>
@@ -805,7 +798,6 @@ This software is released under the GNU Affero General Public License Version 3.
     </message>
     <message>
         <location filename="../ui/qml/MainWindow.qml" line="175"/>
-        <location filename="../ui/qml/MainWindow.qml" line="1327"/>
         <location filename="../ui/qml/MainWindow.qml" line="1327"/>
         <source>終了</source>
         <translation>Exit</translation>
@@ -1497,7 +1489,6 @@ Save before continuing?</translation>
     <message>
         <location filename="../ui/qml/SceneSettingsWindow.qml" line="37"/>
         <location filename="../ui/qml/SceneSettingsWindow.qml" line="67"/>
-        <location filename="../ui/qml/SceneSettingsWindow.qml" line="67"/>
         <source>新規シーン作成</source>
         <translation type="unfinished"></translation>
     </message>
@@ -1640,7 +1631,6 @@ Save before continuing?</translation>
     </message>
     <message>
         <location filename="../ui/qml/SystemSettingsWindow.qml" line="29"/>
-        <location filename="../ui/qml/SystemSettingsWindow.qml" line="249"/>
         <location filename="../ui/qml/SystemSettingsWindow.qml" line="249"/>
         <source>新規プロジェクト</source>
         <translation>New Project</translation>

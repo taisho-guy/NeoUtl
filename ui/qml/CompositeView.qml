@@ -117,7 +117,7 @@ Item {
         // 親に収まる最大サイズを計算 (Letterboxing)
         width: root.exportMode ? projW : Math.min(parent.width, parent.height * aspect)
         height: root.exportMode ? projH : Math.min(parent.height, parent.width / aspect)
-        anchors.fill: parent
+        anchors.centerIn: parent
         focus: true
         Keys.onSpacePressed: {
             if (Workspace.currentTimeline && Workspace.currentTimeline.transport)
