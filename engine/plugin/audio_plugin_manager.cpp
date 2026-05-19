@@ -516,8 +516,7 @@ auto parseDiscoveryOutput(const QString &output, const QString &format, const QS
 // 1ファイルに対してディスカバリを実行
 // stdout の逐次読み出しでバッファ詰まりデッドロックを回避
 // stdin を /dev/null に向けて子プロセスによる端末状態の汚染を防ぐ
-auto runDiscovery(const QString &tool, const QString &type, const QString &format, const QString &target, std::atomic<bool> &stopFlag,
-                    int waitStartedMs, int timeoutMs, int waitReadyReadMs, int waitFinishedMs) -> QList<PluginInfo> {
+auto runDiscovery(const QString &tool, const QString &type, const QString &format, const QString &target, std::atomic<bool> &stopFlag, int waitStartedMs, int timeoutMs, int waitReadyReadMs, int waitFinishedMs) -> QList<PluginInfo> {
     if (stopFlag) {
         return {};
     }
@@ -633,8 +632,7 @@ auto discoverFormat(const QString &tool, const FormatConfig &cfg, std::atomic<bo
         if (stopFlag) {
             return;
         }
-        QList<PluginInfo> res = runDiscovery(tool, cfg.type, cfg.format, target, stopFlag,
-                                                waitStartedMs, timeoutMs, waitReadyReadMs, waitFinishedMs);
+        QList<PluginInfo> res = runDiscovery(tool, cfg.type, cfg.format, target, stopFlag, waitStartedMs, timeoutMs, waitReadyReadMs, waitFinishedMs);
         if (!res.isEmpty()) {
             QMutexLocker lock(&mutex);
             all += res;

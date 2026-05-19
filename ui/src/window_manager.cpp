@@ -17,18 +17,6 @@ auto WindowManager::instance() -> WindowManager & {
     return inst;
 }
 
-void WindowManager::spawnInitialWindows(QQmlEngine *engine) {
-    m_engine = engine;
-
-    // ユーザーが即座に見るウィンドウのみ生成
-    // その他のウィンドウは初回アクセス時に遅延生成する
-    spawnWindow(engine, QStringLiteral("main"), QStringLiteral("qrc:/qt/qml/AviQtl/ui/qml/MainWindow.qml"), tr("AviQtl メインプレビュー"), 640, 480, 100, 100, true);
-    spawnWindow(engine, QStringLiteral("timeline"), QStringLiteral("qrc:/qt/qml/AviQtl/ui/qml/TimelineWindow.qml"), tr("タイムライン"), 1280, 300, 100, 600, true);
-
-    // タブが 0 の状態で起動しているので、ランチャーを即座に表示する
-    showLauncher();
-}
-
 static void ensureWindowCreated(QQmlEngine *engine, QHash<QString, QPointer<QQuickWindow>> &windows, const QString &id) {
     if (windows.contains(id) && !windows.value(id).isNull()) {
         return;
@@ -38,8 +26,11 @@ static void ensureWindowCreated(QQmlEngine *engine, QHash<QString, QPointer<QQui
     }
 
     // 各ウィンドウの遅延生成パラメータを集中定義
-    // NOLINTBEGIN(bugprone-easily-swappable-parameters)
-    if (id == QStringLiteral("projectSettings")) {
+    if (id == QStringLiteral("main")) {
+        WindowManager::instance().spawnWindow(engine, id, QStringLiteral("qrc:/qt/qml/AviQtl/ui/qml/MainWindow.qml"), WindowManager::tr("AviQtl メインプレビュー"), 640, 480, 100, 100, true);
+    } else if (id == QStringLiteral("timeline")) {
+        WindowManager::instance().spawnWindow(engine, id, QStringLiteral("qrc:/qt/qml/AviQtl/ui/qml/TimelineWindow.qml"), WindowManager::tr("タイムライン"), 1280, 300, 100, 600, true);
+    } else if (id == QStringLiteral("projectSettings")) {
         WindowManager::instance().spawnWindow(engine, id, QStringLiteral("qrc:/qt/qml/AviQtl/ui/qml/ProjectSettingsWindow.qml"), WindowManager::tr("プロジェクト設定"), 450, 250, 800, 100, false);
     } else if (id == QStringLiteral("objectSettings")) {
         WindowManager::instance().spawnWindow(engine, id, QStringLiteral("qrc:/qt/qml/AviQtl/ui/qml/SettingDialog.qml"), WindowManager::tr("オブジェクト設定"), 400, 600, 800, 420, false);
@@ -59,6 +50,18 @@ static void ensureWindowCreated(QQmlEngine *engine, QHash<QString, QPointer<QQui
         qWarning() << "[WindowManager] Unknown lazy window id:" << id;
     }
     // NOLINTEND(bugprone-easily-swappable-parameters)
+}
+
+void WindowManager::spawnInitialWindows(QQmlEngine *engine) {
+    m_engine = engine;
+
+    // 初期ウィンドウの生成を ensureWindowCreated に委譲
+    // これにより定義が一本化され、"Unknown lazy window id" 警告も解消される
+    ensureWindowCreated(engine, m_windows, QStringLiteral("main"));
+    ensureWindowCreated(engine, m_windows, QStringLiteral("timeline"));
+
+    // タブが 0 の状態で起動しているので、ランチャーを即座に表示する
+    showLauncher();
 }
 
 void WindowManager::showLauncher(QQmlEngine *engine) {

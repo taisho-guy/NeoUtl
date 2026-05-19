@@ -113,46 +113,54 @@ This software is released under the GNU Affero General Public License Version 3.
 <context>
     <name>AviQtl::UI::WindowManager</name>
     <message>
-        <location filename="../ui/src/window_manager.cpp" line="25"/>
+        <location filename="../ui/src/window_manager.cpp" line="30"/>
         <source>AviQtl メインプレビュー</source>
         <translation>AviQtl Main Preview</translation>
     </message>
     <message>
-        <location filename="../ui/src/window_manager.cpp" line="26"/>
+        <location filename="../ui/src/window_manager.cpp" line="32"/>
         <source>タイムライン</source>
         <translation>Timeline</translation>
     </message>
     <message>
+        <location filename="../ui/src/window_manager.cpp" line="34"/>
         <source>プロジェクト設定</source>
-        <translation type="vanished">Project Settings</translation>
+        <translation>Project Settings</translation>
     </message>
     <message>
+        <location filename="../ui/src/window_manager.cpp" line="36"/>
         <source>オブジェクト設定</source>
-        <translation type="vanished">Object Settings</translation>
+        <translation>Object Settings</translation>
     </message>
     <message>
+        <location filename="../ui/src/window_manager.cpp" line="38"/>
         <source>システム設定</source>
-        <translation type="vanished">System Settings</translation>
+        <translation>System Settings</translation>
     </message>
     <message>
+        <location filename="../ui/src/window_manager.cpp" line="40"/>
         <source>AviQtlについて</source>
-        <translation type="vanished">About AviQtl</translation>
+        <translation>About AviQtl</translation>
     </message>
     <message>
+        <location filename="../ui/src/window_manager.cpp" line="42"/>
         <source>シーン設定</source>
-        <translation type="vanished">Scene Settings</translation>
+        <translation>Scene Settings</translation>
     </message>
     <message>
+        <location filename="../ui/src/window_manager.cpp" line="44"/>
         <source>メディアの書き出し</source>
-        <translation type="vanished">Export Media</translation>
+        <translation>Export Media</translation>
     </message>
     <message>
+        <location filename="../ui/src/window_manager.cpp" line="46"/>
         <source>補間設定</source>
-        <translation type="vanished">Interpolation Settings</translation>
+        <translation>Interpolation Settings</translation>
     </message>
     <message>
+        <location filename="../ui/src/window_manager.cpp" line="48"/>
         <source>パッケージマネージャー</source>
-        <translation type="vanished">Package Manager</translation>
+        <translation>Package Manager</translation>
     </message>
 </context>
 <context>
@@ -192,7 +200,6 @@ This software is released under the GNU Affero General Public License Version 3.
     <name>ControlLoader</name>
     <message>
         <location filename="../ui/qml/common/ControlLoader.qml" line="30"/>
-        <location filename="../ui/qml/common/ControlLoader.qml" line="32"/>
         <location filename="../ui/qml/common/ControlLoader.qml" line="32"/>
         <source>パラメータ</source>
         <translation>Parameters</translation>
@@ -316,7 +323,6 @@ This software is released under the GNU Affero General Public License Version 3.
     <message>
         <location filename="../ui/qml/common/EasingConfigWindow.qml" line="775"/>
         <location filename="../ui/qml/common/EasingConfigWindow.qml" line="979"/>
-        <location filename="../ui/qml/common/EasingConfigWindow.qml" line="979"/>
         <source>直線</source>
         <translation>Linear</translation>
     </message>
@@ -372,7 +378,6 @@ This software is released under the GNU Affero General Public License Version 3.
     </message>
     <message>
         <location filename="../ui/qml/common/EasingConfigWindow.qml" line="808"/>
-        <location filename="../ui/qml/common/EasingConfigWindow.qml" line="982"/>
         <location filename="../ui/qml/common/EasingConfigWindow.qml" line="982"/>
         <source>カスタム</source>
         <translation>Custom</translation>
@@ -468,7 +473,6 @@ This software is released under the GNU Affero General Public License Version 3.
     <message>
         <location filename="../ui/qml/ExportDialog.qml" line="74"/>
         <location filename="../ui/qml/ExportDialog.qml" line="496"/>
-        <location filename="../ui/qml/ExportDialog.qml" line="496"/>
         <source>キャンセル</source>
         <translation>Cancel</translation>
     </message>
@@ -515,7 +519,6 @@ This software is released under the GNU Affero General Public License Version 3.
     <message>
         <location filename="../ui/qml/ExportDialog.qml" line="172"/>
         <location filename="../ui/qml/ExportDialog.qml" line="342"/>
-        <location filename="../ui/qml/ExportDialog.qml" line="342"/>
         <source>コーデック:</source>
         <translation>Codec:</translation>
     </message>
@@ -556,7 +559,6 @@ This software is released under the GNU Affero General Public License Version 3.
     </message>
     <message>
         <location filename="../ui/qml/ExportDialog.qml" line="300"/>
-        <location filename="../ui/qml/ExportDialog.qml" line="383"/>
         <location filename="../ui/qml/ExportDialog.qml" line="383"/>
         <source>ビットレート:</source>
         <translation>Bitrate:</translation>
@@ -786,7 +788,6 @@ This software is released under the GNU Affero General Public License Version 3.
     <message>
         <location filename="../ui/qml/MainWindow.qml" line="142"/>
         <location filename="../ui/qml/MainWindow.qml" line="699"/>
-        <location filename="../ui/qml/MainWindow.qml" line="699"/>
         <source>プロジェクトを開く</source>
         <translation>Open Project</translation>
     </message>
@@ -797,7 +798,6 @@ This software is released under the GNU Affero General Public License Version 3.
     </message>
     <message>
         <location filename="../ui/qml/MainWindow.qml" line="175"/>
-        <location filename="../ui/qml/MainWindow.qml" line="1324"/>
         <location filename="../ui/qml/MainWindow.qml" line="1324"/>
         <source>終了</source>
         <translation>Exit</translation>
@@ -1452,51 +1452,42 @@ Save before continuing?</translation>
         <translation>Change effect order (%1 items)</translation>
     </message>
     <message>
-        <location filename="../ui/src/window_manager.cpp" line="43"/>
         <source>プロジェクト設定</source>
-        <translation type="unfinished">Project Settings</translation>
+        <translation type="obsolete">Project Settings</translation>
     </message>
     <message>
-        <location filename="../ui/src/window_manager.cpp" line="45"/>
         <source>オブジェクト設定</source>
-        <translation type="unfinished">Object Settings</translation>
+        <translation type="obsolete">Object Settings</translation>
     </message>
     <message>
-        <location filename="../ui/src/window_manager.cpp" line="47"/>
         <source>システム設定</source>
-        <translation type="unfinished">System Settings</translation>
+        <translation type="obsolete">System Settings</translation>
     </message>
     <message>
-        <location filename="../ui/src/window_manager.cpp" line="49"/>
         <source>AviQtlについて</source>
-        <translation type="unfinished">About AviQtl</translation>
+        <translation type="obsolete">About AviQtl</translation>
     </message>
     <message>
-        <location filename="../ui/src/window_manager.cpp" line="51"/>
         <source>シーン設定</source>
-        <translation type="unfinished">Scene Settings</translation>
+        <translation type="obsolete">Scene Settings</translation>
     </message>
     <message>
-        <location filename="../ui/src/window_manager.cpp" line="53"/>
         <source>メディアの書き出し</source>
-        <translation type="unfinished">Export Media</translation>
+        <translation type="obsolete">Export Media</translation>
     </message>
     <message>
-        <location filename="../ui/src/window_manager.cpp" line="55"/>
         <source>補間設定</source>
-        <translation type="unfinished">Interpolation Settings</translation>
+        <translation type="obsolete">Interpolation Settings</translation>
     </message>
     <message>
-        <location filename="../ui/src/window_manager.cpp" line="57"/>
         <source>パッケージマネージャー</source>
-        <translation type="unfinished">Package Manager</translation>
+        <translation type="obsolete">Package Manager</translation>
     </message>
 </context>
 <context>
     <name>SceneSettingsWindow</name>
     <message>
         <location filename="../ui/qml/SceneSettingsWindow.qml" line="37"/>
-        <location filename="../ui/qml/SceneSettingsWindow.qml" line="67"/>
         <location filename="../ui/qml/SceneSettingsWindow.qml" line="67"/>
         <source>新規シーン作成</source>
         <translation type="unfinished"></translation>
@@ -1640,7 +1631,6 @@ Save before continuing?</translation>
     </message>
     <message>
         <location filename="../ui/qml/SystemSettingsWindow.qml" line="29"/>
-        <location filename="../ui/qml/SystemSettingsWindow.qml" line="249"/>
         <location filename="../ui/qml/SystemSettingsWindow.qml" line="249"/>
         <source>新規プロジェクト</source>
         <translation>New Project</translation>
