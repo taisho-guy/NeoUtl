@@ -254,33 +254,6 @@ auto ECS::getSnapshot() const -> const ECSState * {
     return &m_buffers[m_activeIndex.load(std::memory_order_acquire)];
 }
 
-// ─── writeSSBOLayout ─────────────────────────────────────────────────────────
-
-void ECS::writeSSBOLayout(GpuClipSoA &out) const {
-    ECS_PROF_INC(ssboWriteCount);
-    const ECSState *state = getSnapshot();
-    out.count = 0;
-    state->transforms.forEach([&](int clipId, const TransformComponent &tc) {
-        if (out.count >= MAX_ACTIVE_CLIPS)
-            return;
-        const int idx = out.count++;
-        out.clipIds[idx] = static_cast<int32_t>(clipId);
-        out.layers[idx] = static_cast<int32_t>(tc.layer);
-        out.timePositions[idx] = static_cast<float>(tc.timePosition);
-        out.startFrames[idx] = static_cast<int32_t>(tc.startFrame);
-        out.durationFrames[idx] = static_cast<int32_t>(tc.durationFrames);
-        if (const auto *ac = state->audioStates.find(clipId)) {
-            out.volumes[idx] = ac->volume;
-            out.pans[idx] = ac->pan;
-            out.mutes[idx] = ac->mute ? 1 : 0;
-        } else {
-            out.volumes[idx] = 1.0f;
-            out.pans[idx] = 0.0f;
-            out.mutes[idx] = 0;
-        }
-    });
-}
-
 // ─── Phase 4 サポート API & Systems ──────────────────────────────────────────
 
 void ECS::updateKeyframeRef(int clipId, uint32_t effectId) {

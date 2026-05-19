@@ -707,6 +707,8 @@ ApplicationWindow {
 
     ExportDialog {
         id: exportDialog
+
+        ownerWindow: mainWin
     }
 
     // タブが 0 になったとき（最後のプロジェクトを閉じた時）にランチャーを自動表示

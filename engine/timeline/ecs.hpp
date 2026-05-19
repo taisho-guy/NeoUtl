@@ -35,7 +35,6 @@ struct GlobalMatrixComponent {
 
 } // namespace AviQtl::ECS
 
-#include "ssbo_layout.hpp"
 #include "string_table.hpp"
 #include <QString>
 #include <array>
@@ -217,25 +216,11 @@ class ECS {
     void updateAudioClipState(int clipId, int startFrame, int durationFrames, float volume, float pan, bool mute);
     void updateMetadata(int clipId, const QString &name, const QString &source, const QString &type, const QString &color);
 
-    // Phase 4 サポート API
-    void updateKeyframeRef(int clipId, uint32_t effectId);
-    void updateEcsTransform(int clipId, float x, float y, float z, float scaleX, float scaleY, float rotX, float rotY, float rotZ, float opacity);
-
     void commit();
-
-    void writeSSBOLayout(GpuClipSoA &out) const;
 
     ECSState &editState() { return m_buffers[m_editIndex]; }
 
-    void markEvaluatedParamsDirty(int clipId) {
-        assert(clipId >= 0 && clipId < MAX_CLIP_ID);
-        m_dirtyFlags[(m_editIndex + 1) % 3].dirty.set(static_cast<std::size_t>(clipId));
-        m_dirtyFlags[(m_editIndex + 2) % 3].dirty.set(static_cast<std::size_t>(clipId));
-    }
-
     const ECSState *getSnapshot() const;
-
-    const StringTable &stringTable() const { return m_stringTable; }
 
     bool isRenderGraphDirty() const;
     void markRenderGraphClean();

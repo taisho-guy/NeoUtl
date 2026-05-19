@@ -7,11 +7,8 @@
 #include <QVariant>
 #include <QVariantList>
 #include <algorithm>
-#include <array>
 #include <cmath>
 #include <functional>
-#include <limits>
-#include <map>
 
 namespace AviQtl::UI {
 
@@ -28,70 +25,6 @@ class EffectModel : public QObject {
         const QVariantMap m = raw.toMap();
         return m.contains(QStringLiteral("start")) && m.contains(QStringLiteral("points"));
     }
-    // フェーズ3: QVariantボクシングを排除した数値専用トラック評価
-    // evaluateTrack と同一ロジックだが戻り値が float (boxing なし)
-    // カラー補間・Lua式は対象外 (audio/video の volume, pan 専用)
-    static float evaluateTrackFloat(const QVariantList &track, int frame, float fallback) {
-        if (track.isEmpty())
-            return fallback;
-        auto getFrame = [](const QVariant &v) { return v.toMap().value(QStringLiteral("frame")).toInt(); };
-        auto getValueD = [](const QVariant &v) -> double { return v.toMap().value(QStringLiteral("value")).toDouble(); };
-        auto getInterp = [](const QVariant &v) { return v.toMap().value(QStringLiteral("interp")).toString(); };
-        auto getModeParams = [](const QVariant &v) { return v.toMap().value(QStringLiteral("modeParams")).toMap(); };
-        auto getBezierParams = [](const QVariant &v) -> std::vector<double> {
-            const auto map = v.toMap();
-            auto it = map.find(QStringLiteral("points"));
-            if (it != map.end()) {
-                QVariantList lst = it.value().toList();
-                std::vector<double> pts;
-                pts.reserve(static_cast<std::size_t>(lst.size()));
-                for (const auto &val : std::as_const(lst))
-                    pts.push_back(val.toDouble());
-                return pts;
-            }
-            return {map.value(QStringLiteral("bzx1"), 0.33).toDouble(), map.value(QStringLiteral("bzy1"), 0.0).toDouble(), map.value(QStringLiteral("bzx2"), 0.66).toDouble(), map.value(QStringLiteral("bzy2"), 1.0).toDouble(), 1.0, 1.0};
-        };
-
-        if (frame <= getFrame(track.front()))
-            return static_cast<float>(getValueD(track.front()));
-        if (frame >= getFrame(track.back()))
-            return static_cast<float>(getValueD(track.back()));
-
-        for (int i = 0; i < track.size() - 1; ++i) {
-            const int f0 = getFrame(track[i]), f1 = getFrame(track[i + 1]);
-            if (frame < f0 || frame > f1)
-                continue;
-            const double a = getValueD(track[i]), b = getValueD(track[i + 1]);
-            const double tRaw = (frame - f0) / static_cast<double>(f1 - f0);
-            QString type = getInterp(track[i]);
-            const QVariantMap modeParams = getModeParams(track[i]);
-
-            if (type == QStringLiteral("none"))
-                return static_cast<float>((frame < f1) ? a : b);
-            if (type == QStringLiteral("random")) {
-                const int stepFrames = std::max(1, modeParams.value(QStringLiteral("stepFrames"), 1).toInt());
-                const int stepIndex = (frame - f0) / stepFrames;
-                const quint32 seed = qHash(f0) ^ qHash(f1) ^ qHash(stepIndex) ^ qHash(static_cast<qint64>(a * 1000)) ^ qHash(static_cast<qint64>(b * 1000));
-                return static_cast<float>(std::min(a, b) + (std::max(a, b) - std::min(a, b)) * (double(seed % 1000000u) / 999999.0));
-            }
-            if (type == QStringLiteral("alternate")) {
-                const int stepFrames = std::max(1, modeParams.value(QStringLiteral("stepFrames"), 1).toInt());
-                return static_cast<float>(((frame - f0) / stepFrames % 2 == 0) ? a : b);
-            }
-            std::vector<double> params;
-            if (type == QStringLiteral("custom"))
-                params = getBezierParams(track[i]);
-            const auto &funcs = easingFunctions();
-            auto efIt = funcs.find(type);
-            if (efIt == funcs.end()) {
-                type = QStringLiteral("linear");
-                efIt = funcs.find(type);
-            }
-            return static_cast<float>(a + (b - a) * efIt.value()(tRaw, params));
-        }
-        return static_cast<float>(getValueD(track.back()));
-    }
-
     static QVariantMap makePoint(int frame, const QVariant &value, const QString &interp = QStringLiteral("none")) {
         QVariantMap p;
         p[QStringLiteral("frame")] = frame;
@@ -727,36 +660,6 @@ class EffectModel : public QObject {
         }
 
         return baseValue;
-    }
-
-    // フェーズ3: 数値パラメータ用 QVariant フリー評価 API (public)
-    // C++側 ECS 同期パスから呼ぶ。m_resolvedCache を evaluatedParam と共有する
-    float evaluatedParamFloat(const QString &paramName, int frame, float fallback = 0.0f, double fps = 60.0) const {
-        Q_UNUSED(fps)
-        const QVariant fb = m_params.value(paramName);
-        const float fbF = fb.isValid() ? static_cast<float>(fb.toDouble()) : fallback;
-        auto ktIt = m_keyframeTracks.find(paramName);
-        if (ktIt == m_keyframeTracks.end())
-            return fbF;
-        auto rcIt = m_resolvedCache.find(paramName);
-        if (rcIt == m_resolvedCache.end()) {
-            const QVariant raw = ktIt.value();
-            if (isStructuredTrack(raw)) {
-                const int d = (m_lastDuration > 0) ? m_lastDuration : inferredDurationForTrack(raw);
-                rcIt = m_resolvedCache.insert(paramName, flattenStructuredTrack(normalizeTrackForDuration(raw, fb, d)));
-            } else {
-                rcIt = m_resolvedCache.insert(paramName, sortPoints(raw.toList()));
-            }
-        }
-        return evaluateTrackFloat(rcIt.value(), frame, fbF);
-    }
-
-    // bool パラメータ用: float 評価 → 0.5 閾値で bool に変換
-    bool evaluatedParamBool(const QString &paramName, int frame, bool fallback = false, double fps = 60.0) const {
-        const QVariant fb = m_params.value(paramName);
-        if (!m_keyframeTracks.contains(paramName))
-            return fb.isValid() ? fb.toBool() : fallback;
-        return evaluatedParamFloat(paramName, frame, fallback ? 1.0f : 0.0f, fps) > 0.5f;
     }
 
     void setKeyframeTracks(const QVariantMap &tracks) {

@@ -201,6 +201,7 @@
     <message>
         <location filename="../ui/qml/common/ControlLoader.qml" line="30"/>
         <location filename="../ui/qml/common/ControlLoader.qml" line="32"/>
+        <location filename="../ui/qml/common/ControlLoader.qml" line="32"/>
         <source>パラメータ</source>
         <translation>参数</translation>
     </message>
@@ -323,6 +324,7 @@
     <message>
         <location filename="../ui/qml/common/EasingConfigWindow.qml" line="775"/>
         <location filename="../ui/qml/common/EasingConfigWindow.qml" line="979"/>
+        <location filename="../ui/qml/common/EasingConfigWindow.qml" line="979"/>
         <source>直線</source>
         <translation>直线</translation>
     </message>
@@ -378,6 +380,7 @@
     </message>
     <message>
         <location filename="../ui/qml/common/EasingConfigWindow.qml" line="808"/>
+        <location filename="../ui/qml/common/EasingConfigWindow.qml" line="982"/>
         <location filename="../ui/qml/common/EasingConfigWindow.qml" line="982"/>
         <source>カスタム</source>
         <translation>自定义</translation>
@@ -456,155 +459,158 @@
 <context>
     <name>ExportDialog</name>
     <message>
-        <location filename="../ui/qml/ExportDialog.qml" line="26"/>
+        <location filename="../ui/qml/ExportDialog.qml" line="28"/>
         <source>メディアの書き出し</source>
         <translation>导出媒体</translation>
     </message>
     <message>
-        <location filename="../ui/qml/ExportDialog.qml" line="48"/>
+        <location filename="../ui/qml/ExportDialog.qml" line="51"/>
         <source>書き出し中...</source>
         <translation>正在导出...</translation>
     </message>
     <message>
-        <location filename="../ui/qml/ExportDialog.qml" line="67"/>
+        <location filename="../ui/qml/ExportDialog.qml" line="70"/>
         <source>0 / 0 フレーム</source>
         <translation>0 / 0 帧</translation>
     </message>
     <message>
-        <location filename="../ui/qml/ExportDialog.qml" line="74"/>
-        <location filename="../ui/qml/ExportDialog.qml" line="496"/>
+        <location filename="../ui/qml/ExportDialog.qml" line="77"/>
+        <location filename="../ui/qml/ExportDialog.qml" line="499"/>
+        <location filename="../ui/qml/ExportDialog.qml" line="499"/>
         <source>キャンセル</source>
         <translation>取消</translation>
     </message>
     <message>
-        <location filename="../ui/qml/ExportDialog.qml" line="86"/>
+        <location filename="../ui/qml/ExportDialog.qml" line="89"/>
         <source>%1 / %2 フレーム</source>
         <translation>%1 / %2 帧</translation>
     </message>
     <message>
-        <location filename="../ui/qml/ExportDialog.qml" line="105"/>
+        <location filename="../ui/qml/ExportDialog.qml" line="108"/>
         <source>完了</source>
         <translation>完成</translation>
     </message>
     <message>
-        <location filename="../ui/qml/ExportDialog.qml" line="105"/>
+        <location filename="../ui/qml/ExportDialog.qml" line="108"/>
         <source>エラー</source>
         <translation>错误</translation>
     </message>
     <message>
-        <location filename="../ui/qml/ExportDialog.qml" line="130"/>
+        <location filename="../ui/qml/ExportDialog.qml" line="133"/>
         <source>保存先ファイルパス...</source>
         <translation>保存目标文件路径...</translation>
     </message>
     <message>
-        <location filename="../ui/qml/ExportDialog.qml" line="134"/>
+        <location filename="../ui/qml/ExportDialog.qml" line="137"/>
         <source>参照...</source>
         <translation>浏览...</translation>
     </message>
     <message>
-        <location filename="../ui/qml/ExportDialog.qml" line="142"/>
+        <location filename="../ui/qml/ExportDialog.qml" line="145"/>
         <source>映像</source>
         <translation>视频</translation>
     </message>
     <message>
-        <location filename="../ui/qml/ExportDialog.qml" line="152"/>
+        <location filename="../ui/qml/ExportDialog.qml" line="155"/>
         <source>解像度:</source>
         <translation>分辨率：</translation>
     </message>
     <message>
-        <location filename="../ui/qml/ExportDialog.qml" line="162"/>
+        <location filename="../ui/qml/ExportDialog.qml" line="165"/>
         <source>FPS:</source>
         <translation>FPS：</translation>
     </message>
     <message>
-        <location filename="../ui/qml/ExportDialog.qml" line="172"/>
-        <location filename="../ui/qml/ExportDialog.qml" line="342"/>
+        <location filename="../ui/qml/ExportDialog.qml" line="175"/>
+        <location filename="../ui/qml/ExportDialog.qml" line="345"/>
+        <location filename="../ui/qml/ExportDialog.qml" line="345"/>
         <source>コーデック:</source>
         <translation>编解码器：</translation>
     </message>
     <message>
-        <location filename="../ui/qml/ExportDialog.qml" line="240"/>
+        <location filename="../ui/qml/ExportDialog.qml" line="243"/>
         <source>品質モード:</source>
         <translation>质量模式：</translation>
     </message>
     <message>
-        <location filename="../ui/qml/ExportDialog.qml" line="250"/>
+        <location filename="../ui/qml/ExportDialog.qml" line="253"/>
         <source>CRF</source>
         <translation>CRF</translation>
     </message>
     <message>
-        <location filename="../ui/qml/ExportDialog.qml" line="256"/>
+        <location filename="../ui/qml/ExportDialog.qml" line="259"/>
         <source>ビットレート</source>
         <translation>比特率</translation>
     </message>
     <message>
-        <location filename="../ui/qml/ExportDialog.qml" line="266"/>
+        <location filename="../ui/qml/ExportDialog.qml" line="269"/>
         <source>CRF:</source>
         <translation>CRF：</translation>
     </message>
     <message>
-        <location filename="../ui/qml/ExportDialog.qml" line="291"/>
+        <location filename="../ui/qml/ExportDialog.qml" line="294"/>
         <source>高品質</source>
         <translation>高质量</translation>
     </message>
     <message>
-        <location filename="../ui/qml/ExportDialog.qml" line="291"/>
+        <location filename="../ui/qml/ExportDialog.qml" line="294"/>
         <source>標準</source>
         <translation>标准</translation>
     </message>
     <message>
-        <location filename="../ui/qml/ExportDialog.qml" line="291"/>
+        <location filename="../ui/qml/ExportDialog.qml" line="294"/>
         <source>低品質</source>
         <translation>低质量</translation>
     </message>
     <message>
-        <location filename="../ui/qml/ExportDialog.qml" line="300"/>
-        <location filename="../ui/qml/ExportDialog.qml" line="383"/>
+        <location filename="../ui/qml/ExportDialog.qml" line="303"/>
+        <location filename="../ui/qml/ExportDialog.qml" line="386"/>
+        <location filename="../ui/qml/ExportDialog.qml" line="386"/>
         <source>ビットレート:</source>
         <translation>比特率：</translation>
     </message>
     <message>
-        <location filename="../ui/qml/ExportDialog.qml" line="317"/>
+        <location filename="../ui/qml/ExportDialog.qml" line="320"/>
         <source>%1 Mbps</source>
         <translation>%1 Mbps</translation>
     </message>
     <message>
-        <location filename="../ui/qml/ExportDialog.qml" line="332"/>
+        <location filename="../ui/qml/ExportDialog.qml" line="335"/>
         <source>音声</source>
         <translation>音频</translation>
     </message>
     <message>
-        <location filename="../ui/qml/ExportDialog.qml" line="410"/>
+        <location filename="../ui/qml/ExportDialog.qml" line="413"/>
         <source>範囲</source>
         <translation>范围</translation>
     </message>
     <message>
-        <location filename="../ui/qml/ExportDialog.qml" line="420"/>
+        <location filename="../ui/qml/ExportDialog.qml" line="423"/>
         <source>タイムライン全体</source>
         <translation>整个时间线</translation>
     </message>
     <message>
-        <location filename="../ui/qml/ExportDialog.qml" line="425"/>
+        <location filename="../ui/qml/ExportDialog.qml" line="428"/>
         <source>開始:</source>
         <translation>开始：</translation>
     </message>
     <message>
-        <location filename="../ui/qml/ExportDialog.qml" line="439"/>
+        <location filename="../ui/qml/ExportDialog.qml" line="442"/>
         <source>終了:</source>
         <translation>结束：</translation>
     </message>
     <message>
-        <location filename="../ui/qml/ExportDialog.qml" line="473"/>
+        <location filename="../ui/qml/ExportDialog.qml" line="476"/>
         <source>(%1 フレーム / %2 秒)</source>
         <translation>（%1 帧 / %2 秒）</translation>
     </message>
     <message>
-        <location filename="../ui/qml/ExportDialog.qml" line="501"/>
+        <location filename="../ui/qml/ExportDialog.qml" line="504"/>
         <source>書き出し開始</source>
         <translation>开始导出</translation>
     </message>
     <message>
-        <location filename="../ui/qml/ExportDialog.qml" line="531"/>
+        <location filename="../ui/qml/ExportDialog.qml" line="534"/>
         <source>保存先を指定</source>
         <translation>指定保存目标</translation>
     </message>
@@ -788,6 +794,7 @@
     <message>
         <location filename="../ui/qml/MainWindow.qml" line="142"/>
         <location filename="../ui/qml/MainWindow.qml" line="699"/>
+        <location filename="../ui/qml/MainWindow.qml" line="699"/>
         <source>プロジェクトを開く</source>
         <translation>打开项目</translation>
     </message>
@@ -798,7 +805,8 @@
     </message>
     <message>
         <location filename="../ui/qml/MainWindow.qml" line="175"/>
-        <location filename="../ui/qml/MainWindow.qml" line="1327"/>
+        <location filename="../ui/qml/MainWindow.qml" line="1329"/>
+        <location filename="../ui/qml/MainWindow.qml" line="1329"/>
         <source>終了</source>
         <translation>退出</translation>
     </message>
@@ -950,12 +958,12 @@
         <translation>另存为</translation>
     </message>
     <message>
-        <location filename="../ui/qml/MainWindow.qml" line="1034"/>
+        <location filename="../ui/qml/MainWindow.qml" line="1036"/>
         <source>速度</source>
         <translation>速度</translation>
     </message>
     <message>
-        <location filename="../ui/qml/MainWindow.qml" line="1290"/>
+        <location filename="../ui/qml/MainWindow.qml" line="1292"/>
         <source>ファイル</source>
         <translation>文件</translation>
     </message>
@@ -975,27 +983,27 @@
         <translation>偏好设置</translation>
     </message>
     <message>
-        <location filename="../ui/qml/MainWindow.qml" line="1387"/>
+        <location filename="../ui/qml/MainWindow.qml" line="1389"/>
         <source>ツール</source>
         <translation>工具</translation>
     </message>
     <message>
-        <location filename="../ui/qml/MainWindow.qml" line="1390"/>
+        <location filename="../ui/qml/MainWindow.qml" line="1392"/>
         <source>パッケージマネージャー</source>
         <translation>软件包管理器</translation>
     </message>
     <message>
-        <location filename="../ui/qml/MainWindow.qml" line="1352"/>
+        <location filename="../ui/qml/MainWindow.qml" line="1354"/>
         <source>設定</source>
         <translation>设置</translation>
     </message>
     <message>
-        <location filename="../ui/qml/MainWindow.qml" line="1336"/>
+        <location filename="../ui/qml/MainWindow.qml" line="1338"/>
         <source>編集</source>
         <translation>编辑</translation>
     </message>
     <message>
-        <location filename="../ui/qml/MainWindow.qml" line="1371"/>
+        <location filename="../ui/qml/MainWindow.qml" line="1373"/>
         <source>表示</source>
         <translation>显示</translation>
     </message>
@@ -1010,7 +1018,7 @@
         <translation>显示设置对话框</translation>
     </message>
     <message>
-        <location filename="../ui/qml/MainWindow.qml" line="1409"/>
+        <location filename="../ui/qml/MainWindow.qml" line="1411"/>
         <source>バージョン情報</source>
         <translation>版本信息</translation>
     </message>
@@ -1489,6 +1497,7 @@
     <message>
         <location filename="../ui/qml/SceneSettingsWindow.qml" line="37"/>
         <location filename="../ui/qml/SceneSettingsWindow.qml" line="67"/>
+        <location filename="../ui/qml/SceneSettingsWindow.qml" line="67"/>
         <source>新規シーン作成</source>
         <translation type="unfinished"></translation>
     </message>
@@ -1631,6 +1640,7 @@
     </message>
     <message>
         <location filename="../ui/qml/SystemSettingsWindow.qml" line="29"/>
+        <location filename="../ui/qml/SystemSettingsWindow.qml" line="249"/>
         <location filename="../ui/qml/SystemSettingsWindow.qml" line="249"/>
         <source>新規プロジェクト</source>
         <translation>新建项目</translation>

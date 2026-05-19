@@ -3,11 +3,13 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Dialogs as Dialogs
 import QtQuick.Layouts
+import "common" as Common
 
-Window {
+Common.AviQtlWindow {
     id: root
 
     property var project: Workspace.currentTimeline ? Workspace.currentTimeline.project : null
+    property var ownerWindow: null
     readonly property double pFps: project ? project.fps : 60
     property string defaultCodec: SettingsManager ? SettingsManager.value("exportDefaultCodec", "h264_vaapi") : "h264_vaapi"
     property int defaultBitrateMbps: SettingsManager ? SettingsManager.value("exportDefaultBitrateMbps", 15) : 15
@@ -26,8 +28,9 @@ Window {
     title: qsTr("メディアの書き出し")
     width: 620
     height: 580
-    modality: Qt.ApplicationModal
-    flags: Qt.Dialog | Qt.WindowCloseButtonHint
+    modality: ownerWindow ? Qt.WindowModal : Qt.ApplicationModal
+    transientParent: ownerWindow
+    flags: Qt.Dialog | Qt.WindowTitleHint | Qt.WindowSystemMenuHint | Qt.WindowCloseButtonHint
 
     // 進捗オーバーレイ
     Rectangle {

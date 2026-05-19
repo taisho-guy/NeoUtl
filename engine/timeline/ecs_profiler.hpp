@@ -15,8 +15,6 @@ struct ECSProfiler {
     std::atomic<uint64_t> denseMapMiss{0};
     std::atomic<uint64_t> syncAliveRemoved{0};
     std::atomic<uint64_t> dirtyBitSetCount{0};
-    // フェーズ6: ECS→SSBO 直書き回数
-    std::atomic<uint64_t> ssboWriteCount{0};
 
     static ECSProfiler &instance() {
         static ECSProfiler prof;
@@ -29,12 +27,11 @@ struct ECSProfiler {
         denseMapMiss.store(0, std::memory_order_relaxed);
         syncAliveRemoved.store(0, std::memory_order_relaxed);
         dirtyBitSetCount.store(0, std::memory_order_relaxed);
-        ssboWriteCount.store(0, std::memory_order_relaxed);
     }
 
     void dump() const {
         qDebug() << "[ECSProfiler]"
-                 << "commit=" << commitCount.load() << "mapHit=" << denseMapHit.load() << "mapMiss=" << denseMapMiss.load() << "syncRemoved=" << syncAliveRemoved.load() << "dirtyBits=" << dirtyBitSetCount.load() << "ssboWrite=" << ssboWriteCount.load();
+                 << "commit=" << commitCount.load() << "mapHit=" << denseMapHit.load() << "mapMiss=" << denseMapMiss.load() << "syncRemoved=" << syncAliveRemoved.load() << "dirtyBits=" << dirtyBitSetCount.load();
     }
 
   private:

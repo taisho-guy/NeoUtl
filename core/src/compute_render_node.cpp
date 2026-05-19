@@ -100,7 +100,7 @@ bool ComputeRenderNode::ensureBuffers(QRhi *rhi) {
         m_gpuBuffers.push_back({entry.binding, buf, static_cast<quint32>(sz)});
     }
 
-    // SRB 構築: GpuClipSoA は Compute Shader からの読み取り専用なので bufferLoad を使用
+    // SRB 構築: SSBO は Compute Shader からの読み取り専用なので bufferLoad を使用
     m_srb = rhi->newShaderResourceBindings();
     QList<QRhiShaderResourceBinding> bindings;
     bindings.reserve(m_gpuBuffers.size());
