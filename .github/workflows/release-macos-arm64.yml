@@ -26,7 +26,15 @@ jobs:
           key: macos-ccache
 
       - name: Build and Package
-        run: python3 BUILD.py --xcode
+        run: |
+          TAG_NAME="${{ github.ref_name }}"
+          VERSION=$(echo "$TAG_NAME" | sed -E 's/^([0-9]+\.[0-9]+\.[0-9]+)(-.*)?$/\1/')
+          CODENAME=$(echo "$TAG_NAME" | sed -E 's/^[0-9]+\.[0-9]+\.[0-9]+-?(.*)$/\1/')
+          if [ -z "$CODENAME" ]; then
+            CODENAME="Maoka"
+          fi
+          echo "Building version: $VERSION, codename: $CODENAME"
+          python3 BUILD.py --xcode --version "$VERSION" --codename "$CODENAME"
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4

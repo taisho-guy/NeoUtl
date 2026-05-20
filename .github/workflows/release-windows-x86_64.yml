@@ -23,10 +23,18 @@ jobs:
           install: >-
             mingw-w64-ucrt-x86_64-python
             mingw-w64-ucrt-x86_64-pyside6
-
+      
       - name: Build and Package
         shell: msys2 {0}
-        run: python BUILD.py --msys2
+        run: |
+          TAG_NAME="${{ github.ref_name }}"
+          VERSION=$(echo "$TAG_NAME" | sed -E 's/^([0-9]+\.[0-9]+\.[0-9]+)(-.*)?$/\1/')
+          CODENAME=$(echo "$TAG_NAME" | sed -E 's/^[0-9]+\.[0-9]+\.[0-9]+-?(.*)$/\1/')
+          if [ -z "$CODENAME" ]; then
+            CODENAME="Maoka"
+          fi
+          echo "Building version: $VERSION, codename: $CODENAME"
+          python BUILD.py --msys2 --version "$VERSION" --codename "$CODENAME"
         env:
           GIT_TERMINAL_PROMPT: 0
 
