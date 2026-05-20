@@ -1,0 +1,32 @@
+{
+  "repository_name": "AviQtl Default Repository",
+  "packages": [
+    {
+      "id": "org.aviqtl.effects.blur",
+      "display_name": "Advanced Blur Effect",
+      "description": "High-performance GLSL Blur implementation",
+      "author": "Taisho Guy",
+      "type": "effect",
+      "release_feed": "https://codeberg.org/taisho-guy/AviQtl-Blur/releases.atom",
+      "download_url_template": "https://codeberg.org/taisho-guy/AviQtl-Blur/releases/download/{VERSION}/blur-effect.zip"
+    },
+    {
+      "id": "org.aviqtl.mods.autosave",
+      "display_name": "Enhanced AutoSave",
+      "description": "Lua script that provides flexible interval backups",
+      "author": "AviQtl Dev Team",
+      "type": "mod",
+      "release_feed": "https://example.com/autosave-mod/releases.atom",
+      "download_url_template": "https://example.com/autosave-mod/download/{VERSION}.zip"
+    },
+    {
+      "id": "org.aviqtl.objects.particle",
+      "display_name": "Particle System",
+      "description": "Custom object for particle generation",
+      "author": "Community Contributor",
+      "type": "object",
+      "release_feed": "https://example.com/particle/releases.atom",
+      "download_url_template": "https://example.com/particle/get/{VERSION}.zip"
+    }
+  ]
+}

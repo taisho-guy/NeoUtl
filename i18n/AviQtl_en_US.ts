@@ -967,27 +967,27 @@ This software is released under the GNU Affero General Public License Version 3.
 <context>
     <name>AviQtl::Core::PackageManager</name>
     <message>
-        <location filename="../core/src/package_manager.cpp" line="11"/>
+        <location filename="../core/src/package_manager.cpp" line="14"/>
         <source>待機中</source>
         <translation>Waiting</translation>
     </message>
     <message>
-        <location filename="../core/src/package_manager.cpp" line="38"/>
+        <location filename="../core/src/package_manager.cpp" line="60"/>
         <source>リポジトリを同期中...</source>
         <translation>Synchronizing repository...</translation>
     </message>
     <message>
-        <location filename="../core/src/package_manager.cpp" line="45"/>
+        <location filename="../core/src/package_manager.cpp" line="66"/>
         <source>同期完了</source>
         <translation>Synchronization complete</translation>
     </message>
     <message>
-        <location filename="../core/src/package_manager.cpp" line="55"/>
+        <location filename="../core/src/package_manager.cpp" line="76"/>
         <source>パッケージのインストール中: %1</source>
         <translation>Installing package: %1</translation>
     </message>
     <message>
-        <location filename="../core/src/package_manager.cpp" line="61"/>
+        <location filename="../core/src/package_manager.cpp" line="95"/>
         <source>インストール完了: %1</source>
         <translation>Installation complete: %1</translation>
     </message>
@@ -1964,17 +1964,27 @@ Save before continuing?</translation>
         <translation>Package Manager</translation>
     </message>
     <message>
-        <location filename="../ui/qml/PackageManagerWindow.qml" line="24"/>
+        <location filename="../ui/qml/PackageManagerWindow.qml" line="22"/>
+        <source>リポジトリ設定</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../ui/qml/PackageManagerWindow.qml" line="44"/>
+        <source>追加</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../ui/qml/PackageManagerWindow.qml" line="105"/>
         <source>リポジトリを同期</source>
         <translation>Sync Repository</translation>
     </message>
     <message>
-        <location filename="../ui/qml/PackageManagerWindow.qml" line="35"/>
+        <location filename="../ui/qml/PackageManagerWindow.qml" line="116"/>
         <source>検索...</source>
         <translation>Search...</translation>
     </message>
     <message>
-        <location filename="../ui/qml/PackageManagerWindow.qml" line="50"/>
+        <location filename="../ui/qml/PackageManagerWindow.qml" line="131"/>
         <source>（後で実装: パッケージリスト）</source>
         <translation>(To be implemented later: package list)</translation>
     </message>

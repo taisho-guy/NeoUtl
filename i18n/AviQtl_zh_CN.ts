@@ -967,27 +967,27 @@
 <context>
     <name>AviQtl::Core::PackageManager</name>
     <message>
-        <location filename="../core/src/package_manager.cpp" line="11"/>
+        <location filename="../core/src/package_manager.cpp" line="14"/>
         <source>待機中</source>
         <translation>等待中</translation>
     </message>
     <message>
-        <location filename="../core/src/package_manager.cpp" line="38"/>
+        <location filename="../core/src/package_manager.cpp" line="60"/>
         <source>リポジトリを同期中...</source>
         <translation>正在同步仓库...</translation>
     </message>
     <message>
-        <location filename="../core/src/package_manager.cpp" line="45"/>
+        <location filename="../core/src/package_manager.cpp" line="66"/>
         <source>同期完了</source>
         <translation>同步完成</translation>
     </message>
     <message>
-        <location filename="../core/src/package_manager.cpp" line="55"/>
+        <location filename="../core/src/package_manager.cpp" line="76"/>
         <source>パッケージのインストール中: %1</source>
         <translation>正在安装软件包：%1</translation>
     </message>
     <message>
-        <location filename="../core/src/package_manager.cpp" line="61"/>
+        <location filename="../core/src/package_manager.cpp" line="95"/>
         <source>インストール完了: %1</source>
         <translation>安装完成：%1</translation>
     </message>
@@ -1964,17 +1964,27 @@
         <translation>软件包管理器</translation>
     </message>
     <message>
-        <location filename="../ui/qml/PackageManagerWindow.qml" line="24"/>
+        <location filename="../ui/qml/PackageManagerWindow.qml" line="22"/>
+        <source>リポジトリ設定</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../ui/qml/PackageManagerWindow.qml" line="44"/>
+        <source>追加</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../ui/qml/PackageManagerWindow.qml" line="105"/>
         <source>リポジトリを同期</source>
         <translation>同步仓库</translation>
     </message>
     <message>
-        <location filename="../ui/qml/PackageManagerWindow.qml" line="35"/>
+        <location filename="../ui/qml/PackageManagerWindow.qml" line="116"/>
         <source>検索...</source>
         <translation>搜索...</translation>
     </message>
     <message>
-        <location filename="../ui/qml/PackageManagerWindow.qml" line="50"/>
+        <location filename="../ui/qml/PackageManagerWindow.qml" line="131"/>
         <source>（後で実装: パッケージリスト）</source>
         <translation>（稍后实现：软件包列表）</translation>
     </message>

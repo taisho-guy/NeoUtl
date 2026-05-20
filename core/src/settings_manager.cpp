@@ -59,6 +59,7 @@ SettingsManager::SettingsManager(QObject *parent) : QObject(parent) {
         {"pluginPathsEffects", getDefaultPluginPaths(QStringLiteral("effects"), {QStringLiteral("AVIQTL_EFFECTS_PATH")}, {})},
         {"pluginEnableObjects", true},
         {"pluginPathsObjects", getDefaultPluginPaths(QStringLiteral("objects"), {QStringLiteral("AVIQTL_OBJECTS_PATH")}, {})},
+        {"packageRepositoryUrls", QStringList{QStringLiteral("https://codeberg.org/taisho-guy/AviQtl/raw/branch/main/repos/AviQtl.json")}},
         {"maxImageSize", 8192},
         {"cacheSize", 512},
         {"undoCount", 32},
