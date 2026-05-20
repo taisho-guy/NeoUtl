@@ -9,9 +9,71 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QRegularExpression>
+#include <QSet>
 #include <QUrl>
 
 namespace AviQtl::Core {
+
+namespace {
+constexpr const char *kMetadataTranslationContext = "AviQtl::Core::EffectRegistry";
+
+auto translatedMetadataString(const QString &source) -> QString {
+    if (source.isEmpty()) {
+        return source;
+    }
+
+    return QCoreApplication::translate(kMetadataTranslationContext, source.toUtf8().constData());
+}
+
+auto localizeUiMetadataValue(const QVariant &value) -> QVariant {
+    if (value.metaType().id() == QMetaType::QVariantMap) {
+        QVariantMap map = value.toMap();
+        static const QSet<QString> translatableKeys = {
+            QStringLiteral("label"),
+            QStringLiteral("title"),
+            QStringLiteral("text"),
+            QStringLiteral("name"),
+            QStringLiteral("filter"),
+            QStringLiteral("placeholder"),
+            QStringLiteral("unit"),
+        };
+
+        for (auto it = map.begin(); it != map.end(); ++it) {
+            if (it.key() == QStringLiteral("options") && it.value().metaType().id() == QMetaType::QVariantList) {
+                QVariantList options;
+                const QVariantList rawOptions = it.value().toList();
+                for (const QVariant &option : rawOptions) {
+                    if (option.metaType().id() == QMetaType::QString) {
+                        const QString rawText = option.toString();
+                        QVariantMap displayOption;
+                        displayOption.insert(QStringLiteral("value"), rawText);
+                        displayOption.insert(QStringLiteral("label"), translatedMetadataString(rawText));
+                        options.append(displayOption);
+                    } else {
+                        options.append(localizeUiMetadataValue(option));
+                    }
+                }
+                it.value() = options;
+            } else if (it.value().metaType().id() == QMetaType::QString && translatableKeys.contains(it.key())) {
+                it.value() = translatedMetadataString(it.value().toString());
+            } else {
+                it.value() = localizeUiMetadataValue(it.value());
+            }
+        }
+        return map;
+    }
+
+    if (value.metaType().id() == QMetaType::QVariantList) {
+        QVariantList list = value.toList();
+        for (QVariant &entry : list) {
+            entry = localizeUiMetadataValue(entry);
+        }
+        return list;
+    }
+
+    return value;
+}
+} // namespace
 
 void EffectRegistry::loadEffectsFromDirectory(const QString &path) {
     QDir dir(path);
@@ -84,11 +146,14 @@ void EffectRegistry::loadEffectsFromDirectory(const QString &path) {
         EffectMetadata meta;
         meta.version = version;
         meta.id = id;
-        meta.name = name;
+        meta.name = translatedMetadataString(name);
         meta.kind = kind;
+        for (QString &category : categories) {
+            category = translatedMetadataString(category);
+        }
         meta.categories = categories;
         meta.defaultParams = params;
-        meta.uiDefinition = uiDef;
+        meta.uiDefinition = localizeUiMetadataValue(uiDef).toMap();
         meta.color = obj.value(QStringLiteral("color")).toString();
 
         // qrc: で始まる場合は絶対パスとしてそのまま使用

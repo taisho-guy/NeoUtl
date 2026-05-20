@@ -50,6 +50,46 @@ Loader {
         return "#ffffff";
     }
 
+    function _optionValue(option) {
+        if (option && typeof option === "object")
+            return option.value !== undefined ? option.value : (option.id !== undefined ? option.id : option.label);
+
+        return option;
+    }
+
+    function _optionText(option) {
+        if (option && typeof option === "object")
+            return option.label !== undefined ? option.label : String(_optionValue(option));
+
+        return String(option);
+    }
+
+    function _optionIndex(options, value) {
+        if (!options)
+            return -1;
+
+        for (var i = 0; i < options.length; i++) {
+            if (_optionValue(options[i]) === value)
+                return i;
+
+        }
+        return -1;
+    }
+
+    function _optionModel(options) {
+        if (!options)
+            return [];
+
+        var result = [];
+        for (var i = 0; i < options.length; i++) {
+            result.push({
+                "value": _optionValue(options[i]),
+                "label": _optionText(options[i])
+            });
+        }
+        return result;
+    }
+
     // キーフレーム区間探索（共通ロジック）
     function _findKeyframeInterval(kfs, cur, total) {
         var s = 0, e = total;
@@ -505,14 +545,17 @@ Loader {
             }
 
             ComboBox {
-                model: controlLoader.definition.options || []
+                id: enumCombo
+
+                model: controlLoader._optionModel(controlLoader.definition.options)
                 Layout.fillWidth: true
+                textRole: "label"
                 currentIndex: {
-                    var idx = model.indexOf(controlLoader.value);
+                    var idx = controlLoader._optionIndex(model, controlLoader.value);
                     return idx >= 0 ? idx : 0;
                 }
                 onActivated: {
-                    controlLoader.valueModified(currentText);
+                    controlLoader.valueModified(controlLoader._optionValue(model[index]));
                 }
             }
 

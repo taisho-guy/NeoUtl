@@ -76,6 +76,9 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # --- Module: Core ---
 file(GLOB CORE_SOURCES "core/src/*.cpp")
 file(GLOB CORE_HEADERS "core/include/*.hpp")
+set(EFFECT_METADATA_I18N_SOURCE "${CMAKE_SOURCE_DIR}/core/src/effect_metadata_i18n.cpp")
+list(REMOVE_ITEM CORE_SOURCES "${EFFECT_METADATA_I18N_SOURCE}")
+list(APPEND CORE_SOURCES "${EFFECT_METADATA_I18N_SOURCE}")
 # main.cpp は後で executable に追加するため除外
 list(REMOVE_ITEM CORE_SOURCES "${CMAKE_SOURCE_DIR}/core/src/main.cpp")
 
@@ -217,6 +220,21 @@ file(GLOB TS_FILES "i18n/AviQtl_*.ts")
 if(TS_FILES)
     qt_add_translations(AviQtl TS_FILES ${TS_FILES})
     add_dependencies(AviQtl AviQtl_lupdate AviQtl_lrelease)
+    set(QM_FILES "")
+    foreach(TS_FILE ${TS_FILES})
+        get_filename_component(TS_NAME "${TS_FILE}" NAME_WE)
+        list(APPEND QM_FILES "${CMAKE_BINARY_DIR}/${TS_NAME}.qm")
+    endforeach()
+    if(APPLE)
+        set(AVIQTL_I18N_OUTPUT_DIR "$<TARGET_BUNDLE_DIR:AviQtl>/Contents/Resources/i18n")
+    else()
+        set(AVIQTL_I18N_OUTPUT_DIR "$<TARGET_FILE_DIR:AviQtl>/i18n")
+    endif()
+    add_custom_command(TARGET AviQtl POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E make_directory "${AVIQTL_I18N_OUTPUT_DIR}"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different ${QM_FILES} "${AVIQTL_I18N_OUTPUT_DIR}"
+        VERBATIM
+    )
 endif()
 
 # --- Platform Specific ---

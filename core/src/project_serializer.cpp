@@ -144,12 +144,25 @@ auto ProjectSerializer::load(const QString &fileUrl, UI::TimelineService *timeli
         clip.layer = c.value(QStringLiteral("layer")).toInt();
         clip.params = c.value(QStringLiteral("params")).toObject().toVariantMap();
 
+        QJsonArray audioPluginsArray = c.value(QStringLiteral("audioPlugins")).toArray();
+        for (const auto &pv : std::as_const(audioPluginsArray)) {
+            QJsonObject pObj = pv.toObject();
+            UI::AudioPluginState plugin;
+            plugin.id = pObj.value(QStringLiteral("id")).toString();
+            plugin.enabled = pObj.value(QStringLiteral("enabled")).toBool(true);
+            plugin.params = pObj.value(QStringLiteral("params")).toObject().toVariantMap();
+            if (!plugin.id.isEmpty()) {
+                clip.audioPlugins.append(plugin);
+            }
+        }
+
         QJsonArray effArr = c.value(QStringLiteral("effects")).toArray();
         for (const auto &ev : std::as_const(effArr)) {
             QJsonObject eObj = ev.toObject();
             QString effId = eObj.value(QStringLiteral("id")).toString();
             EffectMetadata meta = EffectRegistry::instance().getEffect(effId);
-            auto *eff = new UI::EffectModel(effId, eObj.value(QStringLiteral("name")).toString(), meta.kind, meta.categories, eObj.value(QStringLiteral("params")).toObject().toVariantMap(), meta.qmlSource, meta.uiDefinition, timeline);
+            QString displayName = meta.name.isEmpty() ? eObj.value(QStringLiteral("name")).toString() : meta.name;
+            auto *eff = new UI::EffectModel(effId, displayName, meta.kind, meta.categories, eObj.value(QStringLiteral("params")).toObject().toVariantMap(), meta.qmlSource, meta.uiDefinition, timeline);
             eff->setEnabled(eObj.value(QStringLiteral("enabled")).toBool(true));
             auto it = eObj.find(QStringLiteral("keyframes"));
             if (it != eObj.end()) {

@@ -32,6 +32,939 @@
     </message>
 </context>
 <context>
+    <name>AviQtl::Core::EffectRegistry</name>
+    <message>
+        <location filename="../core/src/effect_metadata_i18n.cpp" line="7"/>
+        <source>%</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../core/src/effect_metadata_i18n.cpp" line="8"/>
+        <source>arc</source>
+        <translation>弧形</translation>
+    </message>
+    <message>
+        <location filename="../core/src/effect_metadata_i18n.cpp" line="9"/>
+        <source>Audio Files (*.wav *.mp3 *.aac *.m4a *.flac *.ogg)</source>
+        <translation>音频文件 (*.wav *.mp3 *.aac *.m4a *.flac *.ogg)</translation>
+    </message>
+    <message>
+        <location filename="../core/src/effect_metadata_i18n.cpp" line="10"/>
+        <source>Block Size</source>
+        <translation>块大小</translation>
+    </message>
+    <message>
+        <location filename="../core/src/effect_metadata_i18n.cpp" line="11"/>
+        <source>Direction</source>
+        <translation>方向</translation>
+    </message>
+    <message>
+        <location filename="../core/src/effect_metadata_i18n.cpp" line="12"/>
+        <source>donut</source>
+        <translation>圆环</translation>
+    </message>
+    <message>
+        <location filename="../core/src/effect_metadata_i18n.cpp" line="13"/>
+        <source>f</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../core/src/effect_metadata_i18n.cpp" line="14"/>
+        <source>Glitch</source>
+        <translation>故障效果</translation>
+    </message>
+    <message>
+        <location filename="../core/src/effect_metadata_i18n.cpp" line="15"/>
+        <source>Horizontal</source>
+        <translation>水平</translation>
+    </message>
+    <message>
+        <location filename="../core/src/effect_metadata_i18n.cpp" line="16"/>
+        <source>Max Luma</source>
+        <translation>最大亮度</translation>
+    </message>
+    <message>
+        <location filename="../core/src/effect_metadata_i18n.cpp" line="17"/>
+        <source>Min Luma</source>
+        <translation>最小亮度</translation>
+    </message>
+    <message>
+        <location filename="../core/src/effect_metadata_i18n.cpp" line="18"/>
+        <source>Mix</source>
+        <translation>混合</translation>
+    </message>
+    <message>
+        <location filename="../core/src/effect_metadata_i18n.cpp" line="19"/>
+        <source>pie</source>
+        <translation>扇形</translation>
+    </message>
+    <message>
+        <location filename="../core/src/effect_metadata_i18n.cpp" line="20"/>
+        <source>Pixel Sorter</source>
+        <translation>像素排序</translation>
+    </message>
+    <message>
+        <location filename="../core/src/effect_metadata_i18n.cpp" line="21"/>
+        <source>polygon</source>
+        <translation>多边形</translation>
+    </message>
+    <message>
+        <location filename="../core/src/effect_metadata_i18n.cpp" line="22"/>
+        <source>Reverse</source>
+        <translation>反向</translation>
+    </message>
+    <message>
+        <location filename="../core/src/effect_metadata_i18n.cpp" line="23"/>
+        <source>s</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../core/src/effect_metadata_i18n.cpp" line="24"/>
+        <source>star</source>
+        <translation>星形</translation>
+    </message>
+    <message>
+        <location filename="../core/src/effect_metadata_i18n.cpp" line="25"/>
+        <source>Stylize</source>
+        <translation>风格化</translation>
+    </message>
+    <message>
+        <location filename="../core/src/effect_metadata_i18n.cpp" line="26"/>
+        <source>Vertical</source>
+        <translation>垂直</translation>
+    </message>
+    <message>
+        <location filename="../core/src/effect_metadata_i18n.cpp" line="27"/>
+        <source>Video Files (*.mp4 *.mov *.avi *.mkv *.webm *.wmv)</source>
+        <translation>视频文件 (*.mp4 *.mov *.avi *.mkv *.webm *.wmv)</translation>
+    </message>
+    <message>
+        <location filename="../core/src/effect_metadata_i18n.cpp" line="28"/>
+        <source>X</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../core/src/effect_metadata_i18n.cpp" line="29"/>
+        <source>Xずれ</source>
+        <translation>X 偏移</translation>
+    </message>
+    <message>
+        <location filename="../core/src/effect_metadata_i18n.cpp" line="30"/>
+        <source>Xの強さ</source>
+        <translation>X 强度</translation>
+    </message>
+    <message>
+        <location filename="../core/src/effect_metadata_i18n.cpp" line="31"/>
+        <source>X軸回転</source>
+        <translation>X 轴旋转</translation>
+    </message>
+    <message>
+        <location filename="../core/src/effect_metadata_i18n.cpp" line="32"/>
+        <source>Y</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../core/src/effect_metadata_i18n.cpp" line="33"/>
+        <source>Yずれ</source>
+        <translation>Y 偏移</translation>
+    </message>
+    <message>
+        <location filename="../core/src/effect_metadata_i18n.cpp" line="34"/>
+        <source>Yの強さ</source>
+        <translation>Y 强度</translation>
+    </message>
+    <message>
+        <location filename="../core/src/effect_metadata_i18n.cpp" line="35"/>
+        <source>Y軸回転</source>
+        <translation>Y 轴旋转</translation>
+    </message>
+    <message>
+        <location filename="../core/src/effect_metadata_i18n.cpp" line="36"/>
+        <source>Z</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../core/src/effect_metadata_i18n.cpp" line="37"/>
+        <source>Z軸回転</source>
+        <translation>Z 轴旋转</translation>
+    </message>
+    <message>
+        <location filename="../core/src/effect_metadata_i18n.cpp" line="38"/>
+        <source>オーディオ設定</source>
+        <translation>音频设置</translation>
+    </message>
+    <message>
+        <location filename="../core/src/effect_metadata_i18n.cpp" line="39"/>
+        <source>オーバーレイ</source>
+        <translation>叠加</translation>
+    </message>
+    <message>
+        <location filename="../core/src/effect_metadata_i18n.cpp" line="40"/>
+        <source>オフセット</source>
+        <translation>偏移</translation>
+    </message>
+    <message>
+        <location filename="../core/src/effect_metadata_i18n.cpp" line="41"/>
+        <source>カメラ制御</source>
+        <translation>摄像机控制</translation>
+    </message>
+    <message>
+        <location filename="../core/src/effect_metadata_i18n.cpp" line="42"/>
+        <source>カラー</source>
+        <translation>颜色</translation>
+    </message>
+    <message>
+        <location filename="../core/src/effect_metadata_i18n.cpp" line="43"/>
+        <source>グラデーション</source>
+        <translation>渐变</translation>
+    </message>
+    <message>
+        <location filename="../core/src/effect_metadata_i18n.cpp" line="44"/>
+        <source>グラデ種類</source>
+        <translation>渐变类型</translation>
+    </message>
+    <message>
+        <location filename="../core/src/effect_metadata_i18n.cpp" line="45"/>
+        <source>グラデ色2</source>
+        <translation>渐变色 2</translation>
+    </message>
+    <message>
+        <location filename="../core/src/effect_metadata_i18n.cpp" line="46"/>
+        <source>クリッピング</source>
+        <translation>裁剪</translation>
+    </message>
+    <message>
+        <location filename="../core/src/effect_metadata_i18n.cpp" line="47"/>
+        <source>グループ制御</source>
+        <translation>组控制</translation>
+    </message>
+    <message>
+        <location filename="../core/src/effect_metadata_i18n.cpp" line="48"/>
+        <source>コントラスト</source>
+        <translation>对比度</translation>
+    </message>
+    <message>
+        <location filename="../core/src/effect_metadata_i18n.cpp" line="49"/>
+        <source>サイズ</source>
+        <translation>大小</translation>
+    </message>
+    <message>
+        <location filename="../core/src/effect_metadata_i18n.cpp" line="50"/>
+        <source>サイズ固定</source>
+        <translation>固定大小</translation>
+    </message>
+    <message>
+        <location filename="../core/src/effect_metadata_i18n.cpp" line="51"/>
+        <source>サンプル数</source>
+        <translation>采样数</translation>
+    </message>
+    <message>
+        <location filename="../core/src/effect_metadata_i18n.cpp" line="52"/>
+        <source>シーン</source>
+        <translation>场景</translation>
+    </message>
+    <message>
+        <location filename="../core/src/effect_metadata_i18n.cpp" line="53"/>
+        <source>シーンオブジェクト</source>
+        <translation>场景对象</translation>
+    </message>
+    <message>
+        <location filename="../core/src/effect_metadata_i18n.cpp" line="54"/>
+        <source>シャッタースピード</source>
+        <translation>快门速度</translation>
+    </message>
+    <message>
+        <location filename="../core/src/effect_metadata_i18n.cpp" line="55"/>
+        <source>スクリーン</source>
+        <translation>滤色</translation>
+    </message>
+    <message>
+        <location filename="../core/src/effect_metadata_i18n.cpp" line="56"/>
+        <source>その他</source>
+        <translation>其他</translation>
+    </message>
+    <message>
+        <location filename="../core/src/effect_metadata_i18n.cpp" line="57"/>
+        <source>ソフトライト</source>
+        <translation>柔光</translation>
+    </message>
+    <message>
+        <location filename="../core/src/effect_metadata_i18n.cpp" line="58"/>
+        <source>テキスト</source>
+        <translation>文本</translation>
+    </message>
+    <message>
+        <location filename="../core/src/effect_metadata_i18n.cpp" line="59"/>
+        <source>ドロップシャドウ</source>
+        <translation>投影</translation>
+    </message>
+    <message>
+        <location filename="../core/src/effect_metadata_i18n.cpp" line="60"/>
+        <source>ハードライト</source>
+        <translation>强光</translation>
+    </message>
+    <message>
+        <location filename="../core/src/effect_metadata_i18n.cpp" line="61"/>
+        <source>パン</source>
+        <translation>声像</translation>
+    </message>
+    <message>
+        <location filename="../core/src/effect_metadata_i18n.cpp" line="62"/>
+        <source>ファイル</source>
+        <translation>文件</translation>
+    </message>
+    <message>
+        <location filename="../core/src/effect_metadata_i18n.cpp" line="63"/>
+        <source>ファイルパス</source>
+        <translation>文件路径</translation>
+    </message>
+    <message>
+        <location filename="../core/src/effect_metadata_i18n.cpp" line="64"/>
+        <source>フォント</source>
+        <translation>字体</translation>
+    </message>
+    <message>
+        <location filename="../core/src/effect_metadata_i18n.cpp" line="65"/>
+        <source>フレームバッファ</source>
+        <translation>帧缓冲</translation>
+    </message>
+    <message>
+        <location filename="../core/src/effect_metadata_i18n.cpp" line="66"/>
+        <source>フレーム直接指定</source>
+        <translation>直接指定帧</translation>
+    </message>
+    <message>
+        <location filename="../core/src/effect_metadata_i18n.cpp" line="67"/>
+        <source>フレーム番号</source>
+        <translation>帧编号</translation>
+    </message>
+    <message>
+        <location filename="../core/src/effect_metadata_i18n.cpp" line="68"/>
+        <source>ぼかし</source>
+        <translation>模糊</translation>
+    </message>
+    <message>
+        <location filename="../core/src/effect_metadata_i18n.cpp" line="69"/>
+        <source>ミュート</source>
+        <translation>静音</translation>
+    </message>
+    <message>
+        <location filename="../core/src/effect_metadata_i18n.cpp" line="70"/>
+        <source>メディア/音声</source>
+        <translation>媒体/音频</translation>
+    </message>
+    <message>
+        <location filename="../core/src/effect_metadata_i18n.cpp" line="71"/>
+        <source>モーションブラー</source>
+        <translation>运动模糊</translation>
+    </message>
+    <message>
+        <location filename="../core/src/effect_metadata_i18n.cpp" line="72"/>
+        <source>モザイク</source>
+        <translation>马赛克</translation>
+    </message>
+    <message>
+        <location filename="../core/src/effect_metadata_i18n.cpp" line="73"/>
+        <source>ライティング</source>
+        <translation>光照</translation>
+    </message>
+    <message>
+        <location filename="../core/src/effect_metadata_i18n.cpp" line="74"/>
+        <source>ランダムシード</source>
+        <translation>随机种子</translation>
+    </message>
+    <message>
+        <location filename="../core/src/effect_metadata_i18n.cpp" line="75"/>
+        <source>レンズブラー</source>
+        <translation>镜头模糊</translation>
+    </message>
+    <message>
+        <location filename="../core/src/effect_metadata_i18n.cpp" line="76"/>
+        <source>ロール</source>
+        <translation>滚转</translation>
+    </message>
+    <message>
+        <location filename="../core/src/effect_metadata_i18n.cpp" line="77"/>
+        <source>右</source>
+        <translation>右</translation>
+    </message>
+    <message>
+        <location filename="../core/src/effect_metadata_i18n.cpp" line="78"/>
+        <source>影X</source>
+        <translation>阴影 X</translation>
+    </message>
+    <message>
+        <location filename="../core/src/effect_metadata_i18n.cpp" line="79"/>
+        <source>影Y</source>
+        <translation>阴影 Y</translation>
+    </message>
+    <message>
+        <location filename="../core/src/effect_metadata_i18n.cpp" line="80"/>
+        <source>影の不透明度</source>
+        <translation>阴影不透明度</translation>
+    </message>
+    <message>
+        <location filename="../core/src/effect_metadata_i18n.cpp" line="81"/>
+        <source>影色</source>
+        <translation>阴影颜色</translation>
+    </message>
+    <message>
+        <location filename="../core/src/effect_metadata_i18n.cpp" line="82"/>
+        <source>影有効</source>
+        <translation>启用阴影</translation>
+    </message>
+    <message>
+        <location filename="../core/src/effect_metadata_i18n.cpp" line="83"/>
+        <source>縁の色</source>
+        <translation>边框颜色</translation>
+    </message>
+    <message>
+        <location filename="../core/src/effect_metadata_i18n.cpp" line="84"/>
+        <source>縁取り色</source>
+        <translation>描边颜色</translation>
+    </message>
+    <message>
+        <location filename="../core/src/effect_metadata_i18n.cpp" line="85"/>
+        <source>縁取り幅</source>
+        <translation>描边宽度</translation>
+    </message>
+    <message>
+        <location filename="../core/src/effect_metadata_i18n.cpp" line="86"/>
+        <source>縁取り有効</source>
+        <translation>启用描边</translation>
+    </message>
+    <message>
+        <location filename="../core/src/effect_metadata_i18n.cpp" line="87"/>
+        <source>縁幅</source>
+        <translation>边框宽度</translation>
+    </message>
+    <message>
+        <location filename="../core/src/effect_metadata_i18n.cpp" line="88"/>
+        <source>横回数</source>
+        <translation>横向次数</translation>
+    </message>
+    <message>
+        <location filename="../core/src/effect_metadata_i18n.cpp" line="89"/>
+        <source>横間隔</source>
+        <translation>横向间隔</translation>
+    </message>
+    <message>
+        <location filename="../core/src/effect_metadata_i18n.cpp" line="90"/>
+        <source>音声</source>
+        <translation>音频</translation>
+    </message>
+    <message>
+        <location filename="../core/src/effect_metadata_i18n.cpp" line="91"/>
+        <source>音量</source>
+        <translation>音量</translation>
+    </message>
+    <message>
+        <location filename="../core/src/effect_metadata_i18n.cpp" line="92"/>
+        <source>下</source>
+        <translation>下</translation>
+    </message>
+    <message>
+        <location filename="../core/src/effect_metadata_i18n.cpp" line="93"/>
+        <source>下位レイヤーをクリア</source>
+        <translation>清除下方图层</translation>
+    </message>
+    <message>
+        <location filename="../core/src/effect_metadata_i18n.cpp" line="94"/>
+        <source>加算</source>
+        <translation>相加</translation>
+    </message>
+    <message>
+        <location filename="../core/src/effect_metadata_i18n.cpp" line="95"/>
+        <source>画像</source>
+        <translation>图像</translation>
+    </message>
+    <message>
+        <location filename="../core/src/effect_metadata_i18n.cpp" line="96"/>
+        <source>画像ファイル (*.png *.jpg *.jpeg *.bmp *.gif *.tiff *.webp)</source>
+        <translation>图像文件 (*.png *.jpg *.jpeg *.bmp *.gif *.tiff *.webp)</translation>
+    </message>
+    <message>
+        <location filename="../core/src/effect_metadata_i18n.cpp" line="97"/>
+        <source>画像ループ</source>
+        <translation>图像循环</translation>
+    </message>
+    <message>
+        <location filename="../core/src/effect_metadata_i18n.cpp" line="98"/>
+        <source>回転X</source>
+        <translation>旋转 X</translation>
+    </message>
+    <message>
+        <location filename="../core/src/effect_metadata_i18n.cpp" line="99"/>
+        <source>回転Y</source>
+        <translation>旋转 Y</translation>
+    </message>
+    <message>
+        <location filename="../core/src/effect_metadata_i18n.cpp" line="100"/>
+        <source>回転Z</source>
+        <translation>旋转 Z</translation>
+    </message>
+    <message>
+        <location filename="../core/src/effect_metadata_i18n.cpp" line="101"/>
+        <source>開始フレーム</source>
+        <translation>起始帧</translation>
+    </message>
+    <message>
+        <location filename="../core/src/effect_metadata_i18n.cpp" line="102"/>
+        <source>開始フレーム＋再生速度</source>
+        <translation>起始帧＋播放速度</translation>
+    </message>
+    <message>
+        <location filename="../core/src/effect_metadata_i18n.cpp" line="103"/>
+        <source>開始時間</source>
+        <translation>开始时间</translation>
+    </message>
+    <message>
+        <location filename="../core/src/effect_metadata_i18n.cpp" line="104"/>
+        <source>開始時間＋再生速度</source>
+        <translation>开始时间＋播放速度</translation>
+    </message>
+    <message>
+        <location filename="../core/src/effect_metadata_i18n.cpp" line="105"/>
+        <source>拡散</source>
+        <translation>扩散</translation>
+    </message>
+    <message>
+        <location filename="../core/src/effect_metadata_i18n.cpp" line="106"/>
+        <source>拡散光</source>
+        <translation>扩散光</translation>
+    </message>
+    <message>
+        <location filename="../core/src/effect_metadata_i18n.cpp" line="107"/>
+        <source>拡大率</source>
+        <translation>缩放率</translation>
+    </message>
+    <message>
+        <location filename="../core/src/effect_metadata_i18n.cpp" line="108"/>
+        <source>角丸</source>
+        <translation>圆角</translation>
+    </message>
+    <message>
+        <location filename="../core/src/effect_metadata_i18n.cpp" line="109"/>
+        <source>角度</source>
+        <translation>角度</translation>
+    </message>
+    <message>
+        <location filename="../core/src/effect_metadata_i18n.cpp" line="110"/>
+        <source>基本</source>
+        <translation>基本</translation>
+    </message>
+    <message>
+        <location filename="../core/src/effect_metadata_i18n.cpp" line="111"/>
+        <source>基本エフェクト</source>
+        <translation>基本效果</translation>
+    </message>
+    <message>
+        <location filename="../core/src/effect_metadata_i18n.cpp" line="112"/>
+        <source>輝度</source>
+        <translation>亮度</translation>
+    </message>
+    <message>
+        <location filename="../core/src/effect_metadata_i18n.cpp" line="113"/>
+        <source>境界ぼかし</source>
+        <translation>边界模糊</translation>
+    </message>
+    <message>
+        <location filename="../core/src/effect_metadata_i18n.cpp" line="114"/>
+        <source>強さ</source>
+        <translation>强度</translation>
+    </message>
+    <message>
+        <location filename="../core/src/effect_metadata_i18n.cpp" line="115"/>
+        <source>減算</source>
+        <translation>相减</translation>
+    </message>
+    <message>
+        <location filename="../core/src/effect_metadata_i18n.cpp" line="116"/>
+        <source>光の強さ</source>
+        <translation>光强度</translation>
+    </message>
+    <message>
+        <location filename="../core/src/effect_metadata_i18n.cpp" line="117"/>
+        <source>行間隔</source>
+        <translation>行间距</translation>
+    </message>
+    <message>
+        <location filename="../core/src/effect_metadata_i18n.cpp" line="118"/>
+        <source>高さ</source>
+        <translation>高度</translation>
+    </message>
+    <message>
+        <location filename="../core/src/effect_metadata_i18n.cpp" line="119"/>
+        <source>合成モード</source>
+        <translation>混合模式</translation>
+    </message>
+    <message>
+        <location filename="../core/src/effect_metadata_i18n.cpp" line="120"/>
+        <source>左</source>
+        <translation>左</translation>
+    </message>
+    <message>
+        <location filename="../core/src/effect_metadata_i18n.cpp" line="121"/>
+        <source>差の絶対値</source>
+        <translation>差值绝对值</translation>
+    </message>
+    <message>
+        <location filename="../core/src/effect_metadata_i18n.cpp" line="122"/>
+        <source>再生モード</source>
+        <translation>播放模式</translation>
+    </message>
+    <message>
+        <location filename="../core/src/effect_metadata_i18n.cpp" line="123"/>
+        <source>再生速度</source>
+        <translation>播放速度</translation>
+    </message>
+    <message>
+        <location filename="../core/src/effect_metadata_i18n.cpp" line="124"/>
+        <source>彩度</source>
+        <translation>饱和度</translation>
+    </message>
+    <message>
+        <location filename="../core/src/effect_metadata_i18n.cpp" line="125"/>
+        <source>指定時間</source>
+        <translation>指定时间</translation>
+    </message>
+    <message>
+        <location filename="../core/src/effect_metadata_i18n.cpp" line="126"/>
+        <source>視野角</source>
+        <translation>视野角</translation>
+    </message>
+    <message>
+        <location filename="../core/src/effect_metadata_i18n.cpp" line="127"/>
+        <source>時間直接指定</source>
+        <translation>直接指定时间</translation>
+    </message>
+    <message>
+        <location filename="../core/src/effect_metadata_i18n.cpp" line="128"/>
+        <source>斜めクリッピング</source>
+        <translation>斜向裁剪</translation>
+    </message>
+    <message>
+        <location filename="../core/src/effect_metadata_i18n.cpp" line="129"/>
+        <source>斜体</source>
+        <translation>斜体</translation>
+    </message>
+    <message>
+        <location filename="../core/src/effect_metadata_i18n.cpp" line="130"/>
+        <source>種類</source>
+        <translation>类型</translation>
+    </message>
+    <message>
+        <location filename="../core/src/effect_metadata_i18n.cpp" line="131"/>
+        <source>縦横比</source>
+        <translation>宽高比</translation>
+    </message>
+    <message>
+        <location filename="../core/src/effect_metadata_i18n.cpp" line="132"/>
+        <source>縦回数</source>
+        <translation>纵向次数</translation>
+    </message>
+    <message>
+        <location filename="../core/src/effect_metadata_i18n.cpp" line="133"/>
+        <source>縦間隔</source>
+        <translation>纵向间隔</translation>
+    </message>
+    <message>
+        <location filename="../core/src/effect_metadata_i18n.cpp" line="134"/>
+        <source>初期回転 (°)</source>
+        <translation>初始旋转 (°)</translation>
+    </message>
+    <message>
+        <location filename="../core/src/effect_metadata_i18n.cpp" line="135"/>
+        <source>上</source>
+        <translation>上</translation>
+    </message>
+    <message>
+        <location filename="../core/src/effect_metadata_i18n.cpp" line="136"/>
+        <source>乗算</source>
+        <translation>正片叠底</translation>
+    </message>
+    <message>
+        <location filename="../core/src/effect_metadata_i18n.cpp" line="137"/>
+        <source>色</source>
+        <translation>颜色</translation>
+    </message>
+    <message>
+        <location filename="../core/src/effect_metadata_i18n.cpp" line="138"/>
+        <source>色ずれ</source>
+        <translation>色差</translation>
+    </message>
+    <message>
+        <location filename="../core/src/effect_metadata_i18n.cpp" line="139"/>
+        <source>色相</source>
+        <translation>色相</translation>
+    </message>
+    <message>
+        <location filename="../core/src/effect_metadata_i18n.cpp" line="140"/>
+        <source>色調補正</source>
+        <translation>色调校正</translation>
+    </message>
+    <message>
+        <location filename="../core/src/effect_metadata_i18n.cpp" line="141"/>
+        <source>色反転</source>
+        <translation>反色</translation>
+    </message>
+    <message>
+        <location filename="../core/src/effect_metadata_i18n.cpp" line="142"/>
+        <source>振動</source>
+        <translation>振动</translation>
+    </message>
+    <message>
+        <location filename="../core/src/effect_metadata_i18n.cpp" line="143"/>
+        <source>図形</source>
+        <translation>图形</translation>
+    </message>
+    <message>
+        <location filename="../core/src/effect_metadata_i18n.cpp" line="144"/>
+        <source>制御</source>
+        <translation>控制</translation>
+    </message>
+    <message>
+        <location filename="../core/src/effect_metadata_i18n.cpp" line="145"/>
+        <source>青ずれX</source>
+        <translation>蓝色偏移 X</translation>
+    </message>
+    <message>
+        <location filename="../core/src/effect_metadata_i18n.cpp" line="146"/>
+        <source>青ずれY</source>
+        <translation>蓝色偏移 Y</translation>
+    </message>
+    <message>
+        <location filename="../core/src/effect_metadata_i18n.cpp" line="147"/>
+        <source>赤ずれX</source>
+        <translation>红色偏移 X</translation>
+    </message>
+    <message>
+        <location filename="../core/src/effect_metadata_i18n.cpp" line="148"/>
+        <source>赤ずれY</source>
+        <translation>红色偏移 Y</translation>
+    </message>
+    <message>
+        <location filename="../core/src/effect_metadata_i18n.cpp" line="149"/>
+        <source>線形</source>
+        <translation>线性</translation>
+    </message>
+    <message>
+        <location filename="../core/src/effect_metadata_i18n.cpp" line="150"/>
+        <source>速度</source>
+        <translation>速度</translation>
+    </message>
+    <message>
+        <location filename="../core/src/effect_metadata_i18n.cpp" line="151"/>
+        <source>太字</source>
+        <translation>粗体</translation>
+    </message>
+    <message>
+        <location filename="../core/src/effect_metadata_i18n.cpp" line="152"/>
+        <source>対象レイヤー数</source>
+        <translation>目标图层数</translation>
+    </message>
+    <message>
+        <location filename="../core/src/effect_metadata_i18n.cpp" line="153"/>
+        <source>中心X</source>
+        <translation>中心 X</translation>
+    </message>
+    <message>
+        <location filename="../core/src/effect_metadata_i18n.cpp" line="154"/>
+        <source>中心Y</source>
+        <translation>中心 Y</translation>
+    </message>
+    <message>
+        <location filename="../core/src/effect_metadata_i18n.cpp" line="155"/>
+        <source>中心Z</source>
+        <translation>中心 Z</translation>
+    </message>
+    <message>
+        <location filename="../core/src/effect_metadata_i18n.cpp" line="156"/>
+        <source>中心の位置を変更</source>
+        <translation>更改中心位置</translation>
+    </message>
+    <message>
+        <location filename="../core/src/effect_metadata_i18n.cpp" line="157"/>
+        <source>注視X</source>
+        <translation>注视 X</translation>
+    </message>
+    <message>
+        <location filename="../core/src/effect_metadata_i18n.cpp" line="158"/>
+        <source>注視Y</source>
+        <translation>注视 Y</translation>
+    </message>
+    <message>
+        <location filename="../core/src/effect_metadata_i18n.cpp" line="159"/>
+        <source>注視Z</source>
+        <translation>注视 Z</translation>
+    </message>
+    <message>
+        <location filename="../core/src/effect_metadata_i18n.cpp" line="160"/>
+        <source>通常</source>
+        <translation>正常</translation>
+    </message>
+    <message>
+        <location filename="../core/src/effect_metadata_i18n.cpp" line="161"/>
+        <source>塗り色</source>
+        <translation>填充色</translation>
+    </message>
+    <message>
+        <location filename="../core/src/effect_metadata_i18n.cpp" line="162"/>
+        <source>透明度の境界をぼかす</source>
+        <translation>模糊透明边界</translation>
+    </message>
+    <message>
+        <location filename="../core/src/effect_metadata_i18n.cpp" line="163"/>
+        <source>動画</source>
+        <translation>视频</translation>
+    </message>
+    <message>
+        <location filename="../core/src/effect_metadata_i18n.cpp" line="164"/>
+        <source>内径 (%)</source>
+        <translation>内径 (%)</translation>
+    </message>
+    <message>
+        <location filename="../core/src/effect_metadata_i18n.cpp" line="165"/>
+        <source>破線:間隔</source>
+        <translation>虚线：间隔</translation>
+    </message>
+    <message>
+        <location filename="../core/src/effect_metadata_i18n.cpp" line="166"/>
+        <source>破線:線長</source>
+        <translation>虚线：线长</translation>
+    </message>
+    <message>
+        <location filename="../core/src/effect_metadata_i18n.cpp" line="167"/>
+        <source>背景角丸</source>
+        <translation>背景圆角</translation>
+    </message>
+    <message>
+        <location filename="../core/src/effect_metadata_i18n.cpp" line="168"/>
+        <source>背景色</source>
+        <translation>背景颜色</translation>
+    </message>
+    <message>
+        <location filename="../core/src/effect_metadata_i18n.cpp" line="169"/>
+        <source>背景有効</source>
+        <translation>启用背景</translation>
+    </message>
+    <message>
+        <location filename="../core/src/effect_metadata_i18n.cpp" line="170"/>
+        <source>背景余白X</source>
+        <translation>背景边距 X</translation>
+    </message>
+    <message>
+        <location filename="../core/src/effect_metadata_i18n.cpp" line="171"/>
+        <source>背景余白Y</source>
+        <translation>背景边距 Y</translation>
+    </message>
+    <message>
+        <location filename="../core/src/effect_metadata_i18n.cpp" line="172"/>
+        <source>配置 (1:左 2:右 4:中)</source>
+        <translation>对齐 (1:左 2:右 4:中)</translation>
+    </message>
+    <message>
+        <location filename="../core/src/effect_metadata_i18n.cpp" line="173"/>
+        <source>反転配置</source>
+        <translation>交替翻转</translation>
+    </message>
+    <message>
+        <location filename="../core/src/effect_metadata_i18n.cpp" line="174"/>
+        <source>範囲</source>
+        <translation>范围</translation>
+    </message>
+    <message>
+        <location filename="../core/src/effect_metadata_i18n.cpp" line="175"/>
+        <source>比較（暗）</source>
+        <translation>变暗</translation>
+    </message>
+    <message>
+        <location filename="../core/src/effect_metadata_i18n.cpp" line="176"/>
+        <source>比較（明）</source>
+        <translation>变亮</translation>
+    </message>
+    <message>
+        <location filename="../core/src/effect_metadata_i18n.cpp" line="177"/>
+        <source>標準</source>
+        <translation>标准</translation>
+    </message>
+    <message>
+        <location filename="../core/src/effect_metadata_i18n.cpp" line="178"/>
+        <source>標準描画</source>
+        <translation>标准绘制</translation>
+    </message>
+    <message>
+        <location filename="../core/src/effect_metadata_i18n.cpp" line="179"/>
+        <source>品質(サンプル数)</source>
+        <translation>质量（采样数）</translation>
+    </message>
+    <message>
+        <location filename="../core/src/effect_metadata_i18n.cpp" line="180"/>
+        <source>不透明度</source>
+        <translation>不透明度</translation>
+    </message>
+    <message>
+        <location filename="../core/src/effect_metadata_i18n.cpp" line="181"/>
+        <source>幅</source>
+        <translation>宽度</translation>
+    </message>
+    <message>
+        <location filename="../core/src/effect_metadata_i18n.cpp" line="182"/>
+        <source>文字間隔</source>
+        <translation>字间距</translation>
+    </message>
+    <message>
+        <location filename="../core/src/effect_metadata_i18n.cpp" line="183"/>
+        <source>文字色</source>
+        <translation>文字颜色</translation>
+    </message>
+    <message>
+        <location filename="../core/src/effect_metadata_i18n.cpp" line="184"/>
+        <source>変形/クロップ</source>
+        <translation>变形/裁剪</translation>
+    </message>
+    <message>
+        <location filename="../core/src/effect_metadata_i18n.cpp" line="185"/>
+        <source>辺/頂点数</source>
+        <translation>边/顶点数</translation>
+    </message>
+    <message>
+        <location filename="../core/src/effect_metadata_i18n.cpp" line="186"/>
+        <source>放射ブラー</source>
+        <translation>径向模糊</translation>
+    </message>
+    <message>
+        <location filename="../core/src/effect_metadata_i18n.cpp" line="187"/>
+        <source>放射状</source>
+        <translation>径向</translation>
+    </message>
+    <message>
+        <location filename="../core/src/effect_metadata_i18n.cpp" line="188"/>
+        <source>方向ブラー</source>
+        <translation>方向模糊</translation>
+    </message>
+    <message>
+        <location filename="../core/src/effect_metadata_i18n.cpp" line="189"/>
+        <source>明るさ</source>
+        <translation>亮度</translation>
+    </message>
+    <message>
+        <location filename="../core/src/effect_metadata_i18n.cpp" line="190"/>
+        <source>裏面を表示</source>
+        <translation>显示背面</translation>
+    </message>
+    <message>
+        <location filename="../core/src/effect_metadata_i18n.cpp" line="191"/>
+        <source>緑ずれX</source>
+        <translation>绿色偏移 X</translation>
+    </message>
+    <message>
+        <location filename="../core/src/effect_metadata_i18n.cpp" line="192"/>
+        <source>緑ずれY</source>
+        <translation>绿色偏移 Y</translation>
+    </message>
+</context>
+<context>
     <name>AviQtl::Core::PackageManager</name>
     <message>
         <location filename="../core/src/package_manager.cpp" line="11"/>
@@ -205,37 +1138,37 @@
         <translation>参数</translation>
     </message>
     <message>
-        <location filename="../ui/qml/common/ControlLoader.qml" line="270"/>
+        <location filename="../ui/qml/common/ControlLoader.qml" line="310"/>
         <source>開始色 (f%1)</source>
         <translation>起始颜色 (f%1)</translation>
     </message>
     <message>
-        <location filename="../ui/qml/common/ControlLoader.qml" line="270"/>
+        <location filename="../ui/qml/common/ControlLoader.qml" line="310"/>
         <source>色を選択</source>
         <translation>选择颜色</translation>
     </message>
     <message>
-        <location filename="../ui/qml/common/ControlLoader.qml" line="347"/>
+        <location filename="../ui/qml/common/ControlLoader.qml" line="387"/>
         <source>終了色 (f%1)</source>
         <translation>结束颜色 (f%1)</translation>
     </message>
     <message>
-        <location filename="../ui/qml/common/ControlLoader.qml" line="393"/>
+        <location filename="../ui/qml/common/ControlLoader.qml" line="433"/>
         <source>ファイルを選択</source>
         <translation>选择文件</translation>
     </message>
     <message>
-        <location filename="../ui/qml/common/ControlLoader.qml" line="532"/>
+        <location filename="../ui/qml/common/ControlLoader.qml" line="575"/>
         <source>設定</source>
         <translation>设置</translation>
     </message>
     <message>
-        <location filename="../ui/qml/common/ControlLoader.qml" line="608"/>
+        <location filename="../ui/qml/common/ControlLoader.qml" line="651"/>
         <source>フォントを選択</source>
         <translation>选择字体</translation>
     </message>
     <message>
-        <location filename="../ui/qml/common/ControlLoader.qml" line="624"/>
+        <location filename="../ui/qml/common/ControlLoader.qml" line="667"/>
         <source>デフォルト</source>
         <translation>默认</translation>
     </message>
@@ -798,7 +1731,7 @@
     </message>
     <message>
         <location filename="../ui/qml/MainWindow.qml" line="175"/>
-        <location filename="../ui/qml/MainWindow.qml" line="1335"/>
+        <location filename="../ui/qml/MainWindow.qml" line="1329"/>
         <source>終了</source>
         <translation>退出</translation>
     </message>
