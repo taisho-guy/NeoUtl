@@ -941,6 +941,12 @@ ApplicationWindow {
 
                     }
 
+                    MouseArea {
+                        anchors.fill: parent
+                        acceptedButtons: Qt.NoButton
+                        cursorShape: seekSlider.pressed ? Qt.ClosedHandCursor : Qt.OpenHandCursor
+                    }
+
                     // スクラブ中はUI側からの書き換えを優先し、通常時はトランスポートに同期する
                     Binding on value {
                         when: !seekSlider.pressed

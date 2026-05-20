@@ -199,7 +199,6 @@
     <message>
         <location filename="../ui/qml/common/ControlLoader.qml" line="30"/>
         <location filename="../ui/qml/common/ControlLoader.qml" line="32"/>
-        <location filename="../ui/qml/common/ControlLoader.qml" line="32"/>
         <source>パラメータ</source>
         <translation type="unfinished"></translation>
     </message>
@@ -322,7 +321,6 @@
     <message>
         <location filename="../ui/qml/common/EasingConfigWindow.qml" line="775"/>
         <location filename="../ui/qml/common/EasingConfigWindow.qml" line="979"/>
-        <location filename="../ui/qml/common/EasingConfigWindow.qml" line="979"/>
         <source>直線</source>
         <translation type="unfinished"></translation>
     </message>
@@ -378,7 +376,6 @@
     </message>
     <message>
         <location filename="../ui/qml/common/EasingConfigWindow.qml" line="808"/>
-        <location filename="../ui/qml/common/EasingConfigWindow.qml" line="982"/>
         <location filename="../ui/qml/common/EasingConfigWindow.qml" line="982"/>
         <source>カスタム</source>
         <translation type="unfinished"></translation>
@@ -474,7 +471,6 @@
     <message>
         <location filename="../ui/qml/ExportDialog.qml" line="77"/>
         <location filename="../ui/qml/ExportDialog.qml" line="499"/>
-        <location filename="../ui/qml/ExportDialog.qml" line="499"/>
         <source>キャンセル</source>
         <translation type="unfinished"></translation>
     </message>
@@ -521,7 +517,6 @@
     <message>
         <location filename="../ui/qml/ExportDialog.qml" line="175"/>
         <location filename="../ui/qml/ExportDialog.qml" line="345"/>
-        <location filename="../ui/qml/ExportDialog.qml" line="345"/>
         <source>コーデック:</source>
         <translation type="unfinished"></translation>
     </message>
@@ -562,7 +557,6 @@
     </message>
     <message>
         <location filename="../ui/qml/ExportDialog.qml" line="303"/>
-        <location filename="../ui/qml/ExportDialog.qml" line="386"/>
         <location filename="../ui/qml/ExportDialog.qml" line="386"/>
         <source>ビットレート:</source>
         <translation type="unfinished"></translation>
@@ -792,7 +786,6 @@
     <message>
         <location filename="../ui/qml/MainWindow.qml" line="142"/>
         <location filename="../ui/qml/MainWindow.qml" line="699"/>
-        <location filename="../ui/qml/MainWindow.qml" line="699"/>
         <source>プロジェクトを開く</source>
         <translation type="unfinished"></translation>
     </message>
@@ -803,8 +796,7 @@
     </message>
     <message>
         <location filename="../ui/qml/MainWindow.qml" line="175"/>
-        <location filename="../ui/qml/MainWindow.qml" line="1329"/>
-        <location filename="../ui/qml/MainWindow.qml" line="1329"/>
+        <location filename="../ui/qml/MainWindow.qml" line="1335"/>
         <source>終了</source>
         <translation type="unfinished"></translation>
     </message>
@@ -955,12 +947,12 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../ui/qml/MainWindow.qml" line="1036"/>
+        <location filename="../ui/qml/MainWindow.qml" line="1042"/>
         <source>速度</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../ui/qml/MainWindow.qml" line="1292"/>
+        <location filename="../ui/qml/MainWindow.qml" line="1298"/>
         <source>ファイル</source>
         <translation type="unfinished"></translation>
     </message>
@@ -980,27 +972,27 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../ui/qml/MainWindow.qml" line="1389"/>
+        <location filename="../ui/qml/MainWindow.qml" line="1395"/>
         <source>ツール</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../ui/qml/MainWindow.qml" line="1392"/>
+        <location filename="../ui/qml/MainWindow.qml" line="1398"/>
         <source>パッケージマネージャー</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../ui/qml/MainWindow.qml" line="1354"/>
+        <location filename="../ui/qml/MainWindow.qml" line="1360"/>
         <source>設定</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../ui/qml/MainWindow.qml" line="1338"/>
+        <location filename="../ui/qml/MainWindow.qml" line="1344"/>
         <source>編集</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../ui/qml/MainWindow.qml" line="1373"/>
+        <location filename="../ui/qml/MainWindow.qml" line="1379"/>
         <source>表示</source>
         <translation type="unfinished"></translation>
     </message>
@@ -1015,7 +1007,7 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../ui/qml/MainWindow.qml" line="1411"/>
+        <location filename="../ui/qml/MainWindow.qml" line="1417"/>
         <source>バージョン情報</source>
         <translation type="unfinished"></translation>
     </message>
@@ -1438,7 +1430,6 @@
     <message>
         <location filename="../ui/qml/SceneSettingsWindow.qml" line="37"/>
         <location filename="../ui/qml/SceneSettingsWindow.qml" line="67"/>
-        <location filename="../ui/qml/SceneSettingsWindow.qml" line="67"/>
         <source>新規シーン作成</source>
         <translation type="unfinished"></translation>
     </message>
@@ -1581,7 +1572,6 @@
     </message>
     <message>
         <location filename="../ui/qml/SystemSettingsWindow.qml" line="29"/>
-        <location filename="../ui/qml/SystemSettingsWindow.qml" line="249"/>
         <location filename="../ui/qml/SystemSettingsWindow.qml" line="249"/>
         <source>新規プロジェクト</source>
         <translation type="unfinished"></translation>
