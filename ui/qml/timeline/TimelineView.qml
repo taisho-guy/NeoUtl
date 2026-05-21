@@ -238,6 +238,32 @@ ScrollView {
             target: Workspace.currentTimeline && Workspace.currentTimeline.transport ? Workspace.currentTimeline.transport : null
         }
 
+        // 選択レイヤーの背景ハイライト
+        Rectangle {
+            visible: Workspace.currentTimeline !== null
+            x: 0
+            y: (Workspace.currentTimeline ? Workspace.currentTimeline.selectedLayer : 0) * layerHeight
+            width: timelineFlickable.contentWidth
+            height: layerHeight
+            color: palette.highlight
+            opacity: 0.08
+            z: -2
+        }
+
+        // 編集カーソル（マウス追従ガイド）
+        Rectangle {
+            id: editCursorLine
+
+            visible: Workspace.currentTimeline !== null && !Workspace.currentTimeline.transport.isPlaying
+            x: (Workspace.currentTimeline ? Workspace.currentTimeline.cursorFrame : 0) * (Workspace.currentTimeline ? Workspace.currentTimeline.timelineScale : 1)
+            y: 0
+            width: 1
+            height: timelineFlickable.contentHeight
+            color: palette.highlight
+            opacity: 0.5
+            z: 90
+        }
+
         Item {
             // 描画位置をピクセルにスナップさせてサブピクセル描画によるゴミを防ぐ
             x: Math.floor(timelineFlickable.contentX)
@@ -351,6 +377,20 @@ ScrollView {
             z: -1
             acceptedButtons: Qt.LeftButton
             cursorShape: Qt.ArrowCursor
+            hoverEnabled: true
+            onPositionChanged: (mouse) => {
+                if (Workspace.currentTimeline) {
+                    var scale = Workspace.currentTimeline.timelineScale;
+                    var frame = timelineViewRoot.snapFrame(mouse.x / scale, (mouse.modifiers & Qt.ShiftModifier));
+                    Workspace.currentTimeline.cursorFrame = frame;
+                }
+            }
+            onPressed: (mouse) => {
+                var l = Math.floor(mouse.y / layerHeight);
+                if (Workspace.currentTimeline && l >= 0 && l < layerCount)
+                    Workspace.currentTimeline.selectedLayer = l;
+
+            }
             onReleased: (mouse) => {
                 var scale = Workspace.currentTimeline ? Workspace.currentTimeline.timelineScale : 1;
                 var frame = timelineViewRoot.snapFrame(mouse.x / scale);

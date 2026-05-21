@@ -83,6 +83,7 @@ Rectangle {
                     property int layerIndex: index
                     property bool isVisible: headerRoot.getLayerVisible(layerIndex)
                     property bool isLocked: headerRoot.getLayerLocked(layerIndex)
+                    property bool isSelected: (Workspace.currentTimeline && Workspace.currentTimeline.selectedLayer === layerIndex)
 
                     width: headerRoot.headerWidth
                     height: headerRoot.layerHeight
@@ -90,6 +91,9 @@ Rectangle {
                     // 左クリック: 表示/非表示トグル
                     onClicked: {
                         headerRoot.setLayerVisible(layerIndex, !isVisible);
+                        if (Workspace.currentTimeline)
+                            Workspace.currentTimeline.selectedLayer = layerIndex;
+
                     }
 
                     // 右クリック: コンテキストメニュー
@@ -113,10 +117,11 @@ Rectangle {
                             if (layerBtn.isLocked)
                                 return Qt.rgba(0.6, 0.3, 0.3, 1);
 
-                            return (layerBtn.layerIndex % 2 == 0) ? palette.button : Qt.darker(palette.button, 1.1);
+                            var base = (layerBtn.layerIndex % 2 == 0) ? palette.button : Qt.darker(palette.button, 1.1);
+                            return layerBtn.isSelected ? palette.highlight : base;
                         }
-                        border.color: palette.mid
-                        border.width: 1
+                        border.color: layerBtn.isSelected ? palette.highlight : palette.mid
+                        border.width: layerBtn.isSelected ? 2 : 1
                     }
 
                     // レイヤー番号表示
@@ -131,10 +136,10 @@ Rectangle {
                                 if (layerBtn.isLocked)
                                     return "#ffcccc";
 
-                                return palette.text;
+                                return layerBtn.isSelected ? palette.highlightedText : palette.text;
                             }
                             font.pixelSize: 12
-                            font.bold: layerBtn.isVisible && !layerBtn.isLocked
+                            font.bold: (layerBtn.isVisible && !layerBtn.isLocked) || layerBtn.isSelected
                         }
 
                         // 状態インジケーター (右上に小さな記号)

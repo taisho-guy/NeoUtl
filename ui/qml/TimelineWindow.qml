@@ -234,7 +234,7 @@ Common.AviQtlWindow {
         sequence: (SettingsManager.settings.shortcuts && SettingsManager.settings.shortcuts["timeline.split"]) || "S"
         context: Qt.WindowShortcut
         enabled: !_isInputFocused && Workspace.currentTimeline
-        onActivated: Workspace.currentTimeline.splitSelectedClips(Workspace.currentTimeline.transport.currentFrame)
+        onActivated: Workspace.currentTimeline.splitSelectedClips(Workspace.currentTimeline.cursorFrame)
     }
 
     Shortcut {
@@ -255,7 +255,7 @@ Common.AviQtlWindow {
         sequence: (SettingsManager.settings.shortcuts && SettingsManager.settings.shortcuts["edit.paste"]) || "Ctrl+V"
         context: Qt.WindowShortcut
         enabled: !_isInputFocused && Workspace.currentTimeline
-        onActivated: Workspace.currentTimeline.pasteClip(Workspace.currentTimeline.transport.currentFrame, Workspace.currentTimeline.selectedLayer)
+        onActivated: Workspace.currentTimeline.pasteClip(Workspace.currentTimeline.cursorFrame, Workspace.currentTimeline.selectedLayer)
     }
 
     Shortcut {
@@ -264,7 +264,7 @@ Common.AviQtlWindow {
         enabled: !_isInputFocused && Workspace.currentTimeline
         onActivated: {
             Workspace.currentTimeline.copySelectedClips();
-            Workspace.currentTimeline.pasteClip(Workspace.currentTimeline.transport.currentFrame, Workspace.currentTimeline.selectedLayer);
+            Workspace.currentTimeline.pasteClip(Workspace.currentTimeline.cursorFrame, Workspace.currentTimeline.selectedLayer);
         }
     }
 

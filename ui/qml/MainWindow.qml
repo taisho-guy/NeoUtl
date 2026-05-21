@@ -298,7 +298,7 @@ ApplicationWindow {
         text: qsTr("クリップを分割")
         onTriggered: {
             if (Workspace.currentTimeline && Workspace.currentTimeline.transport) {
-                var f = Workspace.currentTimeline.transport.currentFrame;
+                var f = Workspace.currentTimeline.cursorFrame;
                 if (Workspace.currentTimeline.selection && Workspace.currentTimeline.selection.selectedClipId >= 0) {
                     Workspace.currentTimeline.splitClip(Workspace.currentTimeline.selection.selectedClipId, f);
                 } else {
@@ -419,7 +419,7 @@ ApplicationWindow {
         text: qsTr("貼り付け")
         onTriggered: {
             if (Workspace.currentTimeline && Workspace.currentTimeline.transport) {
-                var f = Workspace.currentTimeline.transport.currentFrame;
+                var f = Workspace.currentTimeline.cursorFrame;
                 var l = Workspace.currentTimeline.selectedLayer !== undefined ? Workspace.currentTimeline.selectedLayer : 0;
                 Workspace.currentTimeline.pasteClip(f, l);
             }
@@ -435,7 +435,7 @@ ApplicationWindow {
         onTriggered: {
             if (Workspace.currentTimeline) {
                 Workspace.currentTimeline.copySelectedClips();
-                var f = Workspace.currentTimeline.transport ? Workspace.currentTimeline.transport.currentFrame : 0;
+                var f = Workspace.currentTimeline ? Workspace.currentTimeline.cursorFrame : 0;
                 var l = Workspace.currentTimeline.selectedLayer !== undefined ? Workspace.currentTimeline.selectedLayer : 0;
                 Workspace.currentTimeline.pasteClip(f, l);
             }

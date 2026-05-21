@@ -81,6 +81,8 @@ Rectangle {
 
         // 定規本体
         Item {
+            // マウス操作（スクラブ & ズーム）
+
             Layout.fillWidth: true
             Layout.fillHeight: true
             clip: true
@@ -182,7 +184,20 @@ Rectangle {
                 color: palette.highlight
                 z: 10
             }
-            // マウス操作（スクラブ & ズーム）
+
+            // ルーラー上の編集カーソル表示
+            Rectangle {
+                id: rulerEditCursor
+
+                visible: Workspace.currentTimeline !== null && !Workspace.currentTimeline.transport.isPlaying
+                x: Math.round(((Workspace.currentTimeline ? Workspace.currentTimeline.cursorFrame : 0) * (Workspace.currentTimeline ? Workspace.currentTimeline.timelineScale : 1)) - (targetFlickable ? targetFlickable.contentX : 0))
+                y: rulerRoot.height * 0.6
+                width: 1
+                height: rulerRoot.height * 0.4
+                color: palette.highlight
+                opacity: 0.7
+                z: 5
+            }
 
             // マウス操作（スクラブ & ズーム）
             MouseArea {
@@ -197,6 +212,9 @@ Rectangle {
                     }
                 }
                 onPositionChanged: (mouse) => {
+                    if (Workspace.currentTimeline && targetFlickable)
+                        Workspace.currentTimeline.cursorFrame = pxToFrame(mouse.x, targetFlickable.contentX);
+
                     if (pressed && (mouse.buttons & Qt.LeftButton) && targetFlickable && Workspace.currentTimeline && Workspace.currentTimeline.transport)
                         Workspace.currentTimeline.transport.scrubTo(pxToFrame(mouse.x, targetFlickable.contentX));
 

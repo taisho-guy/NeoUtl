@@ -28,6 +28,7 @@ class TimelineController : public QObject {
     Q_PROPERTY(AviQtl::UI::ProjectService *project READ project CONSTANT)
     Q_PROPERTY(AviQtl::UI::TransportService *transport READ transport CONSTANT)
     Q_PROPERTY(AviQtl::UI::SelectionService *selection READ selection CONSTANT)
+    Q_PROPERTY(int cursorFrame READ cursorFrame WRITE setCursorFrame NOTIFY cursorFrameChanged)
 
     // === レガシー / ファサードプロパティ ===
     Q_PROPERTY(double timelineScale READ timelineScale WRITE setTimelineScale NOTIFY timelineScaleChanged)
@@ -74,6 +75,9 @@ class TimelineController : public QObject {
 
     int layer() const;
     void setLayer(int layer);
+
+    int cursorFrame() const { return m_cursorFrame; }
+    void setCursorFrame(int frame);
 
     int selectedLayer() const { return m_selectedLayer; }
     void setSelectedLayer(int layer);
@@ -209,6 +213,7 @@ class TimelineController : public QObject {
     void clipStartFrameChanged();
     void clipDurationFramesChanged();
     void layerChanged();
+    void cursorFrameChanged();
     void isClipActiveChanged();
     void activeObjectTypeChanged(); // 選択中クリップの種別 (text, rectなど)
     void clipsChanged();
@@ -245,6 +250,7 @@ class TimelineController : public QObject {
     int m_selectedLayer = 0;
     QString m_currentProjectUrl;
 
+    int m_cursorFrame = 0;
     // 各機能を担当するサービス群
     ProjectService *m_project{};
     TransportService *m_transport{};

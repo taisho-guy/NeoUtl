@@ -163,6 +163,13 @@ void TimelineController::setLayer(int layer) {
     m_timeline->undoStack()->endMacro();
 }
 
+void TimelineController::setCursorFrame(int frame) {
+    if (m_cursorFrame != frame) {
+        m_cursorFrame = frame;
+        emit cursorFrameChanged();
+    }
+}
+
 void TimelineController::setSelectedLayer(int layer) {
     if (m_selectedLayer != layer) {
         m_selectedLayer = layer;

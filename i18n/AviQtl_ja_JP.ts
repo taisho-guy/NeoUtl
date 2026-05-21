@@ -1095,7 +1095,7 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../ui/src/timeline/timeline_controller_clip.cpp" line="314"/>
+        <location filename="../ui/src/timeline/timeline_controller_clip.cpp" line="321"/>
         <source>複数クリップリサイズ: %1</source>
         <translation type="unfinished"></translation>
     </message>
@@ -1771,27 +1771,27 @@
 <context>
     <name>LayerHeader</name>
     <message>
-        <location filename="../ui/qml/timeline/LayerHeader.qml" line="180"/>
+        <location filename="../ui/qml/timeline/LayerHeader.qml" line="185"/>
         <source>表示/非表示を切り替え</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../ui/qml/timeline/LayerHeader.qml" line="194"/>
+        <location filename="../ui/qml/timeline/LayerHeader.qml" line="199"/>
         <source>ロックを解除</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../ui/qml/timeline/LayerHeader.qml" line="194"/>
+        <location filename="../ui/qml/timeline/LayerHeader.qml" line="199"/>
         <source>ロック</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../ui/qml/timeline/LayerHeader.qml" line="207"/>
+        <location filename="../ui/qml/timeline/LayerHeader.qml" line="212"/>
         <source>すべて表示</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../ui/qml/timeline/LayerHeader.qml" line="217"/>
+        <location filename="../ui/qml/timeline/LayerHeader.qml" line="222"/>
         <source>すべて非表示</source>
         <translation type="unfinished"></translation>
     </message>
@@ -3006,57 +3006,57 @@
 <context>
     <name>TimelineView</name>
     <message>
-        <location filename="../ui/qml/timeline/TimelineView.qml" line="655"/>
+        <location filename="../ui/qml/timeline/TimelineView.qml" line="695"/>
         <source>オブジェクトを追加</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../ui/qml/timeline/TimelineView.qml" line="660"/>
+        <location filename="../ui/qml/timeline/TimelineView.qml" line="700"/>
         <source>元に戻す</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../ui/qml/timeline/TimelineView.qml" line="661"/>
+        <location filename="../ui/qml/timeline/TimelineView.qml" line="701"/>
         <source>やり直す</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../ui/qml/timeline/TimelineView.qml" line="662"/>
+        <location filename="../ui/qml/timeline/TimelineView.qml" line="702"/>
         <source>貼り付け</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../ui/qml/timeline/TimelineView.qml" line="664"/>
+        <location filename="../ui/qml/timeline/TimelineView.qml" line="704"/>
         <source>シーン設定...</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../ui/qml/timeline/TimelineView.qml" line="665"/>
+        <location filename="../ui/qml/timeline/TimelineView.qml" line="705"/>
         <source>プロジェクト設定...</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../ui/qml/timeline/TimelineView.qml" line="666"/>
+        <location filename="../ui/qml/timeline/TimelineView.qml" line="706"/>
         <source>環境設定...</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../ui/qml/timeline/TimelineView.qml" line="668"/>
+        <location filename="../ui/qml/timeline/TimelineView.qml" line="708"/>
         <source>削除</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../ui/qml/timeline/TimelineView.qml" line="669"/>
+        <location filename="../ui/qml/timeline/TimelineView.qml" line="709"/>
         <source>分割</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../ui/qml/timeline/TimelineView.qml" line="671"/>
+        <location filename="../ui/qml/timeline/TimelineView.qml" line="711"/>
         <source>切り取り</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../ui/qml/timeline/TimelineView.qml" line="672"/>
+        <location filename="../ui/qml/timeline/TimelineView.qml" line="712"/>
         <source>コピー</source>
         <translation type="unfinished"></translation>
     </message>
