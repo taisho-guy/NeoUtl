@@ -45,6 +45,11 @@ jobs:
           if [ -z "$CODENAME" ]; then
             CODENAME="Unstable"
           fi
+          if [ "$CODENAME" = "Unstable" ]; then
+            echo "IS_PRERELEASE=true" >> "$GITHUB_ENV"
+          else
+            echo "IS_PRERELEASE=false" >> "$GITHUB_ENV"
+          fi
           echo "RELEASE_NAME=$VERSION $CODENAME" >> "$GITHUB_ENV"
           echo "Building version: $VERSION, codename: $CODENAME"
           python3 BUILD.py --no-container --version "$VERSION" --codename "$CODENAME"
@@ -67,7 +72,7 @@ jobs:
           token: ${{ secrets.CODEBERG_TOKEN }}
           repository: taisho-guy/AviQtl
           draft: false
-          prerelease: false
+          prerelease: ${{ env.IS_PRERELEASE }}
           tag_name: ${{ github.ref_name }}
           name: ${{ env.RELEASE_NAME }}
           body: ""
