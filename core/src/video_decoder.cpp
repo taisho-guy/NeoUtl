@@ -355,17 +355,19 @@ void VideoDecoder::decodeTask(int targetFrame, double fps) { // NOLINT(bugprone-
     targetFrame = std::max(targetFrame, 0);
     targetFrame = std::min(targetFrame, static_cast<int>(mindex.size()) - 1);
 
+    const QString clipKey = QString::number(clipId());
+
     // 1. GOPキャッシュのチェック (MLT O(1) パス)
     QVideoFrame cachedFrame;
     if (getFrameFromGopCache(targetFrame, cachedFrame)) {
-        mstore->setVideoFrameSafe(QString::number(clipId()), cachedFrame);
+        mstore->setVideoFrameSafe(clipKey, cachedFrame);
         QMetaObject::invokeMethod(this, [this, targetFrame]() -> void { emit frameReady(targetFrame); }, Qt::QueuedConnection);
         return;
     }
 
     // 2. QCache (個別フレームキャッシュ) のチェック
     if (QVideoFrame *cached = mframeCache.object(targetFrame)) {
-        mstore->setVideoFrameSafe(QString::number(clipId()), *cached);
+        mstore->setVideoFrameSafe(clipKey, *cached);
         QMetaObject::invokeMethod(this, [this, targetFrame]() { emit frameReady(targetFrame); }, Qt::QueuedConnection);
         return;
     }
@@ -448,7 +450,7 @@ void VideoDecoder::decodeTask(int targetFrame, double fps) { // NOLINT(bugprone-
             if (decodedFrameIndex == targetFrame && !targetDispatched) {
                 QVideoFrame *cached = mframeCache.object(decodedFrameIndex);
                 if (cached && cached->isValid()) {
-                    mstore->setVideoFrameSafe(QString::number(clipId()), *cached);
+                    mstore->setVideoFrameSafe(clipKey, *cached);
                     m_lastGoodFrame = *cached;
                     if (auto *app = qApp) {
                         QMetaObject::invokeMethod(this, [this, targetFrame]() { emit frameReady(targetFrame); }, Qt::QueuedConnection);
@@ -555,7 +557,7 @@ void VideoDecoder::decodeTask(int targetFrame, double fps) { // NOLINT(bugprone-
                         // ターゲットを見つけた瞬間に UI へ横流しする。
                         // これにより、GOP全体の充填を待たずに再生ヘッドを動かせる。
                         if (decodedFrameIndex == targetFrame && !targetDispatched) {
-                            mstore->setVideoFrameSafe(QString::number(clipId()), m_lastGoodFrame);
+                            mstore->setVideoFrameSafe(clipKey, m_lastGoodFrame);
                             if (auto *app = qApp) {
                                 QMetaObject::invokeMethod(this, [this, targetFrame]() { emit frameReady(targetFrame); }, Qt::QueuedConnection);
                             }
@@ -588,7 +590,7 @@ void VideoDecoder::decodeTask(int targetFrame, double fps) { // NOLINT(bugprone-
 
     // 【重要】エラー隠蔽 (Error Concealment) - 安全チェックの強化
     if (!targetDispatched && m_lastGoodFrame.isValid() && !mclosing.load(std::memory_order_acquire)) {
-        mstore->setVideoFrameSafe(QString::number(clipId()), m_lastGoodFrame);
+        mstore->setVideoFrameSafe(clipKey, m_lastGoodFrame);
         if (auto *app = qApp) {
             QMetaObject::invokeMethod(this, [this, targetFrame]() { emit frameReady(targetFrame); }, Qt::QueuedConnection);
         }

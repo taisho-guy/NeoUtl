@@ -214,14 +214,18 @@ auto VideoEncoder::open(const Config &config) -> bool {
         }
     }
 
-    // 6. フレーム確保
+    // 6. Frame allocation
     m_swFrame = av_frame_alloc();
-    m_swFrame->format = AV_PIX_FMT_NV12; // SW変換用中間バッファ
+    m_swFrame->format = AV_PIX_FMT_NV12; // SW intermediate buffer
     m_swFrame->width = config.width;
     m_swFrame->height = config.height;
-    av_frame_get_buffer(m_swFrame, 32);
+    if (av_frame_get_buffer(m_swFrame, 32) < 0) {
+        qWarning() << "Failed to allocate SW frame buffer.";
+        cleanup();
+        return false;
+    }
 
-    m_hwFrame = av_frame_alloc(); // HW転送用
+    m_hwFrame = av_frame_alloc(); // For HW upload
 
     qDebug() << "VideoEncoder opened using codec:" << config.codecName;
 
@@ -283,18 +287,24 @@ auto VideoEncoder::addAudioStream(int sampleRate, int channels) -> bool {
 
     avcodec_parameters_from_context(m_audioStream->codecpar, m_audioEncCtx);
 
-    // FIFOとリサンプラーの初期化
+    // FIFO and resampler initialization
     m_audioFifo = av_audio_fifo_alloc(m_audioEncCtx->sample_fmt, channels, 1024);
     m_audioFrame = av_frame_alloc();
     m_audioFrame->nb_samples = m_audioEncCtx->frame_size;
     m_audioFrame->format = m_audioEncCtx->sample_fmt;
     m_audioFrame->ch_layout = m_audioEncCtx->ch_layout;
     m_audioFrame->sample_rate = m_audioEncCtx->sample_rate;
-    av_frame_get_buffer(m_audioFrame, 0);
+    if (av_frame_get_buffer(m_audioFrame, 0) < 0) {
+        qWarning() << "Failed to allocate audio frame buffer.";
+        return false;
+    }
 
-    // 入力(Float Interleaved) -> 出力(Encoder Format, likely FLTP)
+    // Input (Float Interleaved) -> Output (Encoder Format, likely FLTP)
     swr_alloc_set_opts2(&m_swrCtx, &m_audioEncCtx->ch_layout, m_audioEncCtx->sample_fmt, m_audioEncCtx->sample_rate, &m_audioEncCtx->ch_layout, AV_SAMPLE_FMT_FLT, sampleRate, 0, nullptr);
-    swr_init(m_swrCtx);
+    if (swr_init(m_swrCtx) < 0) {
+        qWarning() << "Failed to initialize audio resampler.";
+        return false;
+    }
 
     qDebug() << "Audio stream added: AAC" << sampleRate << "Hz";
     return true;
@@ -539,8 +549,8 @@ auto VideoEncoder::processAudio(const std::vector<float> &samples) -> bool {
     av_audio_fifo_write(m_audioFifo, reinterpret_cast<void **>(convertedData), sampleCount);
 
     if (convertedData != nullptr) {
-        av_freep(static_cast<void *>(&convertedData[0]));
-        free(static_cast<void *>(convertedData));
+        av_freep(static_cast<void *>(&convertedData[0])); // sample buffer
+        av_freep(static_cast<void *>(&convertedData));    // pointer array (av_malloc'd, not C free)
     }
 
     // 3. エンコーダーのフレームサイズ分溜まったらエンコード

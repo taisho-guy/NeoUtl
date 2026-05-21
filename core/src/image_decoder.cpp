@@ -102,12 +102,19 @@ void ImageDecoder::decodeImage(const QString &path) {
     }
 
     if (decoded) {
-        // sws_scale で RGBA に変換（VideoDecoder と同一フォーマット、Vulkan 等の RHI バックエンドとの互換性向上のため）
+        // Convert to RGBA via sws_scale (same format as VideoDecoder, for compatibility with Vulkan/RHI backends)
         AVFrame *rgbaFrame = av_frame_alloc();
         rgbaFrame->format = AV_PIX_FMT_RGBA;
         rgbaFrame->width = srcFrame->width;
         rgbaFrame->height = srcFrame->height;
-        av_frame_get_buffer(rgbaFrame, 0);
+        if (av_frame_get_buffer(rgbaFrame, 0) < 0) {
+            av_frame_free(&rgbaFrame);
+            av_frame_free(&srcFrame);
+            av_packet_free(&pkt);
+            avcodec_free_context(&decCtx);
+            avformat_close_input(&fmtCtx);
+            return;
+        }
 
         SwsContext *swsCtx = sws_getContext(srcFrame->width, srcFrame->height, static_cast<AVPixelFormat>(srcFrame->format), rgbaFrame->width, rgbaFrame->height, AV_PIX_FMT_RGBA, SWS_BILINEAR, nullptr, nullptr, nullptr);
 
