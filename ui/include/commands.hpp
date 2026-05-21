@@ -182,18 +182,6 @@ class SplitClipCommand : public QUndoCommand {
     QString m_clipName;
 };
 
-class DeleteClipCommand : public QUndoCommand {
-  public:
-    DeleteClipCommand(TimelineService *service, int clipId, const QString &clipName);
-    void undo() override;
-    void redo() override;
-
-  private:
-    TimelineService *m_service;
-    int m_clipId;
-    ClipData m_snapshot;
-};
-
 class DeleteClipsCommand : public QUndoCommand {
   public:
     DeleteClipsCommand(TimelineService *service, const QList<int> &clipIds, const QString &macroText);

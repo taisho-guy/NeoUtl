@@ -1077,17 +1077,17 @@
 <context>
     <name>AviQtl::UI::TimelineExportManager</name>
     <message>
-        <location filename="../ui/src/timeline/timeline_export_manager.cpp" line="96"/>
+        <location filename="../ui/src/timeline/timeline_export_manager.cpp" line="41"/>
         <source>エンコーダーの初期化に失敗しました</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../ui/src/timeline/timeline_export_manager.cpp" line="124"/>
+        <location filename="../ui/src/timeline/timeline_export_manager.cpp" line="69"/>
         <source>キャンセルされました</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../ui/src/timeline/timeline_export_manager.cpp" line="156"/>
+        <location filename="../ui/src/timeline/timeline_export_manager.cpp" line="101"/>
         <source>書き出し完了</source>
         <translation type="unfinished"></translation>
     </message>
@@ -2381,43 +2381,38 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../ui/src/timeline/timeline_commands.cpp" line="170"/>
-        <source>クリップ削除: %1</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../ui/src/timeline/timeline_commands.cpp" line="202"/>
-        <source>切り取り: %1</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../ui/src/timeline/timeline_commands.cpp" line="213"/>
-        <source>貼り付け: %1</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../ui/src/timeline/timeline_commands.cpp" line="225"/>
-        <source>キーフレーム設定: %1</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../ui/src/timeline/timeline_commands.cpp" line="251"/>
-        <source>キーフレーム削除: %1 [%2]</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../ui/src/timeline/timeline_commands.cpp" line="256"/>
+        <location filename="../ui/src/timeline/timeline_commands.cpp" line="244"/>
         <source>シーン追加: %1</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../ui/src/timeline/timeline_commands.cpp" line="267"/>
+        <location filename="../ui/src/timeline/timeline_commands.cpp" line="255"/>
         <source>シーン削除: %1</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../ui/src/timeline/timeline_commands.cpp" line="274"/>
+        <location filename="../ui/src/timeline/timeline_commands.cpp" line="262"/>
         <source>シーン設定変更: %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../ui/src/timeline/timeline_commands.cpp" line="190"/>
+        <source>切り取り: %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../ui/src/timeline/timeline_commands.cpp" line="201"/>
+        <source>貼り付け: %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../ui/src/timeline/timeline_commands.cpp" line="213"/>
+        <source>キーフレーム設定: %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../ui/src/timeline/timeline_commands.cpp" line="239"/>
+        <source>キーフレーム削除: %1 [%2]</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
@@ -2442,22 +2437,22 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../ui/src/timeline/timeline_clip.cpp" line="610"/>
+        <location filename="../ui/src/timeline/timeline_clip.cpp" line="539"/>
         <source>クリップ削除</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../ui/src/timeline/timeline_clip.cpp" line="610"/>
+        <location filename="../ui/src/timeline/timeline_clip.cpp" line="539"/>
         <source>複数クリップ削除: %1</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../ui/src/timeline/timeline_clip.cpp" line="749"/>
+        <location filename="../ui/src/timeline/timeline_clip.cpp" line="678"/>
         <source>複数クリップ分割: %1</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../ui/src/timeline/timeline_clip.cpp" line="802"/>
+        <location filename="../ui/src/timeline/timeline_clip.cpp" line="731"/>
         <source>複数クリップ貼り付け: %1</source>
         <translation type="unfinished"></translation>
     </message>

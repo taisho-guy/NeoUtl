@@ -2,7 +2,6 @@
 // ECSプロファイラ: リリースビルドでは完全にゼロコスト
 // 使用方法: CMakeで -DAVIQTL_PROFILE=1 を追加するだけでよい
 #ifdef AVIQTL_PROFILE
-#include <QDebug>
 #include <atomic>
 #include <chrono>
 #include <cstdint>
@@ -19,19 +18,6 @@ struct ECSProfiler {
     static ECSProfiler &instance() {
         static ECSProfiler prof;
         return prof;
-    }
-
-    void reset() noexcept {
-        commitCount.store(0, std::memory_order_relaxed);
-        denseMapHit.store(0, std::memory_order_relaxed);
-        denseMapMiss.store(0, std::memory_order_relaxed);
-        syncAliveRemoved.store(0, std::memory_order_relaxed);
-        dirtyBitSetCount.store(0, std::memory_order_relaxed);
-    }
-
-    void dump() const {
-        qDebug() << "[ECSProfiler]"
-                 << "commit=" << commitCount.load() << "mapHit=" << denseMapHit.load() << "mapMiss=" << denseMapMiss.load() << "syncRemoved=" << syncAliveRemoved.load() << "dirtyBits=" << dirtyBitSetCount.load();
     }
 
   private:

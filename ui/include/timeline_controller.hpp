@@ -8,23 +8,17 @@
 #include "timeline_service.hpp"
 #include "timeline_types.hpp"
 #include "transport_service.hpp"
-#include <QAbstractListModel>
-#include <QDebug>
 #include <QObject>
 #include <QPoint>
 #include <QPointer>
 #include <QQuickItem>
 #include <QVariant>
-#include <QtMath>
 #include <memory>
 #include <vector>
 
-class QUndoStack;
-
 namespace AviQtl::Core {
 class VideoFrameStore;
-class VideoEncoder;
-} // namespace AviQtl::Core
+}
 
 namespace AviQtl::UI { // 元のnamespaceに戻す
 class TimelineController : public QObject {
@@ -98,8 +92,6 @@ class TimelineController : public QObject {
     Q_INVOKABLE void applyClipBatchMove(const QVariantList &moves);
     Q_INVOKABLE void resizeSelectedClips(int deltaStartFrame, int deltaDuration);
 
-    // 衝突回避ロジック付きでクリップを移動する（QMLのドラッグ操作から呼ぶ）
-    Q_INVOKABLE void moveClipWithCollisionCheck(int clipId, int layer, int startFrame);
 
     Q_INVOKABLE QVariantMap evaluateClipParams(int clipId, int relFrame) const;
 
@@ -166,9 +158,6 @@ class TimelineController : public QObject {
     // プロジェクトI/O
     Q_INVOKABLE bool saveProject(const QString &fileUrl);
     Q_INVOKABLE bool loadProject(const QString &fileUrl);
-    Q_INVOKABLE static QVariantMap getProjectInfo(const QString &fileUrl);
-    // 旧インターフェース互換
-    Q_INVOKABLE bool exportMedia(const QString &fileUrl, const QString &format, int quality);
     // 新非同期インターフェース
     Q_INVOKABLE void exportVideoAsync(const QVariantMap &config);
     Q_INVOKABLE void cancelExport();
@@ -182,7 +171,6 @@ class TimelineController : public QObject {
     Q_INVOKABLE QVariantList previewSelectionIds() const;
 
     Q_INVOKABLE void selectClip(int id);
-    Q_INVOKABLE void selectClipsInRange(int frameA, int frameB, int layerA, int layerB, bool additive = false);
     Q_INVOKABLE void toggleSelection(int id, const QVariantMap &data);
     Q_INVOKABLE void applySelectionIds(const QVariantList &ids);
 
@@ -231,7 +219,6 @@ class TimelineController : public QObject {
     void currentProjectUrlChanged();
     void hasUnsavedChangesChanged();
     void clipEffectsChanged(int clipId);
-    void layerStateChanged(int layer);
     void previewSelectionIdsChanged();
     void selectedLayerChanged();
     void errorOccurred(const QString &message);
@@ -270,8 +257,6 @@ class TimelineController : public QObject {
 
     QVariantList m_previewSelectionIds;
 
-    // デバッグ用: Luaスクリプト直接実行
-    Q_INVOKABLE QString debugRunLua(const QString &script);
 
   private:
     QPointer<QQuickItem> m_compositeView; // CompositeViewへの参照

@@ -450,26 +450,11 @@ void TimelineController::updateClip(int id, int layer, int startFrame, int durat
     m_timeline->updateClip(id, layer, startFrame, clamped);
 }
 
-void TimelineController::moveClipWithCollisionCheck(int clipId, int layer, int startFrame) {
-    const ClipData *clip = m_timeline->findClipById(clipId);
-    if (clip == nullptr) {
-        return;
-    }
 
-    int duration = clip->durationFrames;
-    int fixedStart = m_timeline->findVacantFrame(layer, startFrame, duration, clipId);
-    updateClip(clipId, layer, fixedStart, duration);
-}
 
 void TimelineController::selectClip(int id) {
     if (m_timeline != nullptr) {
         m_timeline->applySelectionIds(QVariantList{id});
-    }
-}
-
-void TimelineController::selectClipsInRange(int frameA, int frameB, int layerA, int layerB, bool additive) {
-    if (m_timeline != nullptr) {
-        m_timeline->selectClipsInRange(frameA, frameB, layerA, layerB, additive);
     }
 }
 

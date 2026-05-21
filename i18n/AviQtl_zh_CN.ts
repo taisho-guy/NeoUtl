@@ -1079,17 +1079,17 @@
 <context>
     <name>AviQtl::UI::TimelineExportManager</name>
     <message>
-        <location filename="../ui/src/timeline/timeline_export_manager.cpp" line="96"/>
+        <location filename="../ui/src/timeline/timeline_export_manager.cpp" line="41"/>
         <source>エンコーダーの初期化に失敗しました</source>
         <translation>编码器初始化失败</translation>
     </message>
     <message>
-        <location filename="../ui/src/timeline/timeline_export_manager.cpp" line="124"/>
+        <location filename="../ui/src/timeline/timeline_export_manager.cpp" line="69"/>
         <source>キャンセルされました</source>
         <translation>已取消</translation>
     </message>
     <message>
-        <location filename="../ui/src/timeline/timeline_export_manager.cpp" line="156"/>
+        <location filename="../ui/src/timeline/timeline_export_manager.cpp" line="101"/>
         <source>書き出し完了</source>
         <translation>导出完成</translation>
     </message>
@@ -2412,42 +2412,41 @@
         <translation>分割片段：%1</translation>
     </message>
     <message>
-        <location filename="../ui/src/timeline/timeline_commands.cpp" line="170"/>
         <source>クリップ削除: %1</source>
-        <translation>删除片段：%1</translation>
+        <translation type="vanished">删除片段：%1</translation>
     </message>
     <message>
-        <location filename="../ui/src/timeline/timeline_commands.cpp" line="202"/>
+        <location filename="../ui/src/timeline/timeline_commands.cpp" line="190"/>
         <source>切り取り: %1</source>
         <translation>剪切：%1</translation>
     </message>
     <message>
-        <location filename="../ui/src/timeline/timeline_commands.cpp" line="213"/>
+        <location filename="../ui/src/timeline/timeline_commands.cpp" line="201"/>
         <source>貼り付け: %1</source>
         <translation>粘贴：%1</translation>
     </message>
     <message>
-        <location filename="../ui/src/timeline/timeline_commands.cpp" line="225"/>
+        <location filename="../ui/src/timeline/timeline_commands.cpp" line="213"/>
         <source>キーフレーム設定: %1</source>
         <translation>设置关键帧：%1</translation>
     </message>
     <message>
-        <location filename="../ui/src/timeline/timeline_commands.cpp" line="251"/>
+        <location filename="../ui/src/timeline/timeline_commands.cpp" line="239"/>
         <source>キーフレーム削除: %1 [%2]</source>
         <translation>删除关键帧：%1 [%2]</translation>
     </message>
     <message>
-        <location filename="../ui/src/timeline/timeline_commands.cpp" line="256"/>
+        <location filename="../ui/src/timeline/timeline_commands.cpp" line="244"/>
         <source>シーン追加: %1</source>
         <translation>添加场景：%1</translation>
     </message>
     <message>
-        <location filename="../ui/src/timeline/timeline_commands.cpp" line="267"/>
+        <location filename="../ui/src/timeline/timeline_commands.cpp" line="255"/>
         <source>シーン削除: %1</source>
         <translation>删除场景：%1</translation>
     </message>
     <message>
-        <location filename="../ui/src/timeline/timeline_commands.cpp" line="274"/>
+        <location filename="../ui/src/timeline/timeline_commands.cpp" line="262"/>
         <source>シーン設定変更: %1</source>
         <translation>场景设置更改：%1</translation>
     </message>
@@ -2473,22 +2472,22 @@
         <translation>变换多个片段：%1</translation>
     </message>
     <message>
-        <location filename="../ui/src/timeline/timeline_clip.cpp" line="610"/>
+        <location filename="../ui/src/timeline/timeline_clip.cpp" line="539"/>
         <source>クリップ削除</source>
         <translation>删除片段</translation>
     </message>
     <message>
-        <location filename="../ui/src/timeline/timeline_clip.cpp" line="610"/>
+        <location filename="../ui/src/timeline/timeline_clip.cpp" line="539"/>
         <source>複数クリップ削除: %1</source>
         <translation>删除多个片段：%1</translation>
     </message>
     <message>
-        <location filename="../ui/src/timeline/timeline_clip.cpp" line="749"/>
+        <location filename="../ui/src/timeline/timeline_clip.cpp" line="678"/>
         <source>複数クリップ分割: %1</source>
         <translation>分割多个片段：%1</translation>
     </message>
     <message>
-        <location filename="../ui/src/timeline/timeline_clip.cpp" line="802"/>
+        <location filename="../ui/src/timeline/timeline_clip.cpp" line="731"/>
         <source>複数クリップ貼り付け: %1</source>
         <translation>粘贴多个片段：%1</translation>
     </message>

@@ -20,61 +20,6 @@ TimelineExportManager::~TimelineExportManager() {
     }
 }
 
-auto TimelineExportManager::exportMedia(const QString &fileUrl, const QString &format, int quality) -> bool { // NOLINT(bugprone-easily-swappable-parameters)
-    QString localPath = QUrl(fileUrl).toLocalFile();
-    if (localPath.isEmpty()) {
-        localPath = fileUrl;
-    }
-
-    if (format == QLatin1String("image_sequence")) {
-        return exportImageSequence(localPath, quality);
-    }
-    return false;
-}
-
-auto TimelineExportManager::exportImageSequence(const QString &dir, int quality) -> bool {
-    int totalFrames = m_controller->timelineDuration();
-    QString baseName = dir;
-    if (baseName.endsWith(QLatin1String(".png"))) {
-        baseName.chop(4);
-    }
-    auto &settings = AviQtl::Core::SettingsManager::instance();
-    const int sequencePadding = settings.value(QStringLiteral("exportSequencePadding"), 6).toInt();
-    const int timeoutMs = settings.value(QStringLiteral("exportFrameGrabTimeoutMs"), 2000).toInt();
-    const int progressInterval = settings.value(QStringLiteral("exportProgressInterval"), 5).toInt();
-
-    QQuickItem *view = m_controller->compositeView();
-    if (view != nullptr) {
-        view->setProperty("exportMode", true);
-    }
-    QQuickItem *targetItem = (view != nullptr) ? ((view->property("view3D").value<QQuickItem *>() != nullptr) ? view->property("view3D").value<QQuickItem *>() : view) : nullptr;
-
-    for (int frame = 0; frame < totalFrames; ++frame) {
-        m_controller->transport()->setCurrentFrame(frame);
-        QImage renderedFrame;
-        if (targetItem != nullptr) {
-            auto grabResult = targetItem->grabToImage(QSize(m_controller->project()->width(), m_controller->project()->height()));
-            if (grabResult) {
-                QEventLoop loop;
-                connect(grabResult.get(), &QQuickItemGrabResult::ready, &loop, &QEventLoop::quit);
-                QTimer::singleShot(timeoutMs, &loop, &QEventLoop::quit);
-                loop.exec();
-                renderedFrame = grabResult->image();
-            }
-        }
-        QString filename = QString(QStringLiteral("%1_%2.png")).arg(baseName).arg(frame, sequencePadding, 10, QChar('0'));
-        renderedFrame.save(filename, "PNG", quality);
-        if (frame % progressInterval == 0 || frame == totalFrames - 1) {
-            emit m_controller->exportProgressChanged((frame * 100) / totalFrames, frame + 1, totalFrames);
-        }
-    }
-    if (view != nullptr) {
-        view->setProperty("exportMode", false);
-    }
-    emit m_controller->exportProgressChanged(100, totalFrames, totalFrames);
-    return true;
-}
-
 void TimelineExportManager::exportVideoAsync(const AviQtl::Core::VideoEncoder::Config &config) {
     if (m_exporting.load()) {
         return;

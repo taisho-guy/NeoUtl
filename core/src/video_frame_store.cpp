@@ -44,22 +44,6 @@ void VideoFrameStore::setVideoFrameSafe(const QString &key, const QVideoFrame &f
     emit frameUpdated(key);
 }
 
-auto VideoFrameStore::sink(const QString &key) -> QVideoSink * {
-    if (QThread::currentThread() != thread()) {
-        QVideoSink *result = nullptr;
-        QMetaObject::invokeMethod(this, [this, key, &result]() -> void { result = sink(key); }, Qt::BlockingQueuedConnection);
-        return result;
-    }
-
-    QMutexLocker locker(&m_mutex);
-    auto it = m_sinks.find(key);
-    if (it == m_sinks.end() || it.value().isNull()) {
-        auto *s = new QVideoSink(this);
-        it = m_sinks.insert(key, s);
-    }
-    return it.value();
-}
-
 void VideoFrameStore::registerSink(const QString &key, QVideoSink *sink) {
     if (QThread::currentThread() != thread()) {
         QMetaObject::invokeMethod(this, [this, key, sink]() -> void { registerSink(key, sink); }, Qt::QueuedConnection);

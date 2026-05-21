@@ -7,35 +7,17 @@
 
 namespace AviQtl::ECS {
 
-struct ActiveComponent {
-    bool active = false;
-};
 struct TransformComponent {
     float x = 0, y = 0, z = 0, scaleX = 1, scaleY = 1, rotX = 0, rotY = 0, rotZ = 0, opacity = 1;
 };
 struct KeyframeRefComponent {
     uint32_t clipId = 0;
 };
-struct RenderableComponent {
-    uint32_t textureId = 0;
-    uint32_t psoId = 0;
-    uint32_t layer = 0;
-};
-struct RenderBoundaryComponent {
-    bool clearBelow = false;
-    uint32_t layer = 0;
-};
-struct GroupTransformComponent {
-    uint32_t layerCount = 1;
-};
 struct GlobalMatrixComponent {
     float m[16] = {1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1};
 };
 
 } // namespace AviQtl::ECS
-
-#include "string_table.hpp"
-#include <QString>
 #include <array>
 #include <atomic>
 #include <bitset>
@@ -164,16 +146,6 @@ struct TransformComponent {
     int durationFrames = 0;
 };
 
-struct MetadataComponent {
-    int32_t clipId = -1;
-    uint32_t nameId = 0;
-    uint32_t sourceId = 0;
-    uint32_t typeId = 0;
-    uint32_t colorRGBA = 0;
-};
-static_assert(sizeof(MetadataComponent) == 20, "MetadataComponent size check failed");
-static_assert(std::is_trivially_copyable_v<MetadataComponent>);
-
 struct RenderComponent {
     // Placeholder: fields will be defined when RenderSystem reads renderStates
 };
@@ -184,7 +156,6 @@ struct ECSState {
     DenseComponentMap<TransformComponent> transforms;
     DenseComponentMap<RenderComponent> renderStates;
     DenseComponentMap<AudioComponent> audioStates;
-    DenseComponentMap<MetadataComponent> metadataStates;
 
     // Phase 4 拡張: 座標・補間管理
     DenseComponentMap<AviQtl::ECS::KeyframeRefComponent> keyframeRefs;
@@ -201,18 +172,12 @@ class ECS {
     // TimelineController の毎フレーム先頭 (onTick 相当) から呼び出すこと。
     void runCommandSystem(AviQtl::UI::CoreBridge &bridge);
 
-    // ── Phase 4: Interpolation & Transform Systems ────────────────────────────
-    void runInterpolationSystem();
-    void runTransformSystem();
-    // ─────────────────────────────────────────────────────────────────────────
-
     int currentFrame() const { return m_currentFrame; }
     bool isPlaying() const { return m_isPlaying; }
 
     void syncClipIds(const std::bitset<MAX_CLIP_ID> &aliveFlags);
     void updateClipState(int clipId, int layer, double time, int startFrame, int durationFrames);
     void updateAudioClipState(int clipId, int startFrame, int durationFrames, float volume, float pan, bool mute);
-    void updateMetadata(int clipId, const QString &name, const QString &source, const QString &type, const QString &color);
 
     void commit();
 
@@ -231,7 +196,6 @@ class ECS {
     mutable std::atomic<int> m_activeIndex{0};
     mutable std::atomic<int> m_pendingIndex{-1};
 
-    StringTable m_stringTable;
     std::array<DirtyFlags, 3> m_dirtyFlags;
 
     // Phase 2.4: CommandSystem が管理するグローバル再生状態

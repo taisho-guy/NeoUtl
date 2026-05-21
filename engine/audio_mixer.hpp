@@ -30,9 +30,6 @@ class AudioMixer : public QObject {
     void processFrame(int currentFrame, double fps, int samplesPerFrame);
     void reset();
 
-    static void processChain(float *buffer, int samples, const Plugin::AudioPluginChain &chain);
-    static void mix(float *output, const float *input, float volume, int samples);
-
     // エクスポート用に生データを取得するメソッド
     std::vector<float> mix(int currentFrame, double fps, int samplesPerFrame);
 

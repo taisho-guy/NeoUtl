@@ -97,34 +97,6 @@ auto TimelineController::loadProject(const QString &fileUrl) -> bool {
     return result;
 }
 
-auto TimelineController::getProjectInfo(const QString &fileUrl) -> QVariantMap {
-    QVariantMap result;
-    QString path = QUrl(fileUrl).toLocalFile();
-    if (path.isEmpty()) {
-        path = fileUrl;
-    }
-
-    QFile file(path);
-    if (!file.open(QIODevice::ReadOnly)) {
-        qWarning() << "プロジェクトファイル情報取得のためファイルを開けませんでした:" << path;
-        return result;
-    }
-
-    QJsonParseError error;
-    QJsonDocument doc = QJsonDocument::fromJson(file.readAll(), &error);
-    if (doc.isNull() || !doc.isObject()) {
-        qWarning() << "プロジェクトJSONの解析に失敗しました:" << error.errorString();
-        return result;
-    }
-
-    QJsonObject root = doc.object();
-    auto it = root.find(QStringLiteral("settings"));
-    if (it != root.end()) {
-        result = it.value().toObject().toVariantMap();
-    }
-
-    return result;
-}
 
 namespace {
 void insertIntoCategoryTree(QVariantList &list, const QStringList &path, const QVariantMap &item) {

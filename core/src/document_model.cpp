@@ -65,20 +65,4 @@ void DocumentModel::removeClip(int sceneId, int clipId) {
     }
 }
 
-void DocumentModel::updateClipPosition(int sceneId, int clipId, int layer, int startFrame, int durationFrames) {
-    auto itScene = std::find_if(m_scenes.begin(), m_scenes.end(), [sceneId](const SceneSettings &s) { return s.id == sceneId; });
-    if (itScene != m_scenes.end()) {
-        auto itClip = std::find_if(itScene->clips.begin(), itScene->clips.end(), [clipId](const Clip &c) { return c.id == clipId; });
-        if (itClip != itScene->clips.end()) {
-            bool changed = (itClip->layer != layer) || (itClip->startFrame != startFrame) || (itClip->durationFrames != durationFrames);
-            if (changed) {
-                itClip->layer = layer;
-                itClip->startFrame = startFrame;
-                itClip->durationFrames = durationFrames;
-                emit structureChanged();
-            }
-        }
-    }
-}
-
 } // namespace AviQtl::Core

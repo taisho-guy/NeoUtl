@@ -177,12 +177,6 @@ auto TimelineController::resolveDragDelta(int clipId, int deltaFrame, int deltaL
     return {dF, dL};
 }
 
-auto TimelineController::debugRunLua(const QString &script) -> QString {
-    // テスト用に time=currentFrame/fps, index=0, value=0 で実行
-    double time = (m_transport != nullptr) ? m_transport->currentFrame() / m_project->fps() : 0.0;
-    double result = AviQtl::Scripting::LuaHost::instance().evaluate(script.toStdString(), time, 0, 0.0);
-    return QString::number(result);
-}
 
 void TimelineController::requestVideoFrame(int clipId, int relFrame) {
     // MediaManagerは直接触れないので、TimelineService側にイベントを発火させる等するか、

@@ -10,15 +10,6 @@
 
 namespace AviQtl::Engine {
 
-void AudioMixer::processChain(float *buffer, int samples, const Plugin::AudioPluginChain &chain) {
-    for (int i = 0; i < chain.count(); ++i) {
-        Plugin::IAudioPlugin *plugin = chain.get(i);
-        if ((plugin != nullptr) && plugin->active()) {
-            plugin->process(buffer, samples);
-        }
-    }
-}
-
 AudioMixer::AudioMixer(QObject *parent) : QObject(parent) {
     int sampleRate = AviQtl::Core::SettingsManager::instance().value(QStringLiteral("_runtime_projectSampleRate"), 48000).toInt();
     m_format.setSampleRate(sampleRate);
@@ -53,12 +44,6 @@ AudioMixer::AudioMixer(QObject *parent) : QObject(parent) {
     m_audioOutput = m_audioSink->start();
     if (m_audioOutput == nullptr) {
         qWarning() << "[AudioMixer] Failed to start audio output! Device:" << device.description();
-    }
-}
-
-void AudioMixer::mix(float *output, const float *input, float volume, int samples) { // NOLINT(bugprone-easily-swappable-parameters)
-    for (int i = 0; i < samples; ++i) {
-        output[i] += input[i] * volume;
     }
 }
 

@@ -1,11 +1,8 @@
 #include "settings_manager.hpp"
 #include "timeline_controller.hpp"
 #include "timeline_service.hpp"
-#include <QUrl>
 
 namespace AviQtl::UI {
-
-auto TimelineController::exportMedia(const QString &fileUrl, const QString &format, int quality) -> bool { return m_exportManager->exportMedia(fileUrl, format, quality); }
 
 void TimelineController::exportVideoAsync(const QVariantMap &cfg) {
     AviQtl::Core::VideoEncoder::Config c;

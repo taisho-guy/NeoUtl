@@ -7,7 +7,6 @@
 #include <QSplashScreen>
 #include <QTimer>
 #include <QTranslator>
-#include <utility>
 
 // Core Headers
 #include "compute_effect.hpp"

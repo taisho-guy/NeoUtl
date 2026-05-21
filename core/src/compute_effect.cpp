@@ -142,10 +142,6 @@ auto ComputeEffect::ssboToBytes(const QVariantMap &bufferData) -> QByteArray {
     return result;
 }
 
-void ComputeEffect::updateState() {
-    // フェーズ8: m_rawSSBOs の内容は updatePaintNode → ComputeRenderNode::syncSSBOs で転送済み
-}
-
 // フェーズ8: ComputeRenderNode を生成・更新して返す
 // updatePaintNode は UI/レンダースレッドの同期ポイントであるため
 // m_rawSSBOs へのアクセスに mutex は不要

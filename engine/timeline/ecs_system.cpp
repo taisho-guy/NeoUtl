@@ -1,4 +1,3 @@
-#include "core/include/interpolation_engine.hpp"
 #include "ecs.hpp"
 #include "ecs_profiler.hpp"
 #include "engine/plugin/audio_plugin_manager.hpp"
@@ -61,7 +60,6 @@ void ECS::syncClipIds(const std::bitset<MAX_CLIP_ID> &aliveFlags) {
     changed |= editState.transforms.syncAlive(aliveFlags);
     changed |= editState.renderStates.syncAlive(aliveFlags);
     changed |= editState.audioStates.syncAlive(aliveFlags);
-    changed |= editState.metadataStates.syncAlive(aliveFlags);
 
     // Phase 4 同期
     changed |= editState.keyframeRefs.syncAlive(aliveFlags);
@@ -134,52 +132,6 @@ void ECS::updateAudioClipState(int clipId, int startFrame, int durationFrames, f
     ECS_PROF_INC(dirtyBitSetCount);
 }
 
-// ─── updateMetadata ───────────────────────────────────────────────────────────
-
-static auto parseColorRGBA(const QString &colorStr) -> uint32_t {
-    QString s = colorStr.trimmed();
-    if (s.startsWith(u'#'))
-        s.remove(0, 1);
-    bool ok = false;
-    const uint32_t val = s.toUInt(&ok, 16);
-    if (!ok)
-        return 0xFF000000u;
-    if (s.length() == 6)
-        return 0xFF000000u | val;
-    return val;
-}
-
-void ECS::updateMetadata(int clipId, const QString &name, const QString &source, const QString &type, const QString &color) {
-    assert(clipId >= 0 && clipId < MAX_CLIP_ID);
-    auto &editState = m_buffers[m_editIndex];
-    auto *ptr = editState.metadataStates.find(clipId);
-    if (!ptr) {
-        m_dirtyFlags[(m_editIndex + 1) % 3].fullSync = true;
-        m_dirtyFlags[(m_editIndex + 2) % 3].fullSync = true;
-        ptr = &editState.metadataStates[clipId];
-    }
-    const uint32_t nId = m_stringTable.intern(name.toStdString());
-    const uint32_t sId = m_stringTable.intern(source.toStdString());
-    const uint32_t tId = m_stringTable.intern(type.toStdString());
-    const uint32_t cRGBA = parseColorRGBA(color);
-    auto &meta = *ptr;
-    if (meta.clipId != static_cast<int32_t>(clipId) || meta.nameId != nId || meta.sourceId != sId || meta.typeId != tId || meta.colorRGBA != cRGBA) {
-        meta.clipId = static_cast<int32_t>(clipId);
-        meta.nameId = nId;
-        meta.sourceId = sId;
-        meta.typeId = tId;
-        meta.colorRGBA = cRGBA;
-    }
-
-    for (int i = 1; i <= 2; ++i) {
-        auto &df = m_dirtyFlags[(m_editIndex + i) % 3];
-        if (!df.dirty.test(static_cast<std::size_t>(clipId))) {
-            df.dirty.set(static_cast<std::size_t>(clipId));
-            df.dirtyIds.push_back(clipId);
-        }
-    }
-}
-
 // ─── commit ───────────────────────────────────────────────────────────────────
 
 void ECS::commit() {
@@ -216,22 +168,20 @@ void ECS::commit() {
 
         // dirtyIds を使ってピンポイントで同期
         for (int id : df.dirtyIds) {
-            if (const auto *s = src.transforms.find(id))
-                dst.transforms[id] = *s;
-            if (const auto *s = src.renderStates.find(id))
-                dst.renderStates[id] = *s;
-            if (const auto *s = src.audioStates.find(id))
-                dst.audioStates[id] = *s;
-            if (const auto *s = src.metadataStates.find(id))
-                dst.metadataStates[id] = *s;
-
-            // Phase 4 同期
-            if (const auto *s = src.keyframeRefs.find(id))
-                dst.keyframeRefs[id] = *s;
-            if (const auto *s = src.ecsTransforms.find(id))
-                dst.ecsTransforms[id] = *s;
-            if (const auto *s = src.globalMatrices.find(id))
-                dst.globalMatrices[id] = *s;
+             if (const auto *s = src.transforms.find(id))
+                 dst.transforms[id] = *s;
+             if (const auto *s = src.renderStates.find(id))
+                 dst.renderStates[id] = *s;
+             if (const auto *s = src.audioStates.find(id))
+                 dst.audioStates[id] = *s;
+ 
+             // Phase 4 同期
+             if (const auto *s = src.keyframeRefs.find(id))
+                 dst.keyframeRefs[id] = *s;
+             if (const auto *s = src.ecsTransforms.find(id))
+                 dst.ecsTransforms[id] = *s;
+             if (const auto *s = src.globalMatrices.find(id))
+                 dst.globalMatrices[id] = *s;
         }
         df.dirty.reset();
         df.dirtyIds.clear();

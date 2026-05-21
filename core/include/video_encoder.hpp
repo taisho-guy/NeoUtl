@@ -4,10 +4,8 @@
 #include <QObject>
 #include <QSize>
 #include <QString>
-#include <QVariantMap>
 #include <atomic>
 #include <condition_variable>
-#include <memory>
 #include <mutex>
 #include <queue>
 #include <thread>
@@ -49,7 +47,6 @@ class VideoEncoder : public QObject {
     ~VideoEncoder();
 
     bool open(const Config &config);
-    Q_INVOKABLE bool open(const QVariantMap &config);
     bool pushFrame(const QImage &img, int64_t pts); // CPU -> HW Upload
     bool addAudioStream(int sampleRate = 48000, int channels = 2);
     bool pushAudio(const float *samples, int sampleCount);
@@ -96,7 +93,6 @@ class VideoEncoder : public QObject {
     std::condition_variable m_queuePushCv;
     std::atomic<bool> m_stopEncoding{false};
     std::atomic<bool> m_errorOccurred{false};
-    static const size_t MAX_QUEUE_SIZE = 16;
 
     bool initHardware(const QString &codecName);
     bool writeHeaderIfNeeded();

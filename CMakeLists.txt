@@ -3,7 +3,6 @@ project(AviQtl LANGUAGES CXX C)
 
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 set(QT_QML_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/qml)
-set(QT_NO_PRIVATE_MODULE_WARNING ON)
 
 set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
@@ -222,8 +221,6 @@ add_custom_target(AviQtl_ExternalShaders ALL DEPENDS ${EXTERNAL_QSB_FILES})
 qt_add_executable(AviQtl
     core/src/main.cpp
     ui/resources.qrc
-    ${QML_FILES}
-    ${COMMON_SHADERS}
 )
 
 if(APPLE)

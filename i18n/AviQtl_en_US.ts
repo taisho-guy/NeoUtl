@@ -1079,17 +1079,17 @@ This software is released under the GNU Affero General Public License Version 3.
 <context>
     <name>AviQtl::UI::TimelineExportManager</name>
     <message>
-        <location filename="../ui/src/timeline/timeline_export_manager.cpp" line="96"/>
+        <location filename="../ui/src/timeline/timeline_export_manager.cpp" line="41"/>
         <source>エンコーダーの初期化に失敗しました</source>
         <translation>Failed to initialize encoder</translation>
     </message>
     <message>
-        <location filename="../ui/src/timeline/timeline_export_manager.cpp" line="124"/>
+        <location filename="../ui/src/timeline/timeline_export_manager.cpp" line="69"/>
         <source>キャンセルされました</source>
         <translation>Canceled</translation>
     </message>
     <message>
-        <location filename="../ui/src/timeline/timeline_export_manager.cpp" line="156"/>
+        <location filename="../ui/src/timeline/timeline_export_manager.cpp" line="101"/>
         <source>書き出し完了</source>
         <translation>Export complete</translation>
     </message>
@@ -2412,42 +2412,41 @@ Save before continuing?</translation>
         <translation>Split clip: %1</translation>
     </message>
     <message>
-        <location filename="../ui/src/timeline/timeline_commands.cpp" line="170"/>
         <source>クリップ削除: %1</source>
-        <translation>Delete clip: %1</translation>
+        <translation type="vanished">Delete clip: %1</translation>
     </message>
     <message>
-        <location filename="../ui/src/timeline/timeline_commands.cpp" line="202"/>
+        <location filename="../ui/src/timeline/timeline_commands.cpp" line="190"/>
         <source>切り取り: %1</source>
         <translation>Cut: %1</translation>
     </message>
     <message>
-        <location filename="../ui/src/timeline/timeline_commands.cpp" line="213"/>
+        <location filename="../ui/src/timeline/timeline_commands.cpp" line="201"/>
         <source>貼り付け: %1</source>
         <translation>Paste: %1</translation>
     </message>
     <message>
-        <location filename="../ui/src/timeline/timeline_commands.cpp" line="225"/>
+        <location filename="../ui/src/timeline/timeline_commands.cpp" line="213"/>
         <source>キーフレーム設定: %1</source>
         <translation>Set keyframe: %1</translation>
     </message>
     <message>
-        <location filename="../ui/src/timeline/timeline_commands.cpp" line="251"/>
+        <location filename="../ui/src/timeline/timeline_commands.cpp" line="239"/>
         <source>キーフレーム削除: %1 [%2]</source>
         <translation>Delete keyframe: %1 [%2]</translation>
     </message>
     <message>
-        <location filename="../ui/src/timeline/timeline_commands.cpp" line="256"/>
+        <location filename="../ui/src/timeline/timeline_commands.cpp" line="244"/>
         <source>シーン追加: %1</source>
         <translation>Add scene: %1</translation>
     </message>
     <message>
-        <location filename="../ui/src/timeline/timeline_commands.cpp" line="267"/>
+        <location filename="../ui/src/timeline/timeline_commands.cpp" line="255"/>
         <source>シーン削除: %1</source>
         <translation>Delete scene: %1</translation>
     </message>
     <message>
-        <location filename="../ui/src/timeline/timeline_commands.cpp" line="274"/>
+        <location filename="../ui/src/timeline/timeline_commands.cpp" line="262"/>
         <source>シーン設定変更: %1</source>
         <translation>Scene settings change: %1</translation>
     </message>
@@ -2473,22 +2472,22 @@ Save before continuing?</translation>
         <translation>Transform multiple clips: %1</translation>
     </message>
     <message>
-        <location filename="../ui/src/timeline/timeline_clip.cpp" line="610"/>
+        <location filename="../ui/src/timeline/timeline_clip.cpp" line="539"/>
         <source>クリップ削除</source>
         <translation>Delete clip</translation>
     </message>
     <message>
-        <location filename="../ui/src/timeline/timeline_clip.cpp" line="610"/>
+        <location filename="../ui/src/timeline/timeline_clip.cpp" line="539"/>
         <source>複数クリップ削除: %1</source>
         <translation>Delete multiple clips: %1</translation>
     </message>
     <message>
-        <location filename="../ui/src/timeline/timeline_clip.cpp" line="749"/>
+        <location filename="../ui/src/timeline/timeline_clip.cpp" line="678"/>
         <source>複数クリップ分割: %1</source>
         <translation>Split multiple clips: %1</translation>
     </message>
     <message>
-        <location filename="../ui/src/timeline/timeline_clip.cpp" line="802"/>
+        <location filename="../ui/src/timeline/timeline_clip.cpp" line="731"/>
         <source>複数クリップ貼り付け: %1</source>
         <translation>Paste multiple clips: %1</translation>
     </message>

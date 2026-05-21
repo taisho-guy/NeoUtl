@@ -162,18 +162,6 @@ void SplitClipCommand::redo() {
     m_service->addClipDirectInternal(newClip);
 }
 
-DeleteClipCommand::DeleteClipCommand(TimelineService *service, int clipId, const QString &clipName) : m_service(service), m_clipId(clipId) {
-    const auto *clip = service->findClipById(clipId);
-    if (clip != nullptr) {
-        m_snapshot = service->deepCopyClip(*clip);
-    }
-    setText(QObject::tr("クリップ削除: %1").arg(clipName));
-}
-void DeleteClipCommand::redo() { m_service->deleteClipInternal(m_clipId); }
-void DeleteClipCommand::undo() {
-    m_snapshot.id = m_clipId;
-    m_service->addClipDirectInternal(m_snapshot);
-}
 
 DeleteClipsCommand::DeleteClipsCommand(TimelineService *service, const QList<int> &clipIds, const QString &macroText) : m_service(service), m_clipIds(clipIds) {
     setText(macroText);

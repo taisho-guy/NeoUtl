@@ -97,7 +97,6 @@ class DocumentModel : public QObject {
     const Clip *findClip(int sceneId, int clipId) const;
     void addClip(int sceneId, const Clip &clip);
     void removeClip(int sceneId, int clipId);
-    void updateClipPosition(int sceneId, int clipId, int layer, int startFrame, int durationFrames);
 
     // Undo / Redo スタックの提供
     QUndoStack *undoStack() { return &m_undoStack; }

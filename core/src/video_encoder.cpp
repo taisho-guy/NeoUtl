@@ -15,6 +15,8 @@ extern "C" {
 
 namespace AviQtl::Core {
 
+constexpr size_t MAX_QUEUE_SIZE = 16;
+
 VideoEncoder::VideoEncoder(QObject *parent) : QObject(parent) {}
 
 VideoEncoder::~VideoEncoder() { close(); }
@@ -212,8 +214,6 @@ auto VideoEncoder::open(const Config &config) -> bool {
         }
     }
 
-    // ヘッダー書き込みは音声ストリーム追加の機会を与えるため、最初のフレームプッシュまで遅延させる
-
     // 6. フレーム確保
     m_swFrame = av_frame_alloc();
     m_swFrame->format = AV_PIX_FMT_NV12; // SW変換用中間バッファ
@@ -237,17 +237,6 @@ auto VideoEncoder::open(const Config &config) -> bool {
     return true;
 }
 
-auto VideoEncoder::open(const QVariantMap &configMap) -> bool {
-    Config config;
-    config.width = configMap.value(QStringLiteral("width")).toInt();
-    config.height = configMap.value(QStringLiteral("height")).toInt();
-    config.fps_num = configMap.value(QStringLiteral("fps_num")).toInt();
-    config.fps_den = configMap.value(QStringLiteral("fps_den")).toInt();
-    config.bitrate = configMap.value(QStringLiteral("bitrate")).toLongLong();
-    config.outputUrl = configMap.value(QStringLiteral("outputUrl")).toString();
-    // codecName defaults to h264_vaapi if not present
-    return open(config);
-}
 auto VideoEncoder::addAudioStream(int sampleRate, int channels) -> bool {
     std::scoped_lock lock(m_mutex);
     if (m_fmtCtx == nullptr) {
@@ -721,4 +710,5 @@ void VideoEncoder::close() {
     qDebug() << "VideoEncoder closed.";
 }
 
-} // namespace AviQtl::Core
+} // namespace AviQtl::Core/ /   P R   1 :   M A X   q u e u e   s i z e   f r o m   . h p p   m o v e d   h e r e  
+ 

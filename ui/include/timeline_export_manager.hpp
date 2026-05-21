@@ -24,9 +24,6 @@ class TimelineExportManager : public QObject {
     void cancelExport();
     bool isExporting() const { return m_exporting.load(); }
 
-    // 旧インターフェース互換
-    bool exportMedia(const QString &fileUrl, const QString &format, int quality);
-
   signals:
     void exportStarted(int totalFrames);
     void exportProgressChanged(int progress, int currentFrame, int totalFrames);

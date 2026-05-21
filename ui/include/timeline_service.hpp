@@ -21,9 +21,6 @@ class TimelineService : public QObject {
     QList<ClipData> &clipsMutable();                 // シリアライザ用
     const QList<ClipData> &clips(int sceneId) const; // 特定シーンのクリップ取得
 
-    // ネストを解決した「フレーム時点のアクティブクリップ」を返す
-    QList<ClipData *> resolvedActiveClipsAt(int frame) const;
-
     // 指定された条件で配置可能な最短の開始フレームを計算する（衝突回避）
     int findVacantFrame(int layer, int startFrame, int duration, int excludeClipId) const;
 
@@ -42,7 +39,6 @@ class TimelineService : public QObject {
     void resizeSelectedClips(int deltaStartFrame, int deltaDuration);
     void splitClip(int clipId, int frame);
     void splitSelectedClips(int frame);
-    Q_INVOKABLE int computeMagneticSnapPosition(int clipId, int targetLayer, int proposedStartFrame); // Note: This is for a different snap feature
     Q_INVOKABLE QPoint resolveDragPosition(int clipId, int targetLayer, int proposedStartFrame, const QVariantList &batchIds = QVariantList());
     void selectClip(int id);
     void selectClipsInRange(int frameA, int frameB, int layerA, int layerB, bool additive = false);

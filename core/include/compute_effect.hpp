@@ -75,7 +75,6 @@ class ComputeEffect : public QQuickItem {
     QSGNode *updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *data) override;
     // フェーズ8: ジオメトリ変更時に autoWorkGroup の値を再計算する
     void geometryChange(const QRectF &newGeometry, const QRectF &oldGeometry) override;
-    void updateState();
 
   private:
     // フェーズ8: autoWorkGroup が true の場合にワークグループサイズを item 寸法から算出する
