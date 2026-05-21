@@ -71,7 +71,7 @@ Rectangle {
 
             Text {
                 anchors.centerIn: parent
-                text: Workspace.currentTimeline && Workspace.currentTimeline.transport ? Workspace.currentTimeline.transport.currentFrame + "f" : "0f"
+                text: Workspace.currentTimeline ? Workspace.currentTimeline.cursorFrame : "0"
                 font.pixelSize: 11
                 font.bold: true
                 color: palette.highlight

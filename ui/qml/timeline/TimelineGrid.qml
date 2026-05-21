@@ -33,8 +33,7 @@ Canvas {
         // 境界の1px残りを防ぐため、クリア範囲を広めにとる
         ctx.clearRect(-1, -1, width + 2, height + 2);
         ctx.lineWidth = 1;
-        // 水平区切り線
-        ctx.strokeStyle = Qt.rgba(0.5, 0.5, 0.5, 0.2);
+        // 水平区切り線と行の背景色
         var startY = contentY;
         for (var i = 0; i < layerCount; i++) {
             // 整数座標で描画
@@ -42,6 +41,12 @@ Canvas {
             if (ly < -layerHeight || ly > height)
                 continue;
 
+            // 行の背景を塗り分け（アクセシビリティ向上のための縞模様）
+            // レイヤーヘッダーの濃淡順（偶数行が明るめ）に合わせます
+            ctx.fillStyle = (i % 2 === 0) ? Qt.rgba(1, 1, 1, 0.02) : "transparent";
+            ctx.fillRect(0, ly, width, layerHeight);
+            // 水平区切り線
+            ctx.strokeStyle = Qt.rgba(0.5, 0.5, 0.5, 0.2);
             ctx.beginPath();
             ctx.moveTo(0, ly);
             ctx.lineTo(width, ly);
