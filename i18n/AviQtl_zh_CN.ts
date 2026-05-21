@@ -967,73 +967,78 @@
 <context>
     <name>AviQtl::Core::PackageManager</name>
     <message>
-        <location filename="../core/src/package_manager.cpp" line="79"/>
+        <location filename="../core/src/package_manager.cpp" line="106"/>
         <source>待機中</source>
         <translation>等待中</translation>
     </message>
     <message>
-        <location filename="../core/src/package_manager.cpp" line="153"/>
+        <location filename="../core/src/package_manager.cpp" line="206"/>
         <source>キャッシュからパッケージをロードしました（更新を確認するには「同期」を押してください）</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../core/src/package_manager.cpp" line="186"/>
+        <location filename="../core/src/package_manager.cpp" line="238"/>
         <source>リポジトリを同期中...</source>
         <translation>正在同步仓库...</translation>
     </message>
     <message>
-        <location filename="../core/src/package_manager.cpp" line="275"/>
-        <location filename="../core/src/package_manager.cpp" line="302"/>
+        <location filename="../core/src/package_manager.cpp" line="326"/>
+        <location filename="../core/src/package_manager.cpp" line="354"/>
         <source>同期完了</source>
         <translation>同步完成</translation>
     </message>
     <message>
-        <location filename="../core/src/package_manager.cpp" line="355"/>
+        <location filename="../core/src/package_manager.cpp" line="412"/>
+        <source>最新バージョン情報が取得できていません。同期を行ってください。</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../core/src/package_manager.cpp" line="420"/>
         <source>パッケージのインストール中: %1</source>
         <translation>正在安装软件包：%1</translation>
     </message>
     <message>
-        <location filename="../core/src/package_manager.cpp" line="482"/>
+        <location filename="../core/src/package_manager.cpp" line="547"/>
         <source>アップグレード可能なパッケージはありません。</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../core/src/package_manager.cpp" line="487"/>
+        <location filename="../core/src/package_manager.cpp" line="552"/>
         <source>すべてのパッケージをアップグレード中...</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../core/src/package_manager.cpp" line="494"/>
+        <location filename="../core/src/package_manager.cpp" line="559"/>
         <source>すべてのアップグレードが完了しました</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../core/src/package_manager.cpp" line="500"/>
+        <location filename="../core/src/package_manager.cpp" line="565"/>
         <source>パッケージをアップグレード中: %1</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../core/src/package_manager.cpp" line="343"/>
+        <location filename="../core/src/package_manager.cpp" line="406"/>
         <source>パッケージが見つかりません: %1</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../core/src/package_manager.cpp" line="360"/>
+        <location filename="../core/src/package_manager.cpp" line="425"/>
         <source>インストール完了: %1</source>
         <translation>安装完成：%1</translation>
     </message>
     <message>
-        <location filename="../core/src/package_manager.cpp" line="371"/>
+        <location filename="../core/src/package_manager.cpp" line="436"/>
         <source>AviQtlのアップデートがダウンロード可能です。再起動して適用してください。</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../core/src/package_manager.cpp" line="408"/>
+        <location filename="../core/src/package_manager.cpp" line="473"/>
         <source>パッケージを削除中: %1</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../core/src/package_manager.cpp" line="433"/>
+        <location filename="../core/src/package_manager.cpp" line="498"/>
         <source>削除完了: %1</source>
         <translation type="unfinished"></translation>
     </message>
@@ -2074,11 +2079,16 @@
     </message>
     <message>
         <location filename="../ui/qml/PackageManagerWindow.qml" line="270"/>
+        <source>削除</source>
+        <translation type="unfinished">删除</translation>
+    </message>
+    <message>
+        <location filename="../ui/qml/PackageManagerWindow.qml" line="277"/>
         <source>アップデート</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../ui/qml/PackageManagerWindow.qml" line="270"/>
+        <location filename="../ui/qml/PackageManagerWindow.qml" line="277"/>
         <source>インストール</source>
         <translation type="unfinished"></translation>
     </message>

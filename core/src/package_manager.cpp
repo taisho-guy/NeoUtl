@@ -25,8 +25,14 @@ int compareVersions(const QString &v1, const QString &v2) {
     if (v1 == v2)
         return 0;
 
-    QStringList parts1 = v1.split('.');
-    QStringList parts2 = v2.split('.');
+    auto sanitize = [](QString v) {
+        if (v.startsWith('v'))
+            v.remove(0, 1);
+        return v;
+    };
+
+    QStringList parts1 = sanitize(v1).split('.');
+    QStringList parts2 = sanitize(v2).split('.');
 
     int i = 0;
     while (i < parts1.size() && i < parts2.size()) {
@@ -67,6 +73,27 @@ QVariantMap loadInstalledPackagesFromFile() {
         file.close();
     }
     return installed;
+}
+
+QString parseLatestVersionFromXml(const QByteArray &data) {
+    QString latest;
+    QXmlStreamReader xml(data);
+    while (!xml.atEnd()) {
+        if (xml.isStartElement() && (xml.name() == QStringLiteral("item") || xml.name() == QStringLiteral("entry"))) {
+            while (xml.readNextStartElement()) {
+                if (xml.name() == QStringLiteral("title")) {
+                    latest = xml.readElementText().trimmed();
+                } else {
+                    xml.skipCurrentElement();
+                }
+                if (!latest.isEmpty())
+                    break;
+            }
+            break;
+        }
+        xml.readNext();
+    }
+    return latest;
 }
 } // namespace
 
@@ -138,20 +165,45 @@ void PackageManager::loadCachedPackages() {
                 // インストール済み情報の付加
                 if (id == QStringLiteral("org.aviqtl.app")) {
                     p[QStringLiteral("installed_version")] = QString::fromUtf8(AviQtl::VERSION_STRING);
+                    p[QStringLiteral("latest_version")] = QString::fromUtf8(AviQtl::VERSION_STRING);
                 } else if (installed.contains(id)) {
                     p[QStringLiteral("installed_version")] = installed.value(id).toMap().value(QStringLiteral("version"));
                 }
 
                 // 起動直後は最新バージョンは不明（同期ボタンで初めて取得される）
-                p[QStringLiteral("latest_version")] = QString();
+                // ただし、キャッシュされたフィードがあれば読み込む
+                if (id != QStringLiteral("org.aviqtl.app")) {
+                    const QString feedUrl = p.value(QStringLiteral("release_feed")).toString();
+                    if (!feedUrl.isEmpty()) {
+                        const QString feedFileName = QStringLiteral("feed_") + QString::fromLatin1(QCryptographicHash::hash(feedUrl.toUtf8(), QCryptographicHash::Sha1).toHex()) + QStringLiteral(".xml");
+                        QFile feedFile(repoPath + QStringLiteral("/") + feedFileName);
+                        if (feedFile.open(QIODevice::ReadOnly)) {
+                            p[QStringLiteral("latest_version")] = parseLatestVersionFromXml(feedFile.readAll());
+                            feedFile.close();
+                        }
+                    }
+                }
 
                 m_packageList.append(p);
             }
         }
     }
     emit packageListChanged();
+
+    // キャッシュ情報に基づいてアップデートの有無を初期評価
+    bool anyUpdates = false;
+    for (const auto &p : m_packageList) {
+        const QVariantMap item = p.toMap();
+        const QString instVer = item.value(QStringLiteral("installed_version")).toString();
+        const QString latVer = item.value(QStringLiteral("latest_version")).toString();
+        if (!instVer.isEmpty() && !latVer.isEmpty() && compareVersions(latVer, instVer) > 0) {
+            anyUpdates = true;
+            break;
+        }
+    }
+    setHasUpdatesAvailable(anyUpdates);
+
     setStatus(tr("キャッシュからパッケージをロードしました（更新を確認するには「同期」を押してください）"));
-    setHasUpdatesAvailable(false); // 起動時はアップデート不明
 }
 
 QStringList PackageManager::repositories() const { return SettingsManager::instance().value(QStringLiteral("packageRepositoryUrls")).toStringList(); }
@@ -229,6 +281,16 @@ void PackageManager::refreshRepositories() {
                             p["installed_version"] = installed.value(id).toMap().value("version");
                         }
 
+                        // JSON側のバージョンを初期の最新バージョンとしてセット
+                        if (p.contains(QStringLiteral("version"))) {
+                            QString jsonVer = p.value(QStringLiteral("version")).toString();
+                            if (id == QStringLiteral("org.aviqtl.app") && compareVersions(jsonVer, QString::fromUtf8(AviQtl::VERSION_STRING)) <= 0) {
+                                p[QStringLiteral("latest_version")] = QString::fromUtf8(AviQtl::VERSION_STRING);
+                            } else {
+                                p[QStringLiteral("latest_version")] = jsonVer;
+                            }
+                        }
+
                         // バージョン等の変動情報はクライアント側で解決する
                         // JSON側の "version" フィールドは無視し、release_feed を優先する
                         const QString feedUrl = p.value("release_feed").toString();
@@ -236,36 +298,25 @@ void PackageManager::refreshRepositories() {
                         if (!feedUrl.isEmpty()) {
                             QNetworkReply *rssReply = m_networkManager->get(QNetworkRequest(QUrl(feedUrl)));
                             m_pendingRequests++;
-                            connect(rssReply, &QNetworkReply::finished, this, [this, rssReply, id]() {
+                            connect(rssReply, &QNetworkReply::finished, this, [this, rssReply, id, feedUrl]() {
                                 rssReply->deleteLater();
                                 m_pendingRequests--;
-                                QString latest;
 
                                 if (rssReply->error() == QNetworkReply::NoError) {
-                                    QXmlStreamReader xml(rssReply->readAll());
-                                    while (!xml.atEnd()) {
-                                        if (xml.isStartElement() && xml.name() == QStringLiteral("item")) {
-                                            while (xml.readNextStartElement()) {
-                                                if (xml.name() == QStringLiteral("title")) {
-                                                    latest = xml.readElementText().trimmed();
-                                                } else {
-                                                    xml.skipCurrentElement();
-                                                }
-                                                if (!latest.isEmpty())
-                                                    break;
-                                            }
-                                            break; // 最初のエントリのみ取得
-                                        }
-                                        xml.readNext();
+                                    const QByteArray rssData = rssReply->readAll();
+                                    // フィードをキャッシュ保存
+                                    const QString repoPath = QCoreApplication::applicationDirPath() + QStringLiteral("/repos");
+                                    const QString feedFileName = QStringLiteral("feed_") + QString::fromLatin1(QCryptographicHash::hash(feedUrl.toUtf8(), QCryptographicHash::Sha1).toHex()) + QStringLiteral(".xml");
+                                    QFile feedFile(repoPath + QStringLiteral("/") + feedFileName);
+                                    if (feedFile.open(QIODevice::WriteOnly)) {
+                                        feedFile.write(rssData);
+                                        feedFile.close();
                                     }
-                                    // RSSフィードから取得したバージョンが現在のバージョンより新しい場合のみ更新
-                                    if (id == QStringLiteral("org.aviqtl.app") && compareVersions(latest, QString::fromUtf8(AviQtl::VERSION_STRING)) <= 0) {
-                                        latest = QString::fromUtf8(AviQtl::VERSION_STRING); // 最新バージョンを現在のバージョンに強制
-                                    }
-                                }
 
-                                if (!latest.isEmpty()) {
-                                    updatePackageLatestVersion(id, latest);
+                                    QString latest = parseLatestVersionFromXml(rssData);
+                                    if (!latest.isEmpty()) {
+                                        updatePackageLatestVersion(id, latest);
+                                    }
                                 }
 
                                 if (m_pendingRequests <= 0) {
@@ -280,8 +331,9 @@ void PackageManager::refreshRepositories() {
                                     bool anyUpdates = false;
                                     for (const auto &p : m_packageList) {
                                         const QVariantMap item = p.toMap();
-                                        if (item.value(QStringLiteral("installed_version")).toString() != item.value(QStringLiteral("latest_version")).toString() && !item.value(QStringLiteral("installed_version")).toString().isEmpty() &&
-                                            !item.value(QStringLiteral("latest_version")).toString().isEmpty()) {
+                                        const QString instVer = item.value(QStringLiteral("installed_version")).toString();
+                                        const QString latVer = item.value(QStringLiteral("latest_version")).toString();
+                                        if (!instVer.isEmpty() && !latVer.isEmpty() && compareVersions(latVer, instVer) > 0) {
                                             anyUpdates = true;
                                             break;
                                         }
@@ -316,8 +368,19 @@ void PackageManager::updatePackageLatestVersion(const QString &id, const QString
     for (int i = 0; i < m_packageList.size(); ++i) {
         QVariantMap item = m_packageList[i].toMap();
         if (item.value(QStringLiteral("id")).toString() == id) {
-            if (item.value(QStringLiteral("latest_version")).toString() != version) {
-                item[QStringLiteral("latest_version")] = version;
+            QString latest = version;
+
+            // 先頭の 'v' を取り除く (v0.0.86 -> 0.0.86)
+            if (latest.startsWith('v'))
+                latest.remove(0, 1);
+
+            // AviQtl本体の場合、自分自身のバージョン情報と比較して、新しい場合のみ更新する
+            if (id == QStringLiteral("org.aviqtl.app") && compareVersions(latest, QString::fromUtf8(AviQtl::VERSION_STRING)) <= 0) {
+                latest = QString::fromUtf8(AviQtl::VERSION_STRING);
+            }
+
+            if (item.value(QStringLiteral("latest_version")).toString() != latest || latest.isEmpty()) {
+                item[QStringLiteral("latest_version")] = latest;
                 m_packageList[i] = item;
                 // hasUpdatesAvailable の状態は refreshRepositories の最後でまとめて更新される
                 emit packageListChanged();
@@ -345,8 +408,10 @@ void PackageManager::installPackage(const QString &packageId) {
     }
 
     QString versionToInstall = pkg.value(QStringLiteral("latest_version")).toString();
-    if (versionToInstall.isEmpty())
-        versionToInstall = QStringLiteral("0.0.1");
+    if (versionToInstall.isEmpty()) {
+        emit errorOccurred(tr("最新バージョン情報が取得できていません。同期を行ってください。"));
+        return;
+    }
 
     QString downloadUrl = pkg.value(QStringLiteral("download_url_template")).toString();
     downloadUrl.replace(QStringLiteral("{VERSION}"), versionToInstall);

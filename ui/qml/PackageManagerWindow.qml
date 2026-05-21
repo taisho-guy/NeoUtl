@@ -267,9 +267,17 @@ Common.AviQtlWindow {
                         }
 
                         Button {
+                            text: qsTr("削除")
+                            visible: installedVer !== "" && modelData.id !== "org.aviqtl.app"
+                            enabled: !PackageManager.isBusy
+                            onClicked: PackageManager.removePackage(modelData.id)
+                        }
+
+                        Button {
                             text: hasUpdate ? qsTr("アップデート") : qsTr("インストール")
                             highlighted: true
-                            enabled: !PackageManager.isBusy && (installedVer === "" || hasUpdate)
+                            // 同期前（latestVerが空）の場合はボタンを無効化
+                            enabled: !PackageManager.isBusy && (installedVer === "" || hasUpdate) && latestVer !== ""
                             visible: installedVer === "" || hasUpdate
                             onClicked: PackageManager.installPackage(modelData.id)
                         }
