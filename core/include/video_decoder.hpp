@@ -53,10 +53,21 @@ class VideoDecoder : public AviQtl::Core::MediaDecoder {
 
     void decodeTask(int targetFrame, double fps);
     bool open(const QString &path);
+    int findGopEndIndex(int startFrame) const;
     void close();
     void updateCacheSize();
 
     VideoFrameStore *mstore = nullptr;
+
+    // MLT風：GOP単位のリングバッファ
+    struct GopCacheBlock {
+        int keyframeIndex = -1;
+        int startFrame = -1;
+        int endFrame = -1;
+        QHash<int, QVideoFrame> frames;
+    };
+    static constexpr int MAX_GOP_CACHE_SIZE = 3;
+    std::mutex m_gopCacheMutex;
 
     AVFormatContext *mfmtCtx = nullptr;
     AVCodecContext *mdecCtx = nullptr;
@@ -72,8 +83,18 @@ class VideoDecoder : public AviQtl::Core::MediaDecoder {
     std::vector<int> m_prevKeyframe; ///< m_prevKeyframe[i] = index of the closest keyframe before or at frame i
     QCache<int, QVideoFrame> mframeCache;
     std::atomic<int> mlastRequestedFrame{-1};
+    QVideoFrame m_lastGoodFrame; ///< MLT-style last valid frame for error concealment
     std::atomic<bool> mclosing{false};
     std::atomic<bool> misPlaying{false};
+
+    // MLT式ポインタシャッフル管理
+    int m_gopCacheCount = 0;
+    GopCacheBlock m_gopCacheA[MAX_GOP_CACHE_SIZE];
+    GopCacheBlock m_gopCacheB[MAX_GOP_CACHE_SIZE];
+    GopCacheBlock *m_currentGopCache = m_gopCacheA;
+    bool getFrameFromGopCache(int frameIndex, QVideoFrame &outFrame);
+    void putGopCacheBlock(GopCacheBlock &&block);
+
     std::atomic<bool> misDecoding{false};
     QFuture<void> minitFuture;
     QFuture<void> mdecodeFuture;

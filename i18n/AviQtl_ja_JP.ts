@@ -1001,48 +1001,38 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../core/src/package_manager.cpp" line="494"/>
+        <location filename="../core/src/package_manager.cpp" line="516"/>
         <source>ダウンロード可能なファイルが見つかりませんでした。</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../core/src/package_manager.cpp" line="520"/>
-        <source>最新バージョン情報が取得できていません。同期を行ってください。</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../core/src/package_manager.cpp" line="531"/>
-        <source>ダウンロードURLが特定できません。</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../core/src/package_manager.cpp" line="536"/>
+        <location filename="../core/src/package_manager.cpp" line="549"/>
         <source>パッケージのインストール中: %1</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../core/src/package_manager.cpp" line="663"/>
+        <location filename="../core/src/package_manager.cpp" line="676"/>
         <source>アップグレード可能なパッケージはありません。</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../core/src/package_manager.cpp" line="668"/>
+        <location filename="../core/src/package_manager.cpp" line="681"/>
         <source>すべてのパッケージをアップグレード中...</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../core/src/package_manager.cpp" line="675"/>
+        <location filename="../core/src/package_manager.cpp" line="688"/>
         <source>すべてのアップグレードが完了しました</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../core/src/package_manager.cpp" line="681"/>
+        <location filename="../core/src/package_manager.cpp" line="694"/>
         <source>パッケージをアップグレード中: %1</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
         <location filename="../core/src/package_manager.cpp" line="406"/>
-        <location filename="../core/src/package_manager.cpp" line="514"/>
+        <location filename="../core/src/package_manager.cpp" line="536"/>
         <source>パッケージが見つかりません: %1</source>
         <translation type="unfinished"></translation>
     </message>
@@ -1058,21 +1048,26 @@
     </message>
     <message>
         <location filename="../core/src/package_manager.cpp" line="541"/>
+        <source>ダウンロードURLが指定されていません。アセット情報を取得してください。</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../core/src/package_manager.cpp" line="554"/>
         <source>インストール完了: %1</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../core/src/package_manager.cpp" line="552"/>
+        <location filename="../core/src/package_manager.cpp" line="565"/>
         <source>AviQtlのアップデートがダウンロード可能です。再起動して適用してください。</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../core/src/package_manager.cpp" line="589"/>
+        <location filename="../core/src/package_manager.cpp" line="602"/>
         <source>パッケージを削除中: %1</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../core/src/package_manager.cpp" line="614"/>
+        <location filename="../core/src/package_manager.cpp" line="627"/>
         <source>削除完了: %1</source>
         <translation type="unfinished"></translation>
     </message>

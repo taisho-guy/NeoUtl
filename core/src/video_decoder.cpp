@@ -152,6 +152,70 @@ hwinitdone:
     return true;
 }
 
+bool VideoDecoder::getFrameFromGopCache(int frameIndex, QVideoFrame &outFrame) {
+    std::lock_guard<std::mutex> locker(m_gopCacheMutex);
+    int hitIndex = -1;
+    for (int i = 0; i < m_gopCacheCount; ++i) {
+        if (frameIndex >= m_currentGopCache[i].startFrame && frameIndex <= m_currentGopCache[i].endFrame) {
+            if (m_currentGopCache[i].frames.contains(frameIndex)) {
+                hitIndex = i;
+                break;
+            }
+        }
+    }
+    if (hitIndex == -1)
+        return false;
+
+    // MLT式ポインタシャッフルによるLRU更新
+    GopCacheBlock *alt = (m_currentGopCache == m_gopCacheA) ? m_gopCacheB : m_gopCacheA;
+    int j = 0;
+    for (int i = 0; i < m_gopCacheCount; ++i) {
+        if (i != hitIndex)
+            alt[j++] = std::move(m_currentGopCache[i]);
+    }
+    alt[j++] = std::move(m_currentGopCache[hitIndex]);
+    outFrame = alt[j - 1].frames.value(frameIndex);
+    m_currentGopCache = alt;
+    m_gopCacheCount = j;
+    return true;
+}
+
+void VideoDecoder::putGopCacheBlock(GopCacheBlock &&block) {
+    std::lock_guard<std::mutex> locker(m_gopCacheMutex);
+    GopCacheBlock *alt = (m_currentGopCache == m_gopCacheA) ? m_gopCacheB : m_gopCacheA;
+    int j = 0;
+
+    // 重複除外
+    for (int i = 0; i < m_gopCacheCount; ++i) {
+        if (m_currentGopCache[i].keyframeIndex != block.keyframeIndex) {
+            alt[j++] = std::move(m_currentGopCache[i]);
+        }
+    }
+
+    if (j >= MAX_GOP_CACHE_SIZE) {
+        // 最古を破棄
+        alt[0].frames.clear();
+        for (int i = 1; i < j; ++i) {
+            alt[i - 1] = std::move(alt[i]);
+        }
+        j = MAX_GOP_CACHE_SIZE - 1;
+    }
+
+    alt[j++] = std::move(block);
+    m_currentGopCache = alt;
+    m_gopCacheCount = j;
+}
+
+int VideoDecoder::findGopEndIndex(int startFrame) const {
+    if (mindex.empty())
+        return 0;
+    for (size_t i = static_cast<size_t>(startFrame) + 1; i < mindex.size(); ++i) {
+        if (mindex[i].isKeyframe)
+            return static_cast<int>(i) - 1;
+    }
+    return static_cast<int>(mindex.size()) - 1;
+}
+
 auto VideoDecoder::buildIndex() -> bool {
     if (av_seek_frame(mfmtCtx, mstreamIndex, 0, AVSEEK_FLAG_BACKWARD) < 0) {
         av_seek_frame(mfmtCtx, -1, 0, AVSEEK_FLAG_BACKWARD);
@@ -204,6 +268,7 @@ void VideoDecoder::close() {
         av_buffer_unref(&mhwDeviceCtx);
     }
     mhwDeviceCtx = nullptr;
+    m_lastGoodFrame = QVideoFrame();
 }
 
 void VideoDecoder::seek(qint64 ms) { emit seekRequested(ms); }
@@ -289,13 +354,19 @@ void VideoDecoder::decodeTask(int targetFrame, double fps) { // NOLINT(bugprone-
 
     targetFrame = std::max(targetFrame, 0);
     targetFrame = std::min(targetFrame, static_cast<int>(mindex.size()) - 1);
-    if (mlastRequestedFrame != targetFrame) {
+
+    // 1. GOPキャッシュのチェック (MLT O(1) パス)
+    QVideoFrame cachedFrame;
+    if (getFrameFromGopCache(targetFrame, cachedFrame)) {
+        mstore->setVideoFrameSafe(QString::number(clipId()), cachedFrame);
+        QMetaObject::invokeMethod(this, [this, targetFrame]() -> void { emit frameReady(targetFrame); }, Qt::QueuedConnection);
         return;
     }
 
+    // 2. QCache (個別フレームキャッシュ) のチェック
     if (QVideoFrame *cached = mframeCache.object(targetFrame)) {
         mstore->setVideoFrameSafe(QString::number(clipId()), *cached);
-        QMetaObject::invokeMethod(this, [this, targetFrame]() -> void { emit frameReady(targetFrame); }, Qt::QueuedConnection);
+        QMetaObject::invokeMethod(this, [this, targetFrame]() { emit frameReady(targetFrame); }, Qt::QueuedConnection);
         return;
     }
 
@@ -303,27 +374,35 @@ void VideoDecoder::decodeTask(int targetFrame, double fps) { // NOLINT(bugprone-
     int64_t targetPts = targetEntry.pts;
     bool needSeek = true;
 
+    int keyIndex = m_prevKeyframe[targetFrame];
+    int gopEndIndex = findGopEndIndex(keyIndex);
+
     if (mlastDecodedFrame != -1 && targetFrame > mlastDecodedFrame && targetFrame <= mlastDecodedFrame + 120) {
         needSeek = false;
     }
 
+    bool shouldFillGop = needSeek; // 逆再生やジャンプ時はGOPを充填する
+
     if (needSeek) {
-        int keyIndex = m_prevKeyframe[targetFrame];
         int64_t seekPts = mindex[keyIndex].pts;
-        int ret = av_seek_frame(mfmtCtx, mstreamIndex, seekPts, AVSEEK_FLAG_BACKWARD);
-        if (ret < 0) {
-            av_seek_frame(mfmtCtx, -1, seekPts, AVSEEK_FLAG_BACKWARD);
+        if (avformat_seek_file(mfmtCtx, mstreamIndex, seekPts, seekPts, seekPts, AVSEEK_FLAG_BACKWARD) < 0) {
+            av_seek_frame(mfmtCtx, mstreamIndex, seekPts, AVSEEK_FLAG_BACKWARD);
         }
         avcodec_flush_buffers(mdecCtx);
         mlastDecodedFrame = keyIndex - 1;
     }
 
-    bool frameFound = false;
+    GopCacheBlock newGopBlock;
+    newGopBlock.keyframeIndex = keyIndex;
+    newGopBlock.startFrame = keyIndex;
+    newGopBlock.endFrame = gopEndIndex;
+
+    bool targetDispatched = false;
     AVPacket *pkt = av_packet_alloc();
-    int maxDecodeCount = SettingsManager::instance().value(QStringLiteral("videoDecoderMaxPrefetchCount"), 500).toInt();
+    int maxDecodeCount = std::max(500, (gopEndIndex - keyIndex) + 10);
     bool eof = false;
 
-    while (maxDecodeCount-- > 0 && !frameFound) {
+    while (maxDecodeCount-- > 0) {
         int ret = 0;
         if (!eof) {
             ret = av_read_frame(mfmtCtx, pkt);
@@ -361,7 +440,25 @@ void VideoDecoder::decodeTask(int targetFrame, double fps) { // NOLINT(bugprone-
                 decodedFrameIndex = static_cast<int>(std::distance(mindex.begin(), it));
             }
 
-            if (decodedFrameIndex != -1 && !mframeCache.contains(decodedFrameIndex)) {
+            if (decodedFrameIndex == -1) {
+                continue;
+            }
+
+            // 【修正】ターゲットフレームが既にキャッシュにある場合でも、適切にディスパッチとフラグ更新を行う
+            if (decodedFrameIndex == targetFrame && !targetDispatched) {
+                QVideoFrame *cached = mframeCache.object(decodedFrameIndex);
+                if (cached && cached->isValid()) {
+                    mstore->setVideoFrameSafe(QString::number(clipId()), *cached);
+                    m_lastGoodFrame = *cached;
+                    if (auto *app = qApp) {
+                        QMetaObject::invokeMethod(this, [this, targetFrame]() { emit frameReady(targetFrame); }, Qt::QueuedConnection);
+                    }
+                    targetDispatched = true;
+                }
+            }
+
+            // キャッシュにない場合のみデコードと変換を行う
+            if (!mframeCache.contains(decodedFrameIndex)) {
                 AVFrame *srcFrame = mframe;
                 AVFrame *swFrame = nullptr;
                 AVFrame *convertedFrame = nullptr;
@@ -436,42 +533,80 @@ void VideoDecoder::decodeTask(int targetFrame, double fps) { // NOLINT(bugprone-
                     videoFrame.setEndTime(-1);
 
                     if (videoFrame.isValid()) {
-                        int cost = videoFrame.width() * videoFrame.height();
-                        mframeCache.insert(decodedFrameIndex, new QVideoFrame(videoFrame), cost);
+                        // 【MLT思想 1: Deep Copy / Clone】
+                        // QVideoFrame はハンドル。ここでスタックにコピーを作成することで
+                        // デコーダーが次フレームを処理しても、このハンドルが指すバッファは保護される。
+                        // ffmpeg_video_buffer.hpp 内の av_frame_ref によりデータ実体も保護済み。
+                        int bpp = (qtFmt == QVideoFrameFormat::Format_RGBA8888) ? 4 : 2;
+                        int64_t cost = static_cast<int64_t>(videoFrame.width()) * videoFrame.height() * bpp;
+                        auto *cachedFrame = new QVideoFrame(videoFrame);
+
+                        // 【MLT思想 3: Garbage (遅延解放)】
+                        // QCache は既存キーの上書き時に古いポインタを delete するが、
+                        // VideoFrameStore 側が copy を持っているため、描画中のフレームが
+                        // 物理メモリから消えることはない（参照カウントによる安全なゴミ箱処理）。
+                        mframeCache.insert(decodedFrameIndex, cachedFrame, static_cast<int>(std::clamp<int64_t>(cost, 0, INT_MAX)));
+                        newGopBlock.frames.insert(decodedFrameIndex, videoFrame);
+
+                        // 最後に成功したフレームを更新 (Concealment 用)
+                        m_lastGoodFrame = videoFrame;
+
+                        // 【MLT思想: 往復シャッフルに相当する O(1) ディスパッチ】
+                        // ターゲットを見つけた瞬間に UI へ横流しする。
+                        // これにより、GOP全体の充填を待たずに再生ヘッドを動かせる。
+                        if (decodedFrameIndex == targetFrame && !targetDispatched) {
+                            mstore->setVideoFrameSafe(QString::number(clipId()), m_lastGoodFrame);
+                            if (auto *app = qApp) {
+                                QMetaObject::invokeMethod(this, [this, targetFrame]() { emit frameReady(targetFrame); }, Qt::QueuedConnection);
+                            }
+                            targetDispatched = true;
+                        }
                     }
                 }
             }
 
-            if (currentPts >= targetPts) {
-                mlastDecodedFrame = decodedFrameIndex != -1 ? decodedFrameIndex : targetFrame;
-                frameFound = true;
+            if (decodedFrameIndex != -1) {
+                mlastDecodedFrame = decodedFrameIndex;
+            }
+
+            // 途中で新しいフレーム要求が来た場合は即座にこのタスクを中断
+            if (mlastRequestedFrame.load(std::memory_order_acquire) != targetFrame) {
+                av_packet_free(&pkt);
+                return;
+            }
+
+            // 順再生時、またはGOP末尾に到達した場合は終了
+            if ((!shouldFillGop && mlastDecodedFrame >= targetFrame) || mlastDecodedFrame >= gopEndIndex) {
                 break;
             }
+        }
+        if ((!shouldFillGop && mlastDecodedFrame >= targetFrame) || mlastDecodedFrame >= gopEndIndex) {
+            break;
         }
     }
     av_packet_free(&pkt);
 
-    if (QVideoFrame *cached = mframeCache.object(targetFrame)) {
-        mstore->setVideoFrameSafe(QString::number(clipId()), *cached);
+    // 【重要】エラー隠蔽 (Error Concealment) - 安全チェックの強化
+    if (!targetDispatched && m_lastGoodFrame.isValid() && !mclosing.load(std::memory_order_acquire)) {
+        mstore->setVideoFrameSafe(QString::number(clipId()), m_lastGoodFrame);
+        if (auto *app = qApp) {
+            QMetaObject::invokeMethod(this, [this, targetFrame]() { emit frameReady(targetFrame); }, Qt::QueuedConnection);
+        }
+        targetDispatched = true;
+    }
+
+    if (!targetDispatched) {
         QPointer<VideoDecoder> self(this);
-        QMetaObject::invokeMethod(
-            this,
-            [self, targetFrame]() -> void {
-                if (self && !self->mclosing.load(std::memory_order_acquire)) {
-                    emit self->frameReady(targetFrame);
-                }
-            },
-            Qt::QueuedConnection);
-    } else {
-        QPointer<VideoDecoder> self(this);
-        QMetaObject::invokeMethod(
-            this,
-            [self, targetFrame]() -> void {
-                if (self && !self->mclosing.load(std::memory_order_acquire)) {
-                    emit self->frameError(targetFrame);
-                }
-            },
-            Qt::QueuedConnection);
+        if (auto *app = qApp) {
+            QMetaObject::invokeMethod(
+                this,
+                [self, targetFrame]() -> void {
+                    if (self && !self->mclosing.load(std::memory_order_acquire)) {
+                        emit self->frameError(targetFrame);
+                    }
+                },
+                Qt::QueuedConnection);
+        }
     }
 }
 
