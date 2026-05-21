@@ -29,7 +29,7 @@ constexpr const char *VERSION_STRING = AVIQTL_VERSION_STRING;
 #endif
 
 #ifndef AVIQTL_VERSION_CODENAME
-constexpr const char *VERSION_CODENAME = "Maoka";
+constexpr const char *VERSION_CODENAME = "Unstable";
 #else
 constexpr const char *VERSION_CODENAME = AVIQTL_VERSION_CODENAME;
 #endif

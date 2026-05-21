@@ -35,7 +35,7 @@ class BuildConfig:
     version_minor: int = 0
     version_patch: int = 0
     version_string: str = "0.0.0"
-    version_codename: str = "Maoka"
+    version_codename: str = "Unstable"
 
     @property
     def build_type(self) -> str:
@@ -1298,8 +1298,8 @@ def parse_args() -> argparse.Namespace:
         help="アプリケーションのバージョンを指定 (例: 0.1.0 または 0.1.0-Anon)。"
     )
     parser.add_argument(
-        "--codename", type=str, default="Maoka",
-        help="コードネームを指定 (例: Maoka)。"
+        "--codename", type=str, default="Unstable",
+        help="コードネームを指定 (例: Unstable)。"
     )
     return parser.parse_args()
 

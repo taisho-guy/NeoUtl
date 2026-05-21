@@ -123,7 +123,7 @@ if(NOT DEFINED AVIQTL_VERSION_STRING)
     set(AVIQTL_VERSION_STRING "0.0.0")
 endif()
 if(NOT DEFINED AVIQTL_VERSION_CODENAME)
-    set(AVIQTL_VERSION_CODENAME "Maoka")
+    set(AVIQTL_VERSION_CODENAME "Unstable")
 endif()
 
 target_compile_definitions(AviQtl_Core PUBLIC

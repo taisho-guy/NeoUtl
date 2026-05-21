@@ -28,11 +28,12 @@ jobs:
         shell: msys2 {0}
         run: |
           TAG_NAME="${{ github.ref_name }}"
-          VERSION=$(echo "$TAG_NAME" | sed -E 's/^([0-9]+\.[0-9]+\.[0-9]+)(-.*)?$/\1/')
-          CODENAME=$(echo "$TAG_NAME" | sed -E 's/^[0-9]+\.[0-9]+\.[0-9]+-?(.*)$/\1/')
+          VERSION=$(echo "$TAG_NAME" | sed -E 's/^v?([0-9]+\.[0-9]+\.[0-9]+).*$/\1/')
+          CODENAME=$(echo "$TAG_NAME" | sed -E 's/^v?[0-9]+\.[0-9]+\.[0-9]+-?(.*)$/\1/')
           if [ -z "$CODENAME" ]; then
-            CODENAME="Maoka"
+            CODENAME="Unstable"
           fi
+          echo "RELEASE_NAME=$VERSION $CODENAME" >> "$GITHUB_ENV"
           echo "Building version: $VERSION, codename: $CODENAME"
           python BUILD.py --msys2 --version "$VERSION" --codename "$CODENAME"
         env:
@@ -58,7 +59,7 @@ jobs:
           draft: false
           prerelease: false
           tag_name: ${{ github.ref_name }}
-          name: ${{ github.ref_name }}
+          name: ${{ env.RELEASE_NAME }}
           body: ""
           files: |
             dist/AviQtl-MSYS2-UCRT64-x86_64.zip
