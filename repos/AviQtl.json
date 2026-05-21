@@ -1,43 +1,24 @@
 {
-  "repository_name": "AviQtl Default Repository",
+  "repository_name": "AviQtl Repository",
   "packages": [
     {
       "id": "org.aviqtl.app",
-      "display_name": "AviQtl Application",
-      "description": "The main AviQtl application itself.",
-      "author": "Taisho Guy",
+      "display_name": "AviQtl",
       "type": "application",
       "release_feed": "https://codeberg.org/taisho-guy/AviQtl/releases.atom",
-      "repository_url": "https://codeberg.org/taisho-guy/AviQtl",
-      "download_url_template": "https://codeberg.org/taisho-guy/AviQtl/releases/download/{VERSION}/AviQtl-{VERSION}-win64.zip"
-    },
-    {
-      "id": "org.aviqtl.effects.blur",
-      "display_name": "Advanced Blur Effect",
-      "description": "High-performance GLSL Blur implementation",
-      "author": "Taisho Guy",
-      "type": "effect",
-      "release_feed": "https://codeberg.org/taisho-guy/AviQtl-Blur/releases.atom",
-      "repository_url": "https://codeberg.org/taisho-guy/AviQtl-Blur",
-      "download_url_template": "https://codeberg.org/taisho-guy/AviQtl-Blur/releases/download/{VERSION}/blur-effect.zip"
+      "repository_url": "https://codeberg.org/taisho-guy/AviQtl"
     },
     {
       "id": "org.aviqtl.mods.autosave",
       "display_name": "Enhanced AutoSave",
-      "description": "Lua script that provides flexible interval backups",
-      "author": "AviQtl Dev Team",
       "type": "mod",
-      "release_feed": "https://example.com/autosave-mod/releases.atom",
-      "download_url_template": "https://example.com/autosave-mod/download/{VERSION}.zip"
+      "release_feed": "https://example.com/autosave-mod/releases.atom"
     },
     {
       "id": "org.aviqtl.objects.particle",
       "display_name": "Particle System",
-      "description": "Custom object for particle generation",
-      "author": "Community Contributor",
       "type": "object",
-      "release_feed": "https://example.com/particle/releases.atom",
-      "download_url_template": "https://example.com/particle/get/{VERSION}.zip"
+      "release_feed": "https://example.com/particle/releases.atom"
     }
   ]
 }

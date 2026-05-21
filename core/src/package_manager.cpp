@@ -479,6 +479,28 @@ void PackageManager::fetchAssets(const QString &packageId) {
         }
 
         if (!releaseObj.isEmpty()) {
+            // APIから取得した作者情報と説明文でリストを更新
+            const QString body = releaseObj.value(QStringLiteral("body")).toString();
+            QString author;
+            QJsonObject authorObj = releaseObj.value(QStringLiteral("author")).toObject();
+            author = authorObj.value(QStringLiteral("login")).toString(); // GitHub
+            if (author.isEmpty())
+                author = authorObj.value(QStringLiteral("username")).toString(); // Codeberg
+
+            for (int i = 0; i < m_packageList.size(); ++i) {
+                QVariantMap item = m_packageList[i].toMap();
+                if (item.value(QStringLiteral("id")).toString() == packageId) {
+                    if (!author.isEmpty())
+                        item[QStringLiteral("author")] = author;
+                    if (!body.isEmpty())
+                        item[QStringLiteral("description")] = body.left(200).trimmed() + (body.size() > 200 ? QStringLiteral("...") : QStringLiteral(""));
+
+                    m_packageList[i] = item;
+                    emit packageListChanged();
+                    break;
+                }
+            }
+
             QJsonArray assetsArr = releaseObj.value(QStringLiteral("assets")).toArray();
             for (const auto &aVal : assetsArr) {
                 QJsonObject aObj = aVal.toObject();
@@ -515,22 +537,13 @@ void PackageManager::installPackage(const QString &packageId, const QString &ass
         return;
     }
 
-    QString versionToInstall = pkg.value(QStringLiteral("latest_version")).toString();
-    if (versionToInstall.isEmpty()) {
-        emit errorOccurred(tr("最新バージョン情報が取得できていません。同期を行ってください。"));
+    if (assetUrl.isEmpty()) {
+        emit errorOccurred(tr("ダウンロードURLが指定されていません。アセット情報を取得してください。"));
         return;
     }
 
-    QString downloadUrl = assetUrl;
-    if (downloadUrl.isEmpty()) {
-        downloadUrl = pkg.value(QStringLiteral("download_url_template")).toString();
-        downloadUrl.replace(QStringLiteral("{VERSION}"), versionToInstall);
-    }
-
-    if (downloadUrl.isEmpty()) {
-        emit errorOccurred(tr("ダウンロードURLが特定できません。"));
-        return;
-    }
+    const QString versionToInstall = pkg.value(QStringLiteral("latest_version")).toString();
+    const QString downloadUrl = assetUrl;
 
     setBusy(true);
     setStatus(tr("パッケージのインストール中: %1").arg(packageId));

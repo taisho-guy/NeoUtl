@@ -32,7 +32,6 @@ Common.AviQtlWindow {
         id: errorDialog
 
         title: qsTr("パッケージマネージャーエラー")
-        icon: MessageDialog.Critical
         buttons: MessageDialog.Ok
     }
 
