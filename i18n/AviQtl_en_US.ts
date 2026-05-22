@@ -36,7 +36,7 @@ This software is released under the GNU Affero General Public License Version 3.
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="7"/>
         <source>%</source>
-        <translation type="unfinished"></translation>
+        <translation>%</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="8"/>
@@ -66,7 +66,7 @@ This software is released under the GNU Affero General Public License Version 3.
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="13"/>
         <source>f</source>
-        <translation type="unfinished"></translation>
+        <translation>f</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="14"/>
@@ -116,7 +116,7 @@ This software is released under the GNU Affero General Public License Version 3.
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="23"/>
         <source>s</source>
-        <translation type="unfinished"></translation>
+        <translation>s</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="24"/>
@@ -141,7 +141,7 @@ This software is released under the GNU Affero General Public License Version 3.
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="28"/>
         <source>X</source>
-        <translation type="unfinished"></translation>
+        <translation>X</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="29"/>
@@ -161,7 +161,7 @@ This software is released under the GNU Affero General Public License Version 3.
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="32"/>
         <source>Y</source>
-        <translation type="unfinished"></translation>
+        <translation>Y</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="33"/>
@@ -181,7 +181,7 @@ This software is released under the GNU Affero General Public License Version 3.
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="36"/>
         <source>Z</source>
-        <translation type="unfinished"></translation>
+        <translation>Z</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="37"/>
@@ -974,7 +974,7 @@ This software is released under the GNU Affero General Public License Version 3.
     <message>
         <location filename="../core/src/package_manager.cpp" line="206"/>
         <source>キャッシュからパッケージをロードしました（更新を確認するには「同期」を押してください）</source>
-        <translation type="unfinished"></translation>
+        <translation>Loaded packages from cache (press &quot;Sync&quot; to check for updates)</translation>
     </message>
     <message>
         <location filename="../core/src/package_manager.cpp" line="238"/>
@@ -990,22 +990,22 @@ This software is released under the GNU Affero General Public License Version 3.
     <message>
         <location filename="../core/src/package_manager.cpp" line="429"/>
         <source>利用可能なファイルを検索中...</source>
-        <translation type="unfinished"></translation>
+        <translation>Searching for available files...</translation>
     </message>
     <message>
         <location filename="../core/src/package_manager.cpp" line="441"/>
         <source>リポジトリURLの形式が正しくありません。</source>
-        <translation type="unfinished"></translation>
+        <translation>The repository URL format is incorrect.</translation>
     </message>
     <message>
         <location filename="../core/src/package_manager.cpp" line="457"/>
         <source>サポートされていないリポジトリホストです。</source>
-        <translation type="unfinished"></translation>
+        <translation>Unsupported repository host.</translation>
     </message>
     <message>
         <location filename="../core/src/package_manager.cpp" line="516"/>
         <source>ダウンロード可能なファイルが見つかりませんでした。</source>
-        <translation type="unfinished"></translation>
+        <translation>No downloadable files were found.</translation>
     </message>
     <message>
         <location filename="../core/src/package_manager.cpp" line="549"/>
@@ -1015,43 +1015,43 @@ This software is released under the GNU Affero General Public License Version 3.
     <message>
         <location filename="../core/src/package_manager.cpp" line="676"/>
         <source>アップグレード可能なパッケージはありません。</source>
-        <translation type="unfinished"></translation>
+        <translation>There are no packages that can be upgraded.</translation>
     </message>
     <message>
         <location filename="../core/src/package_manager.cpp" line="681"/>
         <source>すべてのパッケージをアップグレード中...</source>
-        <translation type="unfinished"></translation>
+        <translation>Upgrading all packages...</translation>
     </message>
     <message>
         <location filename="../core/src/package_manager.cpp" line="688"/>
         <source>すべてのアップグレードが完了しました</source>
-        <translation type="unfinished"></translation>
+        <translation>All upgrades are complete</translation>
     </message>
     <message>
         <location filename="../core/src/package_manager.cpp" line="694"/>
         <source>パッケージをアップグレード中: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Upgrading package: %1</translation>
     </message>
     <message>
         <location filename="../core/src/package_manager.cpp" line="406"/>
         <location filename="../core/src/package_manager.cpp" line="536"/>
         <source>パッケージが見つかりません: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Package not found: %1</translation>
     </message>
     <message>
         <location filename="../core/src/package_manager.cpp" line="424"/>
         <source>パッケージのリポジトリURLを特定できません。</source>
-        <translation type="unfinished"></translation>
+        <translation>Unable to identify the repository URL for the package.</translation>
     </message>
     <message>
         <location filename="../core/src/package_manager.cpp" line="467"/>
         <source>リリース情報の取得に失敗しました (%1): %2</source>
-        <translation type="unfinished"></translation>
+        <translation>Failed to retrieve release information (%1): %2</translation>
     </message>
     <message>
         <location filename="../core/src/package_manager.cpp" line="541"/>
         <source>ダウンロードURLが指定されていません。アセット情報を取得してください。</source>
-        <translation type="unfinished"></translation>
+        <translation>Download URL is not specified. Please retrieve the asset information first.</translation>
     </message>
     <message>
         <location filename="../core/src/package_manager.cpp" line="554"/>
@@ -1061,17 +1061,17 @@ This software is released under the GNU Affero General Public License Version 3.
     <message>
         <location filename="../core/src/package_manager.cpp" line="565"/>
         <source>AviQtlのアップデートがダウンロード可能です。再起動して適用してください。</source>
-        <translation type="unfinished"></translation>
+        <translation>An AviQtl update is available. Please restart to apply.</translation>
     </message>
     <message>
         <location filename="../core/src/package_manager.cpp" line="602"/>
         <source>パッケージを削除中: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Removing package: %1</translation>
     </message>
     <message>
         <location filename="../core/src/package_manager.cpp" line="627"/>
         <source>削除完了: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Removal complete: %1</translation>
     </message>
 </context>
 <context>
@@ -1130,12 +1130,12 @@ This software is released under the GNU Affero General Public License Version 3.
     <message>
         <location filename="../ui/src/timeline/timeline_clip.cpp" line="87"/>
         <source>レイヤーを上に挿入</source>
-        <translation type="unfinished"></translation>
+        <translation>Insert Layer Above</translation>
     </message>
     <message>
         <location filename="../ui/src/timeline/timeline_clip.cpp" line="87"/>
         <source>レイヤーを下に挿入</source>
-        <translation type="unfinished"></translation>
+        <translation>Insert Layer Below</translation>
     </message>
 </context>
 <context>
@@ -1346,17 +1346,17 @@ This software is released under the GNU Affero General Public License Version 3.
     <message>
         <location filename="../ui/qml/common/EasingConfigWindow.qml" line="769"/>
         <source>詳細設定</source>
-        <translation type="unfinished"></translation>
+        <translation>Advanced Settings</translation>
     </message>
     <message>
         <location filename="../ui/qml/common/EasingConfigWindow.qml" line="778"/>
         <source>振幅:</source>
-        <translation type="unfinished"></translation>
+        <translation>Amplitude:</translation>
     </message>
     <message>
         <location filename="../ui/qml/common/EasingConfigWindow.qml" line="804"/>
         <source>周期:</source>
-        <translation type="unfinished"></translation>
+        <translation>Period:</translation>
     </message>
     <message>
         <location filename="../ui/qml/common/EasingConfigWindow.qml" line="834"/>
@@ -1788,32 +1788,32 @@ This software is released under the GNU Affero General Public License Version 3.
     <message>
         <location filename="../ui/qml/timeline/LayerHeader.qml" line="185"/>
         <source>上に複数レイヤーを挿入</source>
-        <translation type="unfinished"></translation>
+        <translation>Insert Multiple Layers Above</translation>
     </message>
     <message>
         <location filename="../ui/qml/timeline/LayerHeader.qml" line="185"/>
         <source>下に複数レイヤーを挿入</source>
-        <translation type="unfinished"></translation>
+        <translation>Insert Multiple Layers Below</translation>
     </message>
     <message>
         <location filename="../ui/qml/timeline/LayerHeader.qml" line="198"/>
         <source>挿入するレイヤー数:</source>
-        <translation type="unfinished"></translation>
+        <translation>Number of layers to insert:</translation>
     </message>
     <message>
         <location filename="../ui/qml/timeline/LayerHeader.qml" line="211"/>
         <source>挿入方向:</source>
-        <translation type="unfinished"></translation>
+        <translation>Insertion direction:</translation>
     </message>
     <message>
         <location filename="../ui/qml/timeline/LayerHeader.qml" line="216"/>
         <source>選択レイヤーの上</source>
-        <translation type="unfinished"></translation>
+        <translation>Above selected layer</translation>
     </message>
     <message>
         <location filename="../ui/qml/timeline/LayerHeader.qml" line="226"/>
         <source>選択レイヤーの下</source>
-        <translation type="unfinished"></translation>
+        <translation>Below selected layer</translation>
     </message>
     <message>
         <location filename="../ui/qml/timeline/LayerHeader.qml" line="248"/>
@@ -1823,22 +1823,22 @@ This software is released under the GNU Affero General Public License Version 3.
     <message>
         <location filename="../ui/qml/timeline/LayerHeader.qml" line="260"/>
         <source>上にレイヤーを挿入 (1行)</source>
-        <translation type="unfinished"></translation>
+        <translation>Insert Layer Above (1 row)</translation>
     </message>
     <message>
         <location filename="../ui/qml/timeline/LayerHeader.qml" line="270"/>
         <source>下にレイヤーを挿入 (1行)</source>
-        <translation type="unfinished"></translation>
+        <translation>Insert Layer Below (1 row)</translation>
     </message>
     <message>
         <location filename="../ui/qml/timeline/LayerHeader.qml" line="280"/>
         <source>上に複数レイヤーを挿入...</source>
-        <translation type="unfinished"></translation>
+        <translation>Insert Multiple Layers Above...</translation>
     </message>
     <message>
         <location filename="../ui/qml/timeline/LayerHeader.qml" line="289"/>
         <source>下に複数レイヤーを挿入...</source>
-        <translation type="unfinished"></translation>
+        <translation>Insert Multiple Layers Below...</translation>
     </message>
     <message>
         <location filename="../ui/qml/timeline/LayerHeader.qml" line="303"/>
@@ -1898,12 +1898,12 @@ This software is released under the GNU Affero General Public License Version 3.
     <message>
         <location filename="../ui/qml/MainWindow.qml" line="244"/>
         <source>新規シーン作成</source>
-        <translation type="unfinished"></translation>
+        <translation>Create New Scene</translation>
     </message>
     <message>
         <location filename="../ui/qml/MainWindow.qml" line="249"/>
         <source>シーン %1</source>
-        <translation type="unfinished">Scene %1</translation>
+        <translation>Scene %1</translation>
     </message>
     <message>
         <location filename="../ui/qml/MainWindow.qml" line="259"/>
@@ -1928,22 +1928,22 @@ This software is released under the GNU Affero General Public License Version 3.
     <message>
         <location filename="../ui/qml/MainWindow.qml" line="320"/>
         <source>現在のシーン設定...</source>
-        <translation type="unfinished"></translation>
+        <translation>Current Scene Settings...</translation>
     </message>
     <message>
         <location filename="../ui/qml/MainWindow.qml" line="337"/>
         <source>現在のシーンを削除</source>
-        <translation type="unfinished"></translation>
+        <translation>Delete Current Scene</translation>
     </message>
     <message>
         <location filename="../ui/qml/MainWindow.qml" line="350"/>
         <source>レイヤーロック切替</source>
-        <translation type="unfinished"></translation>
+        <translation>Toggle Layer Lock</translation>
     </message>
     <message>
         <location filename="../ui/qml/MainWindow.qml" line="365"/>
         <source>レイヤー表示切替</source>
-        <translation type="unfinished"></translation>
+        <translation>Toggle Layer Visibility</translation>
     </message>
     <message>
         <location filename="../ui/qml/MainWindow.qml" line="380"/>
@@ -2126,7 +2126,7 @@ Save before continuing?</translation>
     <message>
         <location filename="../ui/qml/PackageManagerWindow.qml" line="25"/>
         <source>AviQtl アップデート</source>
-        <translation type="unfinished"></translation>
+        <translation>AviQtl Update</translation>
     </message>
     <message>
         <location filename="../ui/qml/PackageManagerWindow.qml" line="26"/>
@@ -2134,27 +2134,30 @@ Save before continuing?</translation>
 ダウンロードURL: %2
 
 アプリケーションを再起動して適用してください。</source>
-        <translation type="unfinished"></translation>
+        <translation>A new version of AviQtl (%1) is available.
+Download URL: %2
+
+Please restart the application to apply.</translation>
     </message>
     <message>
         <location filename="../ui/qml/PackageManagerWindow.qml" line="34"/>
         <source>パッケージマネージャーエラー</source>
-        <translation type="unfinished"></translation>
+        <translation>Package Manager Error</translation>
     </message>
     <message>
         <location filename="../ui/qml/PackageManagerWindow.qml" line="69"/>
         <source>ダウンロードするファイルを選択</source>
-        <translation type="unfinished"></translation>
+        <translation>Select file to download</translation>
     </message>
     <message>
         <location filename="../ui/qml/PackageManagerWindow.qml" line="100"/>
         <source>リポジトリ設定</source>
-        <translation type="unfinished"></translation>
+        <translation>Repository Settings</translation>
     </message>
     <message>
         <location filename="../ui/qml/PackageManagerWindow.qml" line="122"/>
         <source>追加</source>
-        <translation type="unfinished"></translation>
+        <translation>Add</translation>
     </message>
     <message>
         <location filename="../ui/qml/PackageManagerWindow.qml" line="185"/>
@@ -2164,7 +2167,7 @@ Save before continuing?</translation>
     <message>
         <location filename="../ui/qml/PackageManagerWindow.qml" line="192"/>
         <source>すべてアップグレード</source>
-        <translation type="unfinished"></translation>
+        <translation>Upgrade All</translation>
     </message>
     <message>
         <location filename="../ui/qml/PackageManagerWindow.qml" line="206"/>
@@ -2174,42 +2177,42 @@ Save before continuing?</translation>
     <message>
         <location filename="../ui/qml/PackageManagerWindow.qml" line="232"/>
         <source>検索結果がありません。</source>
-        <translation type="unfinished"></translation>
+        <translation>No search results.</translation>
     </message>
     <message>
         <location filename="../ui/qml/PackageManagerWindow.qml" line="232"/>
         <source>パッケージリストが空です。リポジトリを同期して最新情報を取得してください。</source>
-        <translation type="unfinished"></translation>
+        <translation>The package list is empty. Please sync the repository to get the latest information.</translation>
     </message>
     <message>
         <location filename="../ui/qml/PackageManagerWindow.qml" line="291"/>
         <source>最新バージョン: </source>
-        <translation type="unfinished"></translation>
+        <translation>Latest version: </translation>
     </message>
     <message>
         <location filename="../ui/qml/PackageManagerWindow.qml" line="309"/>
         <source>インストール済み: </source>
-        <translation type="unfinished"></translation>
+        <translation>Installed: </translation>
     </message>
     <message>
         <location filename="../ui/qml/PackageManagerWindow.qml" line="316"/>
         <source>アップデートあり: </source>
-        <translation type="unfinished"></translation>
+        <translation>Update available: </translation>
     </message>
     <message>
         <location filename="../ui/qml/PackageManagerWindow.qml" line="323"/>
         <source>削除</source>
-        <translation type="unfinished">Delete</translation>
+        <translation>Uninstall</translation>
     </message>
     <message>
         <location filename="../ui/qml/PackageManagerWindow.qml" line="330"/>
         <source>アップデート</source>
-        <translation type="unfinished"></translation>
+        <translation>Update</translation>
     </message>
     <message>
         <location filename="../ui/qml/PackageManagerWindow.qml" line="330"/>
         <source>インストール</source>
-        <translation type="unfinished"></translation>
+        <translation>Install</translation>
     </message>
     <message>
         <source>（後で実装: パッケージリスト）</source>
@@ -2659,12 +2662,107 @@ Save before continuing?</translation>
         <location filename="../ui/qml/SceneSettingsWindow.qml" line="37"/>
         <location filename="../ui/qml/SceneSettingsWindow.qml" line="67"/>
         <source>新規シーン作成</source>
-        <translation type="unfinished"></translation>
+        <translation>Create New Scene</translation>
     </message>
     <message>
         <location filename="../ui/qml/SceneSettingsWindow.qml" line="67"/>
         <source>シーン設定</source>
-        <translation type="unfinished">Scene Settings</translation>
+        <translation>Scene Settings</translation>
+    </message>
+    <message>
+        <location filename="../ui/qml/SceneSettingsWindow.qml" line="82"/>
+        <source>基本設定</source>
+        <translation>Basic Settings</translation>
+    </message>
+    <message>
+        <location filename="../ui/qml/SceneSettingsWindow.qml" line="92"/>
+        <source>シーン名:</source>
+        <translation>Scene Name:</translation>
+    </message>
+    <message>
+        <location filename="../ui/qml/SceneSettingsWindow.qml" line="103"/>
+        <source>幅:</source>
+        <translation>Width:</translation>
+    </message>
+    <message>
+        <location filename="../ui/qml/SceneSettingsWindow.qml" line="116"/>
+        <source>高さ:</source>
+        <translation>Height:</translation>
+    </message>
+    <message>
+        <location filename="../ui/qml/SceneSettingsWindow.qml" line="129"/>
+        <source>FPS:</source>
+        <translation>FPS:</translation>
+    </message>
+    <message>
+        <location filename="../ui/qml/SceneSettingsWindow.qml" line="155"/>
+        <source>編集とスナップ</source>
+        <translation>Editing and Snap</translation>
+    </message>
+    <message>
+        <location filename="../ui/qml/SceneSettingsWindow.qml" line="165"/>
+        <source>スナップを有効にする:</source>
+        <translation>Enable Snap:</translation>
+    </message>
+    <message>
+        <location filename="../ui/qml/SceneSettingsWindow.qml" line="175"/>
+        <source>磁力スナップ範囲:</source>
+        <translation>Magnetic Snap Range:</translation>
+    </message>
+    <message>
+        <location filename="../ui/qml/SceneSettingsWindow.qml" line="188"/>
+        <source>グリッドモード:</source>
+        <translation>Grid Mode:</translation>
+    </message>
+    <message>
+        <location filename="../ui/qml/SceneSettingsWindow.qml" line="195"/>
+        <source>自動 (秒/フレーム)</source>
+        <translation>Auto (Seconds/Frames)</translation>
+    </message>
+    <message>
+        <location filename="../ui/qml/SceneSettingsWindow.qml" line="195"/>
+        <source>BPM (音楽)</source>
+        <translation>BPM (Music)</translation>
+    </message>
+    <message>
+        <location filename="../ui/qml/SceneSettingsWindow.qml" line="195"/>
+        <source>フレーム数固定</source>
+        <translation>Fixed Frame Count</translation>
+    </message>
+    <message>
+        <location filename="../ui/qml/SceneSettingsWindow.qml" line="203"/>
+        <source>BPM設定</source>
+        <translation>BPM Settings</translation>
+    </message>
+    <message>
+        <location filename="../ui/qml/SceneSettingsWindow.qml" line="214"/>
+        <source>BPM:</source>
+        <translation>BPM:</translation>
+    </message>
+    <message>
+        <location filename="../ui/qml/SceneSettingsWindow.qml" line="226"/>
+        <source>拍子 (分割数):</source>
+        <translation>Time Signature (Subdivisions):</translation>
+    </message>
+    <message>
+        <location filename="../ui/qml/SceneSettingsWindow.qml" line="238"/>
+        <source>オフセット (秒):</source>
+        <translation>Offset (Seconds):</translation>
+    </message>
+    <message>
+        <location filename="../ui/qml/SceneSettingsWindow.qml" line="254"/>
+        <source>フレーム設定</source>
+        <translation>Frame Settings</translation>
+    </message>
+    <message>
+        <location filename="../ui/qml/SceneSettingsWindow.qml" line="265"/>
+        <source>間隔 (Frames):</source>
+        <translation>Interval (Frames):</translation>
+    </message>
+    <message>
+        <location filename="../ui/qml/SceneSettingsWindow.qml" line="289"/>
+        <source>キャンセル</source>
+        <translation>Cancel</translation>
     </message>
 </context>
 <context>
@@ -2738,7 +2836,7 @@ Save before continuing?</translation>
     <message>
         <location filename="../ui/qml/SplashWindow.qml" line="7"/>
         <source>AviQtl を起動中...</source>
-        <translation type="unfinished"></translation>
+        <translation>Launching AviQtl...</translation>
     </message>
 </context>
 <context>
@@ -2822,7 +2920,7 @@ Save before continuing?</translation>
     <message>
         <location filename="../ui/qml/SystemSettingsWindow.qml" line="41"/>
         <source>メディアの書き出し</source>
-        <translation type="unfinished">Export Media</translation>
+        <translation>Export Media</translation>
     </message>
     <message>
         <location filename="../ui/qml/SystemSettingsWindow.qml" line="44"/>
@@ -2832,7 +2930,7 @@ Save before continuing?</translation>
     <message>
         <location filename="../ui/qml/SystemSettingsWindow.qml" line="47"/>
         <source>環境設定</source>
-        <translation type="unfinished">Preferences</translation>
+        <translation>Preferences</translation>
     </message>
     <message>
         <location filename="../ui/qml/SystemSettingsWindow.qml" line="50"/>
@@ -2907,17 +3005,17 @@ Save before continuing?</translation>
     <message>
         <location filename="../ui/qml/SystemSettingsWindow.qml" line="92"/>
         <source>タイムラインの表示</source>
-        <translation type="unfinished">Show Timeline</translation>
+        <translation>Show Timeline</translation>
     </message>
     <message>
         <location filename="../ui/qml/SystemSettingsWindow.qml" line="95"/>
         <source>設定ダイアログの表示</source>
-        <translation type="unfinished">Show Settings Dialog</translation>
+        <translation>Show Settings Dialog</translation>
     </message>
     <message>
         <location filename="../ui/qml/SystemSettingsWindow.qml" line="98"/>
         <source>プロジェクト設定</source>
-        <translation type="unfinished">Project Settings</translation>
+        <translation>Project Settings</translation>
     </message>
     <message>
         <location filename="../ui/qml/SystemSettingsWindow.qml" line="101"/>
@@ -2947,27 +3045,27 @@ Save before continuing?</translation>
     <message>
         <location filename="../ui/qml/SystemSettingsWindow.qml" line="116"/>
         <source>新規シーン作成</source>
-        <translation type="unfinished"></translation>
+        <translation>Create New Scene</translation>
     </message>
     <message>
         <location filename="../ui/qml/SystemSettingsWindow.qml" line="119"/>
         <source>現在のシーン設定</source>
-        <translation type="unfinished"></translation>
+        <translation>Current Scene Settings</translation>
     </message>
     <message>
         <location filename="../ui/qml/SystemSettingsWindow.qml" line="122"/>
         <source>現在のシーンを削除</source>
-        <translation type="unfinished"></translation>
+        <translation>Delete Current Scene</translation>
     </message>
     <message>
         <location filename="../ui/qml/SystemSettingsWindow.qml" line="125"/>
         <source>現在のレイヤーをロック/解除</source>
-        <translation type="unfinished"></translation>
+        <translation>Lock/Unlock Current Layer</translation>
     </message>
     <message>
         <location filename="../ui/qml/SystemSettingsWindow.qml" line="128"/>
         <source>現在のレイヤーを表示/非表示</source>
-        <translation type="unfinished"></translation>
+        <translation>Show/Hide Current Layer</translation>
     </message>
     <message>
         <location filename="../ui/qml/SystemSettingsWindow.qml" line="214"/>

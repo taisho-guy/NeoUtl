@@ -79,7 +79,7 @@ Common.AviQtlWindow {
             spacing: 15
 
             GroupBox {
-                title: "基本設定"
+                title: qsTr("基本設定")
                 Layout.fillWidth: true
 
                 GridLayout {
@@ -89,7 +89,7 @@ Common.AviQtlWindow {
                     anchors.fill: parent
 
                     Label {
-                        text: "シーン名:"
+                        text: qsTr("シーン名:")
                     }
 
                     TextField {
@@ -100,7 +100,7 @@ Common.AviQtlWindow {
                     }
 
                     Label {
-                        text: "幅:"
+                        text: qsTr("幅:")
                     }
 
                     SpinBox {
@@ -113,7 +113,7 @@ Common.AviQtlWindow {
                     }
 
                     Label {
-                        text: "高さ:"
+                        text: qsTr("高さ:")
                     }
 
                     SpinBox {
@@ -126,7 +126,7 @@ Common.AviQtlWindow {
                     }
 
                     Label {
-                        text: "FPS:"
+                        text: qsTr("FPS:")
                     }
 
                     SpinBox {
@@ -152,7 +152,7 @@ Common.AviQtlWindow {
             }
 
             GroupBox {
-                title: "編集とスナップ"
+                title: qsTr("編集とスナップ")
                 Layout.fillWidth: true
 
                 GridLayout {
@@ -162,7 +162,7 @@ Common.AviQtlWindow {
                     anchors.fill: parent
 
                     Label {
-                        text: "スナップを有効にする:"
+                        text: qsTr("スナップを有効にする:")
                     }
 
                     CheckBox {
@@ -172,7 +172,7 @@ Common.AviQtlWindow {
                     }
 
                     Label {
-                        text: "磁力スナップ範囲:"
+                        text: qsTr("磁力スナップ範囲:")
                     }
 
                     SpinBox {
@@ -185,14 +185,14 @@ Common.AviQtlWindow {
                     }
 
                     Label {
-                        text: "グリッドモード:"
+                        text: qsTr("グリッドモード:")
                     }
 
                     ComboBox {
                         id: modeCombo
 
                         Layout.fillWidth: true
-                        model: ["自動 (秒/フレーム)", "BPM (音楽)", "フレーム数固定"]
+                        model: [qsTr("自動 (秒/フレーム)"), qsTr("BPM (音楽)"), qsTr("フレーム数固定")]
                     }
 
                 }
@@ -200,7 +200,7 @@ Common.AviQtlWindow {
             }
 
             GroupBox {
-                title: "BPM設定"
+                title: qsTr("BPM設定")
                 visible: modeCombo.currentIndex === 1
                 Layout.fillWidth: true
 
@@ -211,7 +211,7 @@ Common.AviQtlWindow {
                     anchors.fill: parent
 
                     Label {
-                        text: "BPM:"
+                        text: qsTr("BPM:")
                     }
 
                     TextField {
@@ -223,7 +223,7 @@ Common.AviQtlWindow {
                     }
 
                     Label {
-                        text: "拍子 (分割数):"
+                        text: qsTr("拍子 (分割数):")
                     }
 
                     TextField {
@@ -235,7 +235,7 @@ Common.AviQtlWindow {
                     }
 
                     Label {
-                        text: "オフセット (秒):"
+                        text: qsTr("オフセット (秒):")
                     }
 
                     TextField {
@@ -251,7 +251,7 @@ Common.AviQtlWindow {
             }
 
             GroupBox {
-                title: "フレーム設定"
+                title: qsTr("フレーム設定")
                 visible: modeCombo.currentIndex === 2
                 Layout.fillWidth: true
 
@@ -262,7 +262,7 @@ Common.AviQtlWindow {
                     anchors.fill: parent
 
                     Label {
-                        text: "間隔 (Frames):"
+                        text: qsTr("間隔 (Frames):")
                     }
 
                     TextField {
@@ -286,7 +286,7 @@ Common.AviQtlWindow {
                 spacing: 10
 
                 Button {
-                    text: "キャンセル"
+                    text: qsTr("キャンセル")
                     onClicked: root.hide()
                 }
 

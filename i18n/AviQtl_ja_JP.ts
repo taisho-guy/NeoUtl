@@ -6,14 +6,16 @@
     <message>
         <location filename="../ui/qml/AboutWindow.qml" line="9"/>
         <source>AviQtlについて</source>
-        <translation type="unfinished"></translation>
+        <translation>AviQtlについて</translation>
     </message>
     <message>
         <location filename="../ui/qml/AboutWindow.qml" line="67"/>
         <source>AviQtl は AviUtl ではありません。
 
 このソフトウェアは GNU Affero General Public License Version 3 に基づいて公開されています。</source>
-        <translation type="unfinished"></translation>
+        <translation>AviQtl は AviUtl ではありません。
+
+このソフトウェアは GNU Affero General Public License Version 3 に基づいて公開されています。</translation>
     </message>
 </context>
 <context>
@@ -21,12 +23,12 @@
     <message>
         <location filename="../ui/qml/settings/AppearanceSettingsPage.qml" line="34"/>
         <source>表示</source>
-        <translation type="unfinished"></translation>
+        <translation>表示</translation>
     </message>
     <message>
         <location filename="../ui/qml/settings/AppearanceSettingsPage.qml" line="44"/>
         <source>文字余白係数</source>
-        <translation type="unfinished"></translation>
+        <translation>文字余白係数</translation>
     </message>
 </context>
 <context>
@@ -34,932 +36,932 @@
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="7"/>
         <source>%</source>
-        <translation type="unfinished"></translation>
+        <translation>%</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="8"/>
         <source>arc</source>
-        <translation type="unfinished"></translation>
+        <translation>arc</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="9"/>
         <source>Audio Files (*.wav *.mp3 *.aac *.m4a *.flac *.ogg)</source>
-        <translation type="unfinished"></translation>
+        <translation>Audio Files (*.wav *.mp3 *.aac *.m4a *.flac *.ogg)</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="10"/>
         <source>Block Size</source>
-        <translation type="unfinished"></translation>
+        <translation>Block Size</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="11"/>
         <source>Direction</source>
-        <translation type="unfinished"></translation>
+        <translation>Direction</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="12"/>
         <source>donut</source>
-        <translation type="unfinished"></translation>
+        <translation>donut</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="13"/>
         <source>f</source>
-        <translation type="unfinished"></translation>
+        <translation>f</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="14"/>
         <source>Glitch</source>
-        <translation type="unfinished"></translation>
+        <translation>Glitch</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="15"/>
         <source>Horizontal</source>
-        <translation type="unfinished"></translation>
+        <translation>Horizontal</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="16"/>
         <source>Max Luma</source>
-        <translation type="unfinished"></translation>
+        <translation>Max Luma</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="17"/>
         <source>Min Luma</source>
-        <translation type="unfinished"></translation>
+        <translation>Min Luma</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="18"/>
         <source>Mix</source>
-        <translation type="unfinished"></translation>
+        <translation>Mix</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="19"/>
         <source>pie</source>
-        <translation type="unfinished"></translation>
+        <translation>pie</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="20"/>
         <source>Pixel Sorter</source>
-        <translation type="unfinished"></translation>
+        <translation>Pixel Sorter</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="21"/>
         <source>polygon</source>
-        <translation type="unfinished"></translation>
+        <translation>polygon</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="22"/>
         <source>Reverse</source>
-        <translation type="unfinished"></translation>
+        <translation>Reverse</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="23"/>
         <source>s</source>
-        <translation type="unfinished"></translation>
+        <translation>s</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="24"/>
         <source>star</source>
-        <translation type="unfinished"></translation>
+        <translation>star</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="25"/>
         <source>Stylize</source>
-        <translation type="unfinished"></translation>
+        <translation>Stylize</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="26"/>
         <source>Vertical</source>
-        <translation type="unfinished"></translation>
+        <translation>Vertical</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="27"/>
         <source>Video Files (*.mp4 *.mov *.avi *.mkv *.webm *.wmv)</source>
-        <translation type="unfinished"></translation>
+        <translation>Video Files (*.mp4 *.mov *.avi *.mkv *.webm *.wmv)</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="28"/>
         <source>X</source>
-        <translation type="unfinished"></translation>
+        <translation>X</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="29"/>
         <source>Xずれ</source>
-        <translation type="unfinished"></translation>
+        <translation>Xずれ</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="30"/>
         <source>Xの強さ</source>
-        <translation type="unfinished"></translation>
+        <translation>Xの強さ</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="31"/>
         <source>X軸回転</source>
-        <translation type="unfinished"></translation>
+        <translation>X軸回転</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="32"/>
         <source>Y</source>
-        <translation type="unfinished"></translation>
+        <translation>Y</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="33"/>
         <source>Yずれ</source>
-        <translation type="unfinished"></translation>
+        <translation>Yずれ</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="34"/>
         <source>Yの強さ</source>
-        <translation type="unfinished"></translation>
+        <translation>Yの強さ</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="35"/>
         <source>Y軸回転</source>
-        <translation type="unfinished"></translation>
+        <translation>Y軸回転</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="36"/>
         <source>Z</source>
-        <translation type="unfinished"></translation>
+        <translation>Z</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="37"/>
         <source>Z軸回転</source>
-        <translation type="unfinished"></translation>
+        <translation>Z軸回転</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="38"/>
         <source>オーディオ設定</source>
-        <translation type="unfinished"></translation>
+        <translation>オーディオ設定</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="39"/>
         <source>オーバーレイ</source>
-        <translation type="unfinished"></translation>
+        <translation>オーバーレイ</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="40"/>
         <source>オフセット</source>
-        <translation type="unfinished"></translation>
+        <translation>オフセット</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="41"/>
         <source>カメラ制御</source>
-        <translation type="unfinished"></translation>
+        <translation>カメラ制御</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="42"/>
         <source>カラー</source>
-        <translation type="unfinished"></translation>
+        <translation>カラー</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="43"/>
         <source>グラデーション</source>
-        <translation type="unfinished"></translation>
+        <translation>グラデーション</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="44"/>
         <source>グラデ種類</source>
-        <translation type="unfinished"></translation>
+        <translation>グラデ種類</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="45"/>
         <source>グラデ色2</source>
-        <translation type="unfinished"></translation>
+        <translation>グラデ色2</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="46"/>
         <source>クリッピング</source>
-        <translation type="unfinished"></translation>
+        <translation>クリッピング</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="47"/>
         <source>グループ制御</source>
-        <translation type="unfinished"></translation>
+        <translation>グループ制御</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="48"/>
         <source>コントラスト</source>
-        <translation type="unfinished"></translation>
+        <translation>コントラスト</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="49"/>
         <source>サイズ</source>
-        <translation type="unfinished"></translation>
+        <translation>サイズ</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="50"/>
         <source>サイズ固定</source>
-        <translation type="unfinished"></translation>
+        <translation>サイズ固定</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="51"/>
         <source>サンプル数</source>
-        <translation type="unfinished"></translation>
+        <translation>サンプル数</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="52"/>
         <source>シーン</source>
-        <translation type="unfinished"></translation>
+        <translation>シーン</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="53"/>
         <source>シーンオブジェクト</source>
-        <translation type="unfinished"></translation>
+        <translation>シーンオブジェクト</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="54"/>
         <source>シャッタースピード</source>
-        <translation type="unfinished"></translation>
+        <translation>シャッタースピード</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="55"/>
         <source>スクリーン</source>
-        <translation type="unfinished"></translation>
+        <translation>スクリーン</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="56"/>
         <source>その他</source>
-        <translation type="unfinished"></translation>
+        <translation>その他</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="57"/>
         <source>ソフトライト</source>
-        <translation type="unfinished"></translation>
+        <translation>ソフトライト</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="58"/>
         <source>テキスト</source>
-        <translation type="unfinished"></translation>
+        <translation>テキスト</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="59"/>
         <source>ドロップシャドウ</source>
-        <translation type="unfinished"></translation>
+        <translation>ドロップシャドウ</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="60"/>
         <source>ハードライト</source>
-        <translation type="unfinished"></translation>
+        <translation>ハードライト</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="61"/>
         <source>パン</source>
-        <translation type="unfinished"></translation>
+        <translation>パン</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="62"/>
         <source>ファイル</source>
-        <translation type="unfinished"></translation>
+        <translation>ファイル</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="63"/>
         <source>ファイルパス</source>
-        <translation type="unfinished"></translation>
+        <translation>ファイルパス</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="64"/>
         <source>フォント</source>
-        <translation type="unfinished"></translation>
+        <translation>フォント</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="65"/>
         <source>フレームバッファ</source>
-        <translation type="unfinished"></translation>
+        <translation>フレームバッファ</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="66"/>
         <source>フレーム直接指定</source>
-        <translation type="unfinished"></translation>
+        <translation>フレーム直接指定</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="67"/>
         <source>フレーム番号</source>
-        <translation type="unfinished"></translation>
+        <translation>フレーム番号</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="68"/>
         <source>ぼかし</source>
-        <translation type="unfinished"></translation>
+        <translation>ぼかし</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="69"/>
         <source>ミュート</source>
-        <translation type="unfinished"></translation>
+        <translation>ミュート</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="70"/>
         <source>メディア/音声</source>
-        <translation type="unfinished"></translation>
+        <translation>メディア/音声</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="71"/>
         <source>モーションブラー</source>
-        <translation type="unfinished"></translation>
+        <translation>モーションブラー</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="72"/>
         <source>モザイク</source>
-        <translation type="unfinished"></translation>
+        <translation>モザイク</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="73"/>
         <source>ライティング</source>
-        <translation type="unfinished"></translation>
+        <translation>ライティング</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="74"/>
         <source>ランダムシード</source>
-        <translation type="unfinished"></translation>
+        <translation>ランダムシード</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="75"/>
         <source>レンズブラー</source>
-        <translation type="unfinished"></translation>
+        <translation>レンズブラー</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="76"/>
         <source>ロール</source>
-        <translation type="unfinished"></translation>
+        <translation>ロール</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="77"/>
         <source>右</source>
-        <translation type="unfinished"></translation>
+        <translation>右</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="78"/>
         <source>影X</source>
-        <translation type="unfinished"></translation>
+        <translation>影X</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="79"/>
         <source>影Y</source>
-        <translation type="unfinished"></translation>
+        <translation>影Y</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="80"/>
         <source>影の不透明度</source>
-        <translation type="unfinished"></translation>
+        <translation>影の不透明度</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="81"/>
         <source>影色</source>
-        <translation type="unfinished"></translation>
+        <translation>影色</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="82"/>
         <source>影有効</source>
-        <translation type="unfinished"></translation>
+        <translation>影有効</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="83"/>
         <source>縁の色</source>
-        <translation type="unfinished"></translation>
+        <translation>縁の色</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="84"/>
         <source>縁取り色</source>
-        <translation type="unfinished"></translation>
+        <translation>縁取り色</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="85"/>
         <source>縁取り幅</source>
-        <translation type="unfinished"></translation>
+        <translation>縁取り幅</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="86"/>
         <source>縁取り有効</source>
-        <translation type="unfinished"></translation>
+        <translation>縁取り有効</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="87"/>
         <source>縁幅</source>
-        <translation type="unfinished"></translation>
+        <translation>縁幅</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="88"/>
         <source>横回数</source>
-        <translation type="unfinished"></translation>
+        <translation>横回数</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="89"/>
         <source>横間隔</source>
-        <translation type="unfinished"></translation>
+        <translation>横間隔</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="90"/>
         <source>音声</source>
-        <translation type="unfinished"></translation>
+        <translation>音声</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="91"/>
         <source>音量</source>
-        <translation type="unfinished"></translation>
+        <translation>音量</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="92"/>
         <source>下</source>
-        <translation type="unfinished"></translation>
+        <translation>下</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="93"/>
         <source>下位レイヤーをクリア</source>
-        <translation type="unfinished"></translation>
+        <translation>下位レイヤーをクリア</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="94"/>
         <source>加算</source>
-        <translation type="unfinished"></translation>
+        <translation>加算</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="95"/>
         <source>画像</source>
-        <translation type="unfinished"></translation>
+        <translation>画像</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="96"/>
         <source>画像ファイル (*.png *.jpg *.jpeg *.bmp *.gif *.tiff *.webp)</source>
-        <translation type="unfinished"></translation>
+        <translation>画像ファイル (*.png *.jpg *.jpeg *.bmp *.gif *.tiff *.webp)</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="97"/>
         <source>画像ループ</source>
-        <translation type="unfinished"></translation>
+        <translation>画像ループ</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="98"/>
         <source>回転X</source>
-        <translation type="unfinished"></translation>
+        <translation>回転X</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="99"/>
         <source>回転Y</source>
-        <translation type="unfinished"></translation>
+        <translation>回転Y</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="100"/>
         <source>回転Z</source>
-        <translation type="unfinished"></translation>
+        <translation>回転Z</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="101"/>
         <source>開始フレーム</source>
-        <translation type="unfinished"></translation>
+        <translation>開始フレーム</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="102"/>
         <source>開始フレーム＋再生速度</source>
-        <translation type="unfinished"></translation>
+        <translation>開始フレーム＋再生速度</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="103"/>
         <source>開始時間</source>
-        <translation type="unfinished"></translation>
+        <translation>開始時間</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="104"/>
         <source>開始時間＋再生速度</source>
-        <translation type="unfinished"></translation>
+        <translation>開始時間＋再生速度</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="105"/>
         <source>拡散</source>
-        <translation type="unfinished"></translation>
+        <translation>拡散</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="106"/>
         <source>拡散光</source>
-        <translation type="unfinished"></translation>
+        <translation>拡散光</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="107"/>
         <source>拡大率</source>
-        <translation type="unfinished"></translation>
+        <translation>拡大率</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="108"/>
         <source>角丸</source>
-        <translation type="unfinished"></translation>
+        <translation>角丸</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="109"/>
         <source>角度</source>
-        <translation type="unfinished"></translation>
+        <translation>角度</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="110"/>
         <source>基本</source>
-        <translation type="unfinished"></translation>
+        <translation>基本</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="111"/>
         <source>基本エフェクト</source>
-        <translation type="unfinished"></translation>
+        <translation>基本エフェクト</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="112"/>
         <source>輝度</source>
-        <translation type="unfinished"></translation>
+        <translation>輝度</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="113"/>
         <source>境界ぼかし</source>
-        <translation type="unfinished"></translation>
+        <translation>境界ぼかし</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="114"/>
         <source>強さ</source>
-        <translation type="unfinished"></translation>
+        <translation>強さ</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="115"/>
         <source>減算</source>
-        <translation type="unfinished"></translation>
+        <translation>減算</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="116"/>
         <source>光の強さ</source>
-        <translation type="unfinished"></translation>
+        <translation>光の強さ</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="117"/>
         <source>行間隔</source>
-        <translation type="unfinished"></translation>
+        <translation>行間隔</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="118"/>
         <source>高さ</source>
-        <translation type="unfinished"></translation>
+        <translation>高さ</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="119"/>
         <source>合成モード</source>
-        <translation type="unfinished"></translation>
+        <translation>合成モード</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="120"/>
         <source>左</source>
-        <translation type="unfinished"></translation>
+        <translation>左</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="121"/>
         <source>差の絶対値</source>
-        <translation type="unfinished"></translation>
+        <translation>差の絶対値</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="122"/>
         <source>再生モード</source>
-        <translation type="unfinished"></translation>
+        <translation>再生モード</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="123"/>
         <source>再生速度</source>
-        <translation type="unfinished"></translation>
+        <translation>再生速度</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="124"/>
         <source>彩度</source>
-        <translation type="unfinished"></translation>
+        <translation>彩度</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="125"/>
         <source>指定時間</source>
-        <translation type="unfinished"></translation>
+        <translation>指定時間</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="126"/>
         <source>視野角</source>
-        <translation type="unfinished"></translation>
+        <translation>視野角</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="127"/>
         <source>時間直接指定</source>
-        <translation type="unfinished"></translation>
+        <translation>時間直接指定</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="128"/>
         <source>斜めクリッピング</source>
-        <translation type="unfinished"></translation>
+        <translation>斜めクリッピング</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="129"/>
         <source>斜体</source>
-        <translation type="unfinished"></translation>
+        <translation>斜体</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="130"/>
         <source>種類</source>
-        <translation type="unfinished"></translation>
+        <translation>種類</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="131"/>
         <source>縦横比</source>
-        <translation type="unfinished"></translation>
+        <translation>縦横比</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="132"/>
         <source>縦回数</source>
-        <translation type="unfinished"></translation>
+        <translation>縦回数</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="133"/>
         <source>縦間隔</source>
-        <translation type="unfinished"></translation>
+        <translation>縦間隔</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="134"/>
         <source>初期回転 (°)</source>
-        <translation type="unfinished"></translation>
+        <translation>初期回転 (°)</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="135"/>
         <source>上</source>
-        <translation type="unfinished"></translation>
+        <translation>上</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="136"/>
         <source>乗算</source>
-        <translation type="unfinished"></translation>
+        <translation>乗算</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="137"/>
         <source>色</source>
-        <translation type="unfinished"></translation>
+        <translation>色</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="138"/>
         <source>色ずれ</source>
-        <translation type="unfinished"></translation>
+        <translation>色ずれ</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="139"/>
         <source>色相</source>
-        <translation type="unfinished"></translation>
+        <translation>色相</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="140"/>
         <source>色調補正</source>
-        <translation type="unfinished"></translation>
+        <translation>色調補正</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="141"/>
         <source>色反転</source>
-        <translation type="unfinished"></translation>
+        <translation>色反転</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="142"/>
         <source>振動</source>
-        <translation type="unfinished"></translation>
+        <translation>振動</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="143"/>
         <source>図形</source>
-        <translation type="unfinished"></translation>
+        <translation>図形</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="144"/>
         <source>制御</source>
-        <translation type="unfinished"></translation>
+        <translation>制御</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="145"/>
         <source>青ずれX</source>
-        <translation type="unfinished"></translation>
+        <translation>青ずれX</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="146"/>
         <source>青ずれY</source>
-        <translation type="unfinished"></translation>
+        <translation>青ずれY</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="147"/>
         <source>赤ずれX</source>
-        <translation type="unfinished"></translation>
+        <translation>赤ずれX</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="148"/>
         <source>赤ずれY</source>
-        <translation type="unfinished"></translation>
+        <translation>赤ずれY</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="149"/>
         <source>線形</source>
-        <translation type="unfinished"></translation>
+        <translation>線形</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="150"/>
         <source>速度</source>
-        <translation type="unfinished"></translation>
+        <translation>速度</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="151"/>
         <source>太字</source>
-        <translation type="unfinished"></translation>
+        <translation>太字</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="152"/>
         <source>対象レイヤー数</source>
-        <translation type="unfinished"></translation>
+        <translation>対象レイヤー数</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="153"/>
         <source>中心X</source>
-        <translation type="unfinished"></translation>
+        <translation>中心X</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="154"/>
         <source>中心Y</source>
-        <translation type="unfinished"></translation>
+        <translation>中心Y</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="155"/>
         <source>中心Z</source>
-        <translation type="unfinished"></translation>
+        <translation>中心Z</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="156"/>
         <source>中心の位置を変更</source>
-        <translation type="unfinished"></translation>
+        <translation>中心の位置を変更</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="157"/>
         <source>注視X</source>
-        <translation type="unfinished"></translation>
+        <translation>注視X</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="158"/>
         <source>注視Y</source>
-        <translation type="unfinished"></translation>
+        <translation>注視Y</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="159"/>
         <source>注視Z</source>
-        <translation type="unfinished"></translation>
+        <translation>注視Z</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="160"/>
         <source>通常</source>
-        <translation type="unfinished"></translation>
+        <translation>通常</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="161"/>
         <source>塗り色</source>
-        <translation type="unfinished"></translation>
+        <translation>塗り色</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="162"/>
         <source>透明度の境界をぼかす</source>
-        <translation type="unfinished"></translation>
+        <translation>透明度の境界をぼかす</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="163"/>
         <source>動画</source>
-        <translation type="unfinished"></translation>
+        <translation>動画</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="164"/>
         <source>内径 (%)</source>
-        <translation type="unfinished"></translation>
+        <translation>内径 (%)</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="165"/>
         <source>破線:間隔</source>
-        <translation type="unfinished"></translation>
+        <translation>破線:間隔</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="166"/>
         <source>破線:線長</source>
-        <translation type="unfinished"></translation>
+        <translation>破線:線長</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="167"/>
         <source>背景角丸</source>
-        <translation type="unfinished"></translation>
+        <translation>背景角丸</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="168"/>
         <source>背景色</source>
-        <translation type="unfinished"></translation>
+        <translation>背景色</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="169"/>
         <source>背景有効</source>
-        <translation type="unfinished"></translation>
+        <translation>背景有効</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="170"/>
         <source>背景余白X</source>
-        <translation type="unfinished"></translation>
+        <translation>背景余白X</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="171"/>
         <source>背景余白Y</source>
-        <translation type="unfinished"></translation>
+        <translation>背景余白Y</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="172"/>
         <source>配置 (1:左 2:右 4:中)</source>
-        <translation type="unfinished"></translation>
+        <translation>配置 (1:左 2:右 4:中)</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="173"/>
         <source>反転配置</source>
-        <translation type="unfinished"></translation>
+        <translation>反転配置</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="174"/>
         <source>範囲</source>
-        <translation type="unfinished"></translation>
+        <translation>範囲</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="175"/>
         <source>比較（暗）</source>
-        <translation type="unfinished"></translation>
+        <translation>比較（暗）</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="176"/>
         <source>比較（明）</source>
-        <translation type="unfinished"></translation>
+        <translation>比較（明）</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="177"/>
         <source>標準</source>
-        <translation type="unfinished"></translation>
+        <translation>標準</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="178"/>
         <source>標準描画</source>
-        <translation type="unfinished"></translation>
+        <translation>標準描画</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="179"/>
         <source>品質(サンプル数)</source>
-        <translation type="unfinished"></translation>
+        <translation>品質(サンプル数)</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="180"/>
         <source>不透明度</source>
-        <translation type="unfinished"></translation>
+        <translation>不透明度</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="181"/>
         <source>幅</source>
-        <translation type="unfinished"></translation>
+        <translation>幅</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="182"/>
         <source>文字間隔</source>
-        <translation type="unfinished"></translation>
+        <translation>文字間隔</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="183"/>
         <source>文字色</source>
-        <translation type="unfinished"></translation>
+        <translation>文字色</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="184"/>
         <source>変形/クロップ</source>
-        <translation type="unfinished"></translation>
+        <translation>変形/クロップ</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="185"/>
         <source>辺/頂点数</source>
-        <translation type="unfinished"></translation>
+        <translation>辺/頂点数</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="186"/>
         <source>放射ブラー</source>
-        <translation type="unfinished"></translation>
+        <translation>放射ブラー</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="187"/>
         <source>放射状</source>
-        <translation type="unfinished"></translation>
+        <translation>放射状</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="188"/>
         <source>方向ブラー</source>
-        <translation type="unfinished"></translation>
+        <translation>方向ブラー</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="189"/>
         <source>明るさ</source>
-        <translation type="unfinished"></translation>
+        <translation>明るさ</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="190"/>
         <source>裏面を表示</source>
-        <translation type="unfinished"></translation>
+        <translation>裏面を表示</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="191"/>
         <source>緑ずれX</source>
-        <translation type="unfinished"></translation>
+        <translation>緑ずれX</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="192"/>
         <source>緑ずれY</source>
-        <translation type="unfinished"></translation>
+        <translation>緑ずれY</translation>
     </message>
 </context>
 <context>
@@ -967,109 +969,109 @@
     <message>
         <location filename="../core/src/package_manager.cpp" line="106"/>
         <source>待機中</source>
-        <translation type="unfinished"></translation>
+        <translation>待機中</translation>
     </message>
     <message>
         <location filename="../core/src/package_manager.cpp" line="206"/>
         <source>キャッシュからパッケージをロードしました（更新を確認するには「同期」を押してください）</source>
-        <translation type="unfinished"></translation>
+        <translation>キャッシュからパッケージをロードしました（更新を確認するには「同期」を押してください）</translation>
     </message>
     <message>
         <location filename="../core/src/package_manager.cpp" line="238"/>
         <source>リポジトリを同期中...</source>
-        <translation type="unfinished"></translation>
+        <translation>リポジトリを同期中...</translation>
     </message>
     <message>
         <location filename="../core/src/package_manager.cpp" line="326"/>
         <location filename="../core/src/package_manager.cpp" line="354"/>
         <source>同期完了</source>
-        <translation type="unfinished"></translation>
+        <translation>同期完了</translation>
     </message>
     <message>
         <location filename="../core/src/package_manager.cpp" line="429"/>
         <source>利用可能なファイルを検索中...</source>
-        <translation type="unfinished"></translation>
+        <translation>利用可能なファイルを検索中...</translation>
     </message>
     <message>
         <location filename="../core/src/package_manager.cpp" line="441"/>
         <source>リポジトリURLの形式が正しくありません。</source>
-        <translation type="unfinished"></translation>
+        <translation>リポジトリURLの形式が正しくありません。</translation>
     </message>
     <message>
         <location filename="../core/src/package_manager.cpp" line="457"/>
         <source>サポートされていないリポジトリホストです。</source>
-        <translation type="unfinished"></translation>
+        <translation>サポートされていないリポジトリホストです。</translation>
     </message>
     <message>
         <location filename="../core/src/package_manager.cpp" line="516"/>
         <source>ダウンロード可能なファイルが見つかりませんでした。</source>
-        <translation type="unfinished"></translation>
+        <translation>ダウンロード可能なファイルが見つかりませんでした。</translation>
     </message>
     <message>
         <location filename="../core/src/package_manager.cpp" line="549"/>
         <source>パッケージのインストール中: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>パッケージのインストール中: %1</translation>
     </message>
     <message>
         <location filename="../core/src/package_manager.cpp" line="676"/>
         <source>アップグレード可能なパッケージはありません。</source>
-        <translation type="unfinished"></translation>
+        <translation>アップグレード可能なパッケージはありません。</translation>
     </message>
     <message>
         <location filename="../core/src/package_manager.cpp" line="681"/>
         <source>すべてのパッケージをアップグレード中...</source>
-        <translation type="unfinished"></translation>
+        <translation>すべてのパッケージをアップグレード中...</translation>
     </message>
     <message>
         <location filename="../core/src/package_manager.cpp" line="688"/>
         <source>すべてのアップグレードが完了しました</source>
-        <translation type="unfinished"></translation>
+        <translation>すべてのアップグレードが完了しました</translation>
     </message>
     <message>
         <location filename="../core/src/package_manager.cpp" line="694"/>
         <source>パッケージをアップグレード中: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>パッケージをアップグレード中: %1</translation>
     </message>
     <message>
         <location filename="../core/src/package_manager.cpp" line="406"/>
         <location filename="../core/src/package_manager.cpp" line="536"/>
         <source>パッケージが見つかりません: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>パッケージが見つかりません: %1</translation>
     </message>
     <message>
         <location filename="../core/src/package_manager.cpp" line="424"/>
         <source>パッケージのリポジトリURLを特定できません。</source>
-        <translation type="unfinished"></translation>
+        <translation>パッケージのリポジトリURLを特定できません。</translation>
     </message>
     <message>
         <location filename="../core/src/package_manager.cpp" line="467"/>
         <source>リリース情報の取得に失敗しました (%1): %2</source>
-        <translation type="unfinished"></translation>
+        <translation>リリース情報の取得に失敗しました (%1): %2</translation>
     </message>
     <message>
         <location filename="../core/src/package_manager.cpp" line="541"/>
         <source>ダウンロードURLが指定されていません。アセット情報を取得してください。</source>
-        <translation type="unfinished"></translation>
+        <translation>ダウンロードURLが指定されていません。アセット情報を取得してください。</translation>
     </message>
     <message>
         <location filename="../core/src/package_manager.cpp" line="554"/>
         <source>インストール完了: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>インストール完了: %1</translation>
     </message>
     <message>
         <location filename="../core/src/package_manager.cpp" line="565"/>
         <source>AviQtlのアップデートがダウンロード可能です。再起動して適用してください。</source>
-        <translation type="unfinished"></translation>
+        <translation>AviQtlのアップデートがダウンロード可能です。再起動して適用してください。</translation>
     </message>
     <message>
         <location filename="../core/src/package_manager.cpp" line="602"/>
         <source>パッケージを削除中: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>パッケージを削除中: %1</translation>
     </message>
     <message>
         <location filename="../core/src/package_manager.cpp" line="627"/>
         <source>削除完了: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>削除完了: %1</translation>
     </message>
 </context>
 <context>
@@ -1077,32 +1079,32 @@
     <message>
         <location filename="../ui/src/timeline/timeline_controller_clip.cpp" line="80"/>
         <source>プロパティ変更: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>プロパティ変更: %1</translation>
     </message>
     <message>
         <location filename="../ui/src/timeline/timeline_controller_clip.cpp" line="122"/>
         <source>開始フレーム変更</source>
-        <translation type="unfinished"></translation>
+        <translation>開始フレーム変更</translation>
     </message>
     <message>
         <location filename="../ui/src/timeline/timeline_controller_clip.cpp" line="139"/>
         <source>長さ変更</source>
-        <translation type="unfinished"></translation>
+        <translation>長さ変更</translation>
     </message>
     <message>
         <location filename="../ui/src/timeline/timeline_controller_clip.cpp" line="156"/>
         <source>レイヤー変更</source>
-        <translation type="unfinished"></translation>
+        <translation>レイヤー変更</translation>
     </message>
     <message>
         <location filename="../ui/src/timeline/timeline_controller_clip.cpp" line="321"/>
         <source>複数クリップリサイズ: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>複数クリップリサイズ: %1</translation>
     </message>
     <message>
         <location filename="../ui/src/timeline/timeline_controller_project.cpp" line="63"/>
         <source>保存先のファイルパスが不明です</source>
-        <translation type="unfinished"></translation>
+        <translation>保存先のファイルパスが不明です</translation>
     </message>
 </context>
 <context>
@@ -1110,17 +1112,17 @@
     <message>
         <location filename="../ui/src/timeline/timeline_export_manager.cpp" line="41"/>
         <source>エンコーダーの初期化に失敗しました</source>
-        <translation type="unfinished"></translation>
+        <translation>エンコーダーの初期化に失敗しました</translation>
     </message>
     <message>
         <location filename="../ui/src/timeline/timeline_export_manager.cpp" line="69"/>
         <source>キャンセルされました</source>
-        <translation type="unfinished"></translation>
+        <translation>キャンセルされました</translation>
     </message>
     <message>
         <location filename="../ui/src/timeline/timeline_export_manager.cpp" line="101"/>
         <source>書き出し完了</source>
-        <translation type="unfinished"></translation>
+        <translation>書き出し完了</translation>
     </message>
 </context>
 <context>
@@ -1128,12 +1130,12 @@
     <message>
         <location filename="../ui/src/timeline/timeline_clip.cpp" line="87"/>
         <source>レイヤーを上に挿入</source>
-        <translation type="unfinished"></translation>
+        <translation>レイヤーを上に挿入</translation>
     </message>
     <message>
         <location filename="../ui/src/timeline/timeline_clip.cpp" line="87"/>
         <source>レイヤーを下に挿入</source>
-        <translation type="unfinished"></translation>
+        <translation>レイヤーを下に挿入</translation>
     </message>
 </context>
 <context>
@@ -1141,52 +1143,52 @@
     <message>
         <location filename="../ui/src/window_manager.cpp" line="30"/>
         <source>AviQtl メインプレビュー</source>
-        <translation type="unfinished"></translation>
+        <translation>AviQtl メインプレビュー</translation>
     </message>
     <message>
         <location filename="../ui/src/window_manager.cpp" line="32"/>
         <source>タイムライン</source>
-        <translation type="unfinished"></translation>
+        <translation>タイムライン</translation>
     </message>
     <message>
         <location filename="../ui/src/window_manager.cpp" line="34"/>
         <source>プロジェクト設定</source>
-        <translation type="unfinished"></translation>
+        <translation>プロジェクト設定</translation>
     </message>
     <message>
         <location filename="../ui/src/window_manager.cpp" line="36"/>
         <source>オブジェクト設定</source>
-        <translation type="unfinished"></translation>
+        <translation>オブジェクト設定</translation>
     </message>
     <message>
         <location filename="../ui/src/window_manager.cpp" line="38"/>
         <source>システム設定</source>
-        <translation type="unfinished"></translation>
+        <translation>システム設定</translation>
     </message>
     <message>
         <location filename="../ui/src/window_manager.cpp" line="40"/>
         <source>AviQtlについて</source>
-        <translation type="unfinished"></translation>
+        <translation>AviQtlについて</translation>
     </message>
     <message>
         <location filename="../ui/src/window_manager.cpp" line="42"/>
         <source>シーン設定</source>
-        <translation type="unfinished"></translation>
+        <translation>シーン設定</translation>
     </message>
     <message>
         <location filename="../ui/src/window_manager.cpp" line="44"/>
         <source>メディアの書き出し</source>
-        <translation type="unfinished"></translation>
+        <translation>メディアの書き出し</translation>
     </message>
     <message>
         <location filename="../ui/src/window_manager.cpp" line="46"/>
         <source>補間設定</source>
-        <translation type="unfinished"></translation>
+        <translation>補間設定</translation>
     </message>
     <message>
         <location filename="../ui/src/window_manager.cpp" line="48"/>
         <source>パッケージマネージャー</source>
-        <translation type="unfinished"></translation>
+        <translation>パッケージマネージャー</translation>
     </message>
 </context>
 <context>
@@ -1194,32 +1196,32 @@
     <message>
         <location filename="../ui/qml/common/BaseObject.qml" line="44"/>
         <source>通常</source>
-        <translation type="unfinished"></translation>
+        <translation>通常</translation>
     </message>
     <message>
         <location filename="../ui/qml/common/BaseObject.qml" line="45"/>
         <source>スクリーン</source>
-        <translation type="unfinished"></translation>
+        <translation>スクリーン</translation>
     </message>
     <message>
         <location filename="../ui/qml/common/BaseObject.qml" line="48"/>
         <source>乗算</source>
-        <translation type="unfinished"></translation>
+        <translation>乗算</translation>
     </message>
     <message>
         <location filename="../ui/qml/common/BaseObject.qml" line="51"/>
         <source>オーバーレイ</source>
-        <translation type="unfinished"></translation>
+        <translation>オーバーレイ</translation>
     </message>
     <message>
         <location filename="../ui/qml/common/BaseObject.qml" line="54"/>
         <source>焼き込み</source>
-        <translation type="unfinished"></translation>
+        <translation>焼き込み</translation>
     </message>
     <message>
         <location filename="../ui/qml/common/BaseObject.qml" line="57"/>
         <source>覆い焼き</source>
-        <translation type="unfinished"></translation>
+        <translation>覆い焼き</translation>
     </message>
 </context>
 <context>
@@ -1228,42 +1230,42 @@
         <location filename="../ui/qml/common/ControlLoader.qml" line="30"/>
         <location filename="../ui/qml/common/ControlLoader.qml" line="32"/>
         <source>パラメータ</source>
-        <translation type="unfinished"></translation>
+        <translation>パラメータ</translation>
     </message>
     <message>
         <location filename="../ui/qml/common/ControlLoader.qml" line="310"/>
         <source>開始色 (f%1)</source>
-        <translation type="unfinished"></translation>
+        <translation>開始色 (f%1)</translation>
     </message>
     <message>
         <location filename="../ui/qml/common/ControlLoader.qml" line="310"/>
         <source>色を選択</source>
-        <translation type="unfinished"></translation>
+        <translation>色を選択</translation>
     </message>
     <message>
         <location filename="../ui/qml/common/ControlLoader.qml" line="387"/>
         <source>終了色 (f%1)</source>
-        <translation type="unfinished"></translation>
+        <translation>終了色 (f%1)</translation>
     </message>
     <message>
         <location filename="../ui/qml/common/ControlLoader.qml" line="433"/>
         <source>ファイルを選択</source>
-        <translation type="unfinished"></translation>
+        <translation>ファイルを選択</translation>
     </message>
     <message>
         <location filename="../ui/qml/common/ControlLoader.qml" line="575"/>
         <source>設定</source>
-        <translation type="unfinished"></translation>
+        <translation>設定</translation>
     </message>
     <message>
         <location filename="../ui/qml/common/ControlLoader.qml" line="651"/>
         <source>フォントを選択</source>
-        <translation type="unfinished"></translation>
+        <translation>フォントを選択</translation>
     </message>
     <message>
         <location filename="../ui/qml/common/ControlLoader.qml" line="667"/>
         <source>デフォルト</source>
-        <translation type="unfinished"></translation>
+        <translation>デフォルト</translation>
     </message>
 </context>
 <context>
@@ -1271,47 +1273,47 @@
     <message>
         <location filename="../ui/qml/settings/DecodeAudioSettingsPage.qml" line="40"/>
         <source>映像デコード</source>
-        <translation type="unfinished"></translation>
+        <translation>映像デコード</translation>
     </message>
     <message>
         <location filename="../ui/qml/settings/DecodeAudioSettingsPage.qml" line="50"/>
         <source>インデックス予約数</source>
-        <translation type="unfinished"></translation>
+        <translation>インデックス予約数</translation>
     </message>
     <message>
         <location filename="../ui/qml/settings/DecodeAudioSettingsPage.qml" line="62"/>
         <source>最小キャッシュ量</source>
-        <translation type="unfinished"></translation>
+        <translation>最小キャッシュ量</translation>
     </message>
     <message>
         <location filename="../ui/qml/settings/DecodeAudioSettingsPage.qml" line="74"/>
         <source>ハードウェアフレームプール数</source>
-        <translation type="unfinished"></translation>
+        <translation>ハードウェアフレームプール数</translation>
     </message>
     <message>
         <location filename="../ui/qml/settings/DecodeAudioSettingsPage.qml" line="89"/>
         <source>音声</source>
-        <translation type="unfinished"></translation>
+        <translation>音声</translation>
     </message>
     <message>
         <location filename="../ui/qml/settings/DecodeAudioSettingsPage.qml" line="99"/>
         <source>音声チャンネル数</source>
-        <translation type="unfinished"></translation>
+        <translation>音声チャンネル数</translation>
     </message>
     <message>
         <location filename="../ui/qml/settings/DecodeAudioSettingsPage.qml" line="109"/>
         <source>プラグイン最大ブロックサイズ</source>
-        <translation type="unfinished"></translation>
+        <translation>プラグイン最大ブロックサイズ</translation>
     </message>
     <message>
         <location filename="../ui/qml/settings/DecodeAudioSettingsPage.qml" line="119"/>
         <source>Lua フック間隔</source>
-        <translation type="unfinished"></translation>
+        <translation>Lua フック間隔</translation>
     </message>
     <message>
         <location filename="../ui/qml/settings/DecodeAudioSettingsPage.qml" line="135"/>
         <source>デコードと音声関連の設定は再起動後に反映されます</source>
-        <translation type="unfinished"></translation>
+        <translation>デコードと音声関連の設定は再起動後に反映されます</translation>
     </message>
 </context>
 <context>
@@ -1319,179 +1321,179 @@
     <message>
         <location filename="../ui/qml/common/EasingConfigWindow.qml" line="382"/>
         <source>補間設定: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>補間設定: %1</translation>
     </message>
     <message>
         <location filename="../ui/qml/common/EasingConfigWindow.qml" line="419"/>
         <source>プレビュー</source>
-        <translation type="unfinished"></translation>
+        <translation>プレビュー</translation>
     </message>
     <message>
         <location filename="../ui/qml/common/EasingConfigWindow.qml" line="429"/>
         <source>ズーム:</source>
-        <translation type="unfinished"></translation>
+        <translation>ズーム:</translation>
     </message>
     <message>
         <location filename="../ui/qml/common/EasingConfigWindow.qml" line="760"/>
         <source>右ドラッグ:パン  ホイール:ズーム</source>
-        <translation type="unfinished"></translation>
+        <translation>右ドラッグ:パン  ホイール:ズーム</translation>
     </message>
     <message>
         <location filename="../ui/qml/common/EasingConfigWindow.qml" line="760"/>
         <source>  左ドラッグ:ハンドル</source>
-        <translation type="unfinished"></translation>
+        <translation>  左ドラッグ:ハンドル</translation>
     </message>
     <message>
         <location filename="../ui/qml/common/EasingConfigWindow.qml" line="769"/>
         <source>詳細設定</source>
-        <translation type="unfinished"></translation>
+        <translation>詳細設定</translation>
     </message>
     <message>
         <location filename="../ui/qml/common/EasingConfigWindow.qml" line="778"/>
         <source>振幅:</source>
-        <translation type="unfinished"></translation>
+        <translation>振幅:</translation>
     </message>
     <message>
         <location filename="../ui/qml/common/EasingConfigWindow.qml" line="804"/>
         <source>周期:</source>
-        <translation type="unfinished"></translation>
+        <translation>周期:</translation>
     </message>
     <message>
         <location filename="../ui/qml/common/EasingConfigWindow.qml" line="834"/>
         <source>制御点</source>
-        <translation type="unfinished"></translation>
+        <translation>制御点</translation>
     </message>
     <message>
         <location filename="../ui/qml/common/EasingConfigWindow.qml" line="918"/>
         <location filename="../ui/qml/common/EasingConfigWindow.qml" line="1122"/>
         <source>直線</source>
-        <translation type="unfinished"></translation>
+        <translation>直線</translation>
     </message>
     <message>
         <location filename="../ui/qml/common/EasingConfigWindow.qml" line="921"/>
         <source>サイン</source>
-        <translation type="unfinished"></translation>
+        <translation>サイン</translation>
     </message>
     <message>
         <location filename="../ui/qml/common/EasingConfigWindow.qml" line="924"/>
         <source>2次</source>
-        <translation type="unfinished"></translation>
+        <translation>2次</translation>
     </message>
     <message>
         <location filename="../ui/qml/common/EasingConfigWindow.qml" line="927"/>
         <source>3次</source>
-        <translation type="unfinished"></translation>
+        <translation>3次</translation>
     </message>
     <message>
         <location filename="../ui/qml/common/EasingConfigWindow.qml" line="930"/>
         <source>4次</source>
-        <translation type="unfinished"></translation>
+        <translation>4次</translation>
     </message>
     <message>
         <location filename="../ui/qml/common/EasingConfigWindow.qml" line="933"/>
         <source>5次</source>
-        <translation type="unfinished"></translation>
+        <translation>5次</translation>
     </message>
     <message>
         <location filename="../ui/qml/common/EasingConfigWindow.qml" line="936"/>
         <source>指数</source>
-        <translation type="unfinished"></translation>
+        <translation>指数</translation>
     </message>
     <message>
         <location filename="../ui/qml/common/EasingConfigWindow.qml" line="939"/>
         <source>円</source>
-        <translation type="unfinished"></translation>
+        <translation>円</translation>
     </message>
     <message>
         <location filename="../ui/qml/common/EasingConfigWindow.qml" line="942"/>
         <source>戻る</source>
-        <translation type="unfinished"></translation>
+        <translation>戻る</translation>
     </message>
     <message>
         <location filename="../ui/qml/common/EasingConfigWindow.qml" line="945"/>
         <source>弾性</source>
-        <translation type="unfinished"></translation>
+        <translation>弾性</translation>
     </message>
     <message>
         <location filename="../ui/qml/common/EasingConfigWindow.qml" line="948"/>
         <source>跳ね返り</source>
-        <translation type="unfinished"></translation>
+        <translation>跳ね返り</translation>
     </message>
     <message>
         <location filename="../ui/qml/common/EasingConfigWindow.qml" line="951"/>
         <location filename="../ui/qml/common/EasingConfigWindow.qml" line="1125"/>
         <source>カスタム</source>
-        <translation type="unfinished"></translation>
+        <translation>カスタム</translation>
     </message>
     <message>
         <location filename="../ui/qml/common/EasingConfigWindow.qml" line="962"/>
         <source>種類</source>
-        <translation type="unfinished"></translation>
+        <translation>種類</translation>
     </message>
     <message>
         <location filename="../ui/qml/common/EasingConfigWindow.qml" line="975"/>
         <source>検索...</source>
-        <translation type="unfinished"></translation>
+        <translation>検索...</translation>
     </message>
     <message>
         <location filename="../ui/qml/common/EasingConfigWindow.qml" line="1128"/>
         <source>加減速</source>
-        <translation type="unfinished"></translation>
+        <translation>加減速</translation>
     </message>
     <message>
         <location filename="../ui/qml/common/EasingConfigWindow.qml" line="1131"/>
         <source>減加速</source>
-        <translation type="unfinished"></translation>
+        <translation>減加速</translation>
     </message>
     <message>
         <location filename="../ui/qml/common/EasingConfigWindow.qml" line="1134"/>
         <source>加速</source>
-        <translation type="unfinished"></translation>
+        <translation>加速</translation>
     </message>
     <message>
         <location filename="../ui/qml/common/EasingConfigWindow.qml" line="1137"/>
         <source>減速</source>
-        <translation type="unfinished"></translation>
+        <translation>減速</translation>
     </message>
     <message>
         <location filename="../ui/qml/common/EasingConfigWindow.qml" line="1184"/>
         <source>補間方法:</source>
-        <translation type="unfinished"></translation>
+        <translation>補間方法:</translation>
     </message>
     <message>
         <location filename="../ui/qml/common/EasingConfigWindow.qml" line="1196"/>
         <source>瞬間移動</source>
-        <translation type="unfinished"></translation>
+        <translation>瞬間移動</translation>
     </message>
     <message>
         <location filename="../ui/qml/common/EasingConfigWindow.qml" line="1199"/>
         <source>直線移動</source>
-        <translation type="unfinished"></translation>
+        <translation>直線移動</translation>
     </message>
     <message>
         <location filename="../ui/qml/common/EasingConfigWindow.qml" line="1202"/>
         <source>曲線移動</source>
-        <translation type="unfinished"></translation>
+        <translation>曲線移動</translation>
     </message>
     <message>
         <location filename="../ui/qml/common/EasingConfigWindow.qml" line="1205"/>
         <source>ランダム移動</source>
-        <translation type="unfinished"></translation>
+        <translation>ランダム移動</translation>
     </message>
     <message>
         <location filename="../ui/qml/common/EasingConfigWindow.qml" line="1208"/>
         <source>反復移動</source>
-        <translation type="unfinished"></translation>
+        <translation>反復移動</translation>
     </message>
     <message>
         <location filename="../ui/qml/common/EasingConfigWindow.qml" line="1231"/>
         <source>更新間隔:</source>
-        <translation type="unfinished"></translation>
+        <translation>更新間隔:</translation>
     </message>
     <message>
         <location filename="../ui/qml/common/EasingConfigWindow.qml" line="1244"/>
         <source>フレーム</source>
-        <translation type="unfinished"></translation>
+        <translation>フレーム</translation>
     </message>
 </context>
 <context>
@@ -1499,155 +1501,155 @@
     <message>
         <location filename="../ui/qml/ExportDialog.qml" line="28"/>
         <source>メディアの書き出し</source>
-        <translation type="unfinished"></translation>
+        <translation>メディアの書き出し</translation>
     </message>
     <message>
         <location filename="../ui/qml/ExportDialog.qml" line="51"/>
         <source>書き出し中...</source>
-        <translation type="unfinished"></translation>
+        <translation>書き出し中...</translation>
     </message>
     <message>
         <location filename="../ui/qml/ExportDialog.qml" line="70"/>
         <source>0 / 0 フレーム</source>
-        <translation type="unfinished"></translation>
+        <translation>0 / 0 フレーム</translation>
     </message>
     <message>
         <location filename="../ui/qml/ExportDialog.qml" line="77"/>
         <location filename="../ui/qml/ExportDialog.qml" line="499"/>
         <source>キャンセル</source>
-        <translation type="unfinished"></translation>
+        <translation>キャンセル</translation>
     </message>
     <message>
         <location filename="../ui/qml/ExportDialog.qml" line="89"/>
         <source>%1 / %2 フレーム</source>
-        <translation type="unfinished"></translation>
+        <translation>%1 / %2 フレーム</translation>
     </message>
     <message>
         <location filename="../ui/qml/ExportDialog.qml" line="108"/>
         <source>完了</source>
-        <translation type="unfinished"></translation>
+        <translation>完了</translation>
     </message>
     <message>
         <location filename="../ui/qml/ExportDialog.qml" line="108"/>
         <source>エラー</source>
-        <translation type="unfinished"></translation>
+        <translation>エラー</translation>
     </message>
     <message>
         <location filename="../ui/qml/ExportDialog.qml" line="133"/>
         <source>保存先ファイルパス...</source>
-        <translation type="unfinished"></translation>
+        <translation>保存先ファイルパス...</translation>
     </message>
     <message>
         <location filename="../ui/qml/ExportDialog.qml" line="137"/>
         <source>参照...</source>
-        <translation type="unfinished"></translation>
+        <translation>参照...</translation>
     </message>
     <message>
         <location filename="../ui/qml/ExportDialog.qml" line="145"/>
         <source>映像</source>
-        <translation type="unfinished"></translation>
+        <translation>映像</translation>
     </message>
     <message>
         <location filename="../ui/qml/ExportDialog.qml" line="155"/>
         <source>解像度:</source>
-        <translation type="unfinished"></translation>
+        <translation>解像度:</translation>
     </message>
     <message>
         <location filename="../ui/qml/ExportDialog.qml" line="165"/>
         <source>FPS:</source>
-        <translation type="unfinished"></translation>
+        <translation>FPS:</translation>
     </message>
     <message>
         <location filename="../ui/qml/ExportDialog.qml" line="175"/>
         <location filename="../ui/qml/ExportDialog.qml" line="345"/>
         <source>コーデック:</source>
-        <translation type="unfinished"></translation>
+        <translation>コーデック:</translation>
     </message>
     <message>
         <location filename="../ui/qml/ExportDialog.qml" line="243"/>
         <source>品質モード:</source>
-        <translation type="unfinished"></translation>
+        <translation>品質モード:</translation>
     </message>
     <message>
         <location filename="../ui/qml/ExportDialog.qml" line="253"/>
         <source>CRF</source>
-        <translation type="unfinished"></translation>
+        <translation>CRF</translation>
     </message>
     <message>
         <location filename="../ui/qml/ExportDialog.qml" line="259"/>
         <source>ビットレート</source>
-        <translation type="unfinished"></translation>
+        <translation>ビットレート</translation>
     </message>
     <message>
         <location filename="../ui/qml/ExportDialog.qml" line="269"/>
         <source>CRF:</source>
-        <translation type="unfinished"></translation>
+        <translation>CRF:</translation>
     </message>
     <message>
         <location filename="../ui/qml/ExportDialog.qml" line="294"/>
         <source>高品質</source>
-        <translation type="unfinished"></translation>
+        <translation>高品質</translation>
     </message>
     <message>
         <location filename="../ui/qml/ExportDialog.qml" line="294"/>
         <source>標準</source>
-        <translation type="unfinished"></translation>
+        <translation>標準</translation>
     </message>
     <message>
         <location filename="../ui/qml/ExportDialog.qml" line="294"/>
         <source>低品質</source>
-        <translation type="unfinished"></translation>
+        <translation>低品質</translation>
     </message>
     <message>
         <location filename="../ui/qml/ExportDialog.qml" line="303"/>
         <location filename="../ui/qml/ExportDialog.qml" line="386"/>
         <source>ビットレート:</source>
-        <translation type="unfinished"></translation>
+        <translation>ビットレート:</translation>
     </message>
     <message>
         <location filename="../ui/qml/ExportDialog.qml" line="320"/>
         <source>%1 Mbps</source>
-        <translation type="unfinished"></translation>
+        <translation>%1 Mbps</translation>
     </message>
     <message>
         <location filename="../ui/qml/ExportDialog.qml" line="335"/>
         <source>音声</source>
-        <translation type="unfinished"></translation>
+        <translation>音声</translation>
     </message>
     <message>
         <location filename="../ui/qml/ExportDialog.qml" line="413"/>
         <source>範囲</source>
-        <translation type="unfinished"></translation>
+        <translation>範囲</translation>
     </message>
     <message>
         <location filename="../ui/qml/ExportDialog.qml" line="423"/>
         <source>タイムライン全体</source>
-        <translation type="unfinished"></translation>
+        <translation>タイムライン全体</translation>
     </message>
     <message>
         <location filename="../ui/qml/ExportDialog.qml" line="428"/>
         <source>開始:</source>
-        <translation type="unfinished"></translation>
+        <translation>開始:</translation>
     </message>
     <message>
         <location filename="../ui/qml/ExportDialog.qml" line="442"/>
         <source>終了:</source>
-        <translation type="unfinished"></translation>
+        <translation>終了:</translation>
     </message>
     <message>
         <location filename="../ui/qml/ExportDialog.qml" line="476"/>
         <source>(%1 フレーム / %2 秒)</source>
-        <translation type="unfinished"></translation>
+        <translation>(%1 フレーム / %2 秒)</translation>
     </message>
     <message>
         <location filename="../ui/qml/ExportDialog.qml" line="504"/>
         <source>書き出し開始</source>
-        <translation type="unfinished"></translation>
+        <translation>書き出し開始</translation>
     </message>
     <message>
         <location filename="../ui/qml/ExportDialog.qml" line="534"/>
         <source>保存先を指定</source>
-        <translation type="unfinished"></translation>
+        <translation>保存先を指定</translation>
     </message>
 </context>
 <context>
@@ -1655,57 +1657,57 @@
     <message>
         <location filename="../ui/qml/settings/ExportSettingsPage.qml" line="44"/>
         <source>映像</source>
-        <translation type="unfinished"></translation>
+        <translation>映像</translation>
     </message>
     <message>
         <location filename="../ui/qml/settings/ExportSettingsPage.qml" line="54"/>
         <source>既定の映像コーデック</source>
-        <translation type="unfinished"></translation>
+        <translation>既定の映像コーデック</translation>
     </message>
     <message>
         <location filename="../ui/qml/settings/ExportSettingsPage.qml" line="64"/>
         <source>既定ビットレート</source>
-        <translation type="unfinished"></translation>
+        <translation>既定ビットレート</translation>
     </message>
     <message>
         <location filename="../ui/qml/settings/ExportSettingsPage.qml" line="75"/>
         <source>既定CRF</source>
-        <translation type="unfinished"></translation>
+        <translation>既定CRF</translation>
     </message>
     <message>
         <location filename="../ui/qml/settings/ExportSettingsPage.qml" line="86"/>
         <source>静止画品質</source>
-        <translation type="unfinished"></translation>
+        <translation>静止画品質</translation>
     </message>
     <message>
         <location filename="../ui/qml/settings/ExportSettingsPage.qml" line="97"/>
         <source>連番桁数</source>
-        <translation type="unfinished"></translation>
+        <translation>連番桁数</translation>
     </message>
     <message>
         <location filename="../ui/qml/settings/ExportSettingsPage.qml" line="112"/>
         <source>音声と進行表示</source>
-        <translation type="unfinished"></translation>
+        <translation>音声と進行表示</translation>
     </message>
     <message>
         <location filename="../ui/qml/settings/ExportSettingsPage.qml" line="122"/>
         <source>既定の音声コーデック</source>
-        <translation type="unfinished"></translation>
+        <translation>既定の音声コーデック</translation>
     </message>
     <message>
         <location filename="../ui/qml/settings/ExportSettingsPage.qml" line="132"/>
         <source>音声ビットレート</source>
-        <translation type="unfinished"></translation>
+        <translation>音声ビットレート</translation>
     </message>
     <message>
         <location filename="../ui/qml/settings/ExportSettingsPage.qml" line="144"/>
         <source>フレーム取得待ち時間</source>
-        <translation type="unfinished"></translation>
+        <translation>フレーム取得待ち時間</translation>
     </message>
     <message>
         <location filename="../ui/qml/settings/ExportSettingsPage.qml" line="156"/>
         <source>進捗更新間隔</source>
-        <translation type="unfinished"></translation>
+        <translation>進捗更新間隔</translation>
     </message>
 </context>
 <context>
@@ -1713,72 +1715,72 @@
     <message>
         <location filename="../ui/qml/settings/GeneralSettingsPage.qml" line="37"/>
         <source>ファイル</source>
-        <translation type="unfinished"></translation>
+        <translation>ファイル</translation>
     </message>
     <message>
         <location filename="../ui/qml/settings/GeneralSettingsPage.qml" line="44"/>
         <source>終了時に確認ダイアログを表示する</source>
-        <translation type="unfinished"></translation>
+        <translation>終了時に確認ダイアログを表示する</translation>
     </message>
     <message>
         <location filename="../ui/qml/settings/GeneralSettingsPage.qml" line="50"/>
         <source>自動バックアップを有効にする</source>
-        <translation type="unfinished"></translation>
+        <translation>自動バックアップを有効にする</translation>
     </message>
     <message>
         <location filename="../ui/qml/settings/GeneralSettingsPage.qml" line="59"/>
         <source>バックアップ間隔</source>
-        <translation type="unfinished"></translation>
+        <translation>バックアップ間隔</translation>
     </message>
     <message>
         <location filename="../ui/qml/settings/GeneralSettingsPage.qml" line="70"/>
         <source>分</source>
-        <translation type="unfinished"></translation>
+        <translation>分</translation>
     </message>
     <message>
         <location filename="../ui/qml/settings/GeneralSettingsPage.qml" line="77"/>
         <source>最近使ったプロジェクトの保持数</source>
-        <translation type="unfinished"></translation>
+        <translation>最近使ったプロジェクトの保持数</translation>
     </message>
     <message>
         <location filename="../ui/qml/settings/GeneralSettingsPage.qml" line="88"/>
         <source>件</source>
-        <translation type="unfinished"></translation>
+        <translation>件</translation>
     </message>
     <message>
         <location filename="../ui/qml/settings/GeneralSettingsPage.qml" line="98"/>
         <source>編集</source>
-        <translation type="unfinished"></translation>
+        <translation>編集</translation>
     </message>
     <message>
         <location filename="../ui/qml/settings/GeneralSettingsPage.qml" line="106"/>
         <source>元に戻す回数</source>
-        <translation type="unfinished"></translation>
+        <translation>元に戻す回数</translation>
     </message>
     <message>
         <location filename="../ui/qml/settings/GeneralSettingsPage.qml" line="119"/>
         <source>回数を増やすとメモリ使用量が増えます</source>
-        <translation type="unfinished"></translation>
+        <translation>回数を増やすとメモリ使用量が増えます</translation>
     </message>
     <message>
         <location filename="../ui/qml/settings/GeneralSettingsPage.qml" line="129"/>
         <source>起動</source>
-        <translation type="unfinished"></translation>
+        <translation>起動</translation>
     </message>
     <message>
         <location filename="../ui/qml/settings/GeneralSettingsPage.qml" line="139"/>
         <source>スプラッシュ表示時間</source>
-        <translation type="unfinished"></translation>
+        <translation>スプラッシュ表示時間</translation>
     </message>
     <message>
         <location filename="../ui/qml/settings/GeneralSettingsPage.qml" line="151"/>
         <source>スプラッシュ画像サイズ</source>
-        <translation type="unfinished"></translation>
+        <translation>スプラッシュ画像サイズ</translation>
     </message>
     <message>
         <location filename="../ui/qml/settings/GeneralSettingsPage.qml" line="163"/>
         <source>起動後の遅延時間</source>
-        <translation type="unfinished"></translation>
+        <translation>起動後の遅延時間</translation>
     </message>
 </context>
 <context>
@@ -1786,77 +1788,77 @@
     <message>
         <location filename="../ui/qml/timeline/LayerHeader.qml" line="185"/>
         <source>上に複数レイヤーを挿入</source>
-        <translation type="unfinished"></translation>
+        <translation>上に複数レイヤーを挿入</translation>
     </message>
     <message>
         <location filename="../ui/qml/timeline/LayerHeader.qml" line="185"/>
         <source>下に複数レイヤーを挿入</source>
-        <translation type="unfinished"></translation>
+        <translation>下に複数レイヤーを挿入</translation>
     </message>
     <message>
         <location filename="../ui/qml/timeline/LayerHeader.qml" line="198"/>
         <source>挿入するレイヤー数:</source>
-        <translation type="unfinished"></translation>
+        <translation>挿入するレイヤー数:</translation>
     </message>
     <message>
         <location filename="../ui/qml/timeline/LayerHeader.qml" line="211"/>
         <source>挿入方向:</source>
-        <translation type="unfinished"></translation>
+        <translation>挿入方向:</translation>
     </message>
     <message>
         <location filename="../ui/qml/timeline/LayerHeader.qml" line="216"/>
         <source>選択レイヤーの上</source>
-        <translation type="unfinished"></translation>
+        <translation>選択レイヤーの上</translation>
     </message>
     <message>
         <location filename="../ui/qml/timeline/LayerHeader.qml" line="226"/>
         <source>選択レイヤーの下</source>
-        <translation type="unfinished"></translation>
+        <translation>選択レイヤーの下</translation>
     </message>
     <message>
         <location filename="../ui/qml/timeline/LayerHeader.qml" line="248"/>
         <source>表示/非表示を切り替え</source>
-        <translation type="unfinished"></translation>
+        <translation>表示/非表示を切り替え</translation>
     </message>
     <message>
         <location filename="../ui/qml/timeline/LayerHeader.qml" line="260"/>
         <source>上にレイヤーを挿入 (1行)</source>
-        <translation type="unfinished"></translation>
+        <translation>上にレイヤーを挿入 (1行)</translation>
     </message>
     <message>
         <location filename="../ui/qml/timeline/LayerHeader.qml" line="270"/>
         <source>下にレイヤーを挿入 (1行)</source>
-        <translation type="unfinished"></translation>
+        <translation>下にレイヤーを挿入 (1行)</translation>
     </message>
     <message>
         <location filename="../ui/qml/timeline/LayerHeader.qml" line="280"/>
         <source>上に複数レイヤーを挿入...</source>
-        <translation type="unfinished"></translation>
+        <translation>上に複数レイヤーを挿入...</translation>
     </message>
     <message>
         <location filename="../ui/qml/timeline/LayerHeader.qml" line="289"/>
         <source>下に複数レイヤーを挿入...</source>
-        <translation type="unfinished"></translation>
+        <translation>下に複数レイヤーを挿入...</translation>
     </message>
     <message>
         <location filename="../ui/qml/timeline/LayerHeader.qml" line="303"/>
         <source>ロックを解除</source>
-        <translation type="unfinished"></translation>
+        <translation>ロックを解除</translation>
     </message>
     <message>
         <location filename="../ui/qml/timeline/LayerHeader.qml" line="303"/>
         <source>ロック</source>
-        <translation type="unfinished"></translation>
+        <translation>ロック</translation>
     </message>
     <message>
         <location filename="../ui/qml/timeline/LayerHeader.qml" line="316"/>
         <source>すべて表示</source>
-        <translation type="unfinished"></translation>
+        <translation>すべて表示</translation>
     </message>
     <message>
         <location filename="../ui/qml/timeline/LayerHeader.qml" line="326"/>
         <source>すべて非表示</source>
-        <translation type="unfinished"></translation>
+        <translation>すべて非表示</translation>
     </message>
 </context>
 <context>
@@ -1864,245 +1866,246 @@
     <message>
         <location filename="../ui/qml/MainWindow.qml" line="74"/>
         <source>AviQtl - プレビュー</source>
-        <translation type="unfinished"></translation>
+        <translation>AviQtl - プレビュー</translation>
     </message>
     <message>
         <location filename="../ui/qml/MainWindow.qml" line="115"/>
         <source>新規プロジェクト</source>
-        <translation type="unfinished"></translation>
+        <translation>新規プロジェクト</translation>
     </message>
     <message>
         <location filename="../ui/qml/MainWindow.qml" line="127"/>
         <source>プロジェクトの上書き保存</source>
-        <translation type="unfinished"></translation>
+        <translation>プロジェクトの上書き保存</translation>
     </message>
     <message>
         <location filename="../ui/qml/MainWindow.qml" line="144"/>
         <location filename="../ui/qml/MainWindow.qml" line="701"/>
         <source>プロジェクトを開く</source>
-        <translation type="unfinished"></translation>
+        <translation>プロジェクトを開く</translation>
     </message>
     <message>
         <location filename="../ui/qml/MainWindow.qml" line="155"/>
         <source>プロジェクトを名前を付けて保存...</source>
-        <translation type="unfinished"></translation>
+        <translation>プロジェクトを名前を付けて保存...</translation>
     </message>
     <message>
         <location filename="../ui/qml/MainWindow.qml" line="177"/>
         <location filename="../ui/qml/MainWindow.qml" line="1337"/>
         <source>終了</source>
-        <translation type="unfinished"></translation>
+        <translation>終了</translation>
     </message>
     <message>
         <location filename="../ui/qml/MainWindow.qml" line="244"/>
         <source>新規シーン作成</source>
-        <translation type="unfinished"></translation>
+        <translation>新規シーン作成</translation>
     </message>
     <message>
         <location filename="../ui/qml/MainWindow.qml" line="249"/>
         <source>シーン %1</source>
-        <translation type="unfinished"></translation>
+        <translation>シーン %1</translation>
     </message>
     <message>
         <location filename="../ui/qml/MainWindow.qml" line="259"/>
         <source>元に戻す</source>
-        <translation type="unfinished"></translation>
+        <translation>元に戻す</translation>
     </message>
     <message>
         <location filename="../ui/qml/MainWindow.qml" line="272"/>
         <source>やり直す</source>
-        <translation type="unfinished"></translation>
+        <translation>やり直す</translation>
     </message>
     <message>
         <location filename="../ui/qml/MainWindow.qml" line="285"/>
         <source>再生 / 一時停止</source>
-        <translation type="unfinished"></translation>
+        <translation>再生 / 一時停止</translation>
     </message>
     <message>
         <location filename="../ui/qml/MainWindow.qml" line="298"/>
         <source>クリップを分割</source>
-        <translation type="unfinished"></translation>
+        <translation>クリップを分割</translation>
     </message>
     <message>
         <location filename="../ui/qml/MainWindow.qml" line="320"/>
         <source>現在のシーン設定...</source>
-        <translation type="unfinished"></translation>
+        <translation>現在のシーン設定...</translation>
     </message>
     <message>
         <location filename="../ui/qml/MainWindow.qml" line="337"/>
         <source>現在のシーンを削除</source>
-        <translation type="unfinished"></translation>
+        <translation>現在のシーンを削除</translation>
     </message>
     <message>
         <location filename="../ui/qml/MainWindow.qml" line="350"/>
         <source>レイヤーロック切替</source>
-        <translation type="unfinished"></translation>
+        <translation>レイヤーロック切替</translation>
     </message>
     <message>
         <location filename="../ui/qml/MainWindow.qml" line="365"/>
         <source>レイヤー表示切替</source>
-        <translation type="unfinished"></translation>
+        <translation>レイヤー表示切替</translation>
     </message>
     <message>
         <location filename="../ui/qml/MainWindow.qml" line="380"/>
         <source>削除</source>
-        <translation type="unfinished"></translation>
+        <translation>削除</translation>
     </message>
     <message>
         <location filename="../ui/qml/MainWindow.qml" line="393"/>
         <source>コピー</source>
-        <translation type="unfinished"></translation>
+        <translation>コピー</translation>
     </message>
     <message>
         <location filename="../ui/qml/MainWindow.qml" line="406"/>
         <source>カット</source>
-        <translation type="unfinished"></translation>
+        <translation>カット</translation>
     </message>
     <message>
         <location filename="../ui/qml/MainWindow.qml" line="419"/>
         <source>貼り付け</source>
-        <translation type="unfinished"></translation>
+        <translation>貼り付け</translation>
     </message>
     <message>
         <location filename="../ui/qml/MainWindow.qml" line="434"/>
         <source>複製</source>
-        <translation type="unfinished"></translation>
+        <translation>複製</translation>
     </message>
     <message>
         <location filename="../ui/qml/MainWindow.qml" line="450"/>
         <source>1フレーム進む</source>
-        <translation type="unfinished"></translation>
+        <translation>1フレーム進む</translation>
     </message>
     <message>
         <location filename="../ui/qml/MainWindow.qml" line="463"/>
         <source>1フレーム戻る</source>
-        <translation type="unfinished"></translation>
+        <translation>1フレーム戻る</translation>
     </message>
     <message>
         <location filename="../ui/qml/MainWindow.qml" line="476"/>
         <source>先頭へ移動</source>
-        <translation type="unfinished"></translation>
+        <translation>先頭へ移動</translation>
     </message>
     <message>
         <location filename="../ui/qml/MainWindow.qml" line="489"/>
         <source>末尾へ移動</source>
-        <translation type="unfinished"></translation>
+        <translation>末尾へ移動</translation>
     </message>
     <message>
         <location filename="../ui/qml/MainWindow.qml" line="502"/>
         <source>ズームイン</source>
-        <translation type="unfinished"></translation>
+        <translation>ズームイン</translation>
     </message>
     <message>
         <location filename="../ui/qml/MainWindow.qml" line="517"/>
         <source>ズームアウト</source>
-        <translation type="unfinished"></translation>
+        <translation>ズームアウト</translation>
     </message>
     <message>
         <location filename="../ui/qml/MainWindow.qml" line="532"/>
         <source>レイヤーを上へ移動</source>
-        <translation type="unfinished"></translation>
+        <translation>レイヤーを上へ移動</translation>
     </message>
     <message>
         <location filename="../ui/qml/MainWindow.qml" line="545"/>
         <source>レイヤーを下へ移動</source>
-        <translation type="unfinished"></translation>
+        <translation>レイヤーを下へ移動</translation>
     </message>
     <message>
         <location filename="../ui/qml/MainWindow.qml" line="558"/>
         <source>1フレーム左へ移動</source>
-        <translation type="unfinished"></translation>
+        <translation>1フレーム左へ移動</translation>
     </message>
     <message>
         <location filename="../ui/qml/MainWindow.qml" line="571"/>
         <source>1フレーム右へ移動</source>
-        <translation type="unfinished"></translation>
+        <translation>1フレーム右へ移動</translation>
     </message>
     <message>
         <location filename="../ui/qml/MainWindow.qml" line="582"/>
         <source>エラー</source>
-        <translation type="unfinished"></translation>
+        <translation>エラー</translation>
     </message>
     <message>
         <location filename="../ui/qml/MainWindow.qml" line="591"/>
         <source>保存の確認</source>
-        <translation type="unfinished"></translation>
+        <translation>保存の確認</translation>
     </message>
     <message>
         <location filename="../ui/qml/MainWindow.qml" line="625"/>
         <source>プロジェクトに保存されていない変更があります。
 続行する前に保存しますか？</source>
-        <translation type="unfinished"></translation>
+        <translation>プロジェクトに保存されていない変更があります。
+続行する前に保存しますか？</translation>
     </message>
     <message>
         <location filename="../ui/qml/MainWindow.qml" line="680"/>
         <source>名前を付けて保存</source>
-        <translation type="unfinished"></translation>
+        <translation>名前を付けて保存</translation>
     </message>
     <message>
         <location filename="../ui/qml/MainWindow.qml" line="1044"/>
         <source>速度</source>
-        <translation type="unfinished"></translation>
+        <translation>速度</translation>
     </message>
     <message>
         <location filename="../ui/qml/MainWindow.qml" line="1300"/>
         <source>ファイル</source>
-        <translation type="unfinished"></translation>
+        <translation>ファイル</translation>
     </message>
     <message>
         <location filename="../ui/qml/MainWindow.qml" line="164"/>
         <source>メディアの書き出し...</source>
-        <translation type="unfinished"></translation>
+        <translation>メディアの書き出し...</translation>
     </message>
     <message>
         <location filename="../ui/qml/MainWindow.qml" line="205"/>
         <source>プロジェクト設定</source>
-        <translation type="unfinished"></translation>
+        <translation>プロジェクト設定</translation>
     </message>
     <message>
         <location filename="../ui/qml/MainWindow.qml" line="192"/>
         <source>環境設定</source>
-        <translation type="unfinished"></translation>
+        <translation>環境設定</translation>
     </message>
     <message>
         <location filename="../ui/qml/MainWindow.qml" line="1397"/>
         <source>ツール</source>
-        <translation type="unfinished"></translation>
+        <translation>ツール</translation>
     </message>
     <message>
         <location filename="../ui/qml/MainWindow.qml" line="1400"/>
         <source>パッケージマネージャー</source>
-        <translation type="unfinished"></translation>
+        <translation>パッケージマネージャー</translation>
     </message>
     <message>
         <location filename="../ui/qml/MainWindow.qml" line="1362"/>
         <source>設定</source>
-        <translation type="unfinished"></translation>
+        <translation>設定</translation>
     </message>
     <message>
         <location filename="../ui/qml/MainWindow.qml" line="1346"/>
         <source>編集</source>
-        <translation type="unfinished"></translation>
+        <translation>編集</translation>
     </message>
     <message>
         <location filename="../ui/qml/MainWindow.qml" line="1381"/>
         <source>表示</source>
-        <translation type="unfinished"></translation>
+        <translation>表示</translation>
     </message>
     <message>
         <location filename="../ui/qml/MainWindow.qml" line="218"/>
         <source>タイムラインの表示</source>
-        <translation type="unfinished"></translation>
+        <translation>タイムラインの表示</translation>
     </message>
     <message>
         <location filename="../ui/qml/MainWindow.qml" line="231"/>
         <source>設定ダイアログの表示</source>
-        <translation type="unfinished"></translation>
+        <translation>設定ダイアログの表示</translation>
     </message>
     <message>
         <location filename="../ui/qml/MainWindow.qml" line="1419"/>
         <source>バージョン情報</source>
-        <translation type="unfinished"></translation>
+        <translation>バージョン情報</translation>
     </message>
 </context>
 <context>
@@ -2110,7 +2113,7 @@
     <message>
         <location filename="../ui/qml/common/NodeLoader.qml" line="61"/>
         <source>[NodeLoader] コンポーネントエラー: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>[NodeLoader] コンポーネントエラー: %1</translation>
     </message>
 </context>
 <context>
@@ -2118,12 +2121,12 @@
     <message>
         <location filename="../ui/qml/PackageManagerWindow.qml" line="12"/>
         <source>パッケージマネージャー</source>
-        <translation type="unfinished"></translation>
+        <translation>パッケージマネージャー</translation>
     </message>
     <message>
         <location filename="../ui/qml/PackageManagerWindow.qml" line="25"/>
         <source>AviQtl アップデート</source>
-        <translation type="unfinished"></translation>
+        <translation>AviQtl アップデート</translation>
     </message>
     <message>
         <location filename="../ui/qml/PackageManagerWindow.qml" line="26"/>
@@ -2131,82 +2134,85 @@
 ダウンロードURL: %2
 
 アプリケーションを再起動して適用してください。</source>
-        <translation type="unfinished"></translation>
+        <translation>新しいバージョンのAviQtl (%1) が利用可能です。
+ダウンロードURL: %2
+
+アプリケーションを再起動して適用してください。</translation>
     </message>
     <message>
         <location filename="../ui/qml/PackageManagerWindow.qml" line="34"/>
         <source>パッケージマネージャーエラー</source>
-        <translation type="unfinished"></translation>
+        <translation>パッケージマネージャーエラー</translation>
     </message>
     <message>
         <location filename="../ui/qml/PackageManagerWindow.qml" line="69"/>
         <source>ダウンロードするファイルを選択</source>
-        <translation type="unfinished"></translation>
+        <translation>ダウンロードするファイルを選択</translation>
     </message>
     <message>
         <location filename="../ui/qml/PackageManagerWindow.qml" line="100"/>
         <source>リポジトリ設定</source>
-        <translation type="unfinished"></translation>
+        <translation>リポジトリ設定</translation>
     </message>
     <message>
         <location filename="../ui/qml/PackageManagerWindow.qml" line="122"/>
         <source>追加</source>
-        <translation type="unfinished"></translation>
+        <translation>追加</translation>
     </message>
     <message>
         <location filename="../ui/qml/PackageManagerWindow.qml" line="185"/>
         <source>リポジトリを同期</source>
-        <translation type="unfinished"></translation>
+        <translation>リポジトリを同期</translation>
     </message>
     <message>
         <location filename="../ui/qml/PackageManagerWindow.qml" line="192"/>
         <source>すべてアップグレード</source>
-        <translation type="unfinished"></translation>
+        <translation>すべてアップグレード</translation>
     </message>
     <message>
         <location filename="../ui/qml/PackageManagerWindow.qml" line="206"/>
         <source>検索...</source>
-        <translation type="unfinished"></translation>
+        <translation>検索...</translation>
     </message>
     <message>
         <location filename="../ui/qml/PackageManagerWindow.qml" line="232"/>
         <source>検索結果がありません。</source>
-        <translation type="unfinished"></translation>
+        <translation>検索結果がありません。</translation>
     </message>
     <message>
         <location filename="../ui/qml/PackageManagerWindow.qml" line="232"/>
         <source>パッケージリストが空です。リポジトリを同期して最新情報を取得してください。</source>
-        <translation type="unfinished"></translation>
+        <translation>パッケージリストが空です。リポジトリを同期して最新情報を取得してください。</translation>
     </message>
     <message>
         <location filename="../ui/qml/PackageManagerWindow.qml" line="291"/>
         <source>最新バージョン: </source>
-        <translation type="unfinished"></translation>
+        <translation>最新バージョン: </translation>
     </message>
     <message>
         <location filename="../ui/qml/PackageManagerWindow.qml" line="309"/>
         <source>インストール済み: </source>
-        <translation type="unfinished"></translation>
+        <translation>インストール済み: </translation>
     </message>
     <message>
         <location filename="../ui/qml/PackageManagerWindow.qml" line="316"/>
         <source>アップデートあり: </source>
-        <translation type="unfinished"></translation>
+        <translation>アップデートあり: </translation>
     </message>
     <message>
         <location filename="../ui/qml/PackageManagerWindow.qml" line="323"/>
         <source>削除</source>
-        <translation type="unfinished"></translation>
+        <translation>削除</translation>
     </message>
     <message>
         <location filename="../ui/qml/PackageManagerWindow.qml" line="330"/>
         <source>アップデート</source>
-        <translation type="unfinished"></translation>
+        <translation>アップデート</translation>
     </message>
     <message>
         <location filename="../ui/qml/PackageManagerWindow.qml" line="330"/>
         <source>インストール</source>
-        <translation type="unfinished"></translation>
+        <translation>インストール</translation>
     </message>
 </context>
 <context>
@@ -2214,7 +2220,7 @@
     <message>
         <location filename="../ui/qml/common/ParamControl.qml" line="9"/>
         <source>パラメータ</source>
-        <translation type="unfinished"></translation>
+        <translation>パラメータ</translation>
     </message>
 </context>
 <context>
@@ -2222,37 +2228,37 @@
     <message>
         <location filename="../ui/qml/settings/PerformanceSettingsPage.qml" line="39"/>
         <source>メモリとキャッシュ</source>
-        <translation type="unfinished"></translation>
+        <translation>メモリとキャッシュ</translation>
     </message>
     <message>
         <location filename="../ui/qml/settings/PerformanceSettingsPage.qml" line="49"/>
         <source>最大画像サイズ</source>
-        <translation type="unfinished"></translation>
+        <translation>最大画像サイズ</translation>
     </message>
     <message>
         <location filename="../ui/qml/settings/PerformanceSettingsPage.qml" line="61"/>
         <source>キャッシュ容量</source>
-        <translation type="unfinished"></translation>
+        <translation>キャッシュ容量</translation>
     </message>
     <message>
         <location filename="../ui/qml/settings/PerformanceSettingsPage.qml" line="73"/>
         <source>描画スレッド数</source>
-        <translation type="unfinished"></translation>
+        <translation>描画スレッド数</translation>
     </message>
     <message>
         <location filename="../ui/qml/settings/PerformanceSettingsPage.qml" line="87"/>
         <source>補足</source>
-        <translation type="unfinished"></translation>
+        <translation>補足</translation>
     </message>
     <message>
         <location filename="../ui/qml/settings/PerformanceSettingsPage.qml" line="94"/>
         <source>描画スレッド数が自動のときは実行環境に応じて決定します</source>
-        <translation type="unfinished"></translation>
+        <translation>描画スレッド数が自動のときは実行環境に応じて決定します</translation>
     </message>
     <message>
         <location filename="../ui/qml/settings/PerformanceSettingsPage.qml" line="100"/>
         <source>ご使用の実行環境に合わせて、まずは自動設定で動作を確認してください</source>
-        <translation type="unfinished"></translation>
+        <translation>ご使用の実行環境に合わせて、まずは自動設定で動作を確認してください</translation>
     </message>
 </context>
 <context>
@@ -2260,22 +2266,22 @@
     <message>
         <location filename="../ui/qml/settings/PluginSettingsPage.qml" line="55"/>
         <source>各形式ごとに有効化と検索パスを設定できます</source>
-        <translation type="unfinished"></translation>
+        <translation>各形式ごとに有効化と検索パスを設定できます</translation>
     </message>
     <message>
         <location filename="../ui/qml/settings/PluginSettingsPage.qml" line="74"/>
         <source>%1 を読み込む</source>
-        <translation type="unfinished"></translation>
+        <translation>%1 を読み込む</translation>
     </message>
     <message>
         <location filename="../ui/qml/settings/PluginSettingsPage.qml" line="80"/>
         <source>検索パス</source>
-        <translation type="unfinished"></translation>
+        <translation>検索パス</translation>
     </message>
     <message>
         <location filename="../ui/qml/settings/PluginSettingsPage.qml" line="105"/>
         <source>1行に1パスを入力します</source>
-        <translation type="unfinished"></translation>
+        <translation>1行に1パスを入力します</translation>
     </message>
 </context>
 <context>
@@ -2283,62 +2289,62 @@
     <message>
         <location filename="../ui/qml/ProjectLauncherWindow.qml" line="12"/>
         <source>AviQtl - プロジェクトランチャー</source>
-        <translation type="unfinished"></translation>
+        <translation>AviQtl - プロジェクトランチャー</translation>
     </message>
     <message>
         <location filename="../ui/qml/ProjectLauncherWindow.qml" line="50"/>
         <source>新規プロジェクト</source>
-        <translation type="unfinished"></translation>
+        <translation>新規プロジェクト</translation>
     </message>
     <message>
         <location filename="../ui/qml/ProjectLauncherWindow.qml" line="56"/>
         <source>プロジェクト設定</source>
-        <translation type="unfinished"></translation>
+        <translation>プロジェクト設定</translation>
     </message>
     <message>
         <location filename="../ui/qml/ProjectLauncherWindow.qml" line="66"/>
         <source>幅 (横):</source>
-        <translation type="unfinished"></translation>
+        <translation>幅 (横):</translation>
     </message>
     <message>
         <location filename="../ui/qml/ProjectLauncherWindow.qml" line="82"/>
         <source>高さ (縦):</source>
-        <translation type="unfinished"></translation>
+        <translation>高さ (縦):</translation>
     </message>
     <message>
         <location filename="../ui/qml/ProjectLauncherWindow.qml" line="98"/>
         <source>フレームレート (FPS):</source>
-        <translation type="unfinished"></translation>
+        <translation>フレームレート (FPS):</translation>
     </message>
     <message>
         <location filename="../ui/qml/ProjectLauncherWindow.qml" line="114"/>
         <source>サンプリングレート:</source>
-        <translation type="unfinished"></translation>
+        <translation>サンプリングレート:</translation>
     </message>
     <message>
         <location filename="../ui/qml/ProjectLauncherWindow.qml" line="162"/>
         <source>新規プロジェクトを作成</source>
-        <translation type="unfinished"></translation>
+        <translation>新規プロジェクトを作成</translation>
     </message>
     <message>
         <location filename="../ui/qml/ProjectLauncherWindow.qml" line="184"/>
         <source>最近使ったプロジェクト</source>
-        <translation type="unfinished"></translation>
+        <translation>最近使ったプロジェクト</translation>
     </message>
     <message>
         <location filename="../ui/qml/ProjectLauncherWindow.qml" line="213"/>
         <source>無題のプロジェクト</source>
-        <translation type="unfinished"></translation>
+        <translation>無題のプロジェクト</translation>
     </message>
     <message>
         <location filename="../ui/qml/ProjectLauncherWindow.qml" line="251"/>
         <source>既存プロジェクトを開く...</source>
-        <translation type="unfinished"></translation>
+        <translation>既存プロジェクトを開く...</translation>
     </message>
     <message>
         <location filename="../ui/qml/ProjectLauncherWindow.qml" line="267"/>
         <source>プロジェクトファイルを開く</source>
-        <translation type="unfinished"></translation>
+        <translation>プロジェクトファイルを開く</translation>
     </message>
 </context>
 <context>
@@ -2346,37 +2352,37 @@
     <message>
         <location filename="../ui/qml/settings/ProjectSettingsPage.qml" line="37"/>
         <source>既定値</source>
-        <translation type="unfinished"></translation>
+        <translation>既定値</translation>
     </message>
     <message>
         <location filename="../ui/qml/settings/ProjectSettingsPage.qml" line="47"/>
         <source>幅</source>
-        <translation type="unfinished"></translation>
+        <translation>幅</translation>
     </message>
     <message>
         <location filename="../ui/qml/settings/ProjectSettingsPage.qml" line="58"/>
         <source>高さ</source>
-        <translation type="unfinished"></translation>
+        <translation>高さ</translation>
     </message>
     <message>
         <location filename="../ui/qml/settings/ProjectSettingsPage.qml" line="69"/>
         <source>フレームレート</source>
-        <translation type="unfinished"></translation>
+        <translation>フレームレート</translation>
     </message>
     <message>
         <location filename="../ui/qml/settings/ProjectSettingsPage.qml" line="87"/>
         <source>総フレーム数</source>
-        <translation type="unfinished"></translation>
+        <translation>総フレーム数</translation>
     </message>
     <message>
         <location filename="../ui/qml/settings/ProjectSettingsPage.qml" line="98"/>
         <source>サンプリング周波数</source>
-        <translation type="unfinished"></translation>
+        <translation>サンプリング周波数</translation>
     </message>
     <message>
         <location filename="../ui/qml/settings/ProjectSettingsPage.qml" line="110"/>
         <source>既定クリップ長</source>
-        <translation type="unfinished"></translation>
+        <translation>既定クリップ長</translation>
     </message>
 </context>
 <context>
@@ -2384,37 +2390,37 @@
     <message>
         <location filename="../ui/qml/ProjectSettingsWindow.qml" line="11"/>
         <source>プロジェクト設定</source>
-        <translation type="unfinished"></translation>
+        <translation>プロジェクト設定</translation>
     </message>
     <message>
         <location filename="../ui/qml/ProjectSettingsWindow.qml" line="32"/>
         <source>幅:</source>
-        <translation type="unfinished"></translation>
+        <translation>幅:</translation>
     </message>
     <message>
         <location filename="../ui/qml/ProjectSettingsWindow.qml" line="48"/>
         <source>高さ:</source>
-        <translation type="unfinished"></translation>
+        <translation>高さ:</translation>
     </message>
     <message>
         <location filename="../ui/qml/ProjectSettingsWindow.qml" line="64"/>
         <source>FPS:</source>
-        <translation type="unfinished"></translation>
+        <translation>FPS:</translation>
     </message>
     <message>
         <location filename="../ui/qml/ProjectSettingsWindow.qml" line="80"/>
         <source>サンプリングレート:</source>
-        <translation type="unfinished"></translation>
+        <translation>サンプリングレート:</translation>
     </message>
     <message>
         <location filename="../ui/qml/ProjectSettingsWindow.qml" line="101"/>
         <source>適用</source>
-        <translation type="unfinished"></translation>
+        <translation>適用</translation>
     </message>
     <message>
         <location filename="../ui/qml/ProjectSettingsWindow.qml" line="115"/>
         <source>キャンセル</source>
-        <translation type="unfinished"></translation>
+        <translation>キャンセル</translation>
     </message>
 </context>
 <context>
@@ -2422,168 +2428,168 @@
     <message>
         <location filename="../ui/src/timeline/timeline_commands.cpp" line="10"/>
         <source>クリップ追加: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>クリップ追加: %1</translation>
     </message>
     <message>
         <location filename="../ui/src/timeline/timeline_commands.cpp" line="17"/>
         <source>クリップ移動: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>クリップ移動: %1</translation>
     </message>
     <message>
         <location filename="../ui/src/timeline/timeline_commands.cpp" line="24"/>
         <source>パラメータ変更: %1 - %2</source>
-        <translation type="unfinished"></translation>
+        <translation>パラメータ変更: %1 - %2</translation>
     </message>
     <message>
         <location filename="../ui/src/timeline/timeline_commands.cpp" line="43"/>
         <source>エフェクト追加: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>エフェクト追加: %1</translation>
     </message>
     <message>
         <location filename="../ui/src/timeline/timeline_commands.cpp" line="50"/>
         <source>エフェクト削除: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>エフェクト削除: %1</translation>
     </message>
     <message>
         <location filename="../ui/src/timeline/timeline_commands.cpp" line="64"/>
         <source>エフェクト順序変更</source>
-        <translation type="unfinished"></translation>
+        <translation>エフェクト順序変更</translation>
     </message>
     <message>
         <location filename="../ui/src/timeline/timeline_commands.cpp" line="77"/>
         <source>オーディオプラグイン順序変更</source>
-        <translation type="unfinished"></translation>
+        <translation>オーディオプラグイン順序変更</translation>
     </message>
     <message>
         <location filename="../ui/src/timeline/timeline_commands.cpp" line="83"/>
         <source>エフェクト有効/無効切り替え</source>
-        <translation type="unfinished"></translation>
+        <translation>エフェクト有効/無効切り替え</translation>
     </message>
     <message>
         <location filename="../ui/src/timeline/timeline_commands.cpp" line="89"/>
         <source>オーディオプラグイン有効/無効切り替え</source>
-        <translation type="unfinished"></translation>
+        <translation>オーディオプラグイン有効/無効切り替え</translation>
     </message>
     <message>
         <location filename="../ui/src/timeline/timeline_commands.cpp" line="97"/>
         <source>エフェクト貼り付け</source>
-        <translation type="unfinished"></translation>
+        <translation>エフェクト貼り付け</translation>
     </message>
     <message>
         <location filename="../ui/src/timeline/timeline_commands.cpp" line="104"/>
         <source>レイヤーロック</source>
-        <translation type="unfinished"></translation>
+        <translation>レイヤーロック</translation>
     </message>
     <message>
         <location filename="../ui/src/timeline/timeline_commands.cpp" line="104"/>
         <source>ロック解除</source>
-        <translation type="unfinished"></translation>
+        <translation>ロック解除</translation>
     </message>
     <message>
         <location filename="../ui/src/timeline/timeline_commands.cpp" line="104"/>
         <source>レイヤー非表示</source>
-        <translation type="unfinished"></translation>
+        <translation>レイヤー非表示</translation>
     </message>
     <message>
         <location filename="../ui/src/timeline/timeline_commands.cpp" line="104"/>
         <source>レイヤー表示</source>
-        <translation type="unfinished"></translation>
+        <translation>レイヤー表示</translation>
     </message>
     <message>
         <location filename="../ui/src/timeline/timeline_commands.cpp" line="105"/>
         <source>%1: レイヤー %2</source>
-        <translation type="unfinished"></translation>
+        <translation>%1: レイヤー %2</translation>
     </message>
     <message>
         <location filename="../ui/src/timeline/timeline_commands.cpp" line="112"/>
         <source>クリップ分割: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>クリップ分割: %1</translation>
     </message>
     <message>
         <location filename="../ui/src/timeline/timeline_commands.cpp" line="243"/>
         <source>シーン追加: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>シーン追加: %1</translation>
     </message>
     <message>
         <location filename="../ui/src/timeline/timeline_commands.cpp" line="254"/>
         <source>シーン削除: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>シーン削除: %1</translation>
     </message>
     <message>
         <location filename="../ui/src/timeline/timeline_commands.cpp" line="261"/>
         <source>シーン設定変更: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>シーン設定変更: %1</translation>
     </message>
     <message>
         <location filename="../ui/src/timeline/timeline_commands.cpp" line="189"/>
         <source>切り取り: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>切り取り: %1</translation>
     </message>
     <message>
         <location filename="../ui/src/timeline/timeline_commands.cpp" line="200"/>
         <source>貼り付け: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>貼り付け: %1</translation>
     </message>
     <message>
         <location filename="../ui/src/timeline/timeline_commands.cpp" line="212"/>
         <source>キーフレーム設定: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>キーフレーム設定: %1</translation>
     </message>
     <message>
         <location filename="../ui/src/timeline/timeline_commands.cpp" line="238"/>
         <source>キーフレーム削除: %1 [%2]</source>
-        <translation type="unfinished"></translation>
+        <translation>キーフレーム削除: %1 [%2]</translation>
     </message>
     <message>
         <location filename="../ui/src/timeline/timeline_scene.cpp" line="71"/>
         <location filename="../ui/src/timeline_service.cpp" line="17"/>
         <source>ルート</source>
-        <translation type="unfinished"></translation>
+        <translation>ルート</translation>
     </message>
     <message>
         <location filename="../ui/src/timeline/timeline_clip.cpp" line="172"/>
         <source>複数クリップ絶対移動: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>複数クリップ絶対移動: %1</translation>
     </message>
     <message>
         <location filename="../ui/src/timeline/timeline_clip.cpp" line="228"/>
         <source>複数クリップ移動: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>複数クリップ移動: %1</translation>
     </message>
     <message>
         <location filename="../ui/src/timeline/timeline_clip.cpp" line="287"/>
         <source>複数クリップ変形: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>複数クリップ変形: %1</translation>
     </message>
     <message>
         <location filename="../ui/src/timeline/timeline_clip.cpp" line="562"/>
         <source>クリップ削除</source>
-        <translation type="unfinished"></translation>
+        <translation>クリップ削除</translation>
     </message>
     <message>
         <location filename="../ui/src/timeline/timeline_clip.cpp" line="562"/>
         <source>複数クリップ削除: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>複数クリップ削除: %1</translation>
     </message>
     <message>
         <location filename="../ui/src/timeline/timeline_clip.cpp" line="701"/>
         <source>複数クリップ分割: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>複数クリップ分割: %1</translation>
     </message>
     <message>
         <location filename="../ui/src/timeline/timeline_clip.cpp" line="754"/>
         <source>複数クリップ貼り付け: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>複数クリップ貼り付け: %1</translation>
     </message>
     <message>
         <location filename="../ui/src/timeline/timeline_effect.cpp" line="108"/>
         <source>エフェクト削除 (%1件)</source>
-        <translation type="unfinished"></translation>
+        <translation>エフェクト削除 (%1件)</translation>
     </message>
     <message>
         <location filename="../ui/src/timeline/timeline_effect.cpp" line="263"/>
         <source>エフェクト順序変更 (%1件)</source>
-        <translation type="unfinished"></translation>
+        <translation>エフェクト順序変更 (%1件)</translation>
     </message>
 </context>
 <context>
@@ -2592,12 +2598,107 @@
         <location filename="../ui/qml/SceneSettingsWindow.qml" line="37"/>
         <location filename="../ui/qml/SceneSettingsWindow.qml" line="67"/>
         <source>新規シーン作成</source>
-        <translation type="unfinished"></translation>
+        <translation>新規シーン作成</translation>
     </message>
     <message>
         <location filename="../ui/qml/SceneSettingsWindow.qml" line="67"/>
         <source>シーン設定</source>
-        <translation type="unfinished"></translation>
+        <translation>シーン設定</translation>
+    </message>
+    <message>
+        <location filename="../ui/qml/SceneSettingsWindow.qml" line="82"/>
+        <source>基本設定</source>
+        <translation>基本設定</translation>
+    </message>
+    <message>
+        <location filename="../ui/qml/SceneSettingsWindow.qml" line="92"/>
+        <source>シーン名:</source>
+        <translation>シーン名:</translation>
+    </message>
+    <message>
+        <location filename="../ui/qml/SceneSettingsWindow.qml" line="103"/>
+        <source>幅:</source>
+        <translation>幅:</translation>
+    </message>
+    <message>
+        <location filename="../ui/qml/SceneSettingsWindow.qml" line="116"/>
+        <source>高さ:</source>
+        <translation>高さ:</translation>
+    </message>
+    <message>
+        <location filename="../ui/qml/SceneSettingsWindow.qml" line="129"/>
+        <source>FPS:</source>
+        <translation>FPS:</translation>
+    </message>
+    <message>
+        <location filename="../ui/qml/SceneSettingsWindow.qml" line="155"/>
+        <source>編集とスナップ</source>
+        <translation>編集とスナップ</translation>
+    </message>
+    <message>
+        <location filename="../ui/qml/SceneSettingsWindow.qml" line="165"/>
+        <source>スナップを有効にする:</source>
+        <translation>スナップを有効にする:</translation>
+    </message>
+    <message>
+        <location filename="../ui/qml/SceneSettingsWindow.qml" line="175"/>
+        <source>磁力スナップ範囲:</source>
+        <translation>磁力スナップ範囲:</translation>
+    </message>
+    <message>
+        <location filename="../ui/qml/SceneSettingsWindow.qml" line="188"/>
+        <source>グリッドモード:</source>
+        <translation>グリッドモード:</translation>
+    </message>
+    <message>
+        <location filename="../ui/qml/SceneSettingsWindow.qml" line="195"/>
+        <source>自動 (秒/フレーム)</source>
+        <translation>自動 (秒/フレーム)</translation>
+    </message>
+    <message>
+        <location filename="../ui/qml/SceneSettingsWindow.qml" line="195"/>
+        <source>BPM (音楽)</source>
+        <translation>BPM (音楽)</translation>
+    </message>
+    <message>
+        <location filename="../ui/qml/SceneSettingsWindow.qml" line="195"/>
+        <source>フレーム数固定</source>
+        <translation>フレーム数固定</translation>
+    </message>
+    <message>
+        <location filename="../ui/qml/SceneSettingsWindow.qml" line="203"/>
+        <source>BPM設定</source>
+        <translation>BPM設定</translation>
+    </message>
+    <message>
+        <location filename="../ui/qml/SceneSettingsWindow.qml" line="214"/>
+        <source>BPM:</source>
+        <translation>BPM:</translation>
+    </message>
+    <message>
+        <location filename="../ui/qml/SceneSettingsWindow.qml" line="226"/>
+        <source>拍子 (分割数):</source>
+        <translation>拍子 (分割数):</translation>
+    </message>
+    <message>
+        <location filename="../ui/qml/SceneSettingsWindow.qml" line="238"/>
+        <source>オフセット (秒):</source>
+        <translation>オフセット (秒):</translation>
+    </message>
+    <message>
+        <location filename="../ui/qml/SceneSettingsWindow.qml" line="254"/>
+        <source>フレーム設定</source>
+        <translation>フレーム設定</translation>
+    </message>
+    <message>
+        <location filename="../ui/qml/SceneSettingsWindow.qml" line="265"/>
+        <source>間隔 (Frames):</source>
+        <translation>間隔 (Frames):</translation>
+    </message>
+    <message>
+        <location filename="../ui/qml/SceneSettingsWindow.qml" line="289"/>
+        <source>キャンセル</source>
+        <translation>キャンセル</translation>
     </message>
 </context>
 <context>
@@ -2605,47 +2706,47 @@
     <message>
         <location filename="../ui/qml/SettingDialog.qml" line="213"/>
         <source>設定ダイアログ</source>
-        <translation type="unfinished"></translation>
+        <translation>設定ダイアログ</translation>
     </message>
     <message>
         <location filename="../ui/qml/SettingDialog.qml" line="508"/>
         <source>削除</source>
-        <translation type="unfinished"></translation>
+        <translation>削除</translation>
     </message>
     <message>
         <location filename="../ui/qml/SettingDialog.qml" line="508"/>
         <source>選択した %1 件を削除</source>
-        <translation type="unfinished"></translation>
+        <translation>選択した %1 件を削除</translation>
     </message>
     <message>
         <location filename="../ui/qml/SettingDialog.qml" line="821"/>
         <source> (直線)</source>
-        <translation type="unfinished"></translation>
+        <translation> (直線)</translation>
     </message>
     <message>
         <location filename="../ui/qml/SettingDialog.qml" line="822"/>
         <source> (加速)</source>
-        <translation type="unfinished"></translation>
+        <translation> (加速)</translation>
     </message>
     <message>
         <location filename="../ui/qml/SettingDialog.qml" line="823"/>
         <source> (減速)</source>
-        <translation type="unfinished"></translation>
+        <translation> (減速)</translation>
     </message>
     <message>
         <location filename="../ui/qml/SettingDialog.qml" line="824"/>
         <source> (加減速)</source>
-        <translation type="unfinished"></translation>
+        <translation> (加減速)</translation>
     </message>
     <message>
         <location filename="../ui/qml/SettingDialog.qml" line="825"/>
         <source> (ベジェ)</source>
-        <translation type="unfinished"></translation>
+        <translation> (ベジェ)</translation>
     </message>
     <message>
         <location filename="../ui/qml/SettingDialog.qml" line="1302"/>
         <source>エフェクトを追加</source>
-        <translation type="unfinished"></translation>
+        <translation>エフェクトを追加</translation>
     </message>
 </context>
 <context>
@@ -2653,17 +2754,17 @@
     <message>
         <location filename="../ui/qml/settings/ShortcutSettingsPage.qml" line="45"/>
         <source>キーボードショートカット</source>
-        <translation type="unfinished"></translation>
+        <translation>キーボードショートカット</translation>
     </message>
     <message>
         <location filename="../ui/qml/settings/ShortcutSettingsPage.qml" line="51"/>
         <source>「Ctrl+S」や「Alt+Shift+N」の形式で入力してください</source>
-        <translation type="unfinished"></translation>
+        <translation>「Ctrl+S」や「Alt+Shift+N」の形式で入力してください</translation>
     </message>
     <message>
         <location filename="../ui/qml/settings/ShortcutSettingsPage.qml" line="78"/>
         <source>未設定</source>
-        <translation type="unfinished"></translation>
+        <translation>未設定</translation>
     </message>
 </context>
 <context>
@@ -2671,7 +2772,7 @@
     <message>
         <location filename="../ui/qml/SplashWindow.qml" line="7"/>
         <source>AviQtl を起動中...</source>
-        <translation type="unfinished"></translation>
+        <translation>AviQtl を起動中...</translation>
     </message>
 </context>
 <context>
@@ -2679,298 +2780,298 @@
     <message>
         <location filename="../ui/qml/SystemSettingsWindow.qml" line="15"/>
         <source>ダーク</source>
-        <translation type="unfinished"></translation>
+        <translation>ダーク</translation>
     </message>
     <message>
         <location filename="../ui/qml/SystemSettingsWindow.qml" line="15"/>
         <source>ライト</source>
-        <translation type="unfinished"></translation>
+        <translation>ライト</translation>
     </message>
     <message>
         <location filename="../ui/qml/SystemSettingsWindow.qml" line="15"/>
         <source>システムに従う</source>
-        <translation type="unfinished"></translation>
+        <translation>システムに従う</translation>
     </message>
     <message>
         <location filename="../ui/qml/SystemSettingsWindow.qml" line="17"/>
         <source>フレーム</source>
-        <translation type="unfinished"></translation>
+        <translation>フレーム</translation>
     </message>
     <message>
         <location filename="../ui/qml/SystemSettingsWindow.qml" line="17"/>
         <source>秒</source>
-        <translation type="unfinished"></translation>
+        <translation>秒</translation>
     </message>
     <message>
         <location filename="../ui/qml/SystemSettingsWindow.qml" line="19"/>
         <source>自動</source>
-        <translation type="unfinished"></translation>
+        <translation>自動</translation>
     </message>
     <message>
         <location filename="../ui/qml/SystemSettingsWindow.qml" line="21"/>
         <source>モノラル</source>
-        <translation type="unfinished"></translation>
+        <translation>モノラル</translation>
     </message>
     <message>
         <location filename="../ui/qml/SystemSettingsWindow.qml" line="21"/>
         <source>ステレオ</source>
-        <translation type="unfinished"></translation>
+        <translation>ステレオ</translation>
     </message>
     <message>
         <location filename="../ui/qml/SystemSettingsWindow.qml" line="24"/>
         <source>H.264 (VAAPI)</source>
-        <translation type="unfinished"></translation>
+        <translation>H.264 (VAAPI)</translation>
     </message>
     <message>
         <location filename="../ui/qml/SystemSettingsWindow.qml" line="24"/>
         <source>HEVC (VAAPI)</source>
-        <translation type="unfinished"></translation>
+        <translation>HEVC (VAAPI)</translation>
     </message>
     <message>
         <location filename="../ui/qml/SystemSettingsWindow.qml" line="24"/>
         <source>H.264 (CPU)</source>
-        <translation type="unfinished"></translation>
+        <translation>H.264 (CPU)</translation>
     </message>
     <message>
         <location filename="../ui/qml/SystemSettingsWindow.qml" line="29"/>
         <location filename="../ui/qml/SystemSettingsWindow.qml" line="249"/>
         <source>新規プロジェクト</source>
-        <translation type="unfinished"></translation>
+        <translation>新規プロジェクト</translation>
     </message>
     <message>
         <location filename="../ui/qml/SystemSettingsWindow.qml" line="32"/>
         <source>プロジェクトを開く</source>
-        <translation type="unfinished"></translation>
+        <translation>プロジェクトを開く</translation>
     </message>
     <message>
         <location filename="../ui/qml/SystemSettingsWindow.qml" line="35"/>
         <source>上書き保存</source>
-        <translation type="unfinished"></translation>
+        <translation>上書き保存</translation>
     </message>
     <message>
         <location filename="../ui/qml/SystemSettingsWindow.qml" line="38"/>
         <source>名前を付けて保存</source>
-        <translation type="unfinished"></translation>
+        <translation>名前を付けて保存</translation>
     </message>
     <message>
         <location filename="../ui/qml/SystemSettingsWindow.qml" line="41"/>
         <source>メディアの書き出し</source>
-        <translation type="unfinished"></translation>
+        <translation>メディアの書き出し</translation>
     </message>
     <message>
         <location filename="../ui/qml/SystemSettingsWindow.qml" line="44"/>
         <source>終了</source>
-        <translation type="unfinished"></translation>
+        <translation>終了</translation>
     </message>
     <message>
         <location filename="../ui/qml/SystemSettingsWindow.qml" line="47"/>
         <source>環境設定</source>
-        <translation type="unfinished"></translation>
+        <translation>環境設定</translation>
     </message>
     <message>
         <location filename="../ui/qml/SystemSettingsWindow.qml" line="50"/>
         <source>元に戻す</source>
-        <translation type="unfinished"></translation>
+        <translation>元に戻す</translation>
     </message>
     <message>
         <location filename="../ui/qml/SystemSettingsWindow.qml" line="53"/>
         <source>やり直す</source>
-        <translation type="unfinished"></translation>
+        <translation>やり直す</translation>
     </message>
     <message>
         <location filename="../ui/qml/SystemSettingsWindow.qml" line="56"/>
         <source>カット</source>
-        <translation type="unfinished"></translation>
+        <translation>カット</translation>
     </message>
     <message>
         <location filename="../ui/qml/SystemSettingsWindow.qml" line="59"/>
         <source>コピー</source>
-        <translation type="unfinished"></translation>
+        <translation>コピー</translation>
     </message>
     <message>
         <location filename="../ui/qml/SystemSettingsWindow.qml" line="62"/>
         <source>貼り付け</source>
-        <translation type="unfinished"></translation>
+        <translation>貼り付け</translation>
     </message>
     <message>
         <location filename="../ui/qml/SystemSettingsWindow.qml" line="65"/>
         <source>削除</source>
-        <translation type="unfinished"></translation>
+        <translation>削除</translation>
     </message>
     <message>
         <location filename="../ui/qml/SystemSettingsWindow.qml" line="68"/>
         <source>複製</source>
-        <translation type="unfinished"></translation>
+        <translation>複製</translation>
     </message>
     <message>
         <location filename="../ui/qml/SystemSettingsWindow.qml" line="71"/>
         <source>再生 / 一時停止</source>
-        <translation type="unfinished"></translation>
+        <translation>再生 / 一時停止</translation>
     </message>
     <message>
         <location filename="../ui/qml/SystemSettingsWindow.qml" line="74"/>
         <source>1フレーム進む</source>
-        <translation type="unfinished"></translation>
+        <translation>1フレーム進む</translation>
     </message>
     <message>
         <location filename="../ui/qml/SystemSettingsWindow.qml" line="77"/>
         <source>1フレーム戻る</source>
-        <translation type="unfinished"></translation>
+        <translation>1フレーム戻る</translation>
     </message>
     <message>
         <location filename="../ui/qml/SystemSettingsWindow.qml" line="80"/>
         <source>先頭へ移動</source>
-        <translation type="unfinished"></translation>
+        <translation>先頭へ移動</translation>
     </message>
     <message>
         <location filename="../ui/qml/SystemSettingsWindow.qml" line="83"/>
         <source>末尾へ移動</source>
-        <translation type="unfinished"></translation>
+        <translation>末尾へ移動</translation>
     </message>
     <message>
         <location filename="../ui/qml/SystemSettingsWindow.qml" line="86"/>
         <source>ズームイン</source>
-        <translation type="unfinished"></translation>
+        <translation>ズームイン</translation>
     </message>
     <message>
         <location filename="../ui/qml/SystemSettingsWindow.qml" line="89"/>
         <source>ズームアウト</source>
-        <translation type="unfinished"></translation>
+        <translation>ズームアウト</translation>
     </message>
     <message>
         <location filename="../ui/qml/SystemSettingsWindow.qml" line="92"/>
         <source>タイムラインの表示</source>
-        <translation type="unfinished"></translation>
+        <translation>タイムラインの表示</translation>
     </message>
     <message>
         <location filename="../ui/qml/SystemSettingsWindow.qml" line="95"/>
         <source>設定ダイアログの表示</source>
-        <translation type="unfinished"></translation>
+        <translation>設定ダイアログの表示</translation>
     </message>
     <message>
         <location filename="../ui/qml/SystemSettingsWindow.qml" line="98"/>
         <source>プロジェクト設定</source>
-        <translation type="unfinished"></translation>
+        <translation>プロジェクト設定</translation>
     </message>
     <message>
         <location filename="../ui/qml/SystemSettingsWindow.qml" line="101"/>
         <source>クリップを分割</source>
-        <translation type="unfinished"></translation>
+        <translation>クリップを分割</translation>
     </message>
     <message>
         <location filename="../ui/qml/SystemSettingsWindow.qml" line="104"/>
         <source>レイヤーを上へ移動</source>
-        <translation type="unfinished"></translation>
+        <translation>レイヤーを上へ移動</translation>
     </message>
     <message>
         <location filename="../ui/qml/SystemSettingsWindow.qml" line="107"/>
         <source>レイヤーを下へ移動</source>
-        <translation type="unfinished"></translation>
+        <translation>レイヤーを下へ移動</translation>
     </message>
     <message>
         <location filename="../ui/qml/SystemSettingsWindow.qml" line="110"/>
         <source>1フレーム左へ移動</source>
-        <translation type="unfinished"></translation>
+        <translation>1フレーム左へ移動</translation>
     </message>
     <message>
         <location filename="../ui/qml/SystemSettingsWindow.qml" line="113"/>
         <source>1フレーム右へ移動</source>
-        <translation type="unfinished"></translation>
+        <translation>1フレーム右へ移動</translation>
     </message>
     <message>
         <location filename="../ui/qml/SystemSettingsWindow.qml" line="116"/>
         <source>新規シーン作成</source>
-        <translation type="unfinished"></translation>
+        <translation>新規シーン作成</translation>
     </message>
     <message>
         <location filename="../ui/qml/SystemSettingsWindow.qml" line="119"/>
         <source>現在のシーン設定</source>
-        <translation type="unfinished"></translation>
+        <translation>現在のシーン設定</translation>
     </message>
     <message>
         <location filename="../ui/qml/SystemSettingsWindow.qml" line="122"/>
         <source>現在のシーンを削除</source>
-        <translation type="unfinished"></translation>
+        <translation>現在のシーンを削除</translation>
     </message>
     <message>
         <location filename="../ui/qml/SystemSettingsWindow.qml" line="125"/>
         <source>現在のレイヤーをロック/解除</source>
-        <translation type="unfinished"></translation>
+        <translation>現在のレイヤーをロック/解除</translation>
     </message>
     <message>
         <location filename="../ui/qml/SystemSettingsWindow.qml" line="128"/>
         <source>現在のレイヤーを表示/非表示</source>
-        <translation type="unfinished"></translation>
+        <translation>現在のレイヤーを表示/非表示</translation>
     </message>
     <message>
         <location filename="../ui/qml/SystemSettingsWindow.qml" line="214"/>
         <source>システム設定</source>
-        <translation type="unfinished"></translation>
+        <translation>システム設定</translation>
     </message>
     <message>
         <location filename="../ui/qml/SystemSettingsWindow.qml" line="233"/>
         <source>一般</source>
-        <translation type="unfinished"></translation>
+        <translation>一般</translation>
     </message>
     <message>
         <location filename="../ui/qml/SystemSettingsWindow.qml" line="237"/>
         <source>性能</source>
-        <translation type="unfinished"></translation>
+        <translation>性能</translation>
     </message>
     <message>
         <location filename="../ui/qml/SystemSettingsWindow.qml" line="241"/>
         <source>タイムライン</source>
-        <translation type="unfinished"></translation>
+        <translation>タイムライン</translation>
     </message>
     <message>
         <location filename="../ui/qml/SystemSettingsWindow.qml" line="245"/>
         <source>外観</source>
-        <translation type="unfinished"></translation>
+        <translation>外観</translation>
     </message>
     <message>
         <location filename="../ui/qml/SystemSettingsWindow.qml" line="253"/>
         <source>書き出し</source>
-        <translation type="unfinished"></translation>
+        <translation>書き出し</translation>
     </message>
     <message>
         <location filename="../ui/qml/SystemSettingsWindow.qml" line="257"/>
         <source>デコードと音声</source>
-        <translation type="unfinished"></translation>
+        <translation>デコードと音声</translation>
     </message>
     <message>
         <location filename="../ui/qml/SystemSettingsWindow.qml" line="261"/>
         <source>プラグイン</source>
-        <translation type="unfinished"></translation>
+        <translation>プラグイン</translation>
     </message>
     <message>
         <location filename="../ui/qml/SystemSettingsWindow.qml" line="265"/>
         <source>ショートカット</source>
-        <translation type="unfinished"></translation>
+        <translation>ショートカット</translation>
     </message>
     <message>
         <location filename="../ui/qml/SystemSettingsWindow.qml" line="372"/>
         <source>設定は「適用」または「OK」で保存されます</source>
-        <translation type="unfinished"></translation>
+        <translation>設定は「適用」または「OK」で保存されます</translation>
     </message>
     <message>
         <location filename="../ui/qml/SystemSettingsWindow.qml" line="378"/>
         <source>再読込</source>
-        <translation type="unfinished"></translation>
+        <translation>再読込</translation>
     </message>
     <message>
         <location filename="../ui/qml/SystemSettingsWindow.qml" line="383"/>
         <source>適用</source>
-        <translation type="unfinished"></translation>
+        <translation>適用</translation>
     </message>
     <message>
         <location filename="../ui/qml/SystemSettingsWindow.qml" line="388"/>
         <source>OK</source>
-        <translation type="unfinished"></translation>
+        <translation>OK</translation>
     </message>
     <message>
         <location filename="../ui/qml/SystemSettingsWindow.qml" line="397"/>
         <source>閉じる</source>
-        <translation type="unfinished"></translation>
+        <translation>閉じる</translation>
     </message>
 </context>
 <context>
@@ -2978,92 +3079,92 @@
     <message>
         <location filename="../ui/qml/settings/TimelineSettingsPage.qml" line="39"/>
         <source>操作</source>
-        <translation type="unfinished"></translation>
+        <translation>操作</translation>
     </message>
     <message>
         <location filename="../ui/qml/settings/TimelineSettingsPage.qml" line="47"/>
         <source>時間表示</source>
-        <translation type="unfinished"></translation>
+        <translation>時間表示</translation>
     </message>
     <message>
         <location filename="../ui/qml/settings/TimelineSettingsPage.qml" line="59"/>
         <source>分割時にカーソル位置を使う</source>
-        <translation type="unfinished"></translation>
+        <translation>分割時にカーソル位置を使う</translation>
     </message>
     <message>
         <location filename="../ui/qml/settings/TimelineSettingsPage.qml" line="65"/>
         <source>レイヤー範囲を表示する</source>
-        <translation type="unfinished"></translation>
+        <translation>レイヤー範囲を表示する</translation>
     </message>
     <message>
         <location filename="../ui/qml/settings/TimelineSettingsPage.qml" line="75"/>
         <source>見た目と寸法</source>
-        <translation type="unfinished"></translation>
+        <translation>見た目と寸法</translation>
     </message>
     <message>
         <location filename="../ui/qml/settings/TimelineSettingsPage.qml" line="85"/>
         <source>トラックの高さ</source>
-        <translation type="unfinished"></translation>
+        <translation>トラックの高さ</translation>
     </message>
     <message>
         <location filename="../ui/qml/settings/TimelineSettingsPage.qml" line="96"/>
         <source>ヘッダーの高さ</source>
-        <translation type="unfinished"></translation>
+        <translation>ヘッダーの高さ</translation>
     </message>
     <message>
         <location filename="../ui/qml/settings/TimelineSettingsPage.qml" line="107"/>
         <source>設定サイドバーを右に配置</source>
-        <translation type="unfinished"></translation>
+        <translation>設定サイドバーを右に配置</translation>
     </message>
     <message>
         <location filename="../ui/qml/settings/TimelineSettingsPage.qml" line="116"/>
         <source>ルーラーの高さ</source>
-        <translation type="unfinished"></translation>
+        <translation>ルーラーの高さ</translation>
     </message>
     <message>
         <location filename="../ui/qml/settings/TimelineSettingsPage.qml" line="127"/>
         <source>最大レイヤー数</source>
-        <translation type="unfinished"></translation>
+        <translation>最大レイヤー数</translation>
     </message>
     <message>
         <location filename="../ui/qml/settings/TimelineSettingsPage.qml" line="138"/>
         <source>レイヤーヘッダー幅</source>
-        <translation type="unfinished"></translation>
+        <translation>レイヤーヘッダー幅</translation>
     </message>
     <message>
         <location filename="../ui/qml/settings/TimelineSettingsPage.qml" line="149"/>
         <source>時間表示欄の幅</source>
-        <translation type="unfinished"></translation>
+        <translation>時間表示欄の幅</translation>
     </message>
     <message>
         <location filename="../ui/qml/settings/TimelineSettingsPage.qml" line="160"/>
         <source>クリップ端のつかみ幅</source>
-        <translation type="unfinished"></translation>
+        <translation>クリップ端のつかみ幅</translation>
     </message>
     <message>
         <location filename="../ui/qml/settings/TimelineSettingsPage.qml" line="175"/>
         <source>編集制約とズーム</source>
-        <translation type="unfinished"></translation>
+        <translation>編集制約とズーム</translation>
     </message>
     <message>
         <location filename="../ui/qml/settings/TimelineSettingsPage.qml" line="185"/>
         <source>最小クリップ長</source>
-        <translation type="unfinished"></translation>
+        <translation>最小クリップ長</translation>
     </message>
     <message>
         <location filename="../ui/qml/settings/TimelineSettingsPage.qml" line="196"/>
         <source>ズーム最小値</source>
-        <translation type="unfinished"></translation>
+        <translation>ズーム最小値</translation>
     </message>
     <message>
         <location filename="../ui/qml/settings/TimelineSettingsPage.qml" line="207"/>
         <source>ズーム最大値</source>
-        <translation type="unfinished"></translation>
+        <translation>ズーム最大値</translation>
     </message>
     <message>
         <location filename="../ui/qml/settings/TimelineSettingsPage.qml" line="218"/>
         <source>ズーム刻み</source>
-        <translation type="unfinished"></translation>
+        <translation>ズーム刻み</translation>
     </message>
 </context>
 <context>
@@ -3071,57 +3172,57 @@
     <message>
         <location filename="../ui/qml/timeline/TimelineView.qml" line="696"/>
         <source>オブジェクトを追加</source>
-        <translation type="unfinished"></translation>
+        <translation>オブジェクトを追加</translation>
     </message>
     <message>
         <location filename="../ui/qml/timeline/TimelineView.qml" line="701"/>
         <source>元に戻す</source>
-        <translation type="unfinished"></translation>
+        <translation>元に戻す</translation>
     </message>
     <message>
         <location filename="../ui/qml/timeline/TimelineView.qml" line="702"/>
         <source>やり直す</source>
-        <translation type="unfinished"></translation>
+        <translation>やり直す</translation>
     </message>
     <message>
         <location filename="../ui/qml/timeline/TimelineView.qml" line="703"/>
         <source>貼り付け</source>
-        <translation type="unfinished"></translation>
+        <translation>貼り付け</translation>
     </message>
     <message>
         <location filename="../ui/qml/timeline/TimelineView.qml" line="705"/>
         <source>シーン設定...</source>
-        <translation type="unfinished"></translation>
+        <translation>シーン設定...</translation>
     </message>
     <message>
         <location filename="../ui/qml/timeline/TimelineView.qml" line="706"/>
         <source>プロジェクト設定...</source>
-        <translation type="unfinished"></translation>
+        <translation>プロジェクト設定...</translation>
     </message>
     <message>
         <location filename="../ui/qml/timeline/TimelineView.qml" line="707"/>
         <source>環境設定...</source>
-        <translation type="unfinished"></translation>
+        <translation>環境設定...</translation>
     </message>
     <message>
         <location filename="../ui/qml/timeline/TimelineView.qml" line="709"/>
         <source>削除</source>
-        <translation type="unfinished"></translation>
+        <translation>削除</translation>
     </message>
     <message>
         <location filename="../ui/qml/timeline/TimelineView.qml" line="710"/>
         <source>分割</source>
-        <translation type="unfinished"></translation>
+        <translation>分割</translation>
     </message>
     <message>
         <location filename="../ui/qml/timeline/TimelineView.qml" line="712"/>
         <source>切り取り</source>
-        <translation type="unfinished"></translation>
+        <translation>切り取り</translation>
     </message>
     <message>
         <location filename="../ui/qml/timeline/TimelineView.qml" line="713"/>
         <source>コピー</source>
-        <translation type="unfinished"></translation>
+        <translation>コピー</translation>
     </message>
 </context>
 <context>
@@ -3129,12 +3230,12 @@
     <message>
         <location filename="../ui/qml/TimelineWindow.qml" line="39"/>
         <source>タイムライン</source>
-        <translation type="unfinished"></translation>
+        <translation>タイムライン</translation>
     </message>
     <message>
         <location filename="../ui/qml/TimelineWindow.qml" line="146"/>
         <source>シーン %1</source>
-        <translation type="unfinished"></translation>
+        <translation>シーン %1</translation>
     </message>
 </context>
 </TS>

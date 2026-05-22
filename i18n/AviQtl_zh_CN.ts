@@ -36,7 +36,7 @@
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="7"/>
         <source>%</source>
-        <translation type="unfinished"></translation>
+        <translation>%</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="8"/>
@@ -66,7 +66,7 @@
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="13"/>
         <source>f</source>
-        <translation type="unfinished"></translation>
+        <translation>帧</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="14"/>
@@ -116,7 +116,7 @@
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="23"/>
         <source>s</source>
-        <translation type="unfinished"></translation>
+        <translation>秒</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="24"/>
@@ -141,7 +141,7 @@
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="28"/>
         <source>X</source>
-        <translation type="unfinished"></translation>
+        <translation>X</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="29"/>
@@ -161,7 +161,7 @@
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="32"/>
         <source>Y</source>
-        <translation type="unfinished"></translation>
+        <translation>Y</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="33"/>
@@ -181,7 +181,7 @@
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="36"/>
         <source>Z</source>
-        <translation type="unfinished"></translation>
+        <translation>Z</translation>
     </message>
     <message>
         <location filename="../core/src/effect_metadata_i18n.cpp" line="37"/>
@@ -974,7 +974,7 @@
     <message>
         <location filename="../core/src/package_manager.cpp" line="206"/>
         <source>キャッシュからパッケージをロードしました（更新を確認するには「同期」を押してください）</source>
-        <translation type="unfinished"></translation>
+        <translation>已从缓存加载软件包（按「同步」检查更新）</translation>
     </message>
     <message>
         <location filename="../core/src/package_manager.cpp" line="238"/>
@@ -990,22 +990,22 @@
     <message>
         <location filename="../core/src/package_manager.cpp" line="429"/>
         <source>利用可能なファイルを検索中...</source>
-        <translation type="unfinished"></translation>
+        <translation>正在搜索可用文件...</translation>
     </message>
     <message>
         <location filename="../core/src/package_manager.cpp" line="441"/>
         <source>リポジトリURLの形式が正しくありません。</source>
-        <translation type="unfinished"></translation>
+        <translation>仓库 URL 格式不正确。</translation>
     </message>
     <message>
         <location filename="../core/src/package_manager.cpp" line="457"/>
         <source>サポートされていないリポジトリホストです。</source>
-        <translation type="unfinished"></translation>
+        <translation>不受支持的仓库主机。</translation>
     </message>
     <message>
         <location filename="../core/src/package_manager.cpp" line="516"/>
         <source>ダウンロード可能なファイルが見つかりませんでした。</source>
-        <translation type="unfinished"></translation>
+        <translation>未找到可下载的文件。</translation>
     </message>
     <message>
         <location filename="../core/src/package_manager.cpp" line="549"/>
@@ -1015,43 +1015,43 @@
     <message>
         <location filename="../core/src/package_manager.cpp" line="676"/>
         <source>アップグレード可能なパッケージはありません。</source>
-        <translation type="unfinished"></translation>
+        <translation>没有可升级的软件包。</translation>
     </message>
     <message>
         <location filename="../core/src/package_manager.cpp" line="681"/>
         <source>すべてのパッケージをアップグレード中...</source>
-        <translation type="unfinished"></translation>
+        <translation>正在升级所有软件包...</translation>
     </message>
     <message>
         <location filename="../core/src/package_manager.cpp" line="688"/>
         <source>すべてのアップグレードが完了しました</source>
-        <translation type="unfinished"></translation>
+        <translation>所有升级已完成</translation>
     </message>
     <message>
         <location filename="../core/src/package_manager.cpp" line="694"/>
         <source>パッケージをアップグレード中: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>正在升级软件包：%1</translation>
     </message>
     <message>
         <location filename="../core/src/package_manager.cpp" line="406"/>
         <location filename="../core/src/package_manager.cpp" line="536"/>
         <source>パッケージが見つかりません: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>未找到软件包：%1</translation>
     </message>
     <message>
         <location filename="../core/src/package_manager.cpp" line="424"/>
         <source>パッケージのリポジトリURLを特定できません。</source>
-        <translation type="unfinished"></translation>
+        <translation>无法识别软件包的仓库 URL。</translation>
     </message>
     <message>
         <location filename="../core/src/package_manager.cpp" line="467"/>
         <source>リリース情報の取得に失敗しました (%1): %2</source>
-        <translation type="unfinished"></translation>
+        <translation>发布信息获取失败 (%1): %2</translation>
     </message>
     <message>
         <location filename="../core/src/package_manager.cpp" line="541"/>
         <source>ダウンロードURLが指定されていません。アセット情報を取得してください。</source>
-        <translation type="unfinished"></translation>
+        <translation>未指定下载 URL。请先获取资产信息。</translation>
     </message>
     <message>
         <location filename="../core/src/package_manager.cpp" line="554"/>
@@ -1061,17 +1061,17 @@
     <message>
         <location filename="../core/src/package_manager.cpp" line="565"/>
         <source>AviQtlのアップデートがダウンロード可能です。再起動して適用してください。</source>
-        <translation type="unfinished"></translation>
+        <translation>AviQtl 有可用更新。请重启以应用。</translation>
     </message>
     <message>
         <location filename="../core/src/package_manager.cpp" line="602"/>
         <source>パッケージを削除中: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>正在删除软件包：%1</translation>
     </message>
     <message>
         <location filename="../core/src/package_manager.cpp" line="627"/>
         <source>削除完了: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>删除完成：%1</translation>
     </message>
 </context>
 <context>
@@ -1130,12 +1130,12 @@
     <message>
         <location filename="../ui/src/timeline/timeline_clip.cpp" line="87"/>
         <source>レイヤーを上に挿入</source>
-        <translation type="unfinished"></translation>
+        <translation>向上插入图层</translation>
     </message>
     <message>
         <location filename="../ui/src/timeline/timeline_clip.cpp" line="87"/>
         <source>レイヤーを下に挿入</source>
-        <translation type="unfinished"></translation>
+        <translation>向下插入图层</translation>
     </message>
 </context>
 <context>
@@ -1346,17 +1346,17 @@
     <message>
         <location filename="../ui/qml/common/EasingConfigWindow.qml" line="769"/>
         <source>詳細設定</source>
-        <translation type="unfinished"></translation>
+        <translation>详细设置</translation>
     </message>
     <message>
         <location filename="../ui/qml/common/EasingConfigWindow.qml" line="778"/>
         <source>振幅:</source>
-        <translation type="unfinished"></translation>
+        <translation>振幅：</translation>
     </message>
     <message>
         <location filename="../ui/qml/common/EasingConfigWindow.qml" line="804"/>
         <source>周期:</source>
-        <translation type="unfinished"></translation>
+        <translation>周期：</translation>
     </message>
     <message>
         <location filename="../ui/qml/common/EasingConfigWindow.qml" line="834"/>
@@ -1788,32 +1788,32 @@
     <message>
         <location filename="../ui/qml/timeline/LayerHeader.qml" line="185"/>
         <source>上に複数レイヤーを挿入</source>
-        <translation type="unfinished"></translation>
+        <translation>向上插入多个图层</translation>
     </message>
     <message>
         <location filename="../ui/qml/timeline/LayerHeader.qml" line="185"/>
         <source>下に複数レイヤーを挿入</source>
-        <translation type="unfinished"></translation>
+        <translation>向下插入多个图层</translation>
     </message>
     <message>
         <location filename="../ui/qml/timeline/LayerHeader.qml" line="198"/>
         <source>挿入するレイヤー数:</source>
-        <translation type="unfinished"></translation>
+        <translation>要插入的图层数：</translation>
     </message>
     <message>
         <location filename="../ui/qml/timeline/LayerHeader.qml" line="211"/>
         <source>挿入方向:</source>
-        <translation type="unfinished"></translation>
+        <translation>插入方向：</translation>
     </message>
     <message>
         <location filename="../ui/qml/timeline/LayerHeader.qml" line="216"/>
         <source>選択レイヤーの上</source>
-        <translation type="unfinished"></translation>
+        <translation>所选图层之上</translation>
     </message>
     <message>
         <location filename="../ui/qml/timeline/LayerHeader.qml" line="226"/>
         <source>選択レイヤーの下</source>
-        <translation type="unfinished"></translation>
+        <translation>所选图层之下</translation>
     </message>
     <message>
         <location filename="../ui/qml/timeline/LayerHeader.qml" line="248"/>
@@ -1823,22 +1823,22 @@
     <message>
         <location filename="../ui/qml/timeline/LayerHeader.qml" line="260"/>
         <source>上にレイヤーを挿入 (1行)</source>
-        <translation type="unfinished"></translation>
+        <translation>向上插入图层（1 层）</translation>
     </message>
     <message>
         <location filename="../ui/qml/timeline/LayerHeader.qml" line="270"/>
         <source>下にレイヤーを挿入 (1行)</source>
-        <translation type="unfinished"></translation>
+        <translation>向下插入图层（1 层）</translation>
     </message>
     <message>
         <location filename="../ui/qml/timeline/LayerHeader.qml" line="280"/>
         <source>上に複数レイヤーを挿入...</source>
-        <translation type="unfinished"></translation>
+        <translation>向上插入多个图层...</translation>
     </message>
     <message>
         <location filename="../ui/qml/timeline/LayerHeader.qml" line="289"/>
         <source>下に複数レイヤーを挿入...</source>
-        <translation type="unfinished"></translation>
+        <translation>向下插入多个图层...</translation>
     </message>
     <message>
         <location filename="../ui/qml/timeline/LayerHeader.qml" line="303"/>
@@ -1898,12 +1898,12 @@
     <message>
         <location filename="../ui/qml/MainWindow.qml" line="244"/>
         <source>新規シーン作成</source>
-        <translation type="unfinished"></translation>
+        <translation>新建场景</translation>
     </message>
     <message>
         <location filename="../ui/qml/MainWindow.qml" line="249"/>
         <source>シーン %1</source>
-        <translation type="unfinished">场景 %1</translation>
+        <translation>场景 %1</translation>
     </message>
     <message>
         <location filename="../ui/qml/MainWindow.qml" line="259"/>
@@ -1928,22 +1928,22 @@
     <message>
         <location filename="../ui/qml/MainWindow.qml" line="320"/>
         <source>現在のシーン設定...</source>
-        <translation type="unfinished"></translation>
+        <translation>当前场景设置...</translation>
     </message>
     <message>
         <location filename="../ui/qml/MainWindow.qml" line="337"/>
         <source>現在のシーンを削除</source>
-        <translation type="unfinished"></translation>
+        <translation>删除当前场景</translation>
     </message>
     <message>
         <location filename="../ui/qml/MainWindow.qml" line="350"/>
         <source>レイヤーロック切替</source>
-        <translation type="unfinished"></translation>
+        <translation>切换图层锁定</translation>
     </message>
     <message>
         <location filename="../ui/qml/MainWindow.qml" line="365"/>
         <source>レイヤー表示切替</source>
-        <translation type="unfinished"></translation>
+        <translation>切换图层可见性</translation>
     </message>
     <message>
         <location filename="../ui/qml/MainWindow.qml" line="380"/>
@@ -2126,7 +2126,7 @@
     <message>
         <location filename="../ui/qml/PackageManagerWindow.qml" line="25"/>
         <source>AviQtl アップデート</source>
-        <translation type="unfinished"></translation>
+        <translation>AviQtl 更新</translation>
     </message>
     <message>
         <location filename="../ui/qml/PackageManagerWindow.qml" line="26"/>
@@ -2134,27 +2134,30 @@
 ダウンロードURL: %2
 
 アプリケーションを再起動して適用してください。</source>
-        <translation type="unfinished"></translation>
+        <translation>AviQtl (%1) 有新版本可用。
+下载 URL: %2
+
+请重启应用程序以应用。</translation>
     </message>
     <message>
         <location filename="../ui/qml/PackageManagerWindow.qml" line="34"/>
         <source>パッケージマネージャーエラー</source>
-        <translation type="unfinished"></translation>
+        <translation>软件包管理器错误</translation>
     </message>
     <message>
         <location filename="../ui/qml/PackageManagerWindow.qml" line="69"/>
         <source>ダウンロードするファイルを選択</source>
-        <translation type="unfinished"></translation>
+        <translation>选择要下载的文件</translation>
     </message>
     <message>
         <location filename="../ui/qml/PackageManagerWindow.qml" line="100"/>
         <source>リポジトリ設定</source>
-        <translation type="unfinished"></translation>
+        <translation>仓库设置</translation>
     </message>
     <message>
         <location filename="../ui/qml/PackageManagerWindow.qml" line="122"/>
         <source>追加</source>
-        <translation type="unfinished"></translation>
+        <translation>添加</translation>
     </message>
     <message>
         <location filename="../ui/qml/PackageManagerWindow.qml" line="185"/>
@@ -2164,7 +2167,7 @@
     <message>
         <location filename="../ui/qml/PackageManagerWindow.qml" line="192"/>
         <source>すべてアップグレード</source>
-        <translation type="unfinished"></translation>
+        <translation>全部升级</translation>
     </message>
     <message>
         <location filename="../ui/qml/PackageManagerWindow.qml" line="206"/>
@@ -2174,42 +2177,42 @@
     <message>
         <location filename="../ui/qml/PackageManagerWindow.qml" line="232"/>
         <source>検索結果がありません。</source>
-        <translation type="unfinished"></translation>
+        <translation>没有搜索结果。</translation>
     </message>
     <message>
         <location filename="../ui/qml/PackageManagerWindow.qml" line="232"/>
         <source>パッケージリストが空です。リポジトリを同期して最新情報を取得してください。</source>
-        <translation type="unfinished"></translation>
+        <translation>软件包列表为空。请同步仓库以获取最新信息。</translation>
     </message>
     <message>
         <location filename="../ui/qml/PackageManagerWindow.qml" line="291"/>
         <source>最新バージョン: </source>
-        <translation type="unfinished"></translation>
+        <translation>最新版本：</translation>
     </message>
     <message>
         <location filename="../ui/qml/PackageManagerWindow.qml" line="309"/>
         <source>インストール済み: </source>
-        <translation type="unfinished"></translation>
+        <translation>已安装：</translation>
     </message>
     <message>
         <location filename="../ui/qml/PackageManagerWindow.qml" line="316"/>
         <source>アップデートあり: </source>
-        <translation type="unfinished"></translation>
+        <translation>有更新：</translation>
     </message>
     <message>
         <location filename="../ui/qml/PackageManagerWindow.qml" line="323"/>
         <source>削除</source>
-        <translation type="unfinished">删除</translation>
+        <translation>卸载</translation>
     </message>
     <message>
         <location filename="../ui/qml/PackageManagerWindow.qml" line="330"/>
         <source>アップデート</source>
-        <translation type="unfinished"></translation>
+        <translation>更新</translation>
     </message>
     <message>
         <location filename="../ui/qml/PackageManagerWindow.qml" line="330"/>
         <source>インストール</source>
-        <translation type="unfinished"></translation>
+        <translation>安装</translation>
     </message>
     <message>
         <source>（後で実装: パッケージリスト）</source>
@@ -2659,12 +2662,107 @@
         <location filename="../ui/qml/SceneSettingsWindow.qml" line="37"/>
         <location filename="../ui/qml/SceneSettingsWindow.qml" line="67"/>
         <source>新規シーン作成</source>
-        <translation type="unfinished"></translation>
+        <translation>新建场景</translation>
     </message>
     <message>
         <location filename="../ui/qml/SceneSettingsWindow.qml" line="67"/>
         <source>シーン設定</source>
-        <translation type="unfinished">场景设置</translation>
+        <translation>场景设置</translation>
+    </message>
+    <message>
+        <location filename="../ui/qml/SceneSettingsWindow.qml" line="82"/>
+        <source>基本設定</source>
+        <translation>基本设置</translation>
+    </message>
+    <message>
+        <location filename="../ui/qml/SceneSettingsWindow.qml" line="92"/>
+        <source>シーン名:</source>
+        <translation>场景名：</translation>
+    </message>
+    <message>
+        <location filename="../ui/qml/SceneSettingsWindow.qml" line="103"/>
+        <source>幅:</source>
+        <translation>宽度：</translation>
+    </message>
+    <message>
+        <location filename="../ui/qml/SceneSettingsWindow.qml" line="116"/>
+        <source>高さ:</source>
+        <translation>高度：</translation>
+    </message>
+    <message>
+        <location filename="../ui/qml/SceneSettingsWindow.qml" line="129"/>
+        <source>FPS:</source>
+        <translation>FPS：</translation>
+    </message>
+    <message>
+        <location filename="../ui/qml/SceneSettingsWindow.qml" line="155"/>
+        <source>編集とスナップ</source>
+        <translation>编辑与吸附</translation>
+    </message>
+    <message>
+        <location filename="../ui/qml/SceneSettingsWindow.qml" line="165"/>
+        <source>スナップを有効にする:</source>
+        <translation>启用吸附：</translation>
+    </message>
+    <message>
+        <location filename="../ui/qml/SceneSettingsWindow.qml" line="175"/>
+        <source>磁力スナップ範囲:</source>
+        <translation>磁力吸附范围：</translation>
+    </message>
+    <message>
+        <location filename="../ui/qml/SceneSettingsWindow.qml" line="188"/>
+        <source>グリッドモード:</source>
+        <translation>网格模式：</translation>
+    </message>
+    <message>
+        <location filename="../ui/qml/SceneSettingsWindow.qml" line="195"/>
+        <source>自動 (秒/フレーム)</source>
+        <translation>自动（秒/帧）</translation>
+    </message>
+    <message>
+        <location filename="../ui/qml/SceneSettingsWindow.qml" line="195"/>
+        <source>BPM (音楽)</source>
+        <translation>BPM（音乐）</translation>
+    </message>
+    <message>
+        <location filename="../ui/qml/SceneSettingsWindow.qml" line="195"/>
+        <source>フレーム数固定</source>
+        <translation>固定帧数</translation>
+    </message>
+    <message>
+        <location filename="../ui/qml/SceneSettingsWindow.qml" line="203"/>
+        <source>BPM設定</source>
+        <translation>BPM 设置</translation>
+    </message>
+    <message>
+        <location filename="../ui/qml/SceneSettingsWindow.qml" line="214"/>
+        <source>BPM:</source>
+        <translation>BPM：</translation>
+    </message>
+    <message>
+        <location filename="../ui/qml/SceneSettingsWindow.qml" line="226"/>
+        <source>拍子 (分割数):</source>
+        <translation>拍号（分割数）：</translation>
+    </message>
+    <message>
+        <location filename="../ui/qml/SceneSettingsWindow.qml" line="238"/>
+        <source>オフセット (秒):</source>
+        <translation>偏移（秒）：</translation>
+    </message>
+    <message>
+        <location filename="../ui/qml/SceneSettingsWindow.qml" line="254"/>
+        <source>フレーム設定</source>
+        <translation>帧设置</translation>
+    </message>
+    <message>
+        <location filename="../ui/qml/SceneSettingsWindow.qml" line="265"/>
+        <source>間隔 (Frames):</source>
+        <translation>间隔（帧）：</translation>
+    </message>
+    <message>
+        <location filename="../ui/qml/SceneSettingsWindow.qml" line="289"/>
+        <source>キャンセル</source>
+        <translation>取消</translation>
     </message>
 </context>
 <context>
@@ -2738,7 +2836,7 @@
     <message>
         <location filename="../ui/qml/SplashWindow.qml" line="7"/>
         <source>AviQtl を起動中...</source>
-        <translation type="unfinished"></translation>
+        <translation>正在启动 AviQtl...</translation>
     </message>
 </context>
 <context>
@@ -2822,7 +2920,7 @@
     <message>
         <location filename="../ui/qml/SystemSettingsWindow.qml" line="41"/>
         <source>メディアの書き出し</source>
-        <translation type="unfinished">导出媒体</translation>
+        <translation>导出媒体</translation>
     </message>
     <message>
         <location filename="../ui/qml/SystemSettingsWindow.qml" line="44"/>
@@ -2832,7 +2930,7 @@
     <message>
         <location filename="../ui/qml/SystemSettingsWindow.qml" line="47"/>
         <source>環境設定</source>
-        <translation type="unfinished">偏好设置</translation>
+        <translation>环境设置</translation>
     </message>
     <message>
         <location filename="../ui/qml/SystemSettingsWindow.qml" line="50"/>
@@ -2907,17 +3005,17 @@
     <message>
         <location filename="../ui/qml/SystemSettingsWindow.qml" line="92"/>
         <source>タイムラインの表示</source>
-        <translation type="unfinished">显示时间线</translation>
+        <translation>显示时间线</translation>
     </message>
     <message>
         <location filename="../ui/qml/SystemSettingsWindow.qml" line="95"/>
         <source>設定ダイアログの表示</source>
-        <translation type="unfinished">显示设置对话框</translation>
+        <translation>显示设置对话框</translation>
     </message>
     <message>
         <location filename="../ui/qml/SystemSettingsWindow.qml" line="98"/>
         <source>プロジェクト設定</source>
-        <translation type="unfinished">项目设置</translation>
+        <translation>项目设置</translation>
     </message>
     <message>
         <location filename="../ui/qml/SystemSettingsWindow.qml" line="101"/>
@@ -2947,27 +3045,27 @@
     <message>
         <location filename="../ui/qml/SystemSettingsWindow.qml" line="116"/>
         <source>新規シーン作成</source>
-        <translation type="unfinished"></translation>
+        <translation>新建场景</translation>
     </message>
     <message>
         <location filename="../ui/qml/SystemSettingsWindow.qml" line="119"/>
         <source>現在のシーン設定</source>
-        <translation type="unfinished"></translation>
+        <translation>当前场景设置</translation>
     </message>
     <message>
         <location filename="../ui/qml/SystemSettingsWindow.qml" line="122"/>
         <source>現在のシーンを削除</source>
-        <translation type="unfinished"></translation>
+        <translation>删除当前场景</translation>
     </message>
     <message>
         <location filename="../ui/qml/SystemSettingsWindow.qml" line="125"/>
         <source>現在のレイヤーをロック/解除</source>
-        <translation type="unfinished"></translation>
+        <translation>锁定/解锁当前图层</translation>
     </message>
     <message>
         <location filename="../ui/qml/SystemSettingsWindow.qml" line="128"/>
         <source>現在のレイヤーを表示/非表示</source>
-        <translation type="unfinished"></translation>
+        <translation>显示/隐藏当前图层</translation>
     </message>
     <message>
         <location filename="../ui/qml/SystemSettingsWindow.qml" line="214"/>
