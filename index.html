@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AviQtlのお部屋</title>
+    <link rel="canonical" href="https://aviqtl.taisho-guy.org/" />
+    <meta name="description" content="AviUtlの操作感を継承し、GPU加速、VST3/LV2、クロスプラットフォームに対応。AviUtlの限界を超える次世代のオープンソース動画編集ソフト「AviQtl」公式サイト。Vulkanによる高速描画とECSによるデータ指向設計。">
+    <meta name="keywords" content="AviQtl, AviUtl, 動画編集, GPU加速, Vulkan, VST3, LV2, Linux, OSS, 次世代">
+    <meta name="google-site-verification" content="xmXYtl-62Vi0ktTxGecj5qIXhQ81q76_dCKlFycBDEY" />
+
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#121b1d">
+
+    <meta property="og:title" content="AviQtlのお部屋">
+    <meta property="og:description" content="AviUtlの操作感を継承し、GPU加速、VST3/LV2、クロスプラットフォームに対応。性能の限界を超える次世代のオープンソース動画編集ソフト「AviQtl」公式サイト。">
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://aviqtl.taisho-guy.org">
+    <meta property="og:image" content="https://aviqtl.taisho-guy.org/assets/splash.svg">
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@700&family=Lexend:wght@400;700&family=Noto+Sans+JP:wght@400;700&display=swap" fetchpriority="high">
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@700&family=Lexend:wght@400;700&family=Noto+Sans+JP:wght@400;700&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
+
+    <link rel="icon" href="assets/icon.svg" type="image/svg+xml" fetchpriority="high">
+    <link rel="apple-touch-icon" href="assets/icon.svg">
+
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "SoftwareApplication",
+      "name": "AviQtl",
+      "operatingSystem": "Linux, Windows, macOS",
+      "applicationCategory": "MultimediaApplication",
+      "description": "AviUtlの操作感を継承し、GPU加速、VST3/LV2、クロスプラットフォームに対応。性能の限界を超える次世代のオープンソース動画編集ソフト。",
+      "image": "https://aviqtl.taisho-guy.org/assets/splash.svg",
+      "url": "https://aviqtl.taisho-guy.org/",
+      "author": {
+        "@type": "Person",
+        "name": "taisho-guy",
+        "url": "https://codeberg.org/taisho-guy"
+      },
+      "license": "https://www.gnu.org/licenses/agpl-3.0.txt",
+      "releaseNotes": "https://codeberg.org/taisho-guy/AviQtl/releases",
+      "softwareVersion": "Alpha",
+      "downloadUrl": "https://codeberg.org/taisho-guy/AviQtl/releases",
+      "featureList": "GPU acceleration, VST3/LV2 support, Cross-platform, AviUtl-like UI, ECS architecture",
+      "offers": {
+        "@type": "Offer",
+        "price": "0",
+        "priceCurrency": "JPY"
+      }
+    }
+    </script>
+    <link rel="stylesheet" href="style.css">
+    <script src="script.js" defer></script>
+</head>
+<body>
+
+<main class="container" style="contain: content;">
+    <header class="hero"><h1 class="hero-title-static">AviQtlのお部屋</h1></header>
+    
+    <section>
+        <h2 class="section-header"><span></span>AviQtlとは...<span></span></h2>
+        <div class="alert">
+            <img src="assets/screenshot.webp" alt="AviQtlのスクリーンショット" loading="lazy">
+        </div>
+        <p><b>AviUtl 1.10</b> & <b>ExEdit 0.92</b>の操作感を踏襲しつつ、<b>AviUtlを超える性能</b>を持つ動画編集ソフトを開発するプロジェクトです。</p>
+        <h3>主な特徴</h3>
+        <ul>
+            <li>AviUtlに酷似した直感的なUI</li>
+            <li>GPUを使った<b>高速で強力なエフェクト</b></li>
+            <li>VST3やLV2等の<b>音声エフェクト</b>に対応</li>
+            <li><b>Linux</b>、<b>Windows</b>、<b>macOS</b>に対応</li>
+        </ul>
+    </section>
+
+    <h2 class="section-header"><span>★</span> インフォメーション <span>★</span></h2>
+    <p>私は2026年度受験生になりますから、開発速度が低下します。ご了承下さい。</p>
+
+    <h2 class="section-header"><span>★</span> ダウンロード <span>★</span></h2>
+
+    <div class="alert alert-note">
+        <div class="alert-title">ダウンロード前にご確認下さい</div>
+        <ul>
+            <li>現在AviQtlはLinux(x86_64)、macOS(ARM64)、Windows(x86_64)をターゲットにしております。</li>
+            <li>最新のパッケージが使えないディストリビューション（Ubuntu等）では正しく動作しない可能性がございます。</li>
+            <li><a href="https://cachyos.org/">CachyOS</a>でのご利用を推奨しております。</li>
+        </ul>
+    </div>
+
+    <div class="alert alert-note">
+        <div class="alert-title">ダウンロード・インストール方法</div>
+        <ol>
+            <li>Linuxの場合、Qt6全般、LuaJIT、Vulkan実装（Mesa等）、FFmpeg、Carlaをインストールします（macOS、Windowsは依存関係を同梱しているため追加のインストールは不要です）。</li>
+            <li>お使いのPCに最適なビルドをダウンロードします。</li>
+            <li>ダウンロードしたファイルを展開します。</li>
+            <li><code>AviQtl</code>に実行権限を付与します。</li>
+            <li><code>AviQtl</code>を実行します。</li>
+        </ol>
+        <p>Linux環境において、Ubuntu等の保守的なディストリビューションをご利用の方は、<a href="https://distrobox.it/">Distrobox</a>でArch Linuxコンテナを作成し、その中で実行することを強く推奨致します。</p>
+    </div>
+
+    <div class="download-grid" id="download-grid">
+        <a href="#" class="download-item" data-platform="linux" title="Linux用ビルド">
+            <div class="download-icon icon-linux is-loading"></div>
+        </a>
+        <a href="#" class="download-item" data-platform="windows" title="Windows用ビルド">
+            <div class="download-icon icon-windows is-loading"></div>
+        </a>
+        <a href="#" class="download-item" data-platform="apple" title="macOS用ビルド">
+            <div class="download-icon icon-apple is-loading"></div>
+        </a>
+        <a href="#" class="download-item" data-platform="source" title="ソースコード">
+            <div class="download-icon icon-codeberg is-loading"></div>
+        </a>
+        <div class="download-info-row" id="download-info-row" role="status">
+            最新のリリース情報を取得中...
+        </div>
+    </div>
+
+    <h2 class="section-header"><span>★</span> ビルド手順 <span>★</span></h2>
+    <p>Linux / macOS / Windowsの各環境で<code>BUILD.py</code>を利用してビルド可能です。
+    <br>ビルドターゲットはOSから自動判定されます。通常は<code>python BUILD.py</code>のみで実行可能です。</p>
+    <div class="alert alert-note">
+        <div class="alert-title">共通の準備</div>
+        <p>リポジトリをクローンし、必要に応じて仮想環境を作成します。</p>
+        <pre><code>git clone https://codeberg.org/taisho-guy/AviQtl.git
+cd AviQtl
+python3 -m venv .venv
+python -m pip install --upgrade pip PySide6</code></pre>
+    </div>
+
+    <details>
+        <summary>Linux</summary>
+        <p>distrobox/podmanを使用してビルド環境を分離します。</p>
+        <ol>
+            <li>依存関係のインストール: <code>pacman -S --needed distrobox podman python pyside6 git</code> (Archの場合)</li>
+            <li>ビルド: <code>python BUILD.py --arch</code></li>
+            <li>実行: <code>./build/AviQtl</code></li>
+        </ol>
+    </details>
+
+    <details>
+        <summary>macOS</summary>
+        <p>Homebrew経由で依存関係を解決し、.appバンドルを作成します。</p>
+        <ol>
+            <li>依存関係のインストール: <code>brew install python pyside git</code></li>
+            <li>ビルド: <code>python BUILD.py --xcode</code></li>
+            <li>実行: <code>open ./build/AviQtl.app</code></li>
+        </ol>
+    </details>
+
+    <details>
+        <summary>Windows (MSYS2)</summary>
+        <ol>
+            <li>依存関係のインストール: <code>pacman -S git mingw-w64-ucrt-x86_64-pyside6</code></li>
+            <li>ビルド: <code>python BUILD.py --msys2</code></li>
+            <li>実行: <code>./build/AviQtl.exe</code></li>
+        </ol>
+    </details>
+
+    <details>
+        <summary>Windows (MSVC - 非推奨)</summary>
+        <p>環境構築の複雑さから非推奨としています。</p>
+        <ol>
+            <li>準備: VS2022 C++ツールセット、公式Qt(MSVC x64版)、vcpkg。</li>
+            <li>ビルド: <code>python BUILD.py --msvc --qt-dir &lt;path&gt;</code></li>
+            <li>実行: <code>.\build\AviQtl.exe</code></li>
+        </ol>
+    </details>
+
+    <h2 class="section-header"><span>★</span> バグ報告・提案・質問 <span>★</span></h2>
+        <p><a href="https://codeberg.org/taisho-guy/AviQtl/issues/" target="_blank">既にあるイシューを確認</a>して下さい。もし、あなたが望む情報がなければ<a href="https://codeberg.org/taisho-guy/AviQtl/issues/new" target="_blank">イシューを作成</a>して下さい。</p>
+
+    <h2 class="section-header"><span>★</span> 貢献 <span>★</span></h2>
+    <p>開発への参加を歓迎します！詳しくは<a href="https://codeberg.org/taisho-guy/AviQtl/src/branch/main/CONTRIBUTING.md" target="_blank">CONTRIBUTING.md</a>をご覧ください。実装はもちろん、ドキュメントの拡充や翻訳などでも貢献できます。</p>
+    <h2 class="section-header"><span>★</span> Q & A <span>★</span></h2>
+    <div class="lazy-render-section">
+    <details>
+        <summary>開発のきっかけは？</summary>
+        <h3>OSの壁と決定的敗北</h3>
+        <p>私が愛用する<b>CachyOS</b>上でAviUtlを運用しようとして失敗したことがきっかけです。<b>AviUtlのためだけにWindows環境を維持し続けること</b>は私にとって受け入れがたいものでした。</p>
+        <h3>肥大化したエコシステム</h3>
+        <p>理由は違えど、AviUtlを「仕方なく」使い続けている方は少なくないはずです。長年の拡張によって肥大化した「ハウルの動く城」のようなエコシステムは、不満を抱えながらも手放すことができない存在となっています。</p>
+        <h3>プロジェクトの目標とミッション</h3>
+        <p>私は、<a href="https://edunet002.synapse-blog.jp/konan/" target="_blank">鹿児島県立甲南高等学校</a>の課題研究において、この現状を打破すべくAviQtlの独自開発を決意しました。</p>
+        <p><b>個人的な目標:</b> Domino、VocalShifter、REAPER、AviUtlをはしごすることなく、Linux上のAviQtlのみで音MADを制作すること。</p>
+        <p><b>AviQtlのミッション:</b> AviUtlを「仕方なく」使っている方々の最適解になること。</p>
+    </details>
+
+    <details>
+        <summary>名称の由来は？</summary>
+        <p>AviQtlは、「AviUtl」と「Qt」を組み合わせた造語です。AviUtlの操作感を継承しつつ、QtによるモダンなUIとクロスプラットフォーム対応を実現する設計思想を表しています。</p>
+    </details>
+
+    <details>
+        <summary>アイコンの由来は？</summary>
+        <div class="icon-origin-box">
+            <img src="assets/qt.svg" alt="Qt" width="64" height="45" loading="lazy" decoding="async">
+            <span class="symbol">+</span>
+            <img src="assets/aviutl.svg" alt="AviUtl" width="64" height="64" loading="lazy" decoding="async">
+            <span class="symbol">=</span>
+            <img src="assets/icon.svg" alt="AviQtl" width="64" loading="lazy">
+        </div>
+        <p>QtとAviUtlを組み合わせた本プロジェクトのアイデンティティを表現しています。</p>
+    </details>
+
+    <details>
+        <summary>なぜAviUtlのクローンを開発しているのですか？</summary>
+        <p>AviQtlは「AviUtlの再発明」ではありません。AviUtlを強く意識していますが、その中身は全く異なります。</p>
+        <table>
+            <tr>
+                <th style="background-color: #0d1f23; color: #2cde85;">鳥瞰図</th><th style="background-color: #0d1f23; color: #2cde85;">AviQtl</th><th style="background-color: #0d1f23; color: #2cde85;">AviUtl1</th><th style="background-color: #0d1f23; color: #2cde85;">ExEdit2</th>
+            </tr>
+            <tr>
+                <td>基盤技術</td><td>Qt Quick/Vulkan</td><td>Win32 API</td><td>Win32 API</td>
+            </tr>
+            <tr>
+                <td>並列処理モデル</td><td>データ駆動型並列処理</td><td>シングルスレッド</td><td>マルチスレッド</td>
+            </tr>
+            <tr>
+                <td>メモリ空間</td><td>64bit</td><td>32bit (最大4GB)</td><td>64bit</td>
+            </tr>
+            <tr>
+                <td>プレビュー描画</td><td>Vulkan</td><td>GDI</td><td>Direct3D</td>
+            </tr>
+            <tr>
+                <td>音声エンジン</td><td>Carla (VST3/LV2等)</td><td>貧弱</td><td>貧弱</td>
+            </tr>
+            <tr>
+                <td>プラグイン方式</td><td>LuaJIT/C++/QML/GLSL</td><td>Lua/C++</td><td>LuaJIT/C++</td>
+            </tr>
+            <tr>
+                <td>対応可能OS</td><td>Linux, Windows, macOS等</td><td>Windows</td><td>Windows</td>
+            </tr>
+        </table>
+        <p>AviQtlはExEdit2も解決できない構造的弱点を根本的に覆します。</p>
+        <h3>1. ECSがもたらす「データ指向」の革命</h3>
+        <p>従来のオブジェクト指向（OOP）的なマルチスレッドでは、各クリップを「オブジェクト」として扱い、メモリ上のあちこちに散らばったデータを読み込むたびにレイテンシが発生します。AviQtlの<b>ECS</b>は、データをメモリ上に「隙間なく、連続して」配置し、CPUのキャッシュ効率を極限まで高めます。</p>
+        <h3>2. メモリ管理の「近代化」と「一貫性」</h3>
+        <p>C++23のスマートポインタ（RAII）とアロケータ最適化を採用し、AviUtlのプラグインごとにバラバラだったメモリ管理を一元化。原因不明のクラッシュを構造的に最小化しています。</p>
+        <h3>3. Qt6 / QML による「疎結合なUIアーキテクチャ」</h3>
+        <p>UIスレッドとレンダリング（Vulkan）スレッドを完全に分離。重いレンダリング中でもタイムラインの操作が一切妨げられず、High-DPI環境でもUIがぼやけることはありません。</p>
+        <h3>4. クロスプラットフォーム・コア（OSからの自立）</h3>
+        <p>特定のOSに縛られ続ける制作上のリスクを排除。Linux上で真のパフォーマンスを発揮できるのはもちろん、他OSでもコアを書き換えることなく最大のパフォーマンスを得られます。</p>
+    </details>
+
+    <details>
+        <summary>AviUtlのプラグインやスクリプトはそのまま使えますか？</summary>
+        <p>いいえ。仕組みが根本から異なるためバイナリレベルでの互換性はありません。互換レイヤーを実装する予定も有りません。しかし、LuaJITを採用しているため、スクリプトの移植性は高く、AviUtl以上に柔軟な拡張システムを備えています。</p>
+    </details>
+
+    <details>
+        <summary>課題研究が終わった後も開発は続きますか？</summary>
+        <p>はい。このプロジェクトは私の「音MAD制作をLinuxで完結させる」という目標から始まっています。研究期間終了後も、私自身のメインエディタとして、そしてAviUtlの代替を待つ方々のために開発を継続します。</p>
+    </details>
+    </div>
+
+    <h2 class="section-header"><span>★</span> 関連リンク <span>★</span></h2>
+    <p>AviQtlは、多くの素晴らしいプロジェクトの上に成り立っています。この場を借りて、感謝を申し上げます。</p>
+    <table class="lazy-render-section">
+        <tr>
+            <td><a href="http://spring-fragrance.mints.ne.jp/aviutl/" target="_blank">AviUtl</a></td>
+            <td>非自由</td>
+            <td>本プロジェクトがリスペクトしている、ＫＥＮくん氏開発の動画編集ソフト「AviUtl」の公式サイトです。</td>
+        </tr>
+        <tr>
+            <td><a href="https://kx.studio/Applications:Carla" target="_blank">Carla</a></td>
+            <td>GPLv2+</td>
+            <td>VST3やLV2等の音声エフェクトをホストするためのバックエンドとして利用しています。</td>
+        </tr>
+        <tr>
+            <td><a href="https://codeberg.org/taisho-guy/AviQtl" target="_blank">AviQtl</a></td>
+            <td>AGPLv3+</td>
+            <td>Codeberg上のメインリポジトリです。開発の最前線であり、ソースコードや最新リリースが公開されています。</td>
+        </tr>
+        <tr>
+            <td><a href="https://ffmpeg.org/" target="_blank">FFmpeg</a></td>
+            <td>GPLv2+</td>
+            <td>動画・音声のデコード、エンコード、変換を司る、映像処理の要です。</td>
+        </tr>
+        <tr>
+            <td><a href="https://luajit.org/" target="_blank">LuaJIT</a></td>
+            <td>MIT</td>
+            <td>非常に高速なJITコンパイルが可能なLuaエンジンで、エフェクト記述や拡張機能に使用しています。</td>
+        </tr>
+        <tr>
+            <td><a href="https://www.qt.io/" target="_blank">Qt</a></td>
+            <td>GPLv3</td>
+            <td>UI/UXの構築にQt QuickおよびQMLを採用し、クロスプラットフォームで軽快な操作感を実現しています。</td>
+        </tr>
+        <tr>
+            <td><a href="https://github.com/Remix-Design/RemixIcon" target="_blank">Remix Icon</a></td>
+            <td>Remix Icon License v1.0</td>
+            <td>AviQtl内のシンボルアイコンに採用されています。</td>
+        </tr>
+        <tr>
+            <td><a href="https://www.vulkan.org/" target="_blank">Vulkan</a></td>
+            <td>Apache 2.0</td>
+            <td>GPUを最大限に引き出し、リアルタイムでの高度な描画とエフェクト処理を支える基盤APIです。</td>
+        </tr>
+        <tr>
+            <td><a href="https://www.zrythm.org" target="_blank">Zrythm</a></td>
+            <td>AGPLv3</td>
+            <td>音声プラグイン（Carla等）の対応において、実装を参考にしました。</td>
+        </tr>
+    </table>
+
+    <h2 class="section-header"><span>★</span> 使用上の注意 <span>★</span></h2>
+    <p>AviQtlは<a href="https://www.gnu.org/licenses/agpl-3.0.txt" target="_blank">GNU Affero General Public License</a>に基づいて公開されている自由ソフトウェアです。</p>
+</main>
+<footer class="container footer-content">
+        <p><a href="https://www.gnu.org/licenses/agpl-3.0.txt" target="_blank" class="easter-egg">ライセンス</a>は<a href="https://www.gnu.org/philosophy/free-sw.html" target="_blank" class="easter-egg">フリー</a>ですので<a href="https://codeberg.org/taisho-guy/AviQtl/fork" target="_blank" class="easter-egg">ご自由にどうぞ</a>。</p>
+        <p>by <a href="https://codeberg.org/taisho-guy" target="_blank">taisho-guy</a></p>
+</footer>
+</body>
+</html>

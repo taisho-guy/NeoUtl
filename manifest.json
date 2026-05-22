@@ -1,0 +1,31 @@
+{
+  "name": "AviQtlのお部屋",
+  "short_name": "AviQtl",
+  "description": "AviUtlの操作感を継承した次世代動画編集ソフト「AviQtl」公式サイト",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#121b1d",
+  "theme_color": "#121b1d",
+  "icons": [
+    {
+      "src": "assets/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "assets/icon.svg",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ],
+  "screenshots": [
+    {
+      "src": "assets/splash.svg",
+      "sizes": "1280x720",
+      "type": "image/svg+xml",
+      "form_factor": "wide"
+    }
+  ]
+}
