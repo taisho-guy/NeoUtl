@@ -1,28 +1,22 @@
+#include "document_model.hpp"
 #include <QSignalSpy>
 #include <QTest>
-#include "document_model.hpp"
 
 using namespace AviQtl::Core;
 
-class TestDocumentModel : public QObject
-{
+class TestDocumentModel : public QObject {
     Q_OBJECT
 
-private slots:
-    void init()
-    {
-        DocumentModel::instance().clear();
-    }
+  private slots:
+    void init() { DocumentModel::instance().clear(); }
 
-    void singletonInstance()
-    {
+    void singletonInstance() {
         DocumentModel &m1 = DocumentModel::instance();
         DocumentModel &m2 = DocumentModel::instance();
         QCOMPARE(&m1, &m2);
     }
 
-    void projectSettings()
-    {
+    void projectSettings() {
         DocumentModel &model = DocumentModel::instance();
         ProjectSettings expected;
         expected.name = QStringLiteral("Test Project");
@@ -42,8 +36,7 @@ private slots:
         QCOMPARE(actual.colorSpace, expected.colorSpace);
     }
 
-    void addAndFindScene()
-    {
+    void addAndFindScene() {
         DocumentModel &model = DocumentModel::instance();
         SceneSettings scene;
         scene.id = 42;
@@ -61,8 +54,7 @@ private slots:
         QCOMPARE(found->fps, 24.0);
     }
 
-    void addSceneEmitsSignal()
-    {
+    void addSceneEmitsSignal() {
         DocumentModel &model = DocumentModel::instance();
         QSignalSpy spy(&model, &DocumentModel::structureChanged);
 
@@ -73,8 +65,7 @@ private slots:
         QCOMPARE(spy.count(), 1);
     }
 
-    void removeScene()
-    {
+    void removeScene() {
         DocumentModel &model = DocumentModel::instance();
         SceneSettings scene;
         scene.id = 99;
@@ -85,8 +76,7 @@ private slots:
         QVERIFY(model.findScene(99) == nullptr);
     }
 
-    void removeSceneEmitsSignal()
-    {
+    void removeSceneEmitsSignal() {
         DocumentModel &model = DocumentModel::instance();
         SceneSettings scene;
         scene.id = 8;
@@ -98,8 +88,7 @@ private slots:
         QCOMPARE(spy.count(), 1);
     }
 
-    void removeSceneNonExistent()
-    {
+    void removeSceneNonExistent() {
         DocumentModel &model = DocumentModel::instance();
         QSignalSpy spy(&model, &DocumentModel::structureChanged);
 
@@ -108,8 +97,7 @@ private slots:
         QVERIFY(model.findScene(99999) == nullptr);
     }
 
-    void addAndFindClip()
-    {
+    void addAndFindClip() {
         DocumentModel &model = DocumentModel::instance();
         SceneSettings scene;
         scene.id = 10;
@@ -132,8 +120,7 @@ private slots:
         QCOMPARE(found->durationFrames, 120);
     }
 
-    void removeClip()
-    {
+    void removeClip() {
         DocumentModel &model = DocumentModel::instance();
         SceneSettings scene;
         scene.id = 11;
@@ -148,8 +135,7 @@ private slots:
         QVERIFY(model.findClip(11, 201) == nullptr);
     }
 
-    void removeClipNonExistent()
-    {
+    void removeClipNonExistent() {
         DocumentModel &model = DocumentModel::instance();
         SceneSettings scene;
         scene.id = 12;
@@ -160,8 +146,7 @@ private slots:
         QCOMPARE(spy.count(), 0);
     }
 
-    void clear()
-    {
+    void clear() {
         DocumentModel &model = DocumentModel::instance();
         SceneSettings scene;
         scene.id = 20;
@@ -173,8 +158,7 @@ private slots:
         QVERIFY(model.findScene(20) == nullptr);
     }
 
-    void clearEmitsSignal()
-    {
+    void clearEmitsSignal() {
         DocumentModel &model = DocumentModel::instance();
         SceneSettings scene;
         scene.id = 21;

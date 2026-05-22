@@ -1,27 +1,24 @@
-#include <QSignalSpy>
-#include <QTest>
-#include <bitset>
 #include "core/include/document_model.hpp"
 #include "core/include/settings_manager.hpp"
 #include "engine/timeline/bake_controller.hpp"
 #include "engine/timeline/ecs.hpp"
+#include <QSignalSpy>
+#include <QTest>
+#include <bitset>
 
 using namespace AviQtl::Core;
 using namespace AviQtl::Engine::Timeline;
 
-class TestBakeController : public QObject
-{
+class TestBakeController : public QObject {
     Q_OBJECT
 
-private slots:
-    void init()
-    {
+  private slots:
+    void init() {
         DocumentModel::instance().clear();
 
         // Isolate BakeController from DocumentModel::structureChanged
         // to prevent accidental rebakes during test setup.
-        QObject::disconnect(&DocumentModel::instance(), nullptr,
-                            &BakeController::instance(), nullptr);
+        QObject::disconnect(&DocumentModel::instance(), nullptr, &BakeController::instance(), nullptr);
 
         // Clear ECS residual entities by syncing with an empty alive set.
         std::bitset<MAX_CLIP_ID> empty;
@@ -29,15 +26,13 @@ private slots:
         ECS::instance().commit();
     }
 
-    void cleanup()
-    {
+    void cleanup() {
         // Restore default bake strategy.
         SettingsManager::instance().setValue(QStringLiteral("bakeStrategy"), QStringLiteral("FullBake"));
         SettingsManager::instance().setValue(QStringLiteral("onDemandPrefetchFrames"), 30);
     }
 
-    void fullBakeAllClips()
-    {
+    void fullBakeAllClips() {
         SceneSettings scene;
         scene.id = 1;
         scene.name = QStringLiteral("Test Scene");
@@ -80,8 +75,7 @@ private slots:
         QVERIFY(!a->mute);
     }
 
-    void onDemandIncludesInRange()
-    {
+    void onDemandIncludesInRange() {
         SettingsManager::instance().setValue(QStringLiteral("bakeStrategy"), QStringLiteral("OnDemand"));
         SettingsManager::instance().setValue(QStringLiteral("onDemandPrefetchFrames"), 10);
 
@@ -105,8 +99,7 @@ private slots:
         QVERIFY(state.transforms.contains(5));
     }
 
-    void onDemandExcludesOutOfRange()
-    {
+    void onDemandExcludesOutOfRange() {
         SettingsManager::instance().setValue(QStringLiteral("bakeStrategy"), QStringLiteral("OnDemand"));
         SettingsManager::instance().setValue(QStringLiteral("onDemandPrefetchFrames"), 10);
 
@@ -130,8 +123,7 @@ private slots:
         QVERIFY(!state.transforms.contains(6));
     }
 
-    void clipIdOutOfRangeIgnored()
-    {
+    void clipIdOutOfRangeIgnored() {
         SceneSettings scene;
         scene.id = 4;
 
@@ -151,8 +143,7 @@ private slots:
         QVERIFY(!state.transforms.contains(MAX_CLIP_ID + 10));
     }
 
-    void removesDeadClips()
-    {
+    void removesDeadClips() {
         SceneSettings scene;
         scene.id = 5;
 
@@ -182,12 +173,9 @@ private slots:
         }
     }
 
-    void triggerRebakeOnStructureChanged()
-    {
+    void triggerRebakeOnStructureChanged() {
         // Reconnect signal for this specific test
-        QObject::connect(
-            &DocumentModel::instance(), SIGNAL(structureChanged()),
-            &BakeController::instance(), SLOT(onStructureChanged()));
+        QObject::connect(&DocumentModel::instance(), SIGNAL(structureChanged()), &BakeController::instance(), SLOT(onStructureChanged()));
 
         SceneSettings scene;
         scene.id = 6;
@@ -225,8 +213,7 @@ private slots:
         QVERIFY(state.transforms.contains(41));
     }
 
-    void relTimeComputation()
-    {
+    void relTimeComputation() {
         SceneSettings scene;
         scene.id = 7;
 

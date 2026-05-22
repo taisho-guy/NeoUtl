@@ -1,19 +1,15 @@
+#include "effect_model.hpp"
 #include <QSignalSpy>
 #include <QTest>
-#include "effect_model.hpp"
 
 using namespace AviQtl::UI;
 
-class TestEffectModel : public QObject
-{
+class TestEffectModel : public QObject {
     Q_OBJECT
 
-private slots:
-    void constructorInitializesDefaults()
-    {
-        EffectModel m(QStringLiteral("test.id"), QStringLiteral("Test"),
-                        QStringLiteral("effect"), {QStringLiteral("VFX")},
-                        {{"opacity", QVariant(100)}, {"pos.x", QVariant(0)}});
+  private slots:
+    void constructorInitializesDefaults() {
+        EffectModel m(QStringLiteral("test.id"), QStringLiteral("Test"), QStringLiteral("effect"), {QStringLiteral("VFX")}, {{"opacity", QVariant(100)}, {"pos.x", QVariant(0)}});
         QCOMPARE(m.id(), QStringLiteral("test.id"));
         QCOMPARE(m.name(), QStringLiteral("Test"));
         QCOMPARE(m.kind(), QStringLiteral("effect"));
@@ -24,11 +20,8 @@ private slots:
         QCOMPARE(m.params().value(QStringLiteral("opacity")).toInt(), 100);
     }
 
-    void cloneCopiesFields()
-    {
-        EffectModel original(QStringLiteral("id"), QStringLiteral("Name"),
-                             QStringLiteral("object"), {QStringLiteral("3D")},
-                             {{"scale", QVariant(1.5)}});
+    void cloneCopiesFields() {
+        EffectModel original(QStringLiteral("id"), QStringLiteral("Name"), QStringLiteral("object"), {QStringLiteral("3D")}, {{"scale", QVariant(1.5)}});
         original.setEnabled(false);
         auto copy = std::unique_ptr<EffectModel>(original.clone());
         QCOMPARE(copy->id(), QStringLiteral("id"));
@@ -36,8 +29,7 @@ private slots:
         QCOMPARE(copy->params().value(QStringLiteral("scale")).toDouble(), 1.5);
     }
 
-    void setEnabledSignal()
-    {
+    void setEnabledSignal() {
         EffectModel m(QStringLiteral("x"), QStringLiteral("Y"), QStringLiteral("effect"), QStringList());
         QSignalSpy spy(&m, &EffectModel::enabledChanged);
         m.setEnabled(true); // no change
@@ -46,10 +38,8 @@ private slots:
         QCOMPARE(spy.count(), 1);
     }
 
-    void setParamUpdatesTrackStartValue()
-    {
-        EffectModel m(QStringLiteral("x"), QStringLiteral("Y"), QStringLiteral("effect"), QStringList(),
-                      {{"opacity", QVariant(0)}});
+    void setParamUpdatesTrackStartValue() {
+        EffectModel m(QStringLiteral("x"), QStringLiteral("Y"), QStringLiteral("effect"), QStringList(), {{"opacity", QVariant(0)}});
         QSignalSpy spy(&m, &EffectModel::paramsChanged);
         QSignalSpy kfSpy(&m, &EffectModel::keyframeTracksChanged);
 
@@ -61,18 +51,15 @@ private slots:
         QVERIFY(m.keyframeTracks().contains(QStringLiteral("opacity")));
     }
 
-    void evaluatedParamNoKeyframeReturnsFallback()
-    {
-        EffectModel m(QStringLiteral("x"), QStringLiteral("Y"), QStringLiteral("effect"), QStringList(),
-                      {{"volume", QVariant(0.8)}});
+    void evaluatedParamNoKeyframeReturnsFallback() {
+        EffectModel m(QStringLiteral("x"), QStringLiteral("Y"), QStringLiteral("effect"), QStringList(), {{"volume", QVariant(0.8)}});
         QVariant val = m.evaluatedParam(QStringLiteral("volume"), 0);
         QCOMPARE(val.toDouble(), 0.8);
         val = m.evaluatedParam(QStringLiteral("volume"), 100);
         QCOMPARE(val.toDouble(), 0.8);
     }
 
-    void availableEasings()
-    {
+    void availableEasings() {
         EffectModel m(QStringLiteral("x"), QStringLiteral("Y"), QStringLiteral("effect"), QStringList());
         QStringList easings = m.availableEasings();
         QVERIFY(!easings.isEmpty());
@@ -82,10 +69,8 @@ private slots:
         QVERIFY(easings.contains(QStringLiteral("random")));
     }
 
-    void isEndpointFrame()
-    {
-        EffectModel m(QStringLiteral("x"), QStringLiteral("Y"), QStringLiteral("effect"), QStringList(),
-                      {{"pos", QVariant(0)}});
+    void isEndpointFrame() {
+        EffectModel m(QStringLiteral("x"), QStringLiteral("Y"), QStringLiteral("effect"), QStringList(), {{"pos", QVariant(0)}});
         QVERIFY(m.isEndpointFrame(QStringLiteral("pos"), 0));
         QVERIFY(!m.isEndpointFrame(QStringLiteral("pos"), 10));
     }

@@ -1,5 +1,5 @@
-#include <QTest>
 #include "engine/plugin/audio_plugin_chain.hpp"
+#include <QTest>
 #include <vector>
 
 using namespace AviQtl::Engine::Plugin;
@@ -7,8 +7,7 @@ using namespace AviQtl::Engine::Plugin;
 // ─── Mock plugin for testing ───
 class MockPlugin : public IAudioPlugin {
   public:
-    explicit MockPlugin(QString id = QStringLiteral("mock"))
-        : m_id(std::move(id)) {}
+    explicit MockPlugin(QString id = QStringLiteral("mock")) : m_id(std::move(id)) {}
 
     bool load(const QString &, int) override { return true; }
     void prepare(double sr, int bs) override {
@@ -48,17 +47,15 @@ class MockPlugin : public IAudioPlugin {
 class TestAudioPluginChain : public QObject {
     Q_OBJECT
 
-private slots:
-    void constructorReadsDefaults()
-    {
+  private slots:
+    void constructorReadsDefaults() {
         AudioPluginChain chain;
         // Just verify it does not crash; defaults come from SettingsManager which is
         // already tested elsewhere.
         QCOMPARE(chain.count(), 0);
     }
 
-    void addAndCount()
-    {
+    void addAndCount() {
         AudioPluginChain chain;
         chain.add(std::make_unique<MockPlugin>());
         QCOMPARE(chain.count(), 1);
@@ -66,8 +63,7 @@ private slots:
         QCOMPARE(chain.count(), 2);
     }
 
-    void addCallsPrepare()
-    {
+    void addCallsPrepare() {
         AudioPluginChain chain;
         auto mock = std::make_unique<MockPlugin>();
         MockPlugin *raw = mock.get();
@@ -75,8 +71,7 @@ private slots:
         QCOMPARE(raw->prepareCalls(), 1);
     }
 
-    void get()
-    {
+    void get() {
         AudioPluginChain chain;
         auto p1 = std::make_unique<MockPlugin>(QStringLiteral("A"));
         auto p2 = std::make_unique<MockPlugin>(QStringLiteral("B"));
@@ -88,8 +83,7 @@ private slots:
         QCOMPARE(chain.get(1)->name(), QStringLiteral("B"));
     }
 
-    void getOutOfBounds()
-    {
+    void getOutOfBounds() {
         AudioPluginChain chain;
         QVERIFY(chain.get(0) == nullptr);
         QVERIFY(chain.get(-1) == nullptr);
@@ -97,8 +91,7 @@ private slots:
         QVERIFY(chain.get(1) == nullptr);
     }
 
-    void remove()
-    {
+    void remove() {
         AudioPluginChain chain;
         chain.add(std::make_unique<MockPlugin>(QStringLiteral("A")));
         chain.add(std::make_unique<MockPlugin>(QStringLiteral("B")));
@@ -109,8 +102,7 @@ private slots:
         QCOMPARE(chain.get(0)->name(), QStringLiteral("B"));
     }
 
-    void removeOutOfBounds()
-    {
+    void removeOutOfBounds() {
         AudioPluginChain chain;
         chain.add(std::make_unique<MockPlugin>());
         chain.remove(-1); // should not crash
@@ -118,8 +110,7 @@ private slots:
         QCOMPARE(chain.count(), 1);
     }
 
-    void clear()
-    {
+    void clear() {
         AudioPluginChain chain;
         chain.add(std::make_unique<MockPlugin>());
         chain.add(std::make_unique<MockPlugin>());
@@ -130,8 +121,7 @@ private slots:
         QVERIFY(chain.get(0) == nullptr);
     }
 
-    void preparePropagates()
-    {
+    void preparePropagates() {
         AudioPluginChain chain;
         auto p1 = std::make_unique<MockPlugin>();
         auto p2 = std::make_unique<MockPlugin>();
@@ -148,8 +138,7 @@ private slots:
         QCOMPARE(raw1->lastBlockSize(), 512);
     }
 
-    void processIterates()
-    {
+    void processIterates() {
         AudioPluginChain chain;
         auto p1 = std::make_unique<MockPlugin>();
         auto p2 = std::make_unique<MockPlugin>();
@@ -167,8 +156,7 @@ private slots:
         QCOMPARE(raw2->lastFrameCount(), 2);
     }
 
-    void processOnEmptyChain()
-    {
+    void processOnEmptyChain() {
         AudioPluginChain chain;
         std::vector<float> buf(4, 0.0f);
         // Should not crash; does nothing.
@@ -176,16 +164,14 @@ private slots:
         QCOMPARE(buf[0], 0.0f);
     }
 
-    void prepareEmptyChain()
-    {
+    void prepareEmptyChain() {
         AudioPluginChain chain;
         // Should not crash on empty chain
         chain.prepare(96000.0, 2048);
         QCOMPARE(chain.count(), 0);
     }
 
-    void addAfterPreparePropagatesSettings()
-    {
+    void addAfterPreparePropagatesSettings() {
         AudioPluginChain chain;
         chain.prepare(44100.0, 512);
 
@@ -198,8 +184,7 @@ private slots:
         QCOMPARE(raw->lastBlockSize(), 512);
     }
 
-    void removeMiddle()
-    {
+    void removeMiddle() {
         AudioPluginChain chain;
         chain.add(std::make_unique<MockPlugin>(QStringLiteral("A")));
         chain.add(std::make_unique<MockPlugin>(QStringLiteral("B")));
@@ -212,21 +197,22 @@ private slots:
         QCOMPARE(chain.get(1)->name(), QStringLiteral("C"));
     }
 
-    void processChainOrder()
-    {
+    void processChainOrder() {
         // Use a mock plugin that adds 1.0 to every sample, then another that multiplies by 2.0
         class AddOnePlugin : public MockPlugin {
           public:
             AddOnePlugin() : MockPlugin(QStringLiteral("add1")) {}
             void process(float *buf, int count) override {
-                for (int i = 0; i < count; ++i) buf[i] += 1.0f;
+                for (int i = 0; i < count; ++i)
+                    buf[i] += 1.0f;
             }
         };
         class MulTwoPlugin : public MockPlugin {
           public:
             MulTwoPlugin() : MockPlugin(QStringLiteral("mul2")) {}
             void process(float *buf, int count) override {
-                for (int i = 0; i < count; ++i) buf[i] *= 2.0f;
+                for (int i = 0; i < count; ++i)
+                    buf[i] *= 2.0f;
             }
         };
 

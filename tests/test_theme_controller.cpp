@@ -1,22 +1,19 @@
+#include "theme_controller.hpp"
 #include <QSignalSpy>
 #include <QTest>
-#include "theme_controller.hpp"
 
 using namespace AviQtl::Core;
 
-class TestThemeController : public QObject
-{
+class TestThemeController : public QObject {
     Q_OBJECT
 
-private slots:
-    void defaultThemeNotEmpty()
-    {
+  private slots:
+    void defaultThemeNotEmpty() {
         QString t = ThemeController::instance().theme();
         QVERIFY(!t.isEmpty()); // "Dark" (default settings) or system
     }
 
-    void setThemeEmitsSignal()
-    {
+    void setThemeEmitsSignal() {
         ThemeController &ctrl = ThemeController::instance();
         QString original = ctrl.theme();
         QString target = (original == QStringLiteral("Light")) ? QStringLiteral("Dark") : QStringLiteral("Light");
@@ -29,8 +26,7 @@ private slots:
         ctrl.setTheme(original);
     }
 
-    void setSameThemeNoSignal()
-    {
+    void setSameThemeNoSignal() {
         ThemeController &ctrl = ThemeController::instance();
         QString current = ctrl.theme();
 

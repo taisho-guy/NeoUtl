@@ -1,15 +1,13 @@
-#include <QTest>
 #include "engine/timeline/ecs.hpp"
+#include <QTest>
 
 using namespace AviQtl::Engine::Timeline;
 
-class TestDenseComponentMap : public QObject
-{
+class TestDenseComponentMap : public QObject {
     Q_OBJECT
 
-private slots:
-    void operatorBracketCreatesElement()
-    {
+  private slots:
+    void operatorBracketCreatesElement() {
         DenseComponentMap<TransformComponent> map;
         TransformComponent &t = map[5];
         QCOMPARE(t.layer, 0);
@@ -20,23 +18,20 @@ private slots:
         QCOMPARE(map.find(5), &t);
     }
 
-    void findMissingReturnsNull()
-    {
+    void findMissingReturnsNull() {
         DenseComponentMap<TransformComponent> map;
         QVERIFY(map.find(0) == nullptr);
         QVERIFY(map.find(1000) == nullptr);
     }
 
-    void contains()
-    {
+    void contains() {
         DenseComponentMap<TransformComponent> map;
         QVERIFY(!map.contains(3));
         map[3] = TransformComponent{};
         QVERIFY(map.contains(3));
     }
 
-    void eraseRemovesElement()
-    {
+    void eraseRemovesElement() {
         DenseComponentMap<TransformComponent> map;
         map[1] = TransformComponent{};
         map[2] = TransformComponent{};
@@ -48,15 +43,13 @@ private slots:
         QVERIFY(map.contains(2));
     }
 
-    void eraseNonExistentIsNoOp()
-    {
+    void eraseNonExistentIsNoOp() {
         DenseComponentMap<TransformComponent> map;
         map.erase(999); // should not crash
         QVERIFY(!map.contains(999));
     }
 
-    void iteration()
-    {
+    void iteration() {
         DenseComponentMap<TransformComponent> map;
         map[10] = TransformComponent{};
         map[10].layer = 10;
@@ -70,8 +63,7 @@ private slots:
         QCOMPARE(count, 2);
     }
 
-    void forEach()
-    {
+    void forEach() {
         DenseComponentMap<TransformComponent> map;
         map[5] = TransformComponent{};
         map[5].layer = 50;
@@ -83,8 +75,7 @@ private slots:
         QCOMPARE(sum, 120);
     }
 
-    void syncAliveRemovesDead()
-    {
+    void syncAliveRemovesDead() {
         DenseComponentMap<TransformComponent> map;
         std::bitset<MAX_CLIP_ID> alive;
 
@@ -107,8 +98,7 @@ private slots:
         QVERIFY(map.contains(3));
     }
 
-    void syncAliveNoChange()
-    {
+    void syncAliveNoChange() {
         DenseComponentMap<TransformComponent> map;
         std::bitset<MAX_CLIP_ID> alive;
 
@@ -120,8 +110,7 @@ private slots:
         QVERIFY(map.contains(10));
     }
 
-    void multipleTypes()
-    {
+    void multipleTypes() {
         DenseComponentMap<TransformComponent> tmap;
         DenseComponentMap<AudioComponent> amap;
 
@@ -134,8 +123,7 @@ private slots:
         QCOMPARE(amap.find(1)->volume, 0.5f);
     }
 
-    void denseStorageCompaction()
-    {
+    void denseStorageCompaction() {
         DenseComponentMap<TransformComponent> map;
         map[0] = TransformComponent{};
         map[0].layer = 100;

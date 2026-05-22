@@ -1,16 +1,14 @@
+#include "transport_service.hpp"
 #include <QSignalSpy>
 #include <QTest>
-#include "transport_service.hpp"
 
 using namespace AviQtl::UI;
 
-class TestTransportService : public QObject
-{
+class TestTransportService : public QObject {
     Q_OBJECT
 
-private slots:
-    void initialState()
-    {
+  private slots:
+    void initialState() {
         TransportService svc;
         QCOMPARE(svc.currentFrame(), 0);
         QCOMPARE(svc.isPlaying(), false);
@@ -19,8 +17,7 @@ private slots:
         QCOMPARE(svc.totalFrames(), 0);
     }
 
-    void setCurrentFrame()
-    {
+    void setCurrentFrame() {
         TransportService svc;
         QSignalSpy spy(&svc, &TransportService::currentFrameChanged);
         svc.setCurrentFrame(42);
@@ -28,8 +25,7 @@ private slots:
         QCOMPARE(spy.count(), 1);
     }
 
-    void setCurrentFrameNoChange()
-    {
+    void setCurrentFrameNoChange() {
         TransportService svc;
         svc.setCurrentFrame(5);
         QSignalSpy spy(&svc, &TransportService::currentFrameChanged);
@@ -37,8 +33,7 @@ private slots:
         QCOMPARE(spy.count(), 0);
     }
 
-    void togglePlay()
-    {
+    void togglePlay() {
         TransportService svc;
         QSignalSpy spy(&svc, &TransportService::isPlayingChanged);
         QVERIFY(!svc.isPlaying());
@@ -52,8 +47,7 @@ private slots:
         QCOMPARE(spy.count(), 2);
     }
 
-    void playPause()
-    {
+    void playPause() {
         TransportService svc;
         QVERIFY(!svc.isPlaying());
         svc.play();
@@ -69,16 +63,14 @@ private slots:
         QCOMPARE(spy.count(), 1); // no duplicate
     }
 
-    void seekResetsOrigin()
-    {
+    void seekResetsOrigin() {
         TransportService svc;
         svc.setCurrentFrame_seek(100);
         QCOMPARE(svc.currentFrame(), 100);
         // Internal state reset, but we can verify by checking it doesn't crash
     }
 
-    void scrub()
-    {
+    void scrub() {
         TransportService svc;
         QVERIFY(!svc.isPlaying());
         svc.play();
@@ -99,8 +91,7 @@ private slots:
         QTRY_COMPARE(svc.isPlaying(), true);
     }
 
-    void scrubWhenNotPlaying()
-    {
+    void scrubWhenNotPlaying() {
         TransportService svc;
         QVERIFY(!svc.isPlaying());
         svc.beginScrub();
@@ -111,8 +102,7 @@ private slots:
         QVERIFY(!svc.isPlaying());
     }
 
-    void setPlaybackSpeed()
-    {
+    void setPlaybackSpeed() {
         TransportService svc;
         QSignalSpy spy(&svc, &TransportService::playbackSpeedChanged);
         svc.setPlaybackSpeed(2.0);
@@ -127,8 +117,7 @@ private slots:
         QCOMPARE(spyPlaying.count(), 0);
     }
 
-    void setFps()
-    {
+    void setFps() {
         TransportService svc;
         QSignalSpy spy(&svc, &TransportService::fpsChanged);
         svc.setFps(30.0);
@@ -139,8 +128,7 @@ private slots:
         QCOMPARE(spy.count(), 1); // no duplicate
     }
 
-    void setTotalFrames()
-    {
+    void setTotalFrames() {
         TransportService svc;
         QSignalSpy spy(&svc, &TransportService::totalFramesChanged);
         svc.setTotalFrames(300);

@@ -1,14 +1,13 @@
-#include <QTest>
-#include <QString>
 #include "effect_registry.hpp"
+#include <QString>
+#include <QTest>
 
 using namespace AviQtl::Core;
 
-class TestEffectRegistry : public QObject
-{
+class TestEffectRegistry : public QObject {
     Q_OBJECT
 
-private slots:
+  private slots:
     void singletonInstance();
     void registerAndRetrieve();
     void duplicateRegistration();
@@ -16,15 +15,13 @@ private slots:
     void getEffectNotFound();
 };
 
-void TestEffectRegistry::singletonInstance()
-{
+void TestEffectRegistry::singletonInstance() {
     EffectRegistry &r1 = EffectRegistry::instance();
     EffectRegistry &r2 = EffectRegistry::instance();
     QCOMPARE(&r1, &r2);
 }
 
-void TestEffectRegistry::registerAndRetrieve()
-{
+void TestEffectRegistry::registerAndRetrieve() {
     EffectRegistry &reg = EffectRegistry::instance();
 
     EffectMetadata meta;
@@ -47,8 +44,7 @@ void TestEffectRegistry::registerAndRetrieve()
     QCOMPARE(fetched.categories[0], QStringLiteral("Test"));
 }
 
-void TestEffectRegistry::duplicateRegistration()
-{
+void TestEffectRegistry::duplicateRegistration() {
     EffectRegistry &reg = EffectRegistry::instance();
 
     EffectMetadata first;
@@ -75,8 +71,7 @@ void TestEffectRegistry::duplicateRegistration()
     QCOMPARE(fetched.kind, QStringLiteral("object"));
 }
 
-void TestEffectRegistry::getAllEffectsPreservesOrder()
-{
+void TestEffectRegistry::getAllEffectsPreservesOrder() {
     EffectRegistry &reg = EffectRegistry::instance();
 
     EffectMetadata a, b, c;
@@ -106,9 +101,12 @@ void TestEffectRegistry::getAllEffectsPreservesOrder()
 
     int idxA = -1, idxB = -1, idxC = -1;
     for (int i = 0; i < all.size(); ++i) {
-        if (all[i].id == QStringLiteral("order.alpha")) idxA = i;
-        if (all[i].id == QStringLiteral("order.beta")) idxB = i;
-        if (all[i].id == QStringLiteral("order.gamma")) idxC = i;
+        if (all[i].id == QStringLiteral("order.alpha"))
+            idxA = i;
+        if (all[i].id == QStringLiteral("order.beta"))
+            idxB = i;
+        if (all[i].id == QStringLiteral("order.gamma"))
+            idxC = i;
     }
 
     QVERIFY2(idxA >= 0, "order.alpha must be present in registry");
@@ -118,8 +116,7 @@ void TestEffectRegistry::getAllEffectsPreservesOrder()
     QVERIFY2(idxB < idxC, "Registration order must be preserved (beta before gamma)");
 }
 
-void TestEffectRegistry::getEffectNotFound()
-{
+void TestEffectRegistry::getEffectNotFound() {
     EffectRegistry &reg = EffectRegistry::instance();
 
     const EffectMetadata &fetched = reg.getEffect(QStringLiteral("__nonexistent__.uuid.1234"));

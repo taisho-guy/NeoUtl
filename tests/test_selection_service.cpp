@@ -1,16 +1,14 @@
+#include "selection_service.hpp"
 #include <QSignalSpy>
 #include <QTest>
-#include "selection_service.hpp"
 
 using namespace AviQtl::UI;
 
-class TestSelectionService : public QObject
-{
+class TestSelectionService : public QObject {
     Q_OBJECT
 
-private slots:
-    void initialState()
-    {
+  private slots:
+    void initialState() {
         SelectionService svc;
         QCOMPARE(svc.selectedClipId(), -1);
         QVERIFY(svc.selectedClipIds().isEmpty());
@@ -18,8 +16,7 @@ private slots:
         QVERIFY(!svc.isSelected(-1));
     }
 
-    void selectSingle()
-    {
+    void selectSingle() {
         SelectionService svc;
         QSignalSpy idsSpy(&svc, &SelectionService::selectedClipIdsChanged);
         QSignalSpy primarySpy(&svc, &SelectionService::selectedClipIdChanged);
@@ -37,8 +34,7 @@ private slots:
         QCOMPARE(dataSpy.count(), 1);
     }
 
-    void selectReplacesPrevious()
-    {
+    void selectReplacesPrevious() {
         SelectionService svc;
         svc.select(1, QVariantMap());
         svc.select(2, QVariantMap());
@@ -48,8 +44,7 @@ private slots:
         QVERIFY(svc.isSelected(2));
     }
 
-    void toggleSelection()
-    {
+    void toggleSelection() {
         SelectionService svc;
         svc.toggleSelection(1, QVariantMap());
         QVERIFY(svc.isSelected(1));
@@ -60,8 +55,7 @@ private slots:
         QCOMPARE(svc.selectedClipId(), 2); // last toggled becomes primary
     }
 
-    void toggleDeselect()
-    {
+    void toggleDeselect() {
         SelectionService svc;
         svc.toggleSelection(1, QVariantMap());
         QVERIFY(svc.isSelected(1));
@@ -71,8 +65,7 @@ private slots:
         QCOMPARE(svc.selectedClipId(), -1);
     }
 
-    void toggleNegativeIdClears()
-    {
+    void toggleNegativeIdClears() {
         SelectionService svc;
         svc.select(1, QVariantMap());
         svc.toggleSelection(-1, QVariantMap());
@@ -80,8 +73,7 @@ private slots:
         QCOMPARE(svc.selectedClipId(), -1);
     }
 
-    void clearSelection()
-    {
+    void clearSelection() {
         SelectionService svc;
         svc.select(1, QVariantMap());
         svc.select(2, QVariantMap());
@@ -94,16 +86,14 @@ private slots:
         QCOMPARE(idsSpy.count(), 1);
     }
 
-    void clearOnEmptyNoSignal()
-    {
+    void clearOnEmptyNoSignal() {
         SelectionService svc;
         QSignalSpy idsSpy(&svc, &SelectionService::selectedClipIdsChanged);
         svc.clearSelection();
         QCOMPARE(idsSpy.count(), 0);
     }
 
-    void replaceSelectionBulk()
-    {
+    void replaceSelectionBulk() {
         SelectionService svc;
         svc.select(1, QVariantMap());
         svc.select(2, QVariantMap());
@@ -120,8 +110,7 @@ private slots:
         QCOMPARE(svc.selectedClipId(), 5);
     }
 
-    void replaceSelectionDeduplicates()
-    {
+    void replaceSelectionDeduplicates() {
         SelectionService svc;
         QVariantList ids;
         ids.append(1);
@@ -132,8 +121,7 @@ private slots:
         QCOMPARE(svc.selectedClipIds().size(), 2); // 1 and 2
     }
 
-    void refreshSelectionData()
-    {
+    void refreshSelectionData() {
         SelectionService svc;
         QVariantMap oldData;
         oldData.insert(QStringLiteral("name"), QStringLiteral("Old"));
@@ -147,8 +135,7 @@ private slots:
         QCOMPARE(dataSpy.count(), 1);
     }
 
-    void refreshSelectionDataNonSelected()
-    {
+    void refreshSelectionDataNonSelected() {
         SelectionService svc;
         QSignalSpy dataSpy(&svc, &SelectionService::selectedClipDataChanged);
         svc.refreshSelectionData(1, QVariantMap());

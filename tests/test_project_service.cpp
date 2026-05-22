@@ -1,16 +1,14 @@
+#include "project_service.hpp"
 #include <QSignalSpy>
 #include <QTest>
-#include "project_service.hpp"
 
 using namespace AviQtl::UI;
 
-class TestProjectService : public QObject
-{
+class TestProjectService : public QObject {
     Q_OBJECT
 
-private slots:
-    void defaultValues()
-    {
+  private slots:
+    void defaultValues() {
         ProjectService svc;
         // Defaults come from SettingsManager, which we already tested.
         // Just verify getters return consistent values.
@@ -20,8 +18,7 @@ private slots:
         QVERIFY(svc.sampleRate() > 0);
     }
 
-    void setWidth()
-    {
+    void setWidth() {
         ProjectService svc;
         int original = svc.width();
         QSignalSpy spy(&svc, &ProjectService::widthChanged);
@@ -30,8 +27,7 @@ private slots:
         QCOMPARE(spy.count(), 1);
     }
 
-    void setWidthNoChange()
-    {
+    void setWidthNoChange() {
         ProjectService svc;
         int width = svc.width();
         QSignalSpy spy(&svc, &ProjectService::widthChanged);
@@ -39,8 +35,7 @@ private slots:
         QCOMPARE(spy.count(), 0);
     }
 
-    void setHeight()
-    {
+    void setHeight() {
         ProjectService svc;
         int original = svc.height();
         QSignalSpy spy(&svc, &ProjectService::heightChanged);
@@ -49,8 +44,7 @@ private slots:
         QCOMPARE(spy.count(), 1);
     }
 
-    void setHeightNoChange()
-    {
+    void setHeightNoChange() {
         ProjectService svc;
         int height = svc.height();
         QSignalSpy spy(&svc, &ProjectService::heightChanged);
@@ -58,8 +52,7 @@ private slots:
         QCOMPARE(spy.count(), 0);
     }
 
-    void setFps()
-    {
+    void setFps() {
         ProjectService svc;
         QSignalSpy spy(&svc, &ProjectService::fpsChanged);
         svc.setFps(30.0);
@@ -67,8 +60,7 @@ private slots:
         QCOMPARE(spy.count(), 1);
     }
 
-    void setFpsNoChange()
-    {
+    void setFpsNoChange() {
         ProjectService svc;
         double fps = svc.fps();
         QSignalSpy spy(&svc, &ProjectService::fpsChanged);
@@ -76,8 +68,7 @@ private slots:
         QCOMPARE(spy.count(), 0);
     }
 
-    void setSampleRate()
-    {
+    void setSampleRate() {
         ProjectService svc;
         QSignalSpy spy(&svc, &ProjectService::sampleRateChanged);
         svc.setSampleRate(44100);
@@ -85,8 +76,7 @@ private slots:
         QCOMPARE(spy.count(), 1);
     }
 
-    void setSampleRateNoChange()
-    {
+    void setSampleRateNoChange() {
         ProjectService svc;
         int rate = svc.sampleRate();
         QSignalSpy spy(&svc, &ProjectService::sampleRateChanged);
