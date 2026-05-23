@@ -379,8 +379,11 @@ ScrollView {
             }
             onPressed: (mouse) => {
                 var l = Math.floor(mouse.y / layerHeight);
-                if (Workspace.currentTimeline && l >= 0 && l < layerCount)
+                if (Workspace.currentTimeline && l >= 0 && l < layerCount) {
                     Workspace.currentTimeline.selectedLayer = l;
+                    Workspace.currentTimeline.clearSelectionPreview();
+                    Workspace.currentTimeline.applySelectionIds([]);
+                }
 
             }
             onReleased: (mouse) => {
