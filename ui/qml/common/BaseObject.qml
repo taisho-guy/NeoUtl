@@ -20,6 +20,14 @@ Node {
     property int clipDurationFrames: 0
     // NodeLoader.onItemChanged で注入されるレイヤー番号
     property int clipLayer: -1
+    // CompositeView で計算済みの実効2D変換。フレームバッファ用の
+    // キャプチャは View3D の親Node変換を受けないため、ここで再現する。
+    property real clipNodeScaleX: 1
+    property real clipNodeScaleY: 1
+    property real clipNodePosX: 0
+    property real clipNodePosY: 0
+    property real clipNodeRotZ: 0
+    property real clipNodeOpacity: 1
     // CompositeView の clipNode から直接セット
     // FB 収集対象: 変換済み2Dキャプチャアイテム
     // FB 収集対象: 変換済み2Dキャプチャアイテム (外部から item.fbCaptureItem でアクセス可能)
@@ -270,7 +278,7 @@ Node {
 
             return 0; // 通常
         }
-        readonly property real fbOpacityValue: base.hasTransform ? transformLoader.item.outputOpacity : 1
+        readonly property real fbOpacityValue: 1
 
         width: (Workspace.currentTimeline && Workspace.currentTimeline.project) ? Workspace.currentTimeline.project.width : 1920
         height: (Workspace.currentTimeline && Workspace.currentTimeline.project) ? Workspace.currentTimeline.project.height : 1080
@@ -279,17 +287,14 @@ Node {
         Item {
             id: fbTransformItem
 
-            // Transform.qmlのインスタンスから値を取得
-            readonly property var _ti: base.hasTransform ? transformLoader.item : null
-
             // テクスチャサイズをスケール適用後のサイズに設定
-            width: (rendererInstance && rendererInstance.output && rendererInstance.output.sourceItem ? rendererInstance.output.sourceItem.width : 1) * (_ti ? _ti.output2dScale : 1)
-            height: (rendererInstance && rendererInstance.output && rendererInstance.output.sourceItem ? rendererInstance.output.sourceItem.height : 1) * (_ti ? _ti.output2dScale : 1)
+            width: (rendererInstance && rendererInstance.output && rendererInstance.output.sourceItem ? rendererInstance.output.sourceItem.width : 1) * base.clipNodeScaleX
+            height: (rendererInstance && rendererInstance.output && rendererInstance.output.sourceItem ? rendererInstance.output.sourceItem.height : 1) * base.clipNodeScaleY
             // AviUtl 座標系: 中心(0,0)、Y下プラス → Qt2D: 中心 = parent の center + offset
-            x: _fbCaptureItemImpl.width / 2 + (_ti ? _ti.output2dX : 0) - width / 2
-            y: _fbCaptureItemImpl.height / 2 - (_ti ? _ti.output2dY : 0) - height / 2
-            rotation: -(_ti ? _ti.output2dRotationZ : 0)
-            opacity: _ti ? _ti.outputOpacity : 1
+            x: _fbCaptureItemImpl.width / 2 + base.clipNodePosX - width / 2
+            y: _fbCaptureItemImpl.height / 2 - base.clipNodePosY - height / 2
+            rotation: -base.clipNodeRotZ
+            opacity: base.clipNodeOpacity
 
             ShaderEffectSource {
                 anchors.fill: parent

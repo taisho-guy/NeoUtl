@@ -32,7 +32,7 @@ Common.BaseObject {
         for (var i = 0; i < ch.length; i++) {
             var node = ch[i];
             var nodeLayer = (node.clipLayerRole !== undefined) ? node.clipLayerRole : -1;
-            if (nodeLayer >= 0 && nodeLayer < root.clipLayer) {
+            if (nodeLayer >= 0 && nodeLayer < root.clipLayer && node.visible) {
                 var out = node.fbRendererOutput;
                 if (out)
                     outputs.push({
@@ -42,9 +42,10 @@ Common.BaseObject {
 
             }
         }
-        // レイヤー昇順ソートして output だけ抽出
+        // AviUtlの上位レイヤー結果を背景側から順に再合成する。
+        // レイヤー番号が小さいほど前面なので、番号の大きいものから描画する。
         outputs.sort(function(a, b) {
-            return a.layer - b.layer;
+            return b.layer - a.layer;
         });
         var sorted = [];
         for (var j = 0; j < outputs.length; j++) sorted.push(outputs[j].src)
@@ -53,6 +54,7 @@ Common.BaseObject {
 
     onSceneRootRefChanged: Qt.callLater(root._rebuildCapture)
     onClipLayerChanged: Qt.callLater(root._rebuildCapture)
+    onCurrentFrameChanged: Qt.callLater(root._rebuildCapture)
     Component.onCompleted: {
         adopt2D(flattenHost);
         adopt2D(fbSourceWrapper);
@@ -88,11 +90,12 @@ Common.BaseObject {
         visible: true // SceneGraph に残す (renderHost 側の opacity:0 で非表示にする)
 
         // ダミーの透明背景
-        Item {
+        Rectangle {
             id: dummyBackground
 
             anchors.fill: parent
-            visible: false
+            color: "transparent"
+            visible: true
         }
 
         // 連鎖的ブレンド合成チェーン
@@ -208,19 +211,24 @@ Common.BaseObject {
     sourceItem: Item {
         id: fbSourceWrapper
 
+        function finalCaptureItem() {
+            if (blendChain.count <= 0)
+                return flattenHost;
+
+            var last = blendChain.itemAt(blendChain.count - 1);
+            if (last && last.status === Loader.Ready && last.item)
+                return last.item.output;
+
+            return flattenHost;
+        }
+
         width: flattenHost.width
         height: flattenHost.height
         visible: true // visible:false だと ShaderEffectSource の更新が止まる
 
         ShaderEffectSource {
             anchors.fill: parent
-            sourceItem: {
-                if (blendChain.count > 0) {
-                    var last = blendChain.itemAt(blendChain.count - 1);
-                    return last ? last.item.output : flattenHost;
-                }
-                return flattenHost;
-            }
+            sourceItem: fbSourceWrapper.finalCaptureItem()
             live: true
             hideSource: true
         }

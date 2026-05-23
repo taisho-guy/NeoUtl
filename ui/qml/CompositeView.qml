@@ -358,6 +358,8 @@ Item {
                 onAspectXChanged: objectContainer._syncTransformToItem()
                 onAspectYChanged: objectContainer._syncTransformToItem()
                 onPOpacityChanged: objectContainer._syncTransformToItem()
+                onEffectiveTransformChanged: objectContainer._syncTransformToItem()
+                onVisibleChanged: root.childRendererOutputsChanged()
 
                 // 根本的修正: 個別のパラメータ変更を clipsChanged なしで検知する
                 Connections {
@@ -404,22 +406,22 @@ Item {
                             return ;
 
                         if ("clipNodeScaleX" in item)
-                            item.clipNodeScaleX = clipNode.baseScale * clipNode.aspectX;
+                            item.clipNodeScaleX = clipNode.effectiveTransform.sx;
 
                         if ("clipNodeScaleY" in item)
-                            item.clipNodeScaleY = clipNode.baseScale * clipNode.aspectY;
+                            item.clipNodeScaleY = clipNode.effectiveTransform.sy;
 
                         if ("clipNodePosX" in item)
-                            item.clipNodePosX = clipNode.px;
+                            item.clipNodePosX = clipNode.effectiveTransform.x;
 
                         if ("clipNodePosY" in item)
-                            item.clipNodePosY = clipNode.py;
+                            item.clipNodePosY = clipNode.effectiveTransform.y;
 
                         if ("clipNodeRotZ" in item)
-                            item.clipNodeRotZ = clipNode.pRotZ;
+                            item.clipNodeRotZ = clipNode.effectiveTransform.rz;
 
                         if ("clipNodeOpacity" in item)
-                            item.clipNodeOpacity = clipNode.pOpacity;
+                            item.clipNodeOpacity = clipNode.effectiveTransform.opacity;
 
                     }
 
@@ -448,6 +450,9 @@ Item {
 
                             if ("sceneId" in item)
                                 item.sceneId = root.sceneId;
+
+                            if ("sceneRootRef" in item)
+                                item.sceneRootRef = sceneRoot;
 
                             if ("rawEffectModels" in item)
                                 item.rawEffectModels = Qt.binding(function() {
