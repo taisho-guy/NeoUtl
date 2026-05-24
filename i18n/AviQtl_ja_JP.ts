@@ -1237,43 +1237,43 @@
 <context>
     <name>ControlLoader</name>
     <message>
-        <location filename="../ui/qml/common/ControlLoader.qml" line="30"/>
-        <location filename="../ui/qml/common/ControlLoader.qml" line="32"/>
+        <location filename="../ui/qml/common/ControlLoader.qml" line="27"/>
+        <location filename="../ui/qml/common/ControlLoader.qml" line="29"/>
         <source>パラメータ</source>
         <translation>パラメータ</translation>
     </message>
     <message>
-        <location filename="../ui/qml/common/ControlLoader.qml" line="310"/>
+        <location filename="../ui/qml/common/ControlLoader.qml" line="307"/>
         <source>開始色 (f%1)</source>
         <translation>開始色 (f%1)</translation>
     </message>
     <message>
-        <location filename="../ui/qml/common/ControlLoader.qml" line="310"/>
+        <location filename="../ui/qml/common/ControlLoader.qml" line="307"/>
         <source>色を選択</source>
         <translation>色を選択</translation>
     </message>
     <message>
-        <location filename="../ui/qml/common/ControlLoader.qml" line="387"/>
+        <location filename="../ui/qml/common/ControlLoader.qml" line="384"/>
         <source>終了色 (f%1)</source>
         <translation>終了色 (f%1)</translation>
     </message>
     <message>
-        <location filename="../ui/qml/common/ControlLoader.qml" line="433"/>
+        <location filename="../ui/qml/common/ControlLoader.qml" line="430"/>
         <source>ファイルを選択</source>
         <translation>ファイルを選択</translation>
     </message>
     <message>
-        <location filename="../ui/qml/common/ControlLoader.qml" line="575"/>
+        <location filename="../ui/qml/common/ControlLoader.qml" line="572"/>
         <source>設定</source>
         <translation>設定</translation>
     </message>
     <message>
-        <location filename="../ui/qml/common/ControlLoader.qml" line="667"/>
+        <location filename="../ui/qml/common/ControlLoader.qml" line="664"/>
         <source>フォントを選択</source>
         <translation>フォントを選択</translation>
     </message>
     <message>
-        <location filename="../ui/qml/common/ControlLoader.qml" line="683"/>
+        <location filename="../ui/qml/common/ControlLoader.qml" line="680"/>
         <source>デフォルト</source>
         <translation>デフォルト</translation>
     </message>
@@ -2830,7 +2830,7 @@
         <translation> (ベジェ)</translation>
     </message>
     <message>
-        <location filename="../ui/qml/SettingDialog.qml" line="1278"/>
+        <location filename="../ui/qml/SettingDialog.qml" line="1283"/>
         <source>エフェクトを追加</source>
         <translation>エフェクトを追加</translation>
     </message>

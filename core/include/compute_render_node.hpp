@@ -27,9 +27,11 @@ class ComputeRenderNode final : public QSGRenderNode {
     void syncSSBOs(const QList<SSBOEntry> &entries);
     void syncShaderPath(const QString &path);
     void syncInputTexture(QSGTexture *tex);
+    void syncSize(float w, float h);
     void syncWorkGroupSize(int x, int y, int z = 1);
 
     // QSGRenderNode オーバーライド
+    QRectF rect() const override;
     void prepare() override;
     void render(const RenderState *state) override;
     void releaseResources() override;
@@ -73,6 +75,8 @@ class ComputeRenderNode final : public QSGRenderNode {
     bool m_ssboDirty = false;
 
     QString m_shaderPath;
+    float m_width = 0;
+    float m_height = 0;
     QSGTexture *m_inputTexture = nullptr;
 
     bool m_shaderDirty = true;

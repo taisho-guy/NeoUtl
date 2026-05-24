@@ -89,7 +89,7 @@ Rectangle {
                     height: headerRoot.layerHeight
                     flat: true
                     // 左クリック: 表示/非表示トグル
-                    onClicked: {
+                    onClicked: () => {
                         headerRoot.setLayerVisible(layerIndex, !isVisible);
                         if (Workspace.currentTimeline)
                             Workspace.currentTimeline.selectedLayer = layerIndex;
@@ -352,7 +352,7 @@ Rectangle {
         Common.IconMenuItem {
             text: qsTr("上にレイヤーを挿入 (1行)")
             iconName: "add_line"
-            onTriggered: {
+            onTriggered: () => {
                 if (Workspace.currentTimeline)
                     Workspace.currentTimeline.insertLayers(layerMenu.layerIndex, 1, true);
 
@@ -362,7 +362,7 @@ Rectangle {
         Common.IconMenuItem {
             text: qsTr("下にレイヤーを挿入 (1行)")
             iconName: "add_line"
-            onTriggered: {
+            onTriggered: () => {
                 if (Workspace.currentTimeline)
                     Workspace.currentTimeline.insertLayers(layerMenu.layerIndex, 1, false);
 

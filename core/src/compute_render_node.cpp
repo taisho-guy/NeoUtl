@@ -37,6 +37,14 @@ void ComputeRenderNode::syncShaderPath(const QString &path) {
     m_shaderDirty = true;
 }
 
+void ComputeRenderNode::syncSize(float w, float h) {
+    if (qFuzzyCompare(m_width, w) && qFuzzyCompare(m_height, h))
+        return;
+    m_width = w;
+    m_height = h;
+    m_bufferLayoutDirty = true;
+}
+
 void ComputeRenderNode::syncInputTexture(QSGTexture *tex) {
     if (m_inputTexture == tex)
         return;
@@ -49,6 +57,8 @@ void ComputeRenderNode::syncWorkGroupSize(int x, int y, int z) {
     m_workGroupY = qMax(1, y);
     m_workGroupZ = qMax(1, z);
 }
+
+QRectF ComputeRenderNode::rect() const { return QRectF(0, 0, m_width, m_height); }
 
 QRhi *ComputeRenderNode::resolveRhi() const { return static_cast<QRhi *>(m_window->rendererInterface()->getResource(m_window, QSGRendererInterface::RhiResource)); }
 
@@ -87,7 +97,8 @@ bool ComputeRenderNode::ensureBuffers(QRhi *rhi) {
     }
 
     if (!needsRebuild)
-        return !m_gpuBuffers.isEmpty();
+        // バッファがなくてもテクスチャ（画像処理）があれば有効とみなす
+        return (m_inputTexture != nullptr) || !m_gpuBuffers.isEmpty();
 
     // 既存 GPU バッファと SRB を安全に破棄
     for (auto &gb : m_gpuBuffers) {
@@ -154,7 +165,7 @@ bool ComputeRenderNode::ensureBuffers(QRhi *rhi) {
             bindings.append(QRhiShaderResourceBinding::imageLoadStore(1, QRhiShaderResourceBinding::ComputeStage, m_outputTexture, 0));
 
             // 描画用リソースの初期化 (Full-screen quad)
-            static const float quadData[] = {-1.0f, 1.0f, 0.0f, 0.0f, -1.0f, -1.0f, 0.0f, 1.0f, 1.0f, 1.0f, 1.0f, 0.0f, 1.0f, -1.0f, 1.0f, 1.0f};
+            static const float quadData[] = {0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 1.0f, 1.0f, 0.0f, 1.0f, 0.0f, 1.0f, 1.0f, 1.0f, 1.0f};
             m_vbuf = rhi->newBuffer(QRhiBuffer::Immutable, QRhiBuffer::VertexBuffer, sizeof(quadData));
             m_vbuf->create();
 
@@ -283,7 +294,9 @@ void ComputeRenderNode::prepare() {
     if (!ensurePipeline(m_rhi))
         return;
 
-    if (!m_ssboDirty && !m_shaderDirty && !m_bufferLayoutDirty)
+    // 実行リソースが揃っているなら、フラグに関わらず実行を許可
+    // (テクスチャの内容そのものが変わっている可能性があるため)
+    if (!m_pipeline || !m_srb)
         return;
 
     auto *cb = resolveCommandBuffer();
@@ -318,20 +331,28 @@ void ComputeRenderNode::render(const RenderState *state) {
     if (!cb || !m_renderPipeline || !m_vbuf || !m_outputTexture)
         return;
 
-    // 行列の更新 (QQuickItem の座標系に合わせる)
+    // 行列の更新 (QMLアイテムの論理座標からNDCへの変換)
     QRhiResourceUpdateBatch *batch = m_rhi->nextResourceUpdateBatch();
-    // projectionMatrix() の戻り値を安全に取得
-    const QMatrix4x4 *proj = state->projectionMatrix();
-    QMatrix4x4 mat = proj ? *proj : QMatrix4x4();
-
+    // projectionMatrix() は Item 空間から NDC への変換を保持しているため、デリファレンスして取得
+    // 頂点データが 0..1 の単位正方形のため、アイテムの論理サイズまでスケールをかける
+    QMatrix4x4 mat = (state && state->projectionMatrix()) ? *state->projectionMatrix() : QMatrix4x4();
+    mat.scale(m_width, m_height, 1.0f);
     batch->updateDynamicBuffer(m_ubuf, 0, 64, mat.constData());
 
     cb->resourceUpdate(batch);
 
     cb->setGraphicsPipeline(m_renderPipeline);
-    // viewportRect() が解決できない場合、window 基準の物理ピクセルビューポートを使用
-    float dpr = m_window->devicePixelRatio();
+
+    // Qt 6.11 では RenderState から直接矩形が得られないため、ウィンドウの物理サイズをビューポートに使用
+    const float dpr = m_window->devicePixelRatio();
     cb->setViewport(QRhiViewport(0, 0, static_cast<float>(m_window->width()) * dpr, static_cast<float>(m_window->height()) * dpr));
+
+    // シーングラフによるクリッピングが有効な場合は適用
+    if (state && state->scissorEnabled()) {
+        const QRect s = state->scissorRect();
+        cb->setScissor(QRhiScissor(s.x(), s.y(), s.width(), s.height()));
+    }
+
     cb->setShaderResources(m_renderSrb);
 
     const QRhiCommandBuffer::VertexInput vbufBinding(m_vbuf, 0);

@@ -5,9 +5,6 @@ import QtQuick.Dialogs
 import QtQuick.Layouts
 
 Loader {
-    // 数値
-    // 整数
-
     id: controlLoader
 
     property var definition: ({
@@ -176,10 +173,10 @@ Loader {
             minValue: controlLoader.definition.min !== undefined ? controlLoader.definition.min : -100000
             maxValue: controlLoader.definition.max !== undefined ? controlLoader.definition.max : 100000
             decimals: controlLoader.definition.decimals !== undefined ? controlLoader.definition.decimals : 2
-            onStartValueModified: function(val) {
+            onStartValueModified: (val) => {
                 controlLoader.valueModified(val);
             }
-            onEndValueModified: function(val) {
+            onEndValueModified: (val) => {
                 controlLoader.valueModified(val);
             }
             onParamButtonClicked: {
@@ -554,7 +551,7 @@ Loader {
                     var idx = controlLoader._optionIndex(model, controlLoader.value);
                     return idx >= 0 ? idx : 0;
                 }
-                onActivated: {
+                onActivated: (index) => {
                     controlLoader.valueModified(controlLoader._optionValue(model[index]));
                 }
             }

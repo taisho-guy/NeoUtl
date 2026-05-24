@@ -458,7 +458,7 @@ Common.AviQtlWindow {
                                 checked: modelData.enabled !== undefined ? modelData.enabled : true
                                 Layout.preferredHeight: 20
                                 Layout.preferredWidth: 20
-                                onToggled: {
+                                onToggled: (checked) => {
                                     if (!Workspace.currentTimeline)
                                         return ;
 
@@ -1197,12 +1197,14 @@ Common.AviQtlWindow {
         handle: Rectangle {
             implicitWidth: 4
             implicitHeight: 4
-            color: SplitView.isPressed ? palette.highlight : palette.mid
-            // ホバー時またはドラッグ時のみ表示
-            opacity: (SplitView.isPressed || SplitView.isHovered) ? 1 : 0
+            color: splitMouseArea.pressed ? palette.highlight : palette.mid
+            opacity: (splitMouseArea.pressed || splitMouseArea.containsMouse) ? 1 : 0
 
             MouseArea {
+                id: splitMouseArea
+
                 anchors.fill: parent
+                hoverEnabled: true
                 acceptedButtons: Qt.NoButton
                 cursorShape: Qt.SplitHCursor
             }
@@ -1238,17 +1240,20 @@ Common.AviQtlWindow {
             property var _dynamicObjects: []
 
             function _registerDynamic(obj) {
+                if (obj)
+                    _dynamicObjects.push(obj);
+
                 return obj;
             }
 
             function _clearDynamicMenu() {
-                while (filterMenu.count > 0) {
-                    var it = filterMenu.takeItem(0);
-                    if (it)
-                        it.destroy();
+                for (var i = 0; i < _dynamicObjects.length; ++i) {
+                    if (_dynamicObjects[i])
+                        _dynamicObjects[i].destroy();
 
                 }
                 _dynamicObjects = [];
+                while (filterMenu.count > 0)filterMenu.takeItem(0)
             }
 
             function buildMenu(parentMenu, items) {

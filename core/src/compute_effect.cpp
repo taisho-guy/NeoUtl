@@ -161,7 +161,9 @@ auto ComputeEffect::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *) -> 
         m_dirty = true;
     }
 
-    if (m_dirty) {
+    // m_dirty だけでなく、ソース（動画・画像）がある場合は毎フレーム更新を試みる
+    // これにより動画再生中のテクスチャ更新がノードへ伝播する
+    if (m_dirty || m_source) {
         // m_rawSSBOs → ComputeRenderNode::SSBOEntry に変換して転送
         QList<ComputeRenderNode::SSBOEntry> entries;
         if (!m_rawSSBOs.isEmpty()) {
@@ -190,6 +192,7 @@ auto ComputeEffect::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *) -> 
 
         node->syncSSBOs(entries);
         node->syncShaderPath(m_shaderPath);
+        node->syncSize(width(), height());
         node->syncWorkGroupSize(m_workGroupX, m_workGroupY);
         m_dirty = false;
     }

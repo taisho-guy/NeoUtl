@@ -1237,43 +1237,43 @@ This software is released under the GNU Affero General Public License Version 3.
 <context>
     <name>ControlLoader</name>
     <message>
-        <location filename="../ui/qml/common/ControlLoader.qml" line="30"/>
-        <location filename="../ui/qml/common/ControlLoader.qml" line="32"/>
+        <location filename="../ui/qml/common/ControlLoader.qml" line="27"/>
+        <location filename="../ui/qml/common/ControlLoader.qml" line="29"/>
         <source>パラメータ</source>
         <translation>Parameters</translation>
     </message>
     <message>
-        <location filename="../ui/qml/common/ControlLoader.qml" line="310"/>
+        <location filename="../ui/qml/common/ControlLoader.qml" line="307"/>
         <source>開始色 (f%1)</source>
         <translation>Start color (f%1)</translation>
     </message>
     <message>
-        <location filename="../ui/qml/common/ControlLoader.qml" line="310"/>
+        <location filename="../ui/qml/common/ControlLoader.qml" line="307"/>
         <source>色を選択</source>
         <translation>Select Color</translation>
     </message>
     <message>
-        <location filename="../ui/qml/common/ControlLoader.qml" line="387"/>
+        <location filename="../ui/qml/common/ControlLoader.qml" line="384"/>
         <source>終了色 (f%1)</source>
         <translation>End color (f%1)</translation>
     </message>
     <message>
-        <location filename="../ui/qml/common/ControlLoader.qml" line="433"/>
+        <location filename="../ui/qml/common/ControlLoader.qml" line="430"/>
         <source>ファイルを選択</source>
         <translation>Select File</translation>
     </message>
     <message>
-        <location filename="../ui/qml/common/ControlLoader.qml" line="575"/>
+        <location filename="../ui/qml/common/ControlLoader.qml" line="572"/>
         <source>設定</source>
         <translation>Settings</translation>
     </message>
     <message>
-        <location filename="../ui/qml/common/ControlLoader.qml" line="667"/>
+        <location filename="../ui/qml/common/ControlLoader.qml" line="664"/>
         <source>フォントを選択</source>
         <translation>Select Font</translation>
     </message>
     <message>
-        <location filename="../ui/qml/common/ControlLoader.qml" line="683"/>
+        <location filename="../ui/qml/common/ControlLoader.qml" line="680"/>
         <source>デフォルト</source>
         <translation>Default</translation>
     </message>
@@ -2890,7 +2890,7 @@ Please restart the application to apply.</translation>
         <translation> (Bezier)</translation>
     </message>
     <message>
-        <location filename="../ui/qml/SettingDialog.qml" line="1278"/>
+        <location filename="../ui/qml/SettingDialog.qml" line="1283"/>
         <source>エフェクトを追加</source>
         <translation>Add Effect</translation>
     </message>
