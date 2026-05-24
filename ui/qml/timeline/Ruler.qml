@@ -212,10 +212,6 @@ Rectangle {
                     }
                 }
                 onPositionChanged: (mouse) => {
-                    // スクラブ操作中（pressed）は編集カーソルの位置を更新しない
-                    if (Workspace.currentTimeline && targetFlickable && !pressed)
-                        Workspace.currentTimeline.cursorFrame = pxToFrame(mouse.x, targetFlickable.contentX);
-
                     if (pressed && (mouse.buttons & Qt.LeftButton) && targetFlickable && Workspace.currentTimeline && Workspace.currentTimeline.transport)
                         Workspace.currentTimeline.transport.scrubTo(pxToFrame(mouse.x, targetFlickable.contentX));
 

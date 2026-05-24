@@ -369,27 +369,17 @@ ScrollView {
             acceptedButtons: Qt.LeftButton
             cursorShape: Qt.ArrowCursor
             hoverEnabled: true
-            onPositionChanged: (mouse) => {
-                if (Workspace.currentTimeline && !pressed && !contextMenu.visible) {
-                    var scale = Workspace.currentTimeline.timelineScale;
-                    var frame = timelineViewRoot.snapFrame(mouse.x / scale, (mouse.modifiers & Qt.ShiftModifier));
-                    Workspace.currentTimeline.cursorFrame = frame;
-                }
-            }
+            onPositionChanged: (mouse) => { }
             onPressed: (mouse) => {
+                if (Workspace.currentTimeline)
+                    Workspace.currentTimeline.cursorFrame = timelineViewRoot.snapFrame(mouse.x / Workspace.currentTimeline.timelineScale, (mouse.modifiers & Qt.ShiftModifier));
+
                 var l = Math.floor(mouse.y / layerHeight);
                 if (Workspace.currentTimeline && l >= 0 && l < layerCount) {
                     Workspace.currentTimeline.selectedLayer = l;
                     Workspace.currentTimeline.clearSelectionPreview();
                     Workspace.currentTimeline.applySelectionIds([]);
                 }
-            }
-            onReleased: (mouse) => {
-                var scale = Workspace.currentTimeline ? Workspace.currentTimeline.timelineScale : 1;
-                var frame = timelineViewRoot.snapFrame(mouse.x / scale);
-                if (Workspace.currentTimeline && Workspace.currentTimeline.transport)
-                    Workspace.currentTimeline.transport.setCurrentFrame_seek(frame);
-
             }
         }
 
