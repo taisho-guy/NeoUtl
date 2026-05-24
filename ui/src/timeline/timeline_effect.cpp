@@ -374,7 +374,7 @@ void TimelineService::updateEffectParamInternal(int clipId, int effectIndex, con
             emit effectParamChanged(clipId, effectIndex, paramName, value);
 
             // 素材の再読み込みが必要な場合のみ、重い全体リフレッシュを発行
-            if (paramName == QLatin1String("path") || paramName == QLatin1String("source") || paramName == QStringLiteral("targetSceneId")) {
+            if (paramName == QLatin1String("path") || paramName == QLatin1String("source") || paramName == QStringLiteral("targetSceneId") || paramName == QStringLiteral("layerCount")) {
                 emit clipsChanged();
             }
 
@@ -439,7 +439,8 @@ void TimelineService::setKeyframeInternal(int clipId, int effectIndex, const QSt
         // ECSエンジンの更新を促す
         emit effectParamChanged(clipId, effectIndex, paramName, value);
 
-        if (paramName == QLatin1String("path") || paramName == QLatin1String("source") || paramName == QStringLiteral("targetSceneId")) {
+        // 見た目や構造に影響するパラメータの場合は全体をリフレッシュ
+        if (paramName == QLatin1String("path") || paramName == QLatin1String("source") || paramName == QStringLiteral("targetSceneId") || paramName == QStringLiteral("layerCount")) {
             emit clipsChanged();
         }
     }
@@ -451,7 +452,7 @@ void TimelineService::removeKeyframeInternal(int clipId, int effectIndex, const 
         clip->effects.value(effectIndex)->removeKeyframe(paramName, frame);
 
         emit effectParamChanged(clipId, effectIndex, paramName, QVariant());
-        if (paramName == QLatin1String("path") || paramName == QLatin1String("source") || paramName == QStringLiteral("targetSceneId")) {
+        if (paramName == QLatin1String("path") || paramName == QLatin1String("source") || paramName == QStringLiteral("targetSceneId") || paramName == QStringLiteral("layerCount")) {
             emit clipsChanged();
         }
     }

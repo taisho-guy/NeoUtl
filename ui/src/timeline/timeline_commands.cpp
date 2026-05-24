@@ -35,6 +35,7 @@ auto UpdateEffectParamCommand::mergeWith(const QUndoCommand *other) -> bool {
         return false;
     }
     m_newValue = cmd->m_newValue; // 連続する同じパラメータの変更はマージする
+    redo();                       // モデルを最新値で更新し、シグナルを発火させる
     return true;
 }
 
@@ -230,6 +231,7 @@ auto SetKeyframeCommand::mergeWith(const QUndoCommand *other) -> bool {
     }
     m_newValue = cmd->m_newValue;
     m_newOptions = cmd->m_newOptions;
+    redo(); // マージ中もモデルを同期
     return true;
 }
 

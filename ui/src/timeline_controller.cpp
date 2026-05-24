@@ -15,6 +15,8 @@
 #include "video_decoder.hpp"
 #include "video_frame_store.hpp"
 #include <QFile>
+#include <QSet>
+#include <QSignalBlocker>
 #include <QUndoStack>
 #include <QUrl>
 #include <QtGlobal>
@@ -208,7 +210,8 @@ bool TimelineController::hasUnsavedChanges() const {
 
 void TimelineController::syncTimelineToDocumentModel() {
     auto &doc = AviQtl::Core::DocumentModel::instance();
-    doc.clear();
+    // 同期中の連続的な信号発火を抑制し、最後に一度だけ Bake を走らせる
+    QSignalBlocker blocker(&doc);
 
     // 1. プロジェクト設定の同期
     AviQtl::Core::ProjectSettings projSettings;
@@ -224,7 +227,23 @@ void TimelineController::syncTimelineToDocumentModel() {
     if (!m_timeline)
         return;
 
-    for (const auto &uiScene : m_timeline->getAllScenes()) {
+    const auto &uiScenes = m_timeline->getAllScenes();
+    QSet<int> incomingSceneIds;
+    for (const auto &s : uiScenes)
+        incomingSceneIds.insert(s.id);
+
+    QSet<int> existingDocSceneIds;
+    for (const auto &s : doc.scenes())
+        existingDocSceneIds.insert(s.id);
+
+    // 2. 不要になったシーンの削除
+    for (int id : existingDocSceneIds) {
+        if (!incomingSceneIds.contains(id))
+            doc.removeScene(id);
+    }
+
+    // 3. シーンとクリップの同期
+    for (const auto &uiScene : uiScenes) {
         AviQtl::Core::SceneSettings sceneSettings;
         sceneSettings.id = uiScene.id;
         sceneSettings.name = uiScene.name;
@@ -243,6 +262,7 @@ void TimelineController::syncTimelineToDocumentModel() {
         }
 
         // クリップ
+        std::vector<AviQtl::Core::Clip> coreClips;
         for (const auto &uiClip : uiScene.clips) {
             AviQtl::Core::Clip clip;
             clip.id = uiClip.id;
@@ -290,11 +310,22 @@ void TimelineController::syncTimelineToDocumentModel() {
                 clip.effects.push_back(std::move(effect));
             }
 
-            sceneSettings.clips.push_back(std::move(clip));
+            coreClips.push_back(std::move(clip));
         }
 
-        doc.addScene(sceneSettings);
+        if (existingDocSceneIds.contains(uiScene.id)) {
+            // 既存シーンの更新
+            doc.updateSceneSettings(sceneSettings);
+            doc.setClips(uiScene.id, std::move(coreClips));
+        } else {
+            // 新規シーンの追加
+            sceneSettings.clips = std::move(coreClips);
+            doc.addScene(sceneSettings);
+        }
     }
+
+    blocker.unblock();
+    emit doc.structureChanged();
 }
 
 } // namespace AviQtl::UI

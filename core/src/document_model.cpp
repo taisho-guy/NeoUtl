@@ -34,6 +34,25 @@ void DocumentModel::removeScene(int sceneId) {
     }
 }
 
+void DocumentModel::updateSceneSettings(const SceneSettings &settings) {
+    auto it = std::find_if(m_scenes.begin(), m_scenes.end(), [&settings](const SceneSettings &s) { return s.id == settings.id; });
+    if (it != m_scenes.end()) {
+        // クリップは保持し、他の設定のみ更新
+        auto savedClips = std::move(it->clips);
+        *it = settings;
+        it->clips = std::move(savedClips);
+        emit structureChanged();
+    }
+}
+
+void DocumentModel::setClips(int sceneId, std::vector<Clip> &&clips) {
+    auto it = std::find_if(m_scenes.begin(), m_scenes.end(), [sceneId](const SceneSettings &s) { return s.id == sceneId; });
+    if (it != m_scenes.end()) {
+        it->clips = std::move(clips);
+        emit structureChanged();
+    }
+}
+
 const Clip *DocumentModel::findClip(int sceneId, int clipId) const {
     const SceneSettings *scene = findScene(sceneId);
     if (!scene)

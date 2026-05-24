@@ -92,6 +92,9 @@ class DocumentModel : public QObject {
     void addScene(const SceneSettings &scene);
     void removeScene(int sceneId);
 
+    void updateSceneSettings(const SceneSettings &settings);
+    void setClips(int sceneId, std::vector<Clip> &&clips);
+
     // クリップ操作
     const Clip *findClip(int sceneId, int clipId) const;
     void addClip(int sceneId, const Clip &clip);

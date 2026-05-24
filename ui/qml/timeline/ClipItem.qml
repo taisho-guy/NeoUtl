@@ -37,9 +37,9 @@ Item {
     z: modelData.layer
 
     Rectangle {
-        visible: clipDelegate.isSelected && (modelData.groupLayerCount > 0)
+        visible: modelData.groupLayerCount > 0
         x: 0
-        y: layerHeight * 0.9
+        y: parent.height
         width: parent.width
         height: modelData.groupLayerCount * layerHeight
         color: Qt.rgba(palette.highlight.r, palette.highlight.g, palette.highlight.b, 0.18)
