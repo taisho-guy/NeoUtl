@@ -15,6 +15,7 @@ Item {
     property int projectHeight: (Workspace.currentTimeline && Workspace.currentTimeline.project) ? Workspace.currentTimeline.project.height : 1080
     property int currentFrame: (Workspace.currentTimeline && Workspace.currentTimeline.transport) ? Workspace.currentTimeline.transport.currentFrame : 0
     property int sceneId: -1
+    property var sceneStack: sceneId >= 0 ? [sceneId] : []
     readonly property int hiddenZ: -9999
     // Component cache to prevent redundant Qt.createComponent calls
     property var _componentCache: ({
@@ -449,6 +450,11 @@ Item {
 
                             if ("sceneRootRef" in item)
                                 item.sceneRootRef = sceneRoot;
+
+                            if ("sceneStack" in item)
+                                item.sceneStack = Qt.binding(function() {
+                                return root.sceneStack;
+                            });
 
                             if ("rawEffectModels" in item)
                                 item.rawEffectModels = Qt.binding(function() {

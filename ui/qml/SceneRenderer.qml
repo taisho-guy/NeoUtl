@@ -7,6 +7,7 @@ Item {
     property int sceneId: -1
     property int currentFrame: 0
     property var timelineBridge: null
+    property var sceneStack: sceneId >= 0 ? [sceneId] : []
     property int sceneWidth: 1920
     property int sceneHeight: 1080
     // シーン情報を取得
@@ -44,6 +45,7 @@ Item {
             return [];
         }
         sceneId: root.sceneId
+        sceneStack: root.sceneStack
         projectWidth: root.sceneWidth
         projectHeight: root.sceneHeight
         currentFrame: root.currentFrame

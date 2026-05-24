@@ -1128,22 +1128,22 @@ This software is released under the GNU Affero General Public License Version 3.
 <context>
     <name>AviQtl::UI::TimelineService</name>
     <message>
-        <location filename="../ui/src/timeline/timeline_clip.cpp" line="86"/>
+        <location filename="../ui/src/timeline/timeline_clip.cpp" line="105"/>
         <source>レイヤーを上に挿入</source>
         <translation>Insert Layer Above</translation>
     </message>
     <message>
-        <location filename="../ui/src/timeline/timeline_clip.cpp" line="86"/>
+        <location filename="../ui/src/timeline/timeline_clip.cpp" line="105"/>
         <source>レイヤーを下に挿入</source>
         <translation>Insert Layer Below</translation>
     </message>
     <message>
-        <location filename="../ui/src/timeline/timeline_clip.cpp" line="109"/>
+        <location filename="../ui/src/timeline/timeline_clip.cpp" line="128"/>
         <source>レイヤーをまとめて下へ移動</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../ui/src/timeline/timeline_clip.cpp" line="109"/>
+        <location filename="../ui/src/timeline/timeline_clip.cpp" line="128"/>
         <source>レイヤーをまとめて上へ移動</source>
         <translation type="unfinished"></translation>
     </message>
@@ -1268,12 +1268,12 @@ This software is released under the GNU Affero General Public License Version 3.
         <translation>Settings</translation>
     </message>
     <message>
-        <location filename="../ui/qml/common/ControlLoader.qml" line="651"/>
+        <location filename="../ui/qml/common/ControlLoader.qml" line="667"/>
         <source>フォントを選択</source>
         <translation>Select Font</translation>
     </message>
     <message>
-        <location filename="../ui/qml/common/ControlLoader.qml" line="667"/>
+        <location filename="../ui/qml/common/ControlLoader.qml" line="683"/>
         <source>デフォルト</source>
         <translation>Default</translation>
     </message>
@@ -2665,37 +2665,37 @@ Please restart the application to apply.</translation>
         <translation>Root</translation>
     </message>
     <message>
-        <location filename="../ui/src/timeline/timeline_clip.cpp" line="195"/>
+        <location filename="../ui/src/timeline/timeline_clip.cpp" line="214"/>
         <source>複数クリップ絶対移動: %1</source>
         <translation>Absolute move multiple clips: %1</translation>
     </message>
     <message>
-        <location filename="../ui/src/timeline/timeline_clip.cpp" line="251"/>
+        <location filename="../ui/src/timeline/timeline_clip.cpp" line="270"/>
         <source>複数クリップ移動: %1</source>
         <translation>Move multiple clips: %1</translation>
     </message>
     <message>
-        <location filename="../ui/src/timeline/timeline_clip.cpp" line="310"/>
+        <location filename="../ui/src/timeline/timeline_clip.cpp" line="329"/>
         <source>複数クリップ変形: %1</source>
         <translation>Transform multiple clips: %1</translation>
     </message>
     <message>
-        <location filename="../ui/src/timeline/timeline_clip.cpp" line="585"/>
+        <location filename="../ui/src/timeline/timeline_clip.cpp" line="604"/>
         <source>クリップ削除</source>
         <translation>Delete clip</translation>
     </message>
     <message>
-        <location filename="../ui/src/timeline/timeline_clip.cpp" line="585"/>
+        <location filename="../ui/src/timeline/timeline_clip.cpp" line="604"/>
         <source>複数クリップ削除: %1</source>
         <translation>Delete multiple clips: %1</translation>
     </message>
     <message>
-        <location filename="../ui/src/timeline/timeline_clip.cpp" line="722"/>
+        <location filename="../ui/src/timeline/timeline_clip.cpp" line="741"/>
         <source>複数クリップ分割: %1</source>
         <translation>Split multiple clips: %1</translation>
     </message>
     <message>
-        <location filename="../ui/src/timeline/timeline_clip.cpp" line="775"/>
+        <location filename="../ui/src/timeline/timeline_clip.cpp" line="794"/>
         <source>複数クリップ貼り付け: %1</source>
         <translation>Paste multiple clips: %1</translation>
     </message>

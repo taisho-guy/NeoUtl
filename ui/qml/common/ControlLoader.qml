@@ -609,9 +609,25 @@ Loader {
 
                     return null;
                 }
+                property var sourceModel: sourceObj ? sourceObj[controlLoader.definition.sourceProperty] : []
+                property var filteredModel: {
+                    if (!controlLoader.definition.excludeCurrentScene || !sourceModel)
+                        return sourceModel;
+
+                    var currentSceneId = Workspace.currentTimeline ? Workspace.currentTimeline.currentSceneId : -1;
+                    var valueKey = controlLoader.definition.valueRole || "id";
+                    var items = [];
+                    for (var i = 0; i < sourceModel.length; i++) {
+                        var item = sourceModel[i];
+                        if (item && item[valueKey] !== currentSceneId)
+                            items.push(item);
+
+                    }
+                    return items;
+                }
 
                 Layout.fillWidth: true
-                model: sourceObj ? sourceObj[controlLoader.definition.sourceProperty] : []
+                model: filteredModel
                 textRole: controlLoader.definition.textRole || "name"
                 valueRole: controlLoader.definition.valueRole || "id"
                 currentIndex: {

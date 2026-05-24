@@ -51,6 +51,25 @@ void TimelineService::createClipInternal(int clipId, const QString &type, int st
 
     addEffectInternal(clipId, QStringLiteral("transform"));
     addEffectInternal(clipId, type);
+    if (type == QLatin1String("scene")) {
+        int defaultTargetSceneId = -1;
+        for (const auto &scene : std::as_const(m_scenes)) {
+            if (scene.id != m_currentSceneId) {
+                defaultTargetSceneId = scene.id;
+                break;
+            }
+        }
+
+        auto *clip = findClipById(clipId);
+        if (clip != nullptr) {
+            for (auto *eff : std::as_const(clip->effects)) {
+                if (eff != nullptr && eff->id() == QLatin1String("scene")) {
+                    eff->setParam(QStringLiteral("targetSceneId"), defaultTargetSceneId);
+                    break;
+                }
+            }
+        }
+    }
 
     if (emitSignal) {
         emit clipsChanged();
