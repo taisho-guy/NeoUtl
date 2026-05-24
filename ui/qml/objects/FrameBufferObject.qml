@@ -11,7 +11,7 @@ Common.BaseObject {
     property int clipLayer: 0
     property var sceneRootRef: null
     // onItemChanged で item.clipLayer = model.layer される
-    property bool clearBelow: Boolean(evalParam("frame_buffer", "clearBelow", false))
+    readonly property bool clearBelow: Boolean(evalParam("frame_buffer", "clearBelow", false))
     // ObjectRenderer の Binding が要求するダミープロパティ (警告抑制)
     property var source: undefined
     property var params: ({
@@ -44,10 +44,10 @@ Common.BaseObject {
 
             }
         }
-        // AviUtlの上位レイヤー結果を背景側から順に再合成する。
-        // レイヤー番号が小さいほど前面なので、番号の大きいものから描画する。
+        // AviUtlのレイヤーを背景側から順に再合成する。
+        // レイヤー番号が大きいほど前面（上に重なる）なので、番号の小さいもの（背景側）から順に並べる。
         outputs.sort(function(a, b) {
-            return b.layer - a.layer;
+            return a.layer - b.layer;
         });
         var sorted = [];
         for (var j = 0; j < outputs.length; j++) sorted.push(outputs[j].src)
@@ -57,6 +57,7 @@ Common.BaseObject {
     onSceneRootRefChanged: Qt.callLater(root._rebuildCapture)
     onClipLayerChanged: Qt.callLater(root._rebuildCapture)
     onCurrentFrameChanged: Qt.callLater(root._rebuildCapture)
+    onClearBelowChanged: Qt.callLater(root._rebuildCapture)
     Component.onCompleted: {
         adopt2D(flattenHost);
         adopt2D(fbSourceWrapper);
@@ -96,7 +97,7 @@ Common.BaseObject {
             id: dummyBackground
 
             anchors.fill: parent
-            color: "transparent"
+            color: root.clearBelow ? "black" : "transparent"
             visible: true
         }
 
@@ -191,7 +192,7 @@ Common.BaseObject {
 
         materials: DefaultMaterial {
             lighting: DefaultMaterial.NoLighting
-            blendMode: root.blendMode
+            blendMode: root.clearBelow ? DefaultMaterial.NoBlending : root.blendMode
             cullMode: root.cullMode
 
             diffuseMap: Texture {
@@ -200,14 +201,6 @@ Common.BaseObject {
 
         }
 
-    }
-
-    // clearBelow: 下位レイヤーを黒でマスク
-    Rectangle {
-        visible: root.clearBelow
-        anchors.fill: parent
-        color: "black"
-        z: -1
     }
 
     // flattenHost またはブレンドチェーンの最終結果を1枚のテクスチャに焼く → sourceItem
