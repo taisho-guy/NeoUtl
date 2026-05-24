@@ -1,4 +1,5 @@
 #include "compute_render_node.hpp"
+#include <QCoreApplication>
 #include <QFile>
 #include <QLoggingCategory>
 #include <QQuickWindow>
@@ -49,6 +50,7 @@ void ComputeRenderNode::syncSize(float w, float h) {
 void ComputeRenderNode::syncInputTexture(QSGTexture *tex) {
     if (m_inputTexture == tex)
         return;
+    qCDebug(lcComputeRenderNode) << "ComputeRenderNode: inputTexture updated to" << tex;
     m_inputTexture = tex;
     m_bufferLayoutDirty = true;
 }
@@ -141,6 +143,12 @@ bool ComputeRenderNode::ensureBuffers(QRhi *rhi) {
         if (m_gpuBuffers.isEmpty()) {
             m_bufferLayoutDirty = false;
         }
+
+        // デバッグ用: 何が原因で「Nothing to do」になっているのかを明確にする
+        static int infoCount = 0;
+        if (infoCount++ % 120 == 0)
+            qCDebug(lcComputeRenderNode) << "ComputeRenderNode Status: inputTex=" << m_inputTexture << " pendingSSBOs=" << m_pendingSSBOs.size();
+
         if (!m_inputTexture) {
             static int warnCount = 0;
             if (warnCount++ % 60 == 0)
@@ -246,10 +254,18 @@ bool ComputeRenderNode::ensurePipeline(QRhi *rhi) {
         inputLayout.setAttributes({{0, 0, QRhiVertexInputAttribute::Float2, 0}, {0, 1, QRhiVertexInputAttribute::Float2, 2 * sizeof(float)}});
         m_renderPipeline->setVertexInputLayout(inputLayout);
 
-        QFile vfile(QStringLiteral(":/qt/qml/AviQtl/ui/qml/common/shaders/blit.vert.qsb"));
-        QFile ffile(QStringLiteral(":/qt/qml/AviQtl/ui/qml/common/shaders/blit.frag.qsb"));
+        // 実行ファイルからの相対パスで直置きファイルを読み込む (build/bin/ から build/common/shaders/ へ)
+        QString baseDir = QCoreApplication::applicationDirPath();
+        if (baseDir.endsWith("/bin"))
+            baseDir.chop(4);
+        QString shaderDir = baseDir + "/common/shaders/";
+        QFile vfile(shaderDir + "blit.vert.qsb");
+        QFile ffile(shaderDir + "blit.frag.qsb");
+
         if (vfile.open(QIODevice::ReadOnly) && ffile.open(QIODevice::ReadOnly)) {
             m_renderPipeline->setShaderStages({{QRhiShaderStage::Vertex, QShader::fromSerialized(vfile.readAll())}, {QRhiShaderStage::Fragment, QShader::fromSerialized(ffile.readAll())}});
+        } else {
+            qCWarning(lcComputeRenderNode) << "ComputeRenderNode: CRITICAL - Failed to load blit shaders from:" << shaderDir;
         }
     }
 
@@ -291,7 +307,10 @@ bool ComputeRenderNode::ensurePipeline(QRhi *rhi) {
         auto *rt = static_cast<QRhiRenderPassDescriptor *>(ri->getResource(m_window, QSGRendererInterface::RenderPassResource));
         m_renderPipeline->setTargetBlends({{}});
         m_renderPipeline->setRenderPassDescriptor(rt);
-        m_renderPipeline->create();
+        if (!m_renderPipeline->create()) {
+            qCWarning(lcComputeRenderNode) << "ComputeRenderNode: Failed to create Graphics Pipeline (Blit)";
+            return false;
+        }
     }
 
     m_shaderDirty = false;
@@ -349,25 +368,19 @@ void ComputeRenderNode::prepare() {
 }
 
 void ComputeRenderNode::render(const RenderState *state) {
-    static bool firstRender = true;
-    if (firstRender) {
-        qCDebug(lcComputeRenderNode) << "ComputeRenderNode: First graphics render pass started";
-        firstRender = false;
-    }
-
     auto *cb = resolveCommandBuffer();
     if (!cb || !m_renderPipeline || !m_vbuf || !m_outputTexture)
         return;
 
-    // 行列の更新 (QMLアイテムの論理座標からNDCへの変換)
-    QRhiResourceUpdateBatch *batch = m_rhi->nextResourceUpdateBatch();
-    // projectionMatrix() は Item 空間から NDC への変換を保持しているため、デリファレンスして取得
+    // 表示位置を QML アイテムと同期させるための行列更新
     // 頂点データが 0..1 の単位正方形のため、アイテムの論理サイズまでスケールをかける
-    QMatrix4x4 mat = (state && state->projectionMatrix()) ? *state->projectionMatrix() : QMatrix4x4();
-    mat.scale(m_width, m_height, 1.0f);
-    batch->updateDynamicBuffer(m_ubuf, 0, 64, mat.constData());
-
-    cb->resourceUpdate(batch);
+    if (m_ubuf && state && state->projectionMatrix()) {
+        QRhiResourceUpdateBatch *batch = m_rhi->nextResourceUpdateBatch();
+        QMatrix4x4 mat = *state->projectionMatrix();
+        mat.scale(m_width, m_height, 1.0f);
+        batch->updateDynamicBuffer(m_ubuf, 0, 64, mat.constData());
+        cb->resourceUpdate(batch);
+    }
 
     cb->setGraphicsPipeline(m_renderPipeline);
 

@@ -5,6 +5,7 @@
 #include <QObject>
 #include <QQuickItem>
 #include <QSGNode>
+#include <QUrl>
 #include <QVariantMap>
 #include <cstdint>
 
@@ -23,9 +24,9 @@ class ComputeEffect : public QQuickItem {
     Q_PROPERTY(QVariantMap params READ params WRITE setParams NOTIFY paramsChanged)
     Q_PROPERTY(QVariantMap storageBuffers READ storageBuffers WRITE setStorageBuffers NOTIFY storageBuffersChanged)
     Q_PROPERTY(bool shaderEnabled READ shaderEnabled WRITE setShaderEnabled NOTIFY shaderEnabledChanged)
-    Q_PROPERTY(QString shaderPath READ shaderPath WRITE setShaderPath NOTIFY shaderPathChanged)
+    Q_PROPERTY(QUrl shaderPath READ shaderPath WRITE setShaderPath NOTIFY shaderPathChanged)
 
-    Q_PROPERTY(QString computeShader READ shaderPath WRITE setShaderPath NOTIFY shaderPathChanged)
+    Q_PROPERTY(QUrl computeShader READ shaderPath WRITE setShaderPath NOTIFY shaderPathChanged)
     Q_PROPERTY(QString error READ error NOTIFY errorChanged)
     Q_PROPERTY(int workGroupSizeX READ workGroupSizeX WRITE setWorkGroupSizeX NOTIFY workGroupSizeXChanged)
     Q_PROPERTY(int workGroupSizeY READ workGroupSizeY WRITE setWorkGroupSizeY NOTIFY workGroupSizeYChanged)
@@ -41,7 +42,7 @@ class ComputeEffect : public QQuickItem {
     QVariantMap params() const { return m_params; }
     QVariantMap storageBuffers() const { return m_storageBuffers; }
     bool shaderEnabled() const { return m_enabled; }
-    QString shaderPath() const { return m_shaderPath; }
+    QUrl shaderPath() const { return m_shaderPath; }
     QString error() const { return m_error; }
 
     int workGroupSizeX() const { return m_workGroupX; }
@@ -51,7 +52,7 @@ class ComputeEffect : public QQuickItem {
     void setParams(const QVariantMap &params);
     void setStorageBuffers(const QVariantMap &buffers);
     void setShaderEnabled(bool enabled);
-    void setShaderPath(const QString &path);
+    void setShaderPath(const QUrl &path);
 
     void setWorkGroupSizeX(int x);
     void setWorkGroupSizeY(int y);
@@ -89,7 +90,7 @@ class ComputeEffect : public QQuickItem {
     QVariantMap m_params;
     QVariantMap m_storageBuffers;
     bool m_enabled = true;
-    QString m_shaderPath;
+    QUrl m_shaderPath;
     QString m_error;
     bool m_dirty = false;
 
