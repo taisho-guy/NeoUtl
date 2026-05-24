@@ -645,13 +645,13 @@ ScrollView {
                     if (node.isCategory) {
                         // addMenu(string) はネイティブメニューハンドルが未確定の場合に
                         // Qt内部でnullポインタ参照を起こすため、Component経由で生成する
-                        var subMenu = subMenuComp.createObject(timelineViewRoot, {
+                        var subMenu = subMenuComp.createObject(parentMenu, {
                             "title": node.title
                         });
                         buildObjMenu(subMenu, node.children);
                         parentMenu.addMenu(subMenu);
                     } else {
-                        var objItem = menuItemComp.createObject(timelineViewRoot, {
+                        var objItem = menuItemComp.createObject(parentMenu, {
                             "text": node.name,
                             "iconName": "shape_line"
                         });
@@ -669,13 +669,13 @@ ScrollView {
                 for (var i = 0; i < items.length; ++i) {
                     var node = items[i];
                     if (node.isCategory) {
-                        var subMenu = subMenuComp.createObject(timelineViewRoot, {
+                        var subMenu = subMenuComp.createObject(parentMenu, {
                             "title": node.title
                         });
                         buildEffectMenu(subMenu, node.children);
                         parentMenu.addMenu(subMenu);
                     } else {
-                        var effItem = menuItemComp.createObject(timelineViewRoot, {
+                        var effItem = menuItemComp.createObject(parentMenu, {
                             "text": node.name,
                             "iconName": "magic_line"
                         });
@@ -699,7 +699,7 @@ ScrollView {
                     var plugins = Workspace.currentTimeline.getPluginsByCategory(catName);
                     for (var p = 0; p < plugins.length; p++) {
                         (function(pluginData) {
-                            var plugItem = menuItemComp.createObject(timelineViewRoot, {
+                            var plugItem = menuItemComp.createObject(subMenu, {
                                 "text": pluginData.name,
                                 "iconName": "music_line"
                             });
@@ -727,12 +727,11 @@ ScrollView {
                     "title": qsTr("オブジェクトを追加")
                 });
                 objectMenu.aboutToShow.connect(function() {
-                    while (objectMenu.count > 0) {
-                        var it = objectMenu.takeItem(0);
-                        if (it)
-                            it.destroy();
+                    // すでに構築済み（ホバーし直し等）なら何もしない。
+                    // これにより項目が減っていく奇妙なバグを回避する。
+                    if (objectMenu.count > 0)
+                        return ;
 
-                    }
                     var objects = Workspace.currentTimeline.getAvailableObjects();
                     buildObjMenu(objectMenu, objects);
                 });
@@ -757,12 +756,9 @@ ScrollView {
                     "title": qsTr("エフェクトを追加")
                 });
                 addEffSub.aboutToShow.connect(function() {
-                    while (addEffSub.count > 0) {
-                        var it = addEffSub.takeItem(0);
-                        if (it)
-                            it.destroy();
+                    if (addEffSub.count > 0)
+                        return ;
 
-                    }
                     if (Workspace.currentTimeline.isAudioClip(targetClipId)) {
                         buildAudioPluginMenu(addEffSub);
                     } else {
