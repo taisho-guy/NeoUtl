@@ -16,10 +16,8 @@ Common.BaseObject {
     property color particleColor: evalColor(objectId, "color", "#ffffff")
     property real opacity: evalNumber(objectId, "opacity", 1)
 
-    sourceItem: sourceItem
-
     function rand(n) {
-        var x = Math.sin((n + seed * 37.17) * 12.9898) * 43758.5453;
+        var x = Math.sin((n + seed * 37.17) * 12.9898) * 43758.5;
         return x - Math.floor(x);
     }
 
@@ -38,6 +36,8 @@ Common.BaseObject {
         ctx.closePath();
         ctx.fill();
     }
+
+    sourceItem: sourceItem
 
     Item {
         id: sourceItem
@@ -93,11 +93,19 @@ Common.BaseObject {
             }
 
             Connections {
+                function onRevisionChanged() {
+                    canvas.requestPaint();
+                }
+
+                function onRelFrameChanged() {
+                    canvas.requestPaint();
+                }
+
                 target: root
-                function onRevisionChanged() { canvas.requestPaint(); }
-                function onRelFrameChanged() { canvas.requestPaint(); }
             }
+
         }
+
     }
 
     Model {
@@ -114,6 +122,9 @@ Common.BaseObject {
             diffuseMap: Texture {
                 sourceItem: root.displayOutput
             }
+
         }
+
     }
+
 }

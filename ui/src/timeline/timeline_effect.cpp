@@ -373,8 +373,20 @@ void TimelineService::updateEffectParamInternal(int clipId, int effectIndex, con
 
             emit effectParamChanged(clipId, effectIndex, paramName, value);
 
-            // 素材の再読み込みが必要な場合のみ、重い全体リフレッシュを発行
-            if (paramName == QLatin1String("path") || paramName == QLatin1String("source") || paramName == QStringLiteral("targetSceneId") || paramName == QStringLiteral("layerCount")) {
+            // [FIX-21] layerCount の変更は clipsChanged() を発行しない。
+            //
+            // 旧実装では layerCount パラメータ変更のたびに clipsChanged() を
+            // emit していたため、CompositeView の clipModel が全再構築され、
+            // CameraControlObject の destroy→recreate サイクルが毎回発生していた。
+            // これが SIGSEGV の主要トリガーの一つであった。
+            //
+            // layerCount の変更はカメラが参照するレイヤー範囲の変更であり、
+            // clipModel の再構築は不要。effectParamChanged シグナルだけで
+            // CameraControlObject.qml 側の evalParam() がリアクティブに再評価される。
+            //
+            // path / source / targetSceneId は実際にメディアや構造の変更を伴うため
+            // 引き続き clipsChanged() を発行する。
+            if (paramName == QLatin1String("path") || paramName == QLatin1String("source") || paramName == QStringLiteral("targetSceneId")) {
                 emit clipsChanged();
             }
 
@@ -483,8 +495,9 @@ void TimelineService::setKeyframeInternal(int clipId, int effectIndex, const QSt
         // ECSエンジンの更新を促す
         emit effectParamChanged(clipId, effectIndex, paramName, value);
 
-        // 見た目や構造に影響するパラメータの場合は全体をリフレッシュ
-        if (paramName == QLatin1String("path") || paramName == QLatin1String("source") || paramName == QStringLiteral("targetSceneId") || paramName == QStringLiteral("layerCount")) {
+        // [FIX-22] キーフレーム設定でも layerCount は clipsChanged() を発行しない。
+        // effectParamChanged でエンジン側は更新される。
+        if (paramName == QLatin1String("path") || paramName == QLatin1String("source") || paramName == QStringLiteral("targetSceneId")) {
             emit clipsChanged();
         }
     }
@@ -496,7 +509,7 @@ void TimelineService::removeKeyframeInternal(int clipId, int effectIndex, const 
         clip->effects.value(effectIndex)->removeKeyframe(paramName, frame);
 
         emit effectParamChanged(clipId, effectIndex, paramName, QVariant());
-        if (paramName == QLatin1String("path") || paramName == QLatin1String("source") || paramName == QStringLiteral("targetSceneId") || paramName == QStringLiteral("layerCount")) {
+        if (paramName == QLatin1String("path") || paramName == QLatin1String("source") || paramName == QStringLiteral("targetSceneId")) {
             emit clipsChanged();
         }
     }
@@ -510,7 +523,7 @@ void TimelineService::moveKeyframeInternal(int clipId, int effectIndex, const QS
         }
 
         emit effectParamChanged(clipId, effectIndex, paramName, QVariant());
-        if (paramName == QLatin1String("path") || paramName == QLatin1String("source") || paramName == QStringLiteral("targetSceneId") || paramName == QStringLiteral("layerCount")) {
+        if (paramName == QLatin1String("path") || paramName == QLatin1String("source") || paramName == QStringLiteral("targetSceneId")) {
             emit clipsChanged();
         }
     }

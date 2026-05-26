@@ -92,7 +92,6 @@ auto main(int argc, char *argv[]) -> int {
         app.installTranslator(&translator);
     }
 
-    // 設定・テーマ初期化（SettingsManagerはコンストラクタで設定をロードし、ThemeControllerがテーマを適用する）
     auto &settings = Core::SettingsManager::instance();
     Core::ThemeController::instance();
 
@@ -154,7 +153,6 @@ auto main(int argc, char *argv[]) -> int {
         loadRegistry(QStringLiteral("Effects"));
         loadRegistry(QStringLiteral("Objects"));
 
-        // シグナル発行がバックグラウンドスレッドからのため、
         // 第三引数に &app (メインスレッド所属) を渡してメインスレッドで実行されるようにする
         QObject::connect(&Engine::Plugin::AudioPluginManager::instance(), &Engine::Plugin::AudioPluginManager::pluginsReady, &app, [&]() {
             UI::WindowManager::instance().showLauncher(&engine);

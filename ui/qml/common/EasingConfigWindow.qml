@@ -791,7 +791,6 @@ ApplicationWindow {
                             // 前のアンカーを取得
                             var prevX = (insertIdx === 0) ? 0 : p[insertIdx - 2];
                             var prevY = (insertIdx === 0) ? 0 : p[insertIdx - 1];
-                            // 前後の中間付近に制御点を配置する簡易初期化
                             var newSeg = [prevX + (lx - prevX) * 0.33, prevY + (ly - prevY) * 0.33, prevX + (lx - prevX) * 0.66, prevY + (ly - prevY) * 0.66, lx, ly];
                             p.splice(insertIdx, 0, newSeg[0], newSeg[1], newSeg[2], newSeg[3], newSeg[4], newSeg[5]);
                             if (insertIdx + 6 < p.length) {
@@ -838,7 +837,6 @@ ApplicationWindow {
 
                                 lx = Math.max(0.001, Math.min(0.999, lx));
                             } else {
-                                // 制御点 (cp)
                                 lx = Math.max(0, Math.min(1, lx));
                             }
                             p[dragIdx] = lx;
@@ -955,7 +953,6 @@ ApplicationWindow {
 
                 }
 
-                // custom モード専用: 制御点テキスト入力
                 GroupBox {
                     title: qsTr("制御点")
                     enabled: root.selectedType === "custom"
@@ -1121,7 +1118,6 @@ ApplicationWindow {
                                 id: catCol
 
                                 property var catData: modelData
-                                // フィルター適用後のアイテム
                                 property var visibleItems: {
                                     var ft = easingGrid.filterText;
                                     if (ft === "")

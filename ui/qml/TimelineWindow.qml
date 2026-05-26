@@ -5,7 +5,6 @@ import "common" as Common
 import "timeline" // サブフォルダのモジュールをインポート
 
 Common.AviQtlWindow {
-    // ─── タイムライン専用ショートカット (WindowShortcut) ───
     // これにより、メインウィンドウや設定ダイアログとの競合を避けつつ、確実に動作させます。
 
     id: timelineWindow
@@ -18,10 +17,8 @@ Common.AviQtlWindow {
     readonly property int headerWidth: settings.timelineLayerHeaderWidth || 60
     readonly property int clipResizeHandleWidth: settings.timelineClipResizeHandleWidth || 10
     readonly property int sceneTabHeight: settings.timelineHeaderHeight || 28
-    // レイヤー状態のグローバル管理（LayerHeaderからの通知を受け取る）
     property var globalLayerStates: ({
     })
-    // 入力フォーカス判定
     readonly property bool _isInputFocused: {
         var item = Qt.application.focusItem;
         if (!item)
@@ -45,7 +42,6 @@ Common.AviQtlWindow {
         anchors.fill: parent
         spacing: 0
 
-        // 1. シーンタブ
         RowLayout {
             Layout.fillWidth: true
             Layout.preferredHeight: sceneTabHeight
@@ -156,7 +152,6 @@ Common.AviQtlWindow {
 
         }
 
-        // 2. 定規
         Ruler {
             targetFlickable: timelineView.flickable
             rulerHeight: timelineWindow.rulerHeight
@@ -164,7 +159,6 @@ Common.AviQtlWindow {
             fps: Workspace.currentTimeline && Workspace.currentTimeline.project ? Workspace.currentTimeline.project.fps : 60
         }
 
-        // 3. メインエリア
         RowLayout {
             Layout.fillWidth: true
             Layout.fillHeight: true

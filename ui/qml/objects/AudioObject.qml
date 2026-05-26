@@ -14,7 +14,6 @@ Common.BaseObject {
     property real pan: Number(evalParam("audio", "pan", 0))
     property bool mute: evalParam("audio", "mute", false)
 
-    // 音声オブジェクトは画面に描画されないため、ダミーの不可視Itemを指定
     sourceItem: Item {
         width: 1
         height: 1

@@ -10,7 +10,6 @@ Rectangle {
     property int layerHeight: 30
     property int layerCount: 128
     property var syncFlickable: null // TimelineViewのFlickable
-    // レイヤー状態管理 (内部保持)
     property var _layerStates: ({
     })
 
@@ -345,7 +344,6 @@ Rectangle {
 
         property int layerIndex: 0
 
-        // --- 挿入系 ---
         MenuSeparator {
         }
 
@@ -375,7 +373,6 @@ Rectangle {
             onTriggered: insertLayersDialog.open()
         }
 
-        // --- 移動系 ---
         MenuSeparator {
         }
 
@@ -408,7 +405,6 @@ Rectangle {
         MenuSeparator {
         }
 
-        // --- 状態設定系 ---
         Common.IconMenuItem {
             text: headerRoot.getLayerVisible(layerMenu.layerIndex) ? qsTr("このレイヤーを非表示にする") : qsTr("このレイヤーを表示する")
             iconName: headerRoot.getLayerVisible(layerMenu.layerIndex) ? "eye_off_line" : "eye_line"
@@ -430,7 +426,6 @@ Rectangle {
             }
         }
 
-        // --- 一括操作系 ---
         MenuSeparator {
         }
 

@@ -12,7 +12,6 @@ layout(std140, binding = 0) uniform buf {
     float opacityValue;
 };
 
-// 🚀 標準ブレンド演算
 vec3 blendMultiply(vec3 base, vec3 blend) {
     return base * blend;
 }
@@ -41,7 +40,6 @@ vec3 blendDarken(vec3 base, vec3 blend) {
     return min(base, blend);
 }
 
-// 🚀 高度なデジタル合成モード
 
 // 8: 色反転 (Invert)
 vec3 blendInvert(vec3 base, vec3 blend) {
@@ -70,7 +68,6 @@ vec3 blendDifference(vec3 base, vec3 blend) {
     return abs(base - blend);
 }
 
-// 🚀 W3C/Photoshop HSL (色相・彩度・カラー・輝度) ブレンド演算
 
 float getLuminosity(vec3 c) {
     return 0.3 * c.r + 0.59 * c.g + 0.11 * c.b;
@@ -151,7 +148,6 @@ void main() {
     vec4 fg = texture(source, qt_TexCoord0);
     vec4 bg = texture(background, qt_TexCoord0);
 
-    // 不透明度の適用
     float activeOpacity = opacityValue * qt_Opacity;
     fg.a *= activeOpacity;
     fg.rgb *= fg.a; // ストレートアルファから事前乗算アルファ (Premultiplied Alpha) へ
@@ -164,7 +160,6 @@ void main() {
 
     vec3 blendedColor = fg.rgb;
     
-    // 合成モードの判定
     if (blendMode == 1) {        // スクリーン
         blendedColor = blendScreen(bg.rgb, fg.rgb);
     } else if (blendMode == 2) { // 乗算
@@ -197,7 +192,6 @@ void main() {
         blendedColor = blendLuminosity(bg.rgb, fg.rgb);
     }
 
-    // 🚀 アルファブレンディング公式 (アルファ・RGBの正確な重ね合わせ)
     vec4 result;
     result.a = fg.a + bg.a * (1.0 - fg.a);
     if (result.a > 0.0) {

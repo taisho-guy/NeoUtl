@@ -95,7 +95,6 @@ Common.AviQtlWindow {
         anchors.margins: 16
         spacing: 12
 
-        // リポジトリ管理
         GroupBox {
             title: qsTr("リポジトリ設定")
             Layout.fillWidth: true

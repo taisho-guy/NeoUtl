@@ -95,7 +95,6 @@ Common.AviQtlWindow {
 
         reloading = true;
         var id = Workspace.currentTimeline.selection.selectedClipId;
-        // 選択状態をオブジェクト参照で保存（インデックスずれ防止）
         var oldModel = sidebarList.model;
         var oldSelectedObjects = [];
         var oldCurrentObject = null;
@@ -1341,7 +1340,6 @@ Common.AviQtlWindow {
             id: filterMenu
 
             property int _lastBuiltClipId: -2
-            // 動的生成したオブジェクトをここで管理する
             property var _dynamicObjects: []
 
             function _registerDynamic(obj) {

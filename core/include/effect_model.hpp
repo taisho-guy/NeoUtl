@@ -19,8 +19,6 @@ class EffectModel : public QObject {
     Q_OBJECT
 
   private:
-    // ─── Static Helpers (メソッドからの参照のため先頭に配置) ───
-
     static bool isStructuredTrack(const QVariant &raw) {
         const QVariantMap m = raw.toMap();
         return m.contains(QStringLiteral("start")) && m.contains(QStringLiteral("points"));
@@ -691,7 +689,6 @@ class EffectModel : public QObject {
         }
         QVariant baseValue = evaluateTrack(rcIt.value(), frame, fallback); // evaluateTrack internally calls easing functions with modeParams
 
-        // 2. パラメータ自体がエクスプレッション定義かチェック（簡易実装）
         QString strVal = m_params.value(paramName).toString();
         if (strVal.startsWith(QStringLiteral("="))) {
             // "=time*100" -> "time*100"

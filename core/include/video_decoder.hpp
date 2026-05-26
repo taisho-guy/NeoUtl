@@ -87,7 +87,6 @@ class VideoDecoder : public AviQtl::Core::MediaDecoder {
     std::atomic<bool> mclosing{false};
     std::atomic<bool> misPlaying{false};
 
-    // MLT式ポインタシャッフル管理
     int m_gopCacheCount = 0;
     GopCacheBlock m_gopCacheA[MAX_GOP_CACHE_SIZE];
     GopCacheBlock m_gopCacheB[MAX_GOP_CACHE_SIZE];

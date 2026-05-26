@@ -10,7 +10,6 @@
 
 namespace AviQtl::Core {
 
-// ─── Keyframe ───
 struct Keyframe {
     int frame = 0;
     float value = 0.0f;
@@ -26,7 +25,6 @@ struct Keyframe {
     QString expression;
 };
 
-// ─── Effect ───
 struct Effect {
     QString id; // プラグインID (例: "border_blur")
     bool enabled = true;
@@ -34,7 +32,6 @@ struct Effect {
     std::map<QString, std::vector<Keyframe>> keyframes; // パラメータ名 -> キーフレーム配列
 };
 
-// ─── Clip ───
 struct Clip {
     int id = -1;
     int sceneId = 0;
@@ -47,7 +44,6 @@ struct Clip {
     std::vector<Effect> effects;
 };
 
-// ─── SceneSettings ───
 struct SceneSettings {
     int id = 0;
     QString name;
@@ -63,7 +59,6 @@ struct SceneSettings {
     std::vector<Clip> clips;
 };
 
-// ─── ProjectSettings ───
 struct ProjectSettings {
     QString name;
     int defaultSceneWidth = 1920;
@@ -74,7 +69,6 @@ struct ProjectSettings {
     bool highBitDepth = false; // true の場合 16bit float 処理を有効化
 };
 
-// ─── DocumentModel ───
 // プロジェクト全体の全データを木構造で保持する唯一の正本
 class DocumentModel : public QObject {
     Q_OBJECT

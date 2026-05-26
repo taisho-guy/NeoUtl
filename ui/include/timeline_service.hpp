@@ -49,7 +49,6 @@ class TimelineService : public QObject {
     void toggleSelection(int id, const QVariantMap &data);
     void applySelectionIds(const QVariantList &ids);
 
-    // シーン管理
     QVariantList scenes() const;
     int currentSceneId() const { return m_currentSceneId; }
     void createScene(const QString &name);
@@ -123,7 +122,6 @@ class TimelineService : public QObject {
     // ヘルパー
     ClipData deepCopyClip(const ClipData &source);
 
-    // 状態管理
     int nextClipId() const { return m_nextClipId; }
     void setNextClipId(int id) { m_nextClipId = id; }
     int nextSceneId() const { return m_nextSceneId; }

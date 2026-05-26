@@ -36,7 +36,6 @@ void main() {
     float s = sin(rad);
     
     // 回転後のX座標（ラインからの距離に相当）
-    // 角度0のとき、垂直線(X軸方向の距離)で判定
     float dist = delta.x * c + delta.y * s;
     
     float alphaFactor = 0.0;

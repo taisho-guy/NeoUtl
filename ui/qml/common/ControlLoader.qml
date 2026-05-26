@@ -11,7 +11,6 @@ Loader {
     })
     property var value: null
     property var effectRootRef: null
-    // 親(SettingDialog)から補間状態を受け取るためのプロパティ
     property int startFrameState: 0
     property int endFrameState: 0
     property bool rightInteractiveState: false
@@ -166,7 +165,6 @@ Loader {
         };
     }
 
-    // === コンポーネント選択 ===
     sourceComponent: {
         if (!definition)
             return unknownComponent;

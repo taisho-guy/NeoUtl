@@ -21,7 +21,6 @@ Common.BaseObject {
     // width/height は flattenHost のサイズで代替 (Binding が上書きしないよう明示宣言)
     property real fbWidth: flattenHost.width
     property real fbHeight: flattenHost.height
-    // ─── 内部: 上位レイヤー収集 ───────────────────────────────────
     property var _capturedOutputs: []
 
     function _rebuildCapture() {
@@ -67,7 +66,6 @@ Common.BaseObject {
         Qt.callLater(_rebuildCapture);
     }
 
-    // CompositeView 側からの集中通知を一括で受け取る
     Connections {
         function onChildRendererOutputsChanged() {
             Qt.callLater(root._rebuildCapture);
@@ -86,7 +84,6 @@ Common.BaseObject {
         target: Workspace.currentTimeline
     }
 
-    // ─── 合成ホスト (offscreenRenderHost へ adopt2D される) ──────
     Item {
         id: flattenHost
 
@@ -188,7 +185,6 @@ Common.BaseObject {
 
     }
 
-    // ─── 3D Model として View3D に配置 ───────────────────────────
     Model {
         source: "#Rectangle"
         visible: root.outputModelVisible

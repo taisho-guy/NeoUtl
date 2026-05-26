@@ -16,7 +16,6 @@ AudioMixer::AudioMixer(QObject *parent) : QObject(parent) {
     m_format.setChannelCount(2);
     m_format.setSampleFormat(QAudioFormat::Float);
 
-    // 4.1 すべてのclipIdに対してPluginChainを初期化
     const auto *state = Timeline::ECS::instance().getSnapshot();
     if (state != nullptr) {
         const auto &audioStates = state->audioStates;
@@ -27,7 +26,6 @@ AudioMixer::AudioMixer(QObject *parent) : QObject(parent) {
         }
     }
 
-    // 4.2 既存のデコーダーを登録
     for (const auto &[clipId, decoder] : m_decoders) {
         registerDecoder(clipId, decoder);
     }
@@ -94,7 +92,6 @@ auto AudioMixer::mix(int currentFrame, double fps, int samplesPerFrame) -> std::
     }
     auto &masterBuffer = m_masterBuffer;
 
-    // 2. ECSから現在の音声コンポーネントを取得
     const auto *state = Timeline::ECS::instance().getSnapshot();
     if (state == nullptr) {
         return masterBuffer;
@@ -114,7 +111,6 @@ auto AudioMixer::mix(int currentFrame, double fps, int samplesPerFrame) -> std::
             continue;
         }
 
-        // 位相と連続再生の管理
         double startTime = static_cast<double>(currentFrame - audio.startFrame) / fps;
         auto lastFrameIt = m_clipLastFrame.find(clipId);
         if (lastFrameIt != m_clipLastFrame.end() && currentFrame == lastFrameIt.value() + 1) {
@@ -172,7 +168,6 @@ auto AudioMixer::mix(int currentFrame, double fps, int samplesPerFrame) -> std::
             m_clipPhase[clipId] = startTime + (static_cast<double>(samplesPerFrame) / m_format.sampleRate());
         }
 
-        // プラグインチェーンを適用
         auto chainIt = m_chains.find(clipId);
         if (chainIt != m_chains.end()) {
             chainIt.value()->process(m_clipSamples.data(), samplesPerFrame);

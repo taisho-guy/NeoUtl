@@ -13,6 +13,23 @@
 
 namespace AviQtl::UI {
 
+// 該当エフェクトが存在しない場合は 0 を返す。
+// ClipItem.qml の groupLayerCount プロパティへ格納され、タイムライン上の
+// カーテン描画に使用される。
+static int getControlLayerCount(const ClipData &clip) {
+    // カーテンを持つエフェクトID と layerCountパラメータ名のリスト
+    static const QList<QLatin1String> kControlEffectIds = {
+        QLatin1String("GroupControl"),
+        QLatin1String("camera"),
+    };
+    for (auto *eff : clip.effects) {
+        if (kControlEffectIds.contains(eff->id())) {
+            return eff->params().value(QStringLiteral("layerCount"), 0).toInt();
+        }
+    }
+    return 0;
+}
+
 void TimelineController::handleClipClick(int clipId, int modifiers) { // NOLINT(bugprone-easily-swappable-parameters)
     if ((modifiers & Qt::ControlModifier) != 0U) {
         m_timeline->toggleSelection(clipId, QVariantMap());
@@ -33,14 +50,7 @@ void TimelineController::updateSelectionPreview(int frameA, int frameB, int laye
     int maxL = std::max(layerA, layerB);
 
     for (const auto &clip : m_timeline->clips()) {
-        int groupLayerCount = 0;
-        for (auto *eff : clip.effects) {
-            if (eff->id() == QLatin1String("GroupControl")) {
-                groupLayerCount = eff->params().value(QStringLiteral("layerCount"), 0).toInt();
-                break;
-            }
-        }
-        int clipMaxL = clip.layer + groupLayerCount;
+        int clipMaxL = clip.layer + getControlLayerCount(clip);
 
         int clipEnd = clip.startFrame + clip.durationFrames;
         if (clip.startFrame < maxF && minF < clipEnd && clipMaxL >= minL && clip.layer <= maxL) {
@@ -182,7 +192,6 @@ void TimelineController::updateClipActiveState() {
     int current = m_transport->currentFrame();
     int start = clipStartFrame();
     int duration = clipDurationFrames();
-    // 矩形判定
     bool active = (current >= start) && (current < start + duration);
     if (m_isClipActive != active) {
         m_isClipActive = active;
@@ -261,14 +270,7 @@ auto TimelineController::clips() const -> QVariantList {
         params.insert(QStringLiteral("durationFrames"), clip.durationFrames);
         params.insert(QStringLiteral("id"), clip.id);
 
-        int groupLayerCount = 0;
-        for (auto *eff : clip.effects) {
-            if (eff->id() == QLatin1String("GroupControl")) {
-                groupLayerCount = eff->params().value(QStringLiteral("layerCount"), 0).toInt();
-                break;
-            }
-        }
-        map.insert(QStringLiteral("groupLayerCount"), groupLayerCount);
+        map.insert(QStringLiteral("groupLayerCount"), getControlLayerCount(clip));
 
         // エフェクトモデルのポインタリストを直接渡す (QMLでの一貫性のため)
         QList<QObject *> effList;
@@ -345,7 +347,6 @@ void TimelineController::resizeSelectedClips(int deltaStartFrame, int deltaDurat
         std::ranges::sort(pending, [](const PendingResize &a, const PendingResize &b) { return a.oldStart != b.oldStart ? a.oldStart < b.oldStart : a.layer < b.layer; });
     }
 
-    // updateClip() 経由で適用: メディア長クランプ・ECS 同期・Undo 登録を全クリップに保証
     m_timeline->undoStack()->beginMacro(tr("複数クリップリサイズ: %1").arg(pending.size()));
     for (const PendingResize &r : std::as_const(pending)) {
         const int newStart = std::max(0, r.oldStart + deltaStartFrame);
@@ -725,9 +726,7 @@ auto TimelineController::evaluateClipParams(int clipId, int relFrame) const -> Q
     for (auto *eff : clip->effects) {
         // 各エフェクトの評価済みパラメータを取得
         QVariantMap p = eff->evaluatedParams(relFrame, fps);
-        // 1. エフェクトIDをキーにしてネスト状態で保持（高度なアクセス用）
         out.insert(eff->id(), p);
-        // 2. トップレベルにフラットにマージ（BaseObjectや既存のQMLコンポーネント用）
         for (auto it = p.begin(); it != p.end(); ++it) {
             out.insert(it.key(), it.value());
         }

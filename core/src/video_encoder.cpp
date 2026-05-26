@@ -104,14 +104,12 @@ auto VideoEncoder::open(const Config &config) -> bool {
     m_headerWritten = false;
     m_encodedFrameCount = 0;
 
-    // 1. コンテナフォーマットの初期化
     avformat_alloc_output_context2(&m_fmtCtx, nullptr, nullptr, config.outputUrl.toStdString().c_str());
     if (m_fmtCtx == nullptr) {
         qWarning() << "Could not deduce output format from file extension.";
         return false;
     }
 
-    // 2. コーデックの検索
     const AVCodec *codec = avcodec_find_encoder_by_name(config.codecName.toStdString().c_str());
     if (codec == nullptr) {
         qWarning() << "Codec not found:" << config.codecName;
@@ -128,7 +126,6 @@ auto VideoEncoder::open(const Config &config) -> bool {
         return false;
     }
 
-    // 3. ハードウェア初期化
     if (!initHardware(config.codecName)) {
         return false;
     }
@@ -162,7 +159,6 @@ auto VideoEncoder::open(const Config &config) -> bool {
         }
     }
 
-    // 4. エンコーダパラメータ設定
     m_encCtx->width = config.width;
     m_encCtx->height = config.height;
     m_encCtx->time_base = {.num = config.fps_den, .den = config.fps_num};
@@ -191,7 +187,6 @@ auto VideoEncoder::open(const Config &config) -> bool {
 #pragma clang diagnostic pop
     }
 
-    // ビットレート制御 (CBR/VBR) - 簡易設定
     if (config.crf >= 0) {
         // CRF モード: libx264/libx265/libaom 系ソフトウェアエンコーダ向け
         av_opt_set_int(m_encCtx->priv_data, "crf", config.crf, 0);
@@ -218,7 +213,6 @@ auto VideoEncoder::open(const Config &config) -> bool {
         return false;
     }
 
-    // 5. ファイルオープン
     if ((m_fmtCtx->oformat->flags & AVFMT_NOFILE) == 0) {
         if (avio_open(&m_fmtCtx->pb, config.outputUrl.toStdString().c_str(), AVIO_FLAG_WRITE) < 0) {
             qWarning() << "Could not open output file:" << config.outputUrl;
@@ -226,7 +220,6 @@ auto VideoEncoder::open(const Config &config) -> bool {
         }
     }
 
-    // 6. Frame allocation
     m_swFrame = av_frame_alloc();
     if (m_encCtx->hw_frames_ctx != nullptr) {
         m_swFrame->format = (reinterpret_cast<AVHWFramesContext *>(m_encCtx->hw_frames_ctx->data))->sw_format;
@@ -425,7 +418,6 @@ auto VideoEncoder::processVideo(const QImage &img, int64_t pts) -> bool {
         return false;
     }
 
-    // 1. QImage -> SW Frame (NV12) 変換
     if (m_swsCtx == nullptr || m_swsSrcFmt != static_cast<int>(srcPixFmt)) {
         if (m_swsCtx != nullptr) {
             sws_freeContext(m_swsCtx);
@@ -449,7 +441,6 @@ auto VideoEncoder::processVideo(const QImage &img, int64_t pts) -> bool {
 
     AVFrame *encodeFrame = m_swFrame;
 
-    // 2. HWエンコードの場合: SW Frame -> HW Frame 転送 (CPU -> GPU Upload)
     if (m_encCtx->hw_frames_ctx != nullptr) {
         if (av_hwframe_get_buffer(m_encCtx->hw_frames_ctx, m_hwFrame, 0) < 0) {
             qWarning() << "Failed to allocate HW frame.";
@@ -464,7 +455,6 @@ auto VideoEncoder::processVideo(const QImage &img, int64_t pts) -> bool {
         encodeFrame = m_hwFrame;
     }
 
-    // 3. エンコード
     int ret = avcodec_send_frame(m_encCtx, encodeFrame);
 
     // EAGAINハンドリング: 入力バッファがいっぱいの場合、出力を読み出して空ける
@@ -570,7 +560,6 @@ auto VideoEncoder::processAudio(const std::vector<float> &samples) -> bool {
         }
     }
 
-    // 1. リサンプリング & フォーマット変換 (Float -> FLTP等)
     // 一時バッファに変換
     uint8_t **convertedData = nullptr;
     int linesize = 0;
@@ -606,7 +595,6 @@ auto VideoEncoder::processAudio(const std::vector<float> &samples) -> bool {
         av_freep(static_cast<void *>(&convertedData));    // pointer array (av_malloc'd, not C free)
     }
 
-    // 3. エンコーダーのフレームサイズ分溜まったらエンコード
     while (av_audio_fifo_size(m_audioFifo) >= m_audioEncCtx->frame_size) {
         if (av_frame_make_writable(m_audioFrame) < 0) {
             break;
@@ -709,7 +697,6 @@ void VideoEncoder::encodingLoop() {
 }
 
 void VideoEncoder::close() {
-    // 1. スレッドに終了シグナルを送る
     {
         std::scoped_lock lock(m_queueMutex);
         m_stopEncoding = true;
@@ -717,7 +704,6 @@ void VideoEncoder::close() {
         m_queuePushCv.notify_all(); // push待ちも解除
     }
 
-    // 2. スレッド終了待ち（残りのキュー処理完了を待つ）
     if (m_workerThread.joinable()) {
         m_workerThread.join();
     }

@@ -18,13 +18,14 @@ Common.BaseObject {
     property color outlineColor: evalColor("counter", "outlineColor", "#000000")
     property real outlineWidth: evalNumber("counter", "outlineWidth", 2)
     property real opacity: evalNumber("counter", "opacity", 1)
-
     readonly property real progress: clipDurationFrames > 0 ? Math.max(0, Math.min(1, relFrame / clipDurationFrames)) : 0
     readonly property real counterValue: {
         if (mode === "time")
             return relFrame / Math.max(projectFps, 0.001);
+
         if (mode === "value")
             return startValue + (endValue - startValue) * progress;
+
         return relFrame;
     }
     readonly property string numberText: {
@@ -33,8 +34,7 @@ Common.BaseObject {
             var sign = text.charAt(0) === "-" ? "-" : "";
             var body = sign ? text.slice(1) : text;
             var parts = body.split(".");
-            while (parts[0].length < digits)
-                parts[0] = "0" + parts[0];
+            while (parts[0].length < digits)parts[0] = "0" + parts[0]
             text = sign + parts.join(".");
         }
         return prefix + text + suffix;
@@ -61,6 +61,7 @@ Common.BaseObject {
             style: root.outlineWidth > 0 ? Text.Outline : Text.Normal
             styleColor: root.outlineColor
         }
+
     }
 
     Model {
@@ -77,6 +78,9 @@ Common.BaseObject {
             diffuseMap: Texture {
                 sourceItem: root.displayOutput
             }
+
         }
+
     }
+
 }

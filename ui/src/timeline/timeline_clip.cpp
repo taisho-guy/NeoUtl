@@ -588,7 +588,6 @@ void TimelineService::selectClipsInRange(int frameA, int frameB, int layerA, int
         }
     }
 
-    // 既存の選択とマージ
     if (additive) {
         QVariantList merged = m_selection->selectedClipIds();
         for (const QVariant &id : std::as_const(ids)) {
@@ -596,7 +595,6 @@ void TimelineService::selectClipsInRange(int frameA, int frameB, int layerA, int
                 merged.append(id);
             }
         }
-        // プライマリIDがまだ設定されていなければ、マージ後の最初のクリップをプライマリにする
         if (primaryId == -1 && !merged.isEmpty()) {
             primaryId = merged.first().toInt();
         }
@@ -906,7 +904,6 @@ auto TimelineService::findVacantFrame(int layer, int startFrame, int duration, i
 void TimelineService::setClipboard(const ClipData &clip) { setClipboard(QList<ClipData>{clip}); }
 
 void TimelineService::setClipboard(const QList<ClipData> &clips) {
-    // 既存のエフェクトを解放
     for (auto &c : m_clipboard) {
         for (auto *eff : std::as_const(c.effects)) {
             if (eff)

@@ -1252,27 +1252,27 @@ This software is released under the GNU Affero General Public License Version 3.
 <context>
     <name>AviQtl::UI::TimelineController</name>
     <message>
-        <location filename="../ui/src/timeline/timeline_controller_clip.cpp" line="79"/>
+        <location filename="../ui/src/timeline/timeline_controller_clip.cpp" line="94"/>
         <source>プロパティ変更: %1</source>
         <translation>Property change: %1</translation>
     </message>
     <message>
-        <location filename="../ui/src/timeline/timeline_controller_clip.cpp" line="121"/>
+        <location filename="../ui/src/timeline/timeline_controller_clip.cpp" line="136"/>
         <source>開始フレーム変更</source>
         <translation>Start frame change</translation>
     </message>
     <message>
-        <location filename="../ui/src/timeline/timeline_controller_clip.cpp" line="138"/>
+        <location filename="../ui/src/timeline/timeline_controller_clip.cpp" line="153"/>
         <source>長さ変更</source>
         <translation>Length change</translation>
     </message>
     <message>
-        <location filename="../ui/src/timeline/timeline_controller_clip.cpp" line="155"/>
+        <location filename="../ui/src/timeline/timeline_controller_clip.cpp" line="170"/>
         <source>レイヤー変更</source>
         <translation>Layer change</translation>
     </message>
     <message>
-        <location filename="../ui/src/timeline/timeline_controller_clip.cpp" line="349"/>
+        <location filename="../ui/src/timeline/timeline_controller_clip.cpp" line="357"/>
         <source>複数クリップリサイズ: %1</source>
         <translation>Resize multiple clips: %1</translation>
     </message>
@@ -2392,7 +2392,7 @@ Save before continuing?</translation>
 <context>
     <name>NodeLoader</name>
     <message>
-        <location filename="../ui/qml/common/NodeLoader.qml" line="61"/>
+        <location filename="../ui/qml/common/NodeLoader.qml" line="79"/>
         <source>[NodeLoader] コンポーネントエラー: %1</source>
         <translation>[NodeLoader] Component error: %1</translation>
     </message>

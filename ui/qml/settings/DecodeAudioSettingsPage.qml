@@ -6,7 +6,6 @@ import QtQuick.Layouts
 ScrollView {
     id: root
 
-    // 親から受け取るドラフト設定
     required property var draftSettings
     required property var audioChannelValues
     required property var audioChannelLabels
@@ -30,7 +29,6 @@ ScrollView {
         return fallback;
     }
 
-    // --- ページ本体 ---
     Layout.fillWidth: true
     Layout.fillHeight: true
     contentWidth: availableWidth

@@ -134,7 +134,6 @@ Common.BaseObject {
                             ctx.closePath();
                         }
                     } else {
-                        // polygon / star 系: 回転適用後に bounding box で正規化し、sizeW/sizeH にぴったり合わせる
                         var rawVerts = [];
                         var baseRot = -Math.PI / 2 - (Math.PI / n) * (n % 2 === 0 ? 1 : 0);
                         if (type === "star") {
@@ -144,7 +143,6 @@ Common.BaseObject {
                                 var r = (si % 2 === 0) ? 1 : (root.innerRadius / 100);
                                 var rx_ = Math.cos(ang) * r;
                                 var ry_ = Math.sin(ang) * r;
-                                // 頂点生成時に回転を適用
                                 rawVerts.push({
                                     "x": rx_ * cosR - ry_ * sinR,
                                     "y": rx_ * sinR + ry_ * cosR

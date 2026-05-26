@@ -196,7 +196,6 @@ void TimelineMediaManager::updateMediaDecoders() {
 
                 if (auto *vid = qobject_cast<AviQtl::Core::VideoDecoder *>(decoder)) {
                     connect(decoder, &AviQtl::Core::MediaDecoder::frameReady, this, [this, cid](int) -> void { emit frameUpdated(cid); });
-                    // 動画メタ情報が揃った時点でクリップの最大長をクランプする
                     connect(vid, &AviQtl::Core::VideoDecoder::videoMetaReady, this, [this, cid](int totalFrameCount, double sourceFps) -> void {
                         const auto *clip = m_controller->timeline()->findClipById(cid);
                         if (!clip || clip->type != QStringLiteral("video")) {

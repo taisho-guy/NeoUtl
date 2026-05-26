@@ -24,7 +24,6 @@ LuaHost::~LuaHost() {
         lua_close(L);
         L = nullptr;
     }
-    // thread_local なステートはスレッド終了時に自動的に破棄されるため、ここでの明示的な管理は不要
 }
 
 static void setupLuaState(lua_State *L) {
@@ -54,7 +53,6 @@ void LuaHost::initialize() {
     qDebug() << "[LuaHost] LuaJITエンジンを初期化しました (Main Thread)";
 }
 
-// スレッドローカルなLuaステート管理ラッパー
 struct ThreadLocalLua {
     ThreadLocalLua(const ThreadLocalLua &) = delete;
     auto operator=(const ThreadLocalLua &) -> ThreadLocalLua & = delete;
@@ -109,7 +107,6 @@ auto LuaHost::evaluate(const std::string &expression, double time, int index, do
     lua_pushnumber(threadL, currentValue); // エイリアス 'v'
     lua_setglobal(threadL, "v");
 
-    // 2. コンパイル済みチャンクの取得または作成
     int ref = LUA_REFNIL;
     auto it = t_lua.compiledRegistry.find(expression);
     if (it == t_lua.compiledRegistry.end()) {
@@ -125,7 +122,6 @@ auto LuaHost::evaluate(const std::string &expression, double time, int index, do
         ref = it->second;
     }
 
-    // 3. Registryから関数を呼び出して実行
     lua_rawgeti(threadL, LUA_REGISTRYINDEX, ref);
     int ret = lua_pcall(threadL, 0, 1, 0);
 
@@ -136,7 +132,6 @@ auto LuaHost::evaluate(const std::string &expression, double time, int index, do
         return currentValue;
     }
 
-    // 4. 結果を取得
     if (lua_isnumber(threadL, -1) == 0) {
         lua_pop(threadL, 1);
         return currentValue;

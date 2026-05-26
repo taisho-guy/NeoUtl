@@ -63,9 +63,6 @@ void TransportService::onTick() {
     }
 }
 
-void TransportService::updateTimerInterval(double fps) {
-    // 旧 API との互換性維持。fps はプロパティ経由で管理
-    setFps(fps);
-}
+void TransportService::updateTimerInterval(double fps) { setFps(fps); }
 
 } // namespace AviQtl::UI

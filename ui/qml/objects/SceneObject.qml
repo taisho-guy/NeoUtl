@@ -26,7 +26,6 @@ Common.BaseObject {
     // シーン内時間計算
     property int sceneFrame: {
         var f = Math.floor(relFrame * speed) + offset;
-        // シーン長が定義されていればクランプ
         var dur = (!recursiveReference && typeof Workspace.currentTimeline !== "undefined") ? Workspace.currentTimeline.getSceneDuration(targetSceneId) : 0;
         if (dur > 0)
             f = Math.max(0, Math.min(f, dur - 1));

@@ -166,9 +166,7 @@ auto TimelineController::getAvailableObjects() -> QVariantList {
         objectsById.insert(meta.id, meta);
     }
 
-    auto translatedCategory = [](const char *source) {
-        return QCoreApplication::translate("AviQtl::Core::EffectRegistry", source);
-    };
+    auto translatedCategory = [](const char *source) { return QCoreApplication::translate("AviQtl::Core::EffectRegistry", source); };
 
     auto makeItem = [&objectsById](const QString &id) -> QVariantMap {
         QVariantMap item;

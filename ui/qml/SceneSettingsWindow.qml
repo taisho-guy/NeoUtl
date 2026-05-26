@@ -295,7 +295,6 @@ Common.AviQtlWindow {
                     highlighted: true
                     onClicked: {
                         if (Workspace.currentTimeline) {
-                            // フレーム数はUIで管理していないため、既存の値またはデフォルト値を維持する
                             var framesToApply = isCreationMode ? (SettingsManager ? SettingsManager.value("defaultProjectFrames", 300) : 300) : Workspace.currentTimeline.getSceneDuration(targetSceneId);
                             var mKey = "Auto";
                             if (modeCombo.currentIndex === 1)
@@ -307,7 +306,6 @@ Common.AviQtlWindow {
                             // 新規作成モードと編集モードで処理を分岐
                             if (isCreationMode) {
                                 Workspace.currentTimeline.createScene(nameField.text);
-                                // 作成されたシーンに設定を適用
                                 // currentSceneId は既に新しいシーンのIDになっている
                                 Workspace.currentTimeline.updateSceneSettings(Workspace.currentTimeline.currentSceneId, nameField.text, widthField.value, heightField.value, fpsField.realValue, framesToApply, mKey, parseFloat(bpmField.text) || 120, parseFloat(offsetField.text) || 0, parseInt(intervalField.text) || 10, parseInt(subdivisionField.text) || 4, enableSnapCheck.checked, snapRangeField.value);
                             } else if (targetSceneId !== -1) {

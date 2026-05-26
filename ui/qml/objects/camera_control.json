@@ -1,8 +1,9 @@
 {
-    "id": "camera_control",
+    "id": "camera",
     "name": "カメラ制御",
     "qml": "CameraControlObject.qml",
     "params": {
+        "layerCount": 1,
         "x": 0,
         "y": 0,
         "z": 0,
@@ -14,6 +15,13 @@
     },
     "ui": {
         "controls": [
+            {
+                "type": "int",
+                "param": "layerCount",
+                "label": "対象レイヤー数",
+                "min": 1,
+                "max": 100
+            },
             {
                 "type": "float",
                 "param": "x",

@@ -7,7 +7,6 @@ Common.BaseComputeEffect {
 
     id: root
 
-    // 1. 確実に fbCaptureItem を持つ親を遡って探す
     source: {
         var p = parent;
         while (p) {
@@ -17,7 +16,6 @@ Common.BaseComputeEffect {
 
             p = p.parent;
         }
-        // 初期化中の一時的な null は許容する
         return null;
     }
     // Qt.resolvedUrl を使うことで、この QML ファイルと同じディレクトリにある QSB を絶対パスで指定できます

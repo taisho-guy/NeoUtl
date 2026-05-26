@@ -458,7 +458,6 @@ aviqtl = {
 }
 )";
     // Lua の delete/switch は予約語なので _G 経由でアクセスする場合のみ注意
-    // テーブルフィールドとしては問題なし (LuaJIT は許容する)
     luaL_dostring(L, aviqtl_table);
 
     qInfo() << "[ModEngine] AviQtl Lua API registered.";

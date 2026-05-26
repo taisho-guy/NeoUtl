@@ -109,7 +109,6 @@ void ImageDecoder::decodeImage(const QString &path) {
     }
 
     if (decoded) {
-        // 表示用の QVideoFrame は Format_RGBA8888 として渡すため、
         // 実データも 8bit RGBA に揃える。
         AVPixelFormat targetFmt = AV_PIX_FMT_RGBA;
         AVFrame *rgbaFrame = av_frame_alloc();

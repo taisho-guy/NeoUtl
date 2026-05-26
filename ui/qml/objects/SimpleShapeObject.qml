@@ -15,7 +15,6 @@ Common.BaseObject {
     property color strokeColor: evalColor(objectId, "strokeColor", "#ffffff")
     property real strokeWidth: evalNumber(objectId, "strokeWidth", 0)
     property real opacity: evalNumber(objectId, "opacity", 1)
-
     readonly property real padding: strokeWidth / 2 + 4
 
     sourceItem: sourceItem
@@ -67,14 +66,20 @@ Common.BaseObject {
                 ctx.fill();
                 if (root.strokeWidth > 0)
                     ctx.stroke();
+
                 ctx.restore();
             }
 
             Connections {
+                function onRevisionChanged() {
+                    canvas.requestPaint();
+                }
+
                 target: root
-                function onRevisionChanged() { canvas.requestPaint(); }
             }
+
         }
+
     }
 
     Model {
@@ -91,6 +96,9 @@ Common.BaseObject {
             diffuseMap: Texture {
                 sourceItem: root.displayOutput
             }
+
         }
+
     }
+
 }

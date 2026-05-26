@@ -9,6 +9,10 @@ Node {
     property var properties: ({
     })
     property QtObject item: null
+    // [FIX-01] item が差し替わる直前の旧オブジェクトを保持する。
+    // CompositeView.onItemChanged で旧アイテムの unregister を確実に行うために必要。
+    // このプロパティで旧参照を渡すことで SIGSEGV を防ぐ。
+    property QtObject previousItem: null
     property int status: Loader.Null
     property string errorString: ""
     // 外部からコンポーネント取得関数を注入可能にする
@@ -28,12 +32,24 @@ Node {
     }
 
     function _load() {
+        // [FIX-01] 旧 item を previousItem に退避してから null 化する。
+        // CompositeView 側の onItemChanged ハンドラが previousItem を参照して
+        // unregisterCameraControl / unregisterGroupControl を安全に呼べるようにする。
         if (item) {
-            item.destroy();
+            previousItem = item;
             item = null;
+            // [FIX-02] previousItem.destroy() は非同期（次のイベントループ）なので、
+            // Qt.callLater で退避後に破棄する。これにより onItemChanged が先に
+            Qt.callLater(function() {
+                if (previousItem) {
+                    previousItem.destroy();
+                    // [FIX-03] 破棄完了後に previousItem をクリアして dangling 参照を除去する。
+                    previousItem = null;
+                }
+            });
         }
         _component = null;
-        status = Loader.Loading;
+        status = Loader.Null;
         errorString = "";
         if (source == "") {
             status = Loader.Null;

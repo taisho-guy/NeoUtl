@@ -19,12 +19,12 @@ Common.BaseObject {
     property color lineColor: evalColor("radial_lines", "color", "#ffffff")
     property real opacity: evalNumber("radial_lines", "opacity", 1)
 
-    sourceItem: sourceItem
-
     function rand(n) {
-        var x = Math.sin((n + seed * 101.3) * 12.9898) * 43758.5453;
+        var x = Math.sin((n + seed * 101.3) * 12.9898) * 43758.5;
         return x - Math.floor(x);
     }
+
+    sourceItem: sourceItem
 
     Item {
         id: sourceItem
@@ -48,7 +48,6 @@ Common.BaseObject {
                 ctx.rotate(root.relFrame * root.spinSpeed * Math.PI / 180);
                 ctx.lineCap = "round";
                 ctx.strokeStyle = root.lineColor;
-
                 var segments = [];
                 for (var i = 0; i < root.lineCount; i++) {
                     var base = i / root.lineCount;
@@ -61,17 +60,16 @@ Common.BaseObject {
                     var cosA = Math.cos(a);
                     var sinA = Math.sin(a);
                     segments.push({
-                        sx: cosA * start,
-                        sy: sinA * start,
-                        bx: cosA * (start + len * 0.08),
-                        by: sinA * (start + len * 0.08),
-                        ex: cosA * len,
-                        ey: sinA * len,
-                        w: w,
-                        alpha: alpha
+                        "sx": cosA * start,
+                        "sy": sinA * start,
+                        "bx": cosA * (start + len * 0.08),
+                        "by": sinA * (start + len * 0.08),
+                        "ex": cosA * len,
+                        "ey": sinA * len,
+                        "w": w,
+                        "alpha": alpha
                     });
                 }
-
                 for (var layer = 0; layer < 3; layer++) {
                     for (var j = 0; j < segments.length; j++) {
                         var s = segments[j];
@@ -94,7 +92,6 @@ Common.BaseObject {
                         ctx.stroke();
                     }
                 }
-
                 var centerGrad = ctx.createRadialGradient(0, 0, 0, 0, 0, Math.max(24, root.thickness * 9));
                 centerGrad.addColorStop(0, "rgba(0,0,0,1)");
                 centerGrad.addColorStop(1, "rgba(0,0,0,0)");
@@ -108,14 +105,21 @@ Common.BaseObject {
             }
 
             Connections {
-                target: root
-                function onRevisionChanged() { canvas.requestPaint(); }
+                function onRevisionChanged() {
+                    canvas.requestPaint();
+                }
+
                 function onRelFrameChanged() {
                     if (root.spinSpeed !== 0)
                         canvas.requestPaint();
+
                 }
+
+                target: root
             }
+
         }
+
     }
 
     Model {
@@ -132,6 +136,9 @@ Common.BaseObject {
             diffuseMap: Texture {
                 sourceItem: root.displayOutput
             }
+
         }
+
     }
+
 }

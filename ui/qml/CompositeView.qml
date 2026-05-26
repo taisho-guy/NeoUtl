@@ -9,7 +9,6 @@ Item {
 
     property var layerStates: ({
     })
-    // 外部から注入可能なプロパティ (デフォルトはTimelineBridgeから取得)
     property var clipModel: []
     property int projectWidth: (Workspace.currentTimeline && Workspace.currentTimeline.project) ? Workspace.currentTimeline.project.width : 1920
     property int projectHeight: (Workspace.currentTimeline && Workspace.currentTimeline.project) ? Workspace.currentTimeline.project.height : 1080
@@ -17,15 +16,37 @@ Item {
     property int sceneId: -1
     property var sceneStack: sceneId >= 0 ? [sceneId] : []
     readonly property int hiddenZ: -9999
-    // Component cache to prevent redundant Qt.createComponent calls
     property var _componentCache: ({
     })
     property bool exportMode: false
     property alias view3D: view
-    // グループ制御管理
     property var groupControls: []
-    // カメラ制御管理
-    property var activeCameraControl: null
+    property var cameraControls: []
+    // [FIX-12] activeCameraControl の評価で破棄済みオブジェクトを触らないよう
+    // isCameraControl フラグを確認してから clipLayer にアクセスする。
+    // QML オブジェクトが破棄されると各プロパティへのアクセスは undefined を返すが、
+    // メソッド呼び出しは SIGSEGV を引き起こすため、フラグ確認が安全弁となる。
+    readonly property var activeCameraControl: {
+        var _cc = root.cameraControls; // バインディングトリガー
+        if (!_cc || _cc.length === 0)
+            return null;
+
+        var best = null;
+        for (var i = 0; i < _cc.length; ++i) {
+            var cc = _cc[i];
+            // [FIX-13] null / 破棄済みオブジェクトを二重チェック。
+            // isCameraControl が true であることは「生きているオブジェクト」の証明。
+            // 破棄済みオブジェクトは QML エンジンが null を返すか、
+            // プロパティアクセスが undefined になる。
+            if (!cc || cc.isCameraControl !== true)
+                continue;
+
+            if (best === null || cc.clipLayer < best.clipLayer)
+                best = cc;
+
+        }
+        return best;
+    }
 
     signal childRendererOutputsChanged()
 
@@ -37,13 +58,49 @@ Item {
         return state !== undefined ? state.visible : true;
     }
 
+    // [FIX-14] push() による直接変異を廃止し、新配列への代入でバインディングを
+    // 確実に更新する。push/splice はリアクティブバインディングに通知されない
+    // ケースがあり、cameraControlsChanged() の手動発火に依存するのは脆弱。
     function registerCameraControl(cc) {
-        activeCameraControl = cc;
+        if (!cc || cc.isCameraControl !== true)
+            return ;
+
+        // 重複チェック
+        for (var i = 0; i < cameraControls.length; ++i) {
+            if (cameraControls[i] === cc)
+                return ;
+
+        }
+        // [FIX-15] 新配列への代入。QML バインディングエンジンが変更を検知できる。
+        cameraControls = cameraControls.concat([cc]);
     }
 
     function unregisterCameraControl(cc) {
-        if (activeCameraControl === cc)
-            activeCameraControl = null;
+        // [FIX-16] filter() で新配列を生成。splice() のような破壊的変異を避ける。
+        // cc が null でも filter 内で === 比較するだけなので安全。
+        var next = cameraControls.filter(function(x) {
+            return x !== cc;
+        });
+        if (next.length !== cameraControls.length)
+            cameraControls = next;
+
+    }
+
+    function registerGroupControl(gc) {
+        for (var i = 0; i < groupControls.length; ++i) {
+            if (groupControls[i] === gc)
+                return ;
+
+        }
+        groupControls = groupControls.concat([gc]);
+    }
+
+    function unregisterGroupControl(gc) {
+        var next = groupControls.filter(function(x) {
+            return x !== gc;
+        });
+        if (next.length !== groupControls.length)
+            groupControls = next;
 
     }
 
@@ -56,32 +113,6 @@ Item {
         return c;
     }
 
-    function registerGroupControl(gc) {
-        for (var i = 0; i < groupControls.length; ++i) {
-            if (groupControls[i] === gc)
-                return ;
-
-        }
-        groupControls.push(gc);
-        groupControlsChanged(); // 配列変更を通知して再計算を促す
-    }
-
-    function unregisterGroupControl(gc) {
-        var idx = -1;
-        for (var i = 0; i < groupControls.length; ++i) {
-            if (groupControls[i] === gc) {
-                idx = i;
-                break;
-            }
-        }
-        if (idx !== -1) {
-            groupControls.splice(idx, 1);
-            groupControlsChanged();
-        }
-    }
-
-    // 2Dレンダー（sourceItem/effects/ShaderEffectSource）を必ずQQuickWindow配下に置くためのホスト
-    // 画面外への移動で見切れるのを防ぐため、十分な余裕を持った巨大なサイズ (ユーザー設定の最大画像サイズ) を確保する
     Item {
         id: offscreenRenderHost
 
@@ -94,27 +125,29 @@ Item {
         z: hiddenZ
     }
 
-    // 背景
     Rectangle {
         anchors.fill: parent
         color: "transparent"
         z: -2
     }
 
-    // プレビューコンテナ
     View3D {
         id: view
 
-        // プロジェクト設定の解像度を取得
         property int projW: root.projectWidth
         property int projH: root.projectHeight
-        // アスペクト比計算
         property double aspect: projW / projH
-        // 現在のクリップ内での相対時間 (0.0 ~ 1.0)
         property double currentClipTimeRatio: (Workspace.currentTimeline) ? Math.max(0, Math.min(1, (root.currentFrame - Workspace.currentTimeline.clipStartFrame) / Workspace.currentTimeline.clipDurationFrames)) : 0
 
-        camera: activeCameraControl ? activeCameraControl.camera : mainCamera
-        // 親に収まる最大サイズを計算 (Letterboxing)
+        // [FIX-17] activeCameraControl.camera へのアクセス前に camera プロパティの
+        // typeof チェックで安全に fallback する。
+        camera: {
+            var acc = root.activeCameraControl;
+            if (acc && typeof acc.camera !== "undefined" && acc.camera)
+                return acc.camera;
+
+            return mainCamera;
+        }
         width: root.exportMode ? projW : Math.min(parent.width, parent.height * aspect)
         height: root.exportMode ? projH : Math.min(parent.height, parent.width / aspect)
         anchors.centerIn: parent
@@ -125,20 +158,17 @@ Item {
 
         }
 
-        // プロジェクト領域の背景
         Rectangle {
             anchors.fill: parent
             color: "#0a0a0a"
             z: -1
         }
 
-        // カメラ設定
         PerspectiveCamera {
             id: mainCamera
 
             property real distance: view.projH / (2 * Math.tan(fieldOfView * Math.PI / 360))
 
-            // 動的カメラ距離計算: projH/2 / tan(fieldOfView/2)
             fieldOfView: 30
             position: Qt.vector3d(0, 0, distance)
             clipFar: 5000
@@ -149,34 +179,26 @@ Item {
             z: 1000
         }
 
-        // プロジェクトの枠線（解像度ガイド）
         Node {
-            // 画面中央を (0,0) としたときの枠
             Model {
                 source: "#Rectangle"
                 scale: Qt.vector3d(root.projectWidth / 100, root.projectHeight / 100, 1)
                 position: Qt.vector3d(0, 0, -10)
-                visible: false // 邪魔なので一旦隠す
+                visible: false
 
                 materials: DefaultMaterial {
                     diffuseColor: "#22000000"
                 }
-                // 奥に配置
 
             }
 
         }
 
-        // Instantiator の親となるノード
         Node {
             id: sceneRoot
         }
 
-        // 動的オブジェクト生成用
         Instantiator {
-            // 拡大率は親の影響を受けず自身のサイズとして適用（AviUtl仕様依存）
-            // console.log("[Debug] CompositeView: Hiding clip", clipIdRole, "due to scene mismatch. root:", root.sceneId, "clip:", clipSceneIdRole)
-
             model: root.clipModel
             onObjectAdded: (index, object) => {
                 object.parent = sceneRoot;
@@ -188,7 +210,6 @@ Item {
             delegate: Node {
                 id: clipNode
 
-                // C++モデル(model)とJS配列(modelData)の両方に対応
                 property var _clipData: (typeof modelData !== "undefined") ? modelData : model
                 property int clipIdRole: _clipData.id
                 property int clipSceneIdRole: _clipData.sceneId !== undefined ? _clipData.sceneId : -1
@@ -198,7 +219,7 @@ Item {
                 property int clipDurationFramesRole: _clipData.durationFrames
                 property url clipQmlSourceRole: _clipData.qmlSource || ""
                 property var clipEffectModelsRole: _clipData.effectModels || []
-                property Item fbRendererOutput: null // NodeLoader 完了後に接続
+                property Item fbRendererOutput: null
                 property int _tmRev: 0
                 property bool clipByUpperObjectRole: Boolean(_clipData.clipByUpperObject)
                 property Item rawFbRendererOutput: null
@@ -206,12 +227,11 @@ Item {
                 readonly property Item clippedRendererOutput: clipByUpperLoader.item ? clipByUpperLoader.item.output : null
                 property Item clipMaskItem: null
                 readonly property var evaluatedParams: {
-                    var _trig = clipNode._tmRev; // 変更検知トリガー
+                    var _trig = clipNode._tmRev;
                     if (!Workspace.currentTimeline)
                         return {
                     };
 
-                    // C++ から最新の計算済み（フラット化された）パラメータを取得
                     return Workspace.currentTimeline.evaluateClipParams(clipIdRole, root.currentFrame - clipStartFrameRole);
                 }
                 readonly property var tParams: {
@@ -251,14 +271,11 @@ Item {
                 readonly property real pScale: tParams.scale !== undefined ? Number(tParams.scale) : 100
                 readonly property real pAspect: tParams.aspect !== undefined ? Number(tParams.aspect) : 0
                 readonly property real pOpacity: tParams.opacity !== undefined ? Number(tParams.opacity) : 1
-                // 拡大率と縦横比
                 readonly property real baseScale: pScale * 0.01
                 readonly property real aspectX: pAspect >= 0 ? (1 + pAspect) : 1
-                readonly property real aspectY: pAspect < 0 ? (1 - pAspect) : 1
-                // 実効トランスフォーム計算 (グループ制御適用)
+                readonly property real aspectY: pAspect < 0 ? (1 - pAspect) : 1 // Note: pAspect<0 の時は 1+|pAspect| ではなく元実装に合わせる
                 property var effectiveTransform: {
                     var _gcList = root.groupControls;
-                    // 1. 適用可能なグループ制御を抽出
                     var activeGroups = [];
                     for (var i = 0; i < root.groupControls.length; ++i) {
                         var gc = root.groupControls[i];
@@ -269,22 +286,14 @@ Item {
                             activeGroups.push(gc);
 
                     }
-                    // 2. レイヤー順（親→子）にソート
-                    // 上位レイヤー(数値が小さい)ほど親として振る舞う
                     activeGroups.sort(function(a, b) {
                         return a.clipLayer - b.clipLayer;
                     });
-                    // 3. 行列による階層的な座標計算
-                    // グローバル座標系での変換行列を作成
                     var m = Qt.matrix4x4();
                     var totalOpacity = pOpacity;
-                    var totalRotX = 0;
-                    var totalRotY = 0;
-                    var totalRotZ = 0;
-                    // 親グループから順に変換を適用
+                    var totalRotX = 0, totalRotY = 0, totalRotZ = 0;
                     for (var j = 0; j < activeGroups.length; ++j) {
                         var g = activeGroups[j];
-                        // AviUtl互換座標系 (Y下プラス) で計算するため、Y軸反転などは最終出力時に行う
                         m.translate(Qt.vector3d(g.x, g.y, g.z));
                         m.rotate(g.rotationX, Qt.vector3d(1, 0, 0));
                         m.rotate(g.rotationY, Qt.vector3d(0, 1, 0));
@@ -292,17 +301,13 @@ Item {
                         var s = g.scale / 100;
                         m.scale(s, s, s);
                         totalOpacity *= g.opacity;
-                        // 回転の単純加算（近似値。厳密な3D回転合成ではないが、AviUtl的な挙動としては十分）
                         totalRotX += g.rotationX;
                         totalRotY += g.rotationY;
                         totalRotZ += g.rotationZ;
                     }
-                    // 最後にオブジェクト自身のローカル座標を適用
                     m.translate(Qt.vector3d(px, py, pz));
-                    // 行列から最終的な位置を取得 (translation vector)
-                    // column(3) は平行移動成分 (x, y, z, w)
                     var pos = m.column(3);
-                    var t = {
+                    return {
                         "x": pos.x,
                         "y": pos.y,
                         "z": pos.z,
@@ -314,14 +319,12 @@ Item {
                         "sz": baseScale,
                         "opacity": totalOpacity
                     };
-                    return t;
                 }
 
                 function dbg(msg) {
                     Logger.log("[CompositeView][clipId=" + clipIdRole + "][type=" + clipTypeRole + "] " + msg, Workspace.currentTimeline);
                 }
 
-                // レイヤーが非表示の場合は描画しない
                 function isClipActiveAtCurrentFrame(node) {
                     if (!node || node.clipStartFrameRole === undefined || node.clipDurationFramesRole === undefined)
                         return false;
@@ -335,8 +338,7 @@ Item {
                     if (!clipByUpperObjectRole || clipLayerRole <= 0 || !sceneRoot)
                         return null;
 
-                    var bestLayer = -1;
-                    var bestMask = null;
+                    var bestLayer = -1, bestMask = null;
                     var nodes = sceneRoot.children;
                     for (var i = 0; i < nodes.length; ++i) {
                         var node = nodes[i];
@@ -375,37 +377,28 @@ Item {
                 onRawFbRendererOutputChanged: Qt.callLater(updateClipMaskItem)
                 onFbRendererOutputChanged: root.childRendererOutputsChanged()
                 visible: {
-                    // 1. レイヤー自体の表示設定
-                    // QMLエンジンのバインディングシステムに検知させるため、layerStatesを直接参照する
                     var states = root.layerStates;
                     var layerInfo = (states !== undefined && states !== null) ? states[clipLayerRole] : null;
                     var layerVisible = (layerInfo !== null && layerInfo !== undefined) ? layerInfo.visible : true;
                     if (!layerVisible)
                         return false;
 
-                    // 2. シーン ID の一致確認
                     if (root.sceneId !== -1 && clipSceneIdRole !== -1 && clipSceneIdRole !== root.sceneId)
                         return false;
 
-                    // 3. 再生ヘッドがクリップの範囲内にあるか（プリロードされたオブジェクトを隠す）
                     return root.currentFrame >= clipStartFrameRole && root.currentFrame < (clipStartFrameRole + clipDurationFramesRole);
                 }
-                // 座標変換: 中心(0,0)、直感的なY軸上プラス（反転なし）
                 x: effectiveTransform.x
                 y: effectiveTransform.y
                 z: effectiveTransform.z
-                // 中心座標 (Pivot)
                 pivot: Qt.vector3d(tParams.anchorX || 0, tParams.anchorY || 0, tParams.anchorZ || 0)
-                // 3軸回転
                 eulerRotation.x: effectiveTransform.rx
                 eulerRotation.y: -effectiveTransform.ry
                 eulerRotation.z: -effectiveTransform.rz
                 scale.x: effectiveTransform.sx
                 scale.y: effectiveTransform.sy
                 scale.z: effectiveTransform.sz
-                // 不透明度 (全体)
                 opacity: effectiveTransform.opacity
-                // params 変化 (scale/pos/rot/opacity) → BaseObject の fbCaptureItem を同期
                 onPxChanged: objectContainer._syncTransformToItem()
                 onPyChanged: objectContainer._syncTransformToItem()
                 onPRotZChanged: objectContainer._syncTransformToItem()
@@ -445,8 +438,6 @@ Item {
                     id: clipByUpperComponent
 
                     Item {
-                        id: clipByUpperHost
-
                         property alias output: clippedCapture
 
                         width: root.projectWidth
@@ -494,8 +485,6 @@ Item {
                 }
 
                 Connections {
-                    // これにより tParams や BaseObject 内部が再評価される
-
                     function onEffectParamChanged(clipId, effIdx, name, val) {
                         if (clipId === clipNode.clipIdRole)
                             clipNode._tmRev++;
@@ -522,16 +511,10 @@ Item {
                     }
 
                 }
-                // 評価済みパラメータからtransform値を取得 (単一経路化)
 
-                // Loader (2D) は 3D シーン内では機能しないため、
-                // Qt.createComponent を使用して Node 派生クラスを動的に生成する
                 Common.NodeLoader {
-                    // 内部の evaluatedParams() 等の再計算を強制するトリガー
-
                     id: objectContainer
 
-                    // clipNode の transform が変わるたびに BaseObject へ同期
                     function _syncTransformToItem() {
                         if (!item)
                             return ;
@@ -572,7 +555,21 @@ Item {
                         "renderHost": offscreenRenderHost
                     }
                     componentFactory: root.getCachedComponent
-                    // NodeLoader 完了後に fbRendererOutput を clipNode へ接続
+                    onPreviousItemChanged: {
+                        // [FIX-18] NodeLoader が旧 item を previousItem に退避した直後に
+                        // unregister を同期的に実行する。これが SIGSEGV の根本修正。
+                        // destroy() より前に unregister を済ませることで、
+                        // cameraControls[] に dangling 参照が残らない。
+                        var prev = previousItem;
+                        if (prev) {
+                            if (prev.isCameraControl && root.unregisterCameraControl)
+                                root.unregisterCameraControl(prev);
+
+                            if (prev.isGroupControl && root.unregisterGroupControl)
+                                root.unregisterGroupControl(prev);
+
+                        }
+                    }
                     onItemChanged: {
                         if (item) {
                             clipNode.rawFbRendererOutput = item.fbCaptureItem ?? null;
@@ -583,7 +580,7 @@ Item {
 
                             if ("displayOutput" in item)
                                 item.displayOutput = Qt.binding(function() {
-                                return clipNode.clipByUpperActive && clipNode.clippedRendererOutput ? clipNode.clippedRendererOutput : item.renderer.output;
+                                return clipNode.clipByUpperActive && clipNode.clippedRendererOutput ? clipNode.clippedRendererOutput : item.renderer ? item.renderer.output : null;
                             });
 
                             if ("clipLayer" in item)
@@ -610,8 +607,15 @@ Item {
                                 return root.currentFrame;
                             });
 
+                            // [FIX-19] isGroupControl チェックは item が生きていることの確認。
+                            // previousItem の unregister が onPreviousItemChanged で
                             if (item.isGroupControl && root.registerGroupControl)
                                 root.registerGroupControl(item);
+
+                            // [FIX-20] registerCameraControl は内部で重複チェックを行う。
+                            // CameraControlObject 側の _tryRegister() と合わせて
+                            if (item.isCameraControl && root.registerCameraControl)
+                                root.registerCameraControl(item);
 
                             _syncTransformToItem();
                         }

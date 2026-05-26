@@ -16,11 +16,11 @@ Common.BaseObject {
     property color flareColor: evalColor(objectId, "color", "#fff2aa")
     property real opacity: evalNumber(objectId, "opacity", 1)
 
-    sourceItem: sourceItem
-
     function rgbaString(c, a) {
         return "rgba(" + Math.round(c.r * 255) + "," + Math.round(c.g * 255) + "," + Math.round(c.b * 255) + "," + Math.max(0, Math.min(1, a)) + ")";
     }
+
+    sourceItem: sourceItem
 
     Item {
         id: sourceItem
@@ -70,10 +70,15 @@ Common.BaseObject {
             }
 
             Connections {
+                function onRevisionChanged() {
+                    canvas.requestPaint();
+                }
+
                 target: root
-                function onRevisionChanged() { canvas.requestPaint(); }
             }
+
         }
+
     }
 
     Model {
@@ -90,6 +95,9 @@ Common.BaseObject {
             diffuseMap: Texture {
                 sourceItem: root.displayOutput
             }
+
         }
+
     }
+
 }

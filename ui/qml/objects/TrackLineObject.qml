@@ -17,7 +17,6 @@ Common.BaseObject {
     property bool arrow: evalBool("track_line", "arrow", true)
     property color lineColor: evalColor("track_line", "color", "#ffffff")
     property real opacity: evalNumber("track_line", "opacity", 1)
-
     readonly property real padding: Math.max(24, lineWidth * 4)
 
     sourceItem: sourceItem
@@ -51,6 +50,7 @@ Common.BaseObject {
                 ctx.lineJoin = "round";
                 if (root.dashLength > 0)
                     ctx.setLineDash([root.dashLength, Math.max(0, root.dashSpace)]);
+
                 ctx.beginPath();
                 ctx.moveTo(x1, y1);
                 ctx.lineTo(x2, y2);
@@ -70,10 +70,15 @@ Common.BaseObject {
             }
 
             Connections {
+                function onRevisionChanged() {
+                    canvas.requestPaint();
+                }
+
                 target: root
-                function onRevisionChanged() { canvas.requestPaint(); }
             }
+
         }
+
     }
 
     Model {
@@ -90,6 +95,9 @@ Common.BaseObject {
             diffuseMap: Texture {
                 sourceItem: root.displayOutput
             }
+
         }
+
     }
+
 }

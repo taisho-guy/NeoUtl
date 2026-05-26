@@ -162,7 +162,6 @@ ScrollView {
                 if (!Workspace.currentTimeline)
                     return ;
 
-                // 1. Viewport sync
                 if (typeof Workspace.currentTimeline.updateViewport === "function")
                     Workspace.currentTimeline.updateViewport(timelineFlickable.contentX, timelineFlickable.contentY);
 
@@ -172,7 +171,6 @@ ScrollView {
                 if (timelineViewRoot.ScrollBar.vertical && timelineViewRoot.ScrollBar.vertical.pressed)
                     timelineViewRoot.autoScrollSuspended = true;
 
-                // 2. Playhead auto-scroll (Page turn)
                 if (Workspace.currentTimeline.transport && Workspace.currentTimeline.transport.isPlaying && !timelineViewRoot.autoScrollSuspended) {
                     let viewportWidth = timelineFlickable.width;
                     let playheadX = Workspace.currentTimeline.transport.currentFrame * Workspace.currentTimeline.timelineScale;
@@ -185,7 +183,6 @@ ScrollView {
                         timelineFlickable.contentX = clamp(nextPage * viewportWidth, 0, maxX);
                     }
                 }
-                // 3. Drag auto-scroll
                 if (timelineViewRoot.dragAutoScrollActive) {
                     let dx = 0;
                     let dy = 0;

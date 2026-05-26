@@ -5,7 +5,6 @@
 
 using namespace AviQtl::Core;
 
-// ─── Concrete subclass for testing ───
 class MockMediaDecoder : public MediaDecoder {
   public:
     explicit MockMediaDecoder(int clipId, QUrl source, QObject *parent = nullptr) : MediaDecoder(clipId, std::move(source), parent) {}

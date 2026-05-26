@@ -4,7 +4,6 @@
 
 using namespace AviQtl::Engine::Plugin;
 
-// ─── Mock plugin for testing ───
 class MockPlugin : public IAudioPlugin {
   public:
     explicit MockPlugin(QString id = QStringLiteral("mock")) : m_id(std::move(id)) {}
@@ -43,7 +42,6 @@ class MockPlugin : public IAudioPlugin {
     int m_lastFrameCount = 0;
 };
 
-// ─── Tests ───
 class TestAudioPluginChain : public QObject {
     Q_OBJECT
 

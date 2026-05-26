@@ -55,7 +55,6 @@ auto TimelineService::scenes() const -> QVariantList {
 }
 
 void TimelineService::setScenes(const QList<SceneData> &scenes) {
-    // 古いデータに含まれる EffectModel のポインタを確実に解放する
     for (auto &scene : m_scenes) {
         for (auto &clip : scene.clips) {
             for (auto *eff : std::as_const(clip.effects)) {

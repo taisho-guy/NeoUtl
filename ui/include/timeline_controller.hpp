@@ -24,13 +24,11 @@ namespace AviQtl::UI { // 元のnamespaceに戻す
 class TimelineController : public QObject {
     Q_OBJECT
 
-    // === サービス (サブコントローラ) ===
     Q_PROPERTY(AviQtl::UI::ProjectService *project READ project CONSTANT)
     Q_PROPERTY(AviQtl::UI::TransportService *transport READ transport CONSTANT)
     Q_PROPERTY(AviQtl::UI::SelectionService *selection READ selection CONSTANT)
     Q_PROPERTY(int cursorFrame READ cursorFrame WRITE setCursorFrame NOTIFY cursorFrameChanged)
 
-    // === レガシー / ファサードプロパティ ===
     Q_PROPERTY(double timelineScale READ timelineScale WRITE setTimelineScale NOTIFY timelineScaleChanged)
     Q_PROPERTY(int clipStartFrame READ clipStartFrame WRITE setClipStartFrame NOTIFY clipStartFrameChanged)
     Q_PROPERTY(int clipDurationFrames READ clipDurationFrames WRITE setClipDurationFrames NOTIFY clipDurationFramesChanged)
@@ -256,7 +254,6 @@ class TimelineController : public QObject {
     QString m_currentProjectUrl;
 
     int m_cursorFrame = 0;
-    // 各機能を担当するサービス群
     ProjectService *m_project{};
     TransportService *m_transport{};
     SelectionService *m_selection{};

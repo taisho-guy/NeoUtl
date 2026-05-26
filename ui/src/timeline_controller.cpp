@@ -102,7 +102,6 @@ void TimelineController::setupConnections() {
     connect(m_project, &ProjectService::fpsChanged, this, [this]() -> void { m_transport->updateTimerInterval(m_project->fps()); });
     m_transport->updateTimerInterval(m_project->fps());
 
-    // 再生状態の変化をデコーダーに伝播
     connect(m_transport, &TransportService::isPlayingChanged, this, &TimelineController::onPlayingChanged);
 
     // 再生位置が変わったらプレビュー更新
@@ -183,7 +182,6 @@ auto TimelineController::resolveDragDelta(int clipId, int deltaFrame, int deltaL
     int dF = resolved.x() - clip->startFrame;
     int dL = resolved.y() - clip->layer;
 
-    // 2. タイムライン境界によるクランプ (QMLから移行)
     if (minFrame + dF < 0) {
         dF = -minFrame;
     }
@@ -213,7 +211,6 @@ void TimelineController::syncTimelineToDocumentModel() {
     // 同期中の連続的な信号発火を抑制し、最後に一度だけ Bake を走らせる
     QSignalBlocker blocker(&doc);
 
-    // 1. プロジェクト設定の同期
     AviQtl::Core::ProjectSettings projSettings;
     if (m_project) {
         projSettings.defaultSceneWidth = m_project->width();
@@ -223,7 +220,6 @@ void TimelineController::syncTimelineToDocumentModel() {
     }
     doc.setProjectSettings(projSettings);
 
-    // 2. シーンデータの同期
     if (!m_timeline)
         return;
 
@@ -236,13 +232,11 @@ void TimelineController::syncTimelineToDocumentModel() {
     for (const auto &s : doc.scenes())
         existingDocSceneIds.insert(s.id);
 
-    // 2. 不要になったシーンの削除
     for (int id : existingDocSceneIds) {
         if (!incomingSceneIds.contains(id))
             doc.removeScene(id);
     }
 
-    // 3. シーンとクリップの同期
     for (const auto &uiScene : uiScenes) {
         AviQtl::Core::SceneSettings sceneSettings;
         sceneSettings.id = uiScene.id;

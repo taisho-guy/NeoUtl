@@ -6,7 +6,6 @@ import QtQuick.Layouts
 ScrollView {
     id: root
 
-    // 親から受け取るドラフト設定
     required property var draftSettings
     readonly property color secondaryTextColor: Qt.rgba(palette.text.r, palette.text.g, palette.text.b, 0.7)
 
@@ -27,7 +26,6 @@ ScrollView {
         return fallback;
     }
 
-    // --- ページ本体 ---
     Layout.fillWidth: true
     Layout.fillHeight: true
     contentWidth: availableWidth

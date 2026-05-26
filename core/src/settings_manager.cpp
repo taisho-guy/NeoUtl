@@ -165,7 +165,6 @@ auto SettingsManager::defaultShortcutSettings() -> QVariantMap {
 }
 
 auto SettingsManager::getSettingsFilePath() -> QString {
-    // 1. 実行ファイルディレクトリを試す (ポータブルモード)
     QString exeDir = QCoreApplication::applicationDirPath();
     QString portablePath = exeDir + QLatin1String("/aviqtl_settings.json");
 
@@ -185,7 +184,6 @@ auto SettingsManager::getSettingsFilePath() -> QString {
         }
     }
 
-    // 2. AppLocalDataLocationにフォールバック
     QString dataPath = QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation);
     QDir().mkpath(dataPath);
     return dataPath + QLatin1String("/settings.json");

@@ -25,7 +25,6 @@ Node {
     property real clipNodeOpacity: 1
     property bool outputModelVisible: true
     property alias fbCaptureItem: _fbCaptureItemImpl
-    // --- 座標変換のモジュール化 ---
     // transformエフェクトのモデルを探す
     readonly property var transformModel: {
         for (var i = 0; i < rawEffectModels.length; i++) {
@@ -196,7 +195,6 @@ Node {
 
     }
 
-    // --- transformエフェクトのインスタンス化 ---
     Loader {
         id: transformLoader
 

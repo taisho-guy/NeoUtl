@@ -381,7 +381,6 @@ void VideoDecoder::decodeTask(int targetFrame, double fps) { // NOLINT(bugprone-
         return;
     }
 
-    // 2. QCache (個別フレームキャッシュ) のチェック
     if (QVideoFrame *cached = mframeCache.object(targetFrame)) {
         mstore->setVideoFrameSafe(clipKey, *cached);
         QMetaObject::invokeMethod(this, [this, targetFrame]() { emit frameReady(targetFrame); }, Qt::QueuedConnection);
@@ -503,7 +502,6 @@ void VideoDecoder::decodeTask(int targetFrame, double fps) { // NOLINT(bugprone-
 
                     bool useHBD = DocumentModel::instance().projectSettings().highBitDepth;
 
-                    // プロジェクト設定に応じてサポート対象を判定
                     bool isSupported = (pixFmt == AV_PIX_FMT_YUV420P || pixFmt == AV_PIX_FMT_NV12 || pixFmt == AV_PIX_FMT_RGBA);
                     if (useHBD)
                         isSupported |= (pixFmt == AV_PIX_FMT_RGBA64LE || pixFmt == AV_PIX_FMT_P010LE);

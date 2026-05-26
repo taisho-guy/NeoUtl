@@ -59,8 +59,6 @@ class TestLuaHost : public QObject {
         QCOMPARE(result, 10.0); // sin(0) = 0
     }
 
-    // ── Extended: table / relational / math edge cases ──
-
     void evaluateTableLength() {
         // Lua tables can be manipulated; # returns length for 1-based numeric tables
         double result = LuaHost::evaluate("#{1,2,3}", 0.0, 0, 0.0);

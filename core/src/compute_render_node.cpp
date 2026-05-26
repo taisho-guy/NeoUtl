@@ -91,7 +91,6 @@ bool ComputeRenderNode::ensureBuffers(QRhi *rhi) {
         m_renderTargetDirty = true;
     }
 
-    // 1. シェーダーが汚れていれば、先に読み込んでリフレクション情報を得る
     if (!m_shaderPath.isEmpty() && m_shaderDirty) {
         QFile f(m_shaderPath);
         if (f.open(QIODevice::ReadOnly)) {

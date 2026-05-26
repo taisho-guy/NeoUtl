@@ -53,7 +53,6 @@ Common.BaseObject {
         // _pad 分 + 背景パディング分だけ拡大
         width: Math.max(textItem.implicitWidth + root._pad * 2 + (root.bgEnabled ? root.bgPaddingX * 2 : 0), 1)
         height: Math.max(textItem.implicitHeight + root._pad * 2 + (root.bgEnabled ? root.bgPaddingY * 2 : 0), 1)
-        // visible: false にすると SceneGraph から外れてテクスチャ更新が止まるため、
         // opacity: 0 で不可視にしつつ SceneGraph には残す（BaseObject.qml の設計方針に準拠）
         visible: true
         opacity: 0

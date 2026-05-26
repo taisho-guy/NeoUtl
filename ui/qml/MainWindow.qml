@@ -10,8 +10,6 @@ ApplicationWindow {
 
     id: mainWin
 
-    // ショートカットの有効判定ヘルパー
-    // 1. 入力系コントロール（TextField等）にフォーカスがある場合は無効化する
     readonly property bool _isInputFocused: {
         var item = Qt.application.focusItem;
         if (!item)
@@ -927,7 +925,6 @@ ApplicationWindow {
                 }
 
                 Label {
-                    // 総フレーム数の桁数に合わせて0埋めし、等幅フォントを適用する
                     text: {
                         var total = Math.floor(seekSlider.to);
                         var cur = Math.floor(seekSlider.value);
@@ -1263,7 +1260,6 @@ ApplicationWindow {
     }
 
     menuBar: MenuBar {
-        // ─── ファイル ───
         Menu {
             title: qsTr("ファイル")
 
@@ -1309,7 +1305,6 @@ ApplicationWindow {
 
         }
 
-        // ─── 編集 ───
         Menu {
             title: qsTr("編集")
 
@@ -1325,7 +1320,6 @@ ApplicationWindow {
 
         }
 
-        // ─── 設定 ───
         Menu {
             title: qsTr("設定")
 
@@ -1344,7 +1338,6 @@ ApplicationWindow {
 
         }
 
-        // ─── 表示 ───
         Menu {
             title: qsTr("表示")
 
@@ -1360,7 +1353,6 @@ ApplicationWindow {
 
         }
 
-        // ─── ツール ───
         Menu {
             title: qsTr("ツール")
 

@@ -8,8 +8,6 @@
 
 namespace AviQtl::Engine::Timeline {
 
-// ─── CommandSystem ────────────────────────────────────────────────────────────
-
 void ECS::runCommandSystem(AviQtl::UI::CoreBridge &bridge) {
     AviQtl::UI::CoreBridge::Command cmd;
     while (bridge.dequeueCommand(cmd)) {
@@ -28,8 +26,6 @@ void ECS::runCommandSystem(AviQtl::UI::CoreBridge &bridge) {
     }
 }
 
-// ─── ECS コンストラクタ / インスタンス ────────────────────────────────────────
-
 ECS::ECS() : m_editIndex(1) {
     m_activeIndex.store(0, std::memory_order_relaxed);
     for (auto &f : m_dirtyFlags)
@@ -40,8 +36,6 @@ auto ECS::instance() -> ECS & {
     static ECS inst;
     return inst;
 }
-
-// ─── syncClipIds ──────────────────────────────────────────────────────────────
 
 void ECS::syncClipIds(const std::bitset<MAX_CLIP_ID> &aliveFlags) {
     auto &editState = m_buffers[m_editIndex];
@@ -59,8 +53,6 @@ void ECS::syncClipIds(const std::bitset<MAX_CLIP_ID> &aliveFlags) {
         m_dirtyFlags[(m_editIndex + 2) % 3].fullSync = true;
     }
 }
-
-// ─── updateClipState ──────────────────────────────────────────────────────────
 
 void ECS::updateClipState(int clipId, int layer, double time, int startFrame, int durationFrames) {
     assert(clipId >= 0 && clipId < MAX_CLIP_ID);
@@ -91,8 +83,6 @@ void ECS::updateClipState(int clipId, int layer, double time, int startFrame, in
     ECS_PROF_INC(dirtyBitSetCount);
 }
 
-// ─── updateAudioClipState ─────────────────────────────────────────────────────
-
 void ECS::updateAudioClipState(int clipId, int startFrame, int durationFrames, float volume, float pan, bool mute) {
     assert(clipId >= 0 && clipId < MAX_CLIP_ID);
     auto &editState = m_buffers[m_editIndex];
@@ -119,8 +109,6 @@ void ECS::updateAudioClipState(int clipId, int startFrame, int durationFrames, f
     }
     ECS_PROF_INC(dirtyBitSetCount);
 }
-
-// ─── commit ───────────────────────────────────────────────────────────────────
 
 void ECS::commit() {
     ECS_PROF_INC(commitCount);
@@ -177,8 +165,6 @@ void ECS::commit() {
     m_pendingIndex.store(justWritten, std::memory_order_release);
 }
 
-// ─── getSnapshot ─────────────────────────────────────────────────────────────
-
 auto ECS::getSnapshot() const -> const ECSState * {
     int pending = m_pendingIndex.load(std::memory_order_acquire);
     if (pending != -1) {
@@ -188,8 +174,6 @@ auto ECS::getSnapshot() const -> const ECSState * {
     }
     return &m_buffers[m_activeIndex.load(std::memory_order_acquire)];
 }
-
-// ─── その他ユーティリティ ─────────────────────────────────────────────────────
 
 auto ECS::isRenderGraphDirty() const -> bool { return m_buffers[m_editIndex].renderGraphDirty; }
 

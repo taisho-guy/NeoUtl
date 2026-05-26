@@ -5,7 +5,6 @@ import "qrc:/qt/qml/AviQtl/ui/qml/common" as Common
 Common.BaseEffect {
     id: root
 
-    // 🚀 3D座標・マテリアル用 (BaseObjectが引き続きバインドして利用)
     readonly property vector3d outputPosition: {
         const x = evalNumber("x", 0);
         const y = evalNumber("y", 0);
@@ -28,14 +27,12 @@ Common.BaseEffect {
     readonly property int outputCullMode: {
         return evalParam("backfaceVisible", true) ? DefaultMaterial.NoCulling : DefaultMaterial.BackFaceCulling;
     }
-    // 🚀 2Dキャプチャ/レンダリング用アフィンパラメータ
     readonly property real output2dScale: Math.max(0, evalNumber("scale", 100)) / 100
     readonly property real output2dX: evalNumber("x", 0)
     readonly property real output2dY: evalNumber("y", 0)
     readonly property real output2dRotationZ: evalNumber("rotationZ", 0)
     readonly property real outputCx: evalNumber("cx", 0)
     readonly property real outputCy: evalNumber("cy", 0)
-    // 🚀 合成（ブレンド）モードの数値化
     readonly property int blendModeInt: {
         const m = evalParam("blendMode", "通常");
         if (m === "スクリーン")
@@ -86,8 +83,6 @@ Common.BaseEffect {
         return 0; // 通常
     }
 
-    // 🚀 2Dテクスチャエフェクトとしてのシェーダー適用
-    // （二重変形による境界見切れバグ防止のため、テクスチャ自体の変形は恒等値に固定する）
     ShaderEffect {
         property variant source: root.sourceProxy
         // アフィン変換 uniform バインド

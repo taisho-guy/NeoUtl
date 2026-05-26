@@ -23,7 +23,6 @@ TimelineService::TimelineService(SelectionService *selection, QObject *parent) :
 }
 
 TimelineService::~TimelineService() {
-    // すべてのエフェクトモデルを解放
     for (auto &scene : m_scenes) {
         for (auto &clip : scene.clips) {
             for (auto *eff : clip.effects) {
