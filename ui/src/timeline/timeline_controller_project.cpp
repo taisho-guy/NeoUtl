@@ -5,8 +5,10 @@
 #include "settings_manager.hpp"
 #include "timeline_controller.hpp"
 #include "timeline_service.hpp"
+#include <QCoreApplication>
 #include <QFile>
 #include <QFileInfo>
+#include <QSet>
 #include <QUrl>
 
 namespace AviQtl::UI {
@@ -156,8 +158,68 @@ auto TimelineController::getAvailableEffects() -> QVariantList {
 auto TimelineController::getAvailableObjects() -> QVariantList {
     QVariantList list;
     const auto effects = AviQtl::Core::EffectRegistry::instance().getAllEffects();
+    QHash<QString, AviQtl::Core::EffectMetadata> objectsById;
     for (const auto &meta : effects) {
         if (meta.kind != "object") {
+            continue;
+        }
+        objectsById.insert(meta.id, meta);
+    }
+
+    auto translatedCategory = [](const char *source) {
+        return QCoreApplication::translate("AviQtl::Core::EffectRegistry", source);
+    };
+
+    auto makeItem = [&objectsById](const QString &id) -> QVariantMap {
+        QVariantMap item;
+        auto it = objectsById.constFind(id);
+        if (it == objectsById.cend()) {
+            return item;
+        }
+        item.insert(QStringLiteral("id"), it->id);
+        item.insert(QStringLiteral("name"), it->name);
+        return item;
+    };
+
+    auto appendItem = [&makeItem](QVariantList &target, const QString &id, QSet<QString> &handledIds) {
+        QVariantMap item = makeItem(id);
+        if (item.isEmpty()) {
+            return;
+        }
+        target.append(item);
+        handledIds.insert(id);
+    };
+
+    auto appendCategory = [&list, &appendItem](const QString &title, const QStringList &ids, QSet<QString> &handledIds) {
+        QVariantList children;
+        for (const QString &id : ids) {
+            appendItem(children, id, handledIds);
+        }
+        if (children.isEmpty()) {
+            return;
+        }
+        QVariantMap categoryNode;
+        categoryNode.insert(QStringLiteral("isCategory"), true);
+        categoryNode.insert(QStringLiteral("title"), title);
+        categoryNode.insert(QStringLiteral("children"), children);
+        list.append(categoryNode);
+    };
+
+    QSet<QString> handledIds;
+
+    appendCategory(translatedCategory("メディア"), {QStringLiteral("video"), QStringLiteral("image"), QStringLiteral("audio")}, handledIds);
+    appendItem(list, QStringLiteral("text"), handledIds);
+    appendItem(list, QStringLiteral("rect"), handledIds);
+    appendItem(list, QStringLiteral("frame_buffer"), handledIds);
+    appendItem(list, QStringLiteral("scene"), handledIds);
+    appendCategory(translatedCategory("制御"), {QStringLiteral("GroupControl"), QStringLiteral("camera_control")}, handledIds);
+    appendCategory(translatedCategory("カスタムオブジェクト"),
+                   {QStringLiteral("radial_lines"), QStringLiteral("counter"), QStringLiteral("lens_flare_object"), QStringLiteral("star"), QStringLiteral("snow"), QStringLiteral("rain"), QStringLiteral("track_line"), QStringLiteral("pie_shape"),
+                    QStringLiteral("polygon_shape"), QStringLiteral("flare")},
+                   handledIds);
+
+    for (const auto &meta : effects) {
+        if (meta.kind != "object" || handledIds.contains(meta.id)) {
             continue;
         }
         QVariantMap m;

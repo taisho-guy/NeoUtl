@@ -1,0 +1,20 @@
+{
+    "id": "polygon_shape",
+    "name": "多角形",
+    "qml": "PolygonShapeObject.qml",
+    "color": "#3b82f6",
+    "params": {"sizeW": 1920, "sizeH": 1080, "sides": 6, "rotation": 0, "color": "#66aa99", "strokeColor": "#ffffff", "strokeWidth": 0, "opacity": 1.0},
+    "ui": {"controls": [
+        {"type": "float", "param": "sizeW", "label": "幅", "min": 1, "max": 4000},
+        {"type": "float", "param": "sizeH", "label": "高さ", "min": 1, "max": 4000},
+        {"type": "int", "param": "sides", "label": "辺/頂点数", "min": 3, "max": 64},
+        {"type": "float", "param": "rotation", "label": "初期回転 (°)", "min": -360, "max": 360},
+        {"type": "color", "param": "color", "label": "塗り色"},
+        {"type": "color", "param": "strokeColor", "label": "縁の色"},
+        {"type": "float", "param": "strokeWidth", "label": "縁幅", "min": 0, "max": 200},
+        {"type": "slider", "param": "opacity", "label": "不透明度", "min": 0, "max": 1, "step": 0.01}
+    ]},
+    "version": "1.0.0",
+    "kind": "object",
+    "categories": ["カスタムオブジェクト"]
+}

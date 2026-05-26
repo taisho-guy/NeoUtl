@@ -45,7 +45,9 @@ void TimelineService::createClipInternal(int clipId, const QString &type, int st
 
     clipsMutable().append(newClip);
 
-    addEffectInternal(clipId, QStringLiteral("transform"));
+    if (type != QLatin1String("audio")) {
+        addEffectInternal(clipId, QStringLiteral("transform"));
+    }
     addEffectInternal(clipId, type);
     if (type == QLatin1String("scene")) {
         int defaultTargetSceneId = -1;

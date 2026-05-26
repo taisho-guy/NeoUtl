@@ -1,0 +1,21 @@
+{
+    "id": "lens_flare_object",
+    "name": "レンズフレア",
+    "qml": "LensFlareObject.qml",
+    "color": "#3b82f6",
+    "params": {"sizeW": 1920, "sizeH": 1080, "centerX": 0, "centerY": 0, "radius": 180, "strength": 1, "ghosts": 4, "color": "#fff2aa", "opacity": 1.0},
+    "ui": {"controls": [
+        {"type": "float", "param": "sizeW", "label": "幅", "min": 1, "max": 4000},
+        {"type": "float", "param": "sizeH", "label": "高さ", "min": 1, "max": 4000},
+        {"type": "float", "param": "centerX", "label": "中心X", "min": -4000, "max": 4000},
+        {"type": "float", "param": "centerY", "label": "中心Y", "min": -4000, "max": 4000},
+        {"type": "float", "param": "radius", "label": "半径", "min": 1, "max": 2000},
+        {"type": "slider", "param": "strength", "label": "強さ", "min": 0, "max": 4, "step": 0.01},
+        {"type": "int", "param": "ghosts", "label": "光斑数", "min": 0, "max": 16},
+        {"type": "color", "param": "color", "label": "色"},
+        {"type": "slider", "param": "opacity", "label": "不透明度", "min": 0, "max": 1, "step": 0.01}
+    ]},
+    "version": "1.0.0",
+    "kind": "object",
+    "categories": ["カスタムオブジェクト"]
+}

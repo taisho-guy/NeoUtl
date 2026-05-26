@@ -205,6 +205,9 @@ auto TimelineController::getClipEffectsModel(int clipId) const -> QList<QObject 
     for (const auto &clip : m_timeline->clips()) {
         if (clip.id == clipId) {
             for (auto *eff : clip.effects) {
+                if (clip.type == QLatin1String("audio") && eff->id() == QLatin1String("transform")) {
+                    continue;
+                }
                 list.append(eff);
             }
             break;

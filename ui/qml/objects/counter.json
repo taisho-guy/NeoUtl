@@ -1,0 +1,41 @@
+{
+    "id": "counter",
+    "name": "カウンター",
+    "qml": "CounterObject.qml",
+    "color": "#3b82f6",
+    "params": {
+        "mode": "frame",
+        "startValue": 0,
+        "endValue": 100,
+        "digits": 0,
+        "decimals": 0,
+        "prefix": "",
+        "suffix": "",
+        "fontFamily": "sans-serif",
+        "fontSize": 64,
+        "color": "#ffffff",
+        "outlineColor": "#000000",
+        "outlineWidth": 2,
+        "opacity": 1.0
+    },
+    "ui": {
+        "controls": [
+            {"type": "enum", "param": "mode", "label": "表示形式", "options": [{"value": "frame", "label": "フレーム"}, {"value": "time", "label": "秒"}, {"value": "value", "label": "値"}]},
+            {"type": "float", "param": "startValue", "label": "開始値", "decimals": 2},
+            {"type": "float", "param": "endValue", "label": "終了値", "decimals": 2},
+            {"type": "int", "param": "digits", "label": "桁数", "min": 0, "max": 12},
+            {"type": "int", "param": "decimals", "label": "小数桁", "min": 0, "max": 6},
+            {"type": "string", "param": "prefix", "label": "接頭辞"},
+            {"type": "string", "param": "suffix", "label": "接尾辞"},
+            {"type": "font", "param": "fontFamily", "label": "フォント"},
+            {"type": "float", "param": "fontSize", "label": "サイズ", "min": 1, "max": 400},
+            {"type": "color", "param": "color", "label": "文字色"},
+            {"type": "color", "param": "outlineColor", "label": "縁取り色"},
+            {"type": "float", "param": "outlineWidth", "label": "縁取り幅", "min": 0, "max": 50},
+            {"type": "slider", "param": "opacity", "label": "不透明度", "min": 0, "max": 1, "step": 0.01}
+        ]
+    },
+    "version": "1.0.0",
+    "kind": "object",
+    "categories": ["カスタムオブジェクト"]
+}

@@ -2,6 +2,7 @@
     "id": "audio",
     "name": "音声",
     "qml": "AudioObject.qml",
+    "color": "#d03030",
     "params": {
         "source": "",
         "playMode": "開始時間＋再生速度",

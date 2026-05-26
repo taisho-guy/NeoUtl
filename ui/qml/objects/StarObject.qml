@@ -1,0 +1,3 @@
+ParticleFieldObject {
+    objectId: "star"
+}

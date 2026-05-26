@@ -1,0 +1,21 @@
+{
+    "id": "star",
+    "name": "星",
+    "qml": "StarObject.qml",
+    "color": "#3b82f6",
+    "params": {"sizeW": 1920, "sizeH": 1080, "count": 120, "speed": 1, "particleSize": 4, "spread": 1, "seed": 1, "color": "#fff8c0", "opacity": 1.0},
+    "ui": {"controls": [
+        {"type": "float", "param": "sizeW", "label": "幅", "min": 1, "max": 4000},
+        {"type": "float", "param": "sizeH", "label": "高さ", "min": 1, "max": 4000},
+        {"type": "int", "param": "count", "label": "個数", "min": 1, "max": 2000},
+        {"type": "float", "param": "speed", "label": "速度", "min": -20, "max": 20},
+        {"type": "float", "param": "particleSize", "label": "サイズ", "min": 0.1, "max": 100},
+        {"type": "slider", "param": "spread", "label": "広がり", "min": 0, "max": 4, "step": 0.01},
+        {"type": "int", "param": "seed", "label": "ランダムシード", "min": 0, "max": 999999},
+        {"type": "color", "param": "color", "label": "色"},
+        {"type": "slider", "param": "opacity", "label": "不透明度", "min": 0, "max": 1, "step": 0.01}
+    ]},
+    "version": "1.0.0",
+    "kind": "object",
+    "categories": ["カスタムオブジェクト"]
+}
