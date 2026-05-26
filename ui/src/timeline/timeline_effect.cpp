@@ -389,10 +389,13 @@ void TimelineService::updateEffectParamInternal(int clipId, int effectIndex, con
 
 void TimelineService::setKeyframe(int clipId, int effectIndex, const QString &paramName, int frame, const QVariant &value, const QVariantMap &options) {
     const auto *clip = findClipById(clipId);
-    if ((clip == nullptr) || effectIndex >= clip->effects.size()) {
+    if ((clip == nullptr) || effectIndex < 0 || effectIndex >= clip->effects.size()) {
         return;
     }
     const auto *eff = clip->effects.value(effectIndex);
+    if (eff == nullptr) {
+        return;
+    }
 
     bool wasExisting = false;
     QVariant oldValue;
@@ -447,10 +450,13 @@ void TimelineService::moveKeyframe(int clipId, int effectIndex, const QString &p
         return;
     }
     const auto *clip = findClipById(clipId);
-    if ((clip == nullptr) || effectIndex >= clip->effects.size()) {
+    if ((clip == nullptr) || effectIndex < 0 || effectIndex >= clip->effects.size()) {
         return;
     }
     const auto *eff = clip->effects.value(effectIndex);
+    if (eff == nullptr) {
+        return;
+    }
     bool foundSource = false;
     const auto track = eff->keyframeListForUi(paramName);
     for (const auto &v : std::as_const(track)) {
@@ -498,7 +504,7 @@ void TimelineService::removeKeyframeInternal(int clipId, int effectIndex, const 
 
 void TimelineService::moveKeyframeInternal(int clipId, int effectIndex, const QString &paramName, int oldFrame, int newFrame) { // NOLINT(bugprone-easily-swappable-parameters)
     const auto *clip = findClipById(clipId);
-    if ((clip != nullptr) && effectIndex < clip->effects.size()) {
+    if ((clip != nullptr) && effectIndex >= 0 && effectIndex < clip->effects.size()) {
         if (!clip->effects.value(effectIndex)->moveKeyframe(paramName, oldFrame, newFrame)) {
             return;
         }

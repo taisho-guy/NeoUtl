@@ -216,6 +216,24 @@ auto TimelineController::getClipEffectsModel(int clipId) const -> QList<QObject 
     return list;
 }
 
+auto TimelineController::getClipEffectIndex(int clipId, QObject *effectModel) const -> int {
+    if (effectModel == nullptr) {
+        return -1;
+    }
+    for (const auto &clip : m_timeline->clips()) {
+        if (clip.id != clipId) {
+            continue;
+        }
+        for (int i = 0; i < clip.effects.size(); ++i) {
+            if (clip.effects.value(i) == effectModel) {
+                return i;
+            }
+        }
+        break;
+    }
+    return -1;
+}
+
 void TimelineController::updateClipEffectParam(int clipId, int effectIndex, const QString &paramName, const QVariant &value) { m_timeline->updateEffectParam(clipId, effectIndex, paramName, value); }
 
 auto TimelineController::clips() const -> QVariantList {

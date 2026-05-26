@@ -105,6 +105,7 @@ class TimelineController : public QObject {
 
     // エフェクト操作
     Q_INVOKABLE QList<QObject *> getClipEffectsModel(int clipId) const;
+    Q_INVOKABLE int getClipEffectIndex(int clipId, QObject *effectModel) const;
     Q_INVOKABLE void updateClipEffectParam(int clipId, int effectIndex, const QString &paramName, const QVariant &value);
 
     // エフェクト・オブジェクトの利用可能リスト取得

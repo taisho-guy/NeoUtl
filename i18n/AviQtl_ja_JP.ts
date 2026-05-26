@@ -1272,7 +1272,7 @@
         <translation>レイヤー変更</translation>
     </message>
     <message>
-        <location filename="../ui/src/timeline/timeline_controller_clip.cpp" line="331"/>
+        <location filename="../ui/src/timeline/timeline_controller_clip.cpp" line="349"/>
         <source>複数クリップリサイズ: %1</source>
         <translation>複数クリップリサイズ: %1</translation>
     </message>
@@ -3015,32 +3015,32 @@
         <translation>選択した %1 件を削除</translation>
     </message>
     <message>
-        <location filename="../ui/qml/SettingDialog.qml" line="929"/>
+        <location filename="../ui/qml/SettingDialog.qml" line="935"/>
         <source> (直線)</source>
         <translation> (直線)</translation>
     </message>
     <message>
-        <location filename="../ui/qml/SettingDialog.qml" line="930"/>
+        <location filename="../ui/qml/SettingDialog.qml" line="936"/>
         <source> (加速)</source>
         <translation> (加速)</translation>
     </message>
     <message>
-        <location filename="../ui/qml/SettingDialog.qml" line="931"/>
+        <location filename="../ui/qml/SettingDialog.qml" line="937"/>
         <source> (減速)</source>
         <translation> (減速)</translation>
     </message>
     <message>
-        <location filename="../ui/qml/SettingDialog.qml" line="932"/>
+        <location filename="../ui/qml/SettingDialog.qml" line="938"/>
         <source> (加減速)</source>
         <translation> (加減速)</translation>
     </message>
     <message>
-        <location filename="../ui/qml/SettingDialog.qml" line="933"/>
+        <location filename="../ui/qml/SettingDialog.qml" line="939"/>
         <source> (ベジェ)</source>
         <translation> (ベジェ)</translation>
     </message>
     <message>
-        <location filename="../ui/qml/SettingDialog.qml" line="1382"/>
+        <location filename="../ui/qml/SettingDialog.qml" line="1388"/>
         <source>エフェクトを追加</source>
         <translation>エフェクトを追加</translation>
     </message>

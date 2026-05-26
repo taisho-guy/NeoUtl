@@ -109,8 +109,9 @@ void ImageDecoder::decodeImage(const QString &path) {
     }
 
     if (decoded) {
-        // 高精度処理のため RGBA64LE (16bit integer) を使用
-        AVPixelFormat targetFmt = AV_PIX_FMT_RGBA64LE;
+        // 表示用の QVideoFrame は Format_RGBA8888 として渡すため、
+        // 実データも 8bit RGBA に揃える。
+        AVPixelFormat targetFmt = AV_PIX_FMT_RGBA;
         AVFrame *rgbaFrame = av_frame_alloc();
         rgbaFrame->format = targetFmt;
         rgbaFrame->width = srcFrame->width;
@@ -137,8 +138,8 @@ void ImageDecoder::decodeImage(const QString &path) {
         sws_scale(swsCtx, srcFrame->data, srcFrame->linesize, 0, srcFrame->height, rgbaFrame->data, rgbaFrame->linesize);
         sws_freeContext(swsCtx);
 
-        // QQuickImageProvider 用に QImage としても保存する（これがプレビューされない直接的な原因）
-        QImage img(rgbaFrame->data[0], rgbaFrame->width, rgbaFrame->height, rgbaFrame->linesize[0], QImage::Format_RGBA64);
+        // QQuickImageProvider 用に QImage としても保存する
+        QImage img(rgbaFrame->data[0], rgbaFrame->width, rgbaFrame->height, rgbaFrame->linesize[0], QImage::Format_RGBA8888);
         m_cachedImage = img.copy();
         const QString &clipIdStr = clipIdString();
         m_store->setFrameSafe(clipIdStr, m_cachedImage);
@@ -146,8 +147,6 @@ void ImageDecoder::decodeImage(const QString &path) {
         QVideoFrameFormat fmt(QSize(rgbaFrame->width, rgbaFrame->height), QVideoFrameFormat::Format_RGBA8888);
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wdeprecated-declarations"
-        // QVideoFrame(Metadata)は8bitだが、データはHBDのままだと表示が崩れるため
-        // 将来的にGPU側で16bitテクスチャとして扱うまで、表示用は8bitを維持
         auto *buf = new FFmpegVideoBuffer(rgbaFrame, fmt);
         QVideoFrame vf(buf, fmt);
 #pragma clang diagnostic pop

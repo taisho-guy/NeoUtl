@@ -583,7 +583,13 @@ Common.AviQtlWindow {
                     delegate: ColumnLayout {
                         id: effectRoot
 
-                        property int effectIndex: index
+                        property int effectIndex: {
+                            if (!Workspace.currentTimeline)
+                                return index;
+
+                            var resolvedIndex = Workspace.currentTimeline.getClipEffectIndex(targetClipId, modelData);
+                            return resolvedIndex >= 0 ? resolvedIndex : index;
+                        }
                         property var effectModel: modelData
                         property int _effectRev: 0
 
@@ -1083,7 +1089,7 @@ Common.AviQtlWindow {
                                             property var rootWindow: root
                                             property int minDragFrame: 0
                                             property int maxDragFrame: clipDur
-                                            property bool isEndpoint: originalFrame === 0 || originalFrame === clipDur
+                                            property bool isEndpoint: originalFrame === 0 || !!modelData.virtualEnd
 
                                             width: 16
                                             height: 16
