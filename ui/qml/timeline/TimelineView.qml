@@ -127,6 +127,7 @@ Item {
 
         if (Workspace.currentTimeline.transport && Workspace.currentTimeline.transport.currentFrame !== nextFrame)
             Workspace.currentTimeline.transport.setCurrentFrame_seek(nextFrame);
+
     }
 
     function getGridInterval() {

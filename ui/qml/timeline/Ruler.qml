@@ -41,6 +41,7 @@ Rectangle {
 
         if (Workspace.currentTimeline.transport && Workspace.currentTimeline.transport.currentFrame !== nextFrame)
             Workspace.currentTimeline.transport.setCurrentFrame_seek(nextFrame);
+
     }
 
     function zoomAt(wheel, zoomFactor) {
@@ -231,6 +232,7 @@ Rectangle {
                 onPressed: (mouse) => {
                     if (mouse.button === Qt.LeftButton && targetFlickable && Workspace.currentTimeline)
                         rulerRoot.seekCursorFrame(pxToFrame(mouse.x, targetFlickable.contentX));
+
                 }
                 onPositionChanged: (mouse) => {
                     if (pressed && (mouse.buttons & Qt.LeftButton) && targetFlickable && Workspace.currentTimeline)

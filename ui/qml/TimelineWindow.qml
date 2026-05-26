@@ -49,7 +49,8 @@ Common.AviQtlWindow {
         if (!Workspace.currentTimeline)
             return ;
 
-        var next = ({});
+        var next = ({
+        });
         for (var i = 0; i < layerCount; i++) {
             next[i] = {
                 "visible": !Workspace.currentTimeline.isLayerHidden(i),
@@ -99,6 +100,7 @@ Common.AviQtlWindow {
     objectName: "timelineWindow"
     width: 1280
     height: 300
+    Component.onCompleted: syncGlobalLayerStates()
 
     ColumnLayout {
         anchors.fill: parent
@@ -326,6 +328,7 @@ Common.AviQtlWindow {
                     size: 18
                     color: parent.enabled && parent.hovered ? parent.palette.highlight : parent.palette.text
                 }
+
             }
 
             Slider {
@@ -367,6 +370,7 @@ Common.AviQtlWindow {
                     size: 18
                     color: parent.enabled && parent.hovered ? parent.palette.highlight : parent.palette.text
                 }
+
             }
 
             Item {
@@ -377,8 +381,6 @@ Common.AviQtlWindow {
         }
 
     }
-
-    Component.onCompleted: syncGlobalLayerStates()
 
     Connections {
         function onCurrentTimelineChanged() {

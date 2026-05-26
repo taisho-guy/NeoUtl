@@ -4,6 +4,8 @@ import QtQuick.Controls
 import QtQuick.Layouts
 
 Rectangle {
+    // 強制的に再評価を促す
+
     id: headerRoot
 
     property int headerWidth: 60
@@ -41,7 +43,6 @@ Rectangle {
 
         layerVisibilityChanged(layer, visible);
         layerStateRevision++;
-        // 強制的に再評価を促す
     }
 
     function setLayerLocked(layer, locked) {

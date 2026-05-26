@@ -220,10 +220,16 @@ class PlatformBuilder:
             shutil.rmtree(path, onerror=onerror)
 
     def get_cmake_config_cmd(self) -> List[str]:
-        return [
+        cmd = [
             "cmake", "-B", str(self.config.work_dir), "-G", "Ninja",
             f"-DCMAKE_BUILD_TYPE={self.config.build_type}",
+            f"-DAVIQTL_VERSION_MAJOR={self.config.version_major}",
+            f"-DAVIQTL_VERSION_MINOR={self.config.version_minor}",
+            f"-DAVIQTL_VERSION_PATCH={self.config.version_patch}",
+            f"-DAVIQTL_VERSION_STRING={self.config.version_string}",
+            f"-DAVIQTL_VERSION_CODENAME={self.config.version_codename}",
         ]
+        return cmd
 
     def get_archive_name(self) -> str:
         return "AviQtl-Archive"

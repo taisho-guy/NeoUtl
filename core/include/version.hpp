@@ -3,7 +3,7 @@
 namespace AviQtl {
 // These values will be defined by CMake.
 // If not defined (e.g., for IDE builds without proper CMake setup, or if BUILD.py doesn't pass --version),
-// they will default to 0.0.0 and "Maoka".
+// they will default to 0.0.0 and "Unstable".
 #ifndef AVIQTL_VERSION_MAJOR
 constexpr int VERSION_MAJOR = 0;
 #else

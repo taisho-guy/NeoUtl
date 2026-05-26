@@ -32,7 +32,8 @@ Item {
                 continue;
 
             if (eff.id === "GroupControl" || eff.id === "camera_control" || eff.id === "camera") {
-                var params = eff.params || {};
+                var params = eff.params || {
+                };
                 return Math.max(0, Number(params.layerCount || 0));
             }
         }
