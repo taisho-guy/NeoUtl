@@ -67,6 +67,7 @@ Item {
             "subdivision": 4
         };
     }
+    property int tailPaddingFrames: 120
     readonly property int maxClipEndFrame: {
         var clips = Workspace.currentTimeline ? Workspace.currentTimeline.clips : null;
         if (!clips)
@@ -81,7 +82,8 @@ Item {
         }
         return max;
     }
-    readonly property int timelineLengthFrames: Math.max(1, maxClipEndFrame)
+    readonly property int sceneTotalFrames: currentSceneData && currentSceneData.totalFrames !== undefined ? currentSceneData.totalFrames : 0
+    readonly property int timelineLengthFrames: Math.max(100, sceneTotalFrames, maxClipEndFrame + tailPaddingFrames)
     readonly property int scrollBarThickness: 14
 
     function beginDragAutoScroll(callback) {
@@ -175,8 +177,7 @@ Item {
         clip: true
         contentWidth: timelineLengthFrames * (Workspace.currentTimeline ? Workspace.currentTimeline.timelineScale : 1)
         contentHeight: layerCount * layerHeight
-        interactive: true
-        onMovementStarted: timelineViewRoot.autoScrollSuspended = true
+        interactive: false
 
         Timer {
             id: renderTimer
@@ -191,10 +192,12 @@ Item {
                 if (typeof Workspace.currentTimeline.updateViewport === "function")
                     Workspace.currentTimeline.updateViewport(timelineFlickable.contentX, timelineFlickable.contentY);
 
-                if (horizontalScrollBar.pressed)
+                // スクロールバーへの接触（ホバー含む）または操作を検知して自動スクロールを一時停止
+                // activeが AsNeeded 条件 (size < 1.0) と連動しているため、非表示時は判定されない
+                if (horizontalScrollBar.active && (horizontalScrollBar.pressed || horizontalScrollBar.hovered))
                     timelineViewRoot.autoScrollSuspended = true;
 
-                if (verticalScrollBar.pressed)
+                if (verticalScrollBar.active && (verticalScrollBar.pressed || verticalScrollBar.hovered))
                     timelineViewRoot.autoScrollSuspended = true;
 
                 if (Workspace.currentTimeline.transport && Workspace.currentTimeline.transport.isPlaying && !timelineViewRoot.autoScrollSuspended) {
@@ -255,9 +258,9 @@ Item {
         // 選択レイヤーの背景ハイライト
         Rectangle {
             visible: Workspace.currentTimeline !== null
-            x: 0
+            x: timelineFlickable.contentX
             y: (Workspace.currentTimeline ? Workspace.currentTimeline.selectedLayer : 0) * layerHeight
-            width: timelineFlickable.contentWidth
+            width: timelineFlickable.width
             height: layerHeight
             color: palette.highlight
             opacity: 0.08
@@ -474,47 +477,6 @@ Item {
             height: Math.abs(boxSelectionCurrent.y - boxSelectionStart.y)
         }
 
-        MouseArea {
-            anchors.fill: parent
-            z: -1
-            acceptedButtons: Qt.NoButton
-            onWheel: (wheel) => {
-                timelineViewRoot.autoScrollSuspended = true;
-                var dy = (wheel.pixelDelta && wheel.pixelDelta.y !== 0) ? wheel.pixelDelta.y * 10 : wheel.angleDelta.y;
-                var dx = (wheel.pixelDelta && wheel.pixelDelta.x !== 0) ? wheel.pixelDelta.x * 10 : wheel.angleDelta.x;
-                if (wheel.modifiers & Qt.AltModifier || wheel.modifiers & Qt.ControlModifier) {
-                    // Zoom
-                    if (Workspace.currentTimeline) {
-                        var step = SettingsManager ? SettingsManager.value("timelineZoomStep", 10) : 10;
-                        var minZ = SettingsManager ? SettingsManager.value("timelineZoomMin", 10) : 10;
-                        var maxZ = SettingsManager ? SettingsManager.value("timelineZoomMax", 400) : 400;
-                        var direction = (Math.abs(dy) > Math.abs(dx) ? dy : dx) > 0 ? 1 : -1;
-                        var zoomPercent = scaleToZoomPercent(Workspace.currentTimeline.timelineScale);
-                        var newScale = zoomPercentToScale(clamp(zoomPercent + (direction * step), minZ, maxZ));
-                        // Zoom keeping the mouse position stationary if possible
-                        var contentX = timelineFlickable.contentX;
-                        var mouseX = wheel.x;
-                        var frameAtMouse = (contentX + mouseX) / Workspace.currentTimeline.timelineScale;
-                        Workspace.currentTimeline.timelineScale = newScale;
-                        // Adjust scroll to keep frameAtMouse at mouseX
-                        var newContentX = frameAtMouse * newScale - mouseX;
-                        var maxX = Math.max(0, timelineFlickable.contentWidth - timelineFlickable.width);
-                        timelineFlickable.contentX = clamp(newContentX, 0, maxX);
-                    }
-                } else if (wheel.modifiers & Qt.ShiftModifier) {
-                    // Vertical Scroll
-                    var maxY = Math.max(0, timelineFlickable.contentHeight - timelineFlickable.height);
-                    timelineFlickable.contentY = clamp(timelineFlickable.contentY - dy, 0, maxY);
-                } else {
-                    // Horizontal Scroll
-                    var delta = (Math.abs(dx) > Math.abs(dy)) ? dx : dy;
-                    var maxX = Math.max(0, timelineFlickable.contentWidth - timelineFlickable.width);
-                    timelineFlickable.contentX = clamp(timelineFlickable.contentX - delta, 0, maxX);
-                }
-                wheel.accepted = true;
-            }
-        }
-
         Rectangle {
             id: playhead
 
@@ -528,6 +490,47 @@ Item {
 
     }
 
+    // Qt6推奨: WheelHandlerでスクロール/ズームを明示的に制御
+    // Flickable外に配置することでMouseAreaとのz競合を回避
+    WheelHandler {
+        id: timelineWheelHandler
+
+        target: null
+        acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
+        acceptedModifiers: Qt.NoModifier
+        grabPermissions: PointerHandler.CanTakeOverFromAnything
+        onWheel: (wheel) => {
+            timelineViewRoot.autoScrollSuspended = true;
+            var dy = (wheel.pixelDelta && wheel.pixelDelta.y !== 0) ? wheel.pixelDelta.y * 10 : wheel.angleDelta.y;
+            var dx = (wheel.pixelDelta && wheel.pixelDelta.x !== 0) ? wheel.pixelDelta.x * 10 : wheel.angleDelta.x;
+            if (wheel.modifiers & Qt.AltModifier || wheel.modifiers & Qt.ControlModifier) {
+                if (Workspace.currentTimeline) {
+                    var step = SettingsManager ? SettingsManager.value("timelineZoomStep", 10) : 10;
+                    var minZ = SettingsManager ? SettingsManager.value("timelineZoomMin", 10) : 10;
+                    var maxZ = SettingsManager ? SettingsManager.value("timelineZoomMax", 400) : 400;
+                    var direction = (Math.abs(dy) > Math.abs(dx) ? dy : dx) > 0 ? 1 : -1;
+                    var zoomPercent = scaleToZoomPercent(Workspace.currentTimeline.timelineScale);
+                    var newScale = zoomPercentToScale(clamp(zoomPercent + (direction * step), minZ, maxZ));
+                    var contentX = timelineFlickable.contentX;
+                    var mouseX = wheel.x;
+                    var frameAtMouse = (contentX + mouseX) / Workspace.currentTimeline.timelineScale;
+                    Workspace.currentTimeline.timelineScale = newScale;
+                    var newContentX = frameAtMouse * newScale - mouseX;
+                    var maxX = Math.max(0, timelineFlickable.contentWidth - timelineFlickable.width);
+                    timelineFlickable.contentX = clamp(newContentX, 0, maxX);
+                }
+            } else if (wheel.modifiers & Qt.ShiftModifier) {
+                var maxY = Math.max(0, timelineFlickable.contentHeight - timelineFlickable.height);
+                timelineFlickable.contentY = clamp(timelineFlickable.contentY - dy, 0, maxY);
+            } else {
+                var delta = (Math.abs(dx) > Math.abs(dy)) ? dx : dy;
+                var maxX = Math.max(0, timelineFlickable.contentWidth - timelineFlickable.width);
+                timelineFlickable.contentX = clamp(timelineFlickable.contentX - delta, 0, maxX);
+            }
+            wheel.accepted = true;
+        }
+    }
+
     ScrollBar {
         id: horizontalScrollBar
 
@@ -537,7 +540,7 @@ Item {
         height: timelineViewRoot.scrollBarThickness
         orientation: Qt.Horizontal
         policy: ScrollBar.AsNeeded
-        active: true
+        active: size < 1
         size: timelineFlickable.visibleArea.widthRatio
         position: timelineFlickable.visibleArea.xPosition
         onPositionChanged: {
@@ -556,7 +559,7 @@ Item {
         width: timelineViewRoot.scrollBarThickness
         orientation: Qt.Vertical
         policy: ScrollBar.AsNeeded
-        active: true
+        active: size < 1
         size: timelineFlickable.visibleArea.heightRatio
         position: timelineFlickable.visibleArea.yPosition
         onPositionChanged: {
