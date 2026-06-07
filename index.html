@@ -59,7 +59,16 @@
 <body>
 
 <main class="container" style="contain: content;">
-    <header class="hero"><h1 class="hero-title-static">AviQtlのお部屋</h1></header>
+    <header class="hero">
+        <h1 class="hero-title-static">AviQtlのお部屋</h1>
+        <p align="center" style="color:#fff; margin:0.5rem 0 0;">
+            <a href="https://aviqtl.taisho-guy.org" style="color:#fff;">公式サイト</a></strong> /
+            <a href="https://codeberg.org/taisho-guy/AviQtl" style="color:#fff;">Codebergリポジトリ</a> /
+            <a href="https://github.com/taisho-guy/AviQtl" style="color:#fff;">GitHubミラー</a> /
+            <a href="https://codeberg.org/taisho-guy/AviQtl/releases" style="color:#fff;">リリース</a> /
+            <a href="https://codeberg.org/taisho-guy/AviQtl/wiki/Home" style="color:#fff;">Wiki</a>
+        </p>
+    </header>
     
     <section>
         <h2 class="section-header"><span></span>AviQtlとは...<span></span></h2>
@@ -78,39 +87,26 @@
 
     <section>
         <h2 class="section-header"><span>★</span> インフォメーション <span>★</span></h2>
-        <div class="alert alert-note">
-            <div class="alert-title">【重要】開発停止のお知らせ</div>
-            <p>AviQtlは2026年5月末日を持って、開発を停止することに致しました。理由は以下のとおりです。</p>
+            <h3>開発リセットのお知らせ</h3>
+            <p>AviQtlは2026年5月末日を持って、開発をリセット致します。理由は以下のとおりです。</p>
             <ul>
-                <li>Qt Quick独自のリソース管理がCompute Shaderと相性が悪く、実装が困難</li>
+                <li>Qt Quick独自のレンダリングループとCompute Shaderとの相性が悪く、実装が困難</li>
                 <li>同様に、ECSとの相性が悪く、最適化が困難</li>
-                <li>リアルタイム処理においてパフォーマンス上の懸念がある</li>
             </ul>
-        </div>
+            <p>今までのQt QuickベースのAviQtl（以降『AviQtl Legacy』）はコミット履歴を含めて<code>legacy</code>ブランチに移動しました。現在の<code>main</code>ブランチには、Qt Widgets及びbgfxをベースとした新しいAviQtl（以降『AviQtl』）が置かれています。</p>
 
-        <h3>本プロジェクトによって得られた知見</h3>
-        <ul>
-            <li>QtとFFmpegを使えば、動画編集ソフトの高品質なプロトタイプを高速に実装できる。</li>
-            <li>動的なCompute Shaderの開通が難しい（出来てもボトルネックが大きい）為、GPUゼロコピーを目指すならQt Quickは不適。</li>
-            <li>QMLとQSBを用いて、拡張性の高いアーキテクチャを構築できる。</li>
-            <li>QMLと他の描画エンジンとの相性は基本的に悪い。</li>
-            <li>Qt Quickの制約に縛られながら実装するため、実装は簡単でも自由度が低い。</li>
-        </ul>
+            <h4>AviQtl Legacyによって得られた知見</h4>
+            <ul>
+                <li>QtとFFmpegを使えば、動画編集ソフトの高品質なプロトタイプを高速に実装できる。</li>
+                <li>Compute Shaderの開通が難しい為、GPUゼロコピーを目指すならQt Quickベースのプレビュー実装は不適。</li>
+                <li>QMLとQSBを用いると、拡張性の高いアーキテクチャを構築できる（少なくともvertとfragは十分に機能する）。</li>
+            </ul>
 
-        <h3>AviQtlの今後</h3>
-        <ul>
-            <li>AviQtlが開発を再開する見通しは立っておりません。Qtの大幅なアップデート等がない限り、開発再開の確率は限りなく低いです。</li>
-            <li>ソースコードは研究用途で引き続き公開されます。<a href="https://codeberg.org/taisho-guy/AviQtl" target="_blank">Codeberg</a>をご覧下さい。</li>
-            <li><strong>AviUtlを踏襲し凌駕する動画編集ソフトの実装を諦めたわけではありません。</strong>
-                <ul>
-                    <li>現在、柔軟な設計が可能な<strong>ImGuiとbgfx</strong>の学習を進めております。</li>
-                    <li>数ヶ月以内に新たなリポジトリを作成し、AGPLv3+で公開する予定です。</li>
-                    <li>コンセプトは変わりません。AviUtlを踏襲し凌駕することが私の目標です。</li>
-                </ul>
-            </li>
-            <li>質問がある方は、<a href="https://www.instagram.com/taisho-guy" target="_blank">Instagram</a>か<a href="https://x.com/taisho-guy" target="_blank">X</a>でDMを送って下さい。</li>
-        </ul>
-
+            <h4>AviQtlの今後</h4>
+            <ul>
+                <li>開発リセット直後はコア機能を実装するためプルリクエストをお受けできません。御了承下さい。</li>
+                <li>AviQtl Legacyのソースコード及び最終バージョン（AviQtl Legacy 0.0.95）のリリースは、引き続き<a href="https://www.gnu.org/licenses/agpl-3.0.txt" target="_blank">GNU Affero General Public License Version 3 or later</a>でライセンスされ、公開を続けます。しかし、動画編集ソフトとしての実用性はありません。AviQtl Legacyの今後のアップデートや互換性は保証されません。</li>
+            </ul>
     </section>
 
     <h2 class="section-header"><span>★</span> ダウンロード <span>★</span></h2>
