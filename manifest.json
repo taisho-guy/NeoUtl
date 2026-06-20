@@ -4,8 +4,8 @@
   "description": "AviUtlの操作感を継承した次世代動画編集ソフト「NeoUtl」公式サイト",
   "start_url": "./index.html",
   "display": "standalone",
-  "background_color": "#121b1d",
-  "theme_color": "#121b1d",
+  "background_color": "#000000",
+  "theme_color": "#b866ff",
   "icons": [
     {
       "src": "assets/icon.svg",
