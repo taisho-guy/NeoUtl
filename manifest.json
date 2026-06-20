@@ -1,7 +1,7 @@
 {
-  "name": "AviQtlのお部屋",
-  "short_name": "AviQtl",
-  "description": "AviUtlの操作感を継承した次世代動画編集ソフト「AviQtl」公式サイト",
+  "name": "NeoUtlのお部屋",
+  "short_name": "NeoUtl",
+  "description": "AviUtlの操作感を継承した次世代動画編集ソフト「NeoUtl」公式サイト",
   "start_url": "./index.html",
   "display": "standalone",
   "background_color": "#121b1d",

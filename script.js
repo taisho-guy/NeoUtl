@@ -1,8 +1,8 @@
 const initReleases = async () => {
-    const REPO = 'taisho-guy/AviQtl';
+    const REPO = 'taisho-guy/NeoUtl';
     const PATTERNS = { linux: ['linux'], windows: ['win', 'msys2', 'ucrt'], apple: ['mac', 'apple', 'darwin'] };
     const info = document.getElementById('download-info-row');
-    const CACHE_KEY = 'aviqtl_release_cache';
+    const CACHE_KEY = 'neoutl_release_cache';
     const CACHE_TTL = 3600000; // 1時間
     const OBSERVER_MARGIN = '100px';
 

@@ -1,3 +1,7 @@
 dist
 build
 .build_tmp
+.blackboxrules
+legacy
+bgfx.cmake
+aviutl2_sdk
