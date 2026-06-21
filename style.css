@@ -1,32 +1,13 @@
+@charset "utf-8";
+
 :root {
-    /* 背景：完全な漆黒（#000000） */
     --bg-color: #000000;
-    
-    /* ヘッダー背景：コントラストを邪魔しない、ごくわずかに紫を含んだ深い黒 */
-    --header-bg: #09040d;
-    
-    /* 基本テキスト：最高の視認性を確保するための高明度低彩度バイオレットホワイト
-       (#000000に対しコントラスト比 18.2:1 / WCAG AAA準拠) */
     --text-color: #f1ebf7;
-    
-    /* メインテーマカラー：WCAGの基準をクリアするために明度を最適化した鮮やかな紫
-       (#000000に対しコントラスト比 7.3:1 / WCAG AAA準拠。小さな文字でもクッキリ見えます) */
     --accent-color: #b866ff;      
-    
-    /* ホバーカラー：視覚的フィードバックを明確にする極彩色ネオンピンク
-       (#000000に対しコントラスト比 9.7:1 / WCAG AAA準拠) */
     --accent-hover: #ff66ff;      
-    
-    /* 訪問済カラー：未訪問時と区別しつつ可読性を維持したディープバイオレット
-       (#000000に対しコントラスト比 4.7:1 / WCAG AA準拠) */
     --accent-visited: #8a33ff;    
-    
-    /* 枠線・構造色：文字のまぶしさを吸収し、コンテンツの境界をスマートに分けるローコントラストな紫 */
     --border-color: #3d1a66;
-    --loading-color: #241040;
-    --missing-color: #120820;
     
-    /* レイアウト定数 */
     --border-thick: 2px;
     --border-thin: 1px;
     --radius-base: 0;
@@ -34,107 +15,127 @@
     --spacing-tight: 16px;
     --op-low: 0.6;
 
-    /* コンポーネント内部用スケール */
     --sp-gap: 2px;
     --sp-xs: 8px;
     --sp-sm: 10px;
     --sp-md: 15px;
-
-    /* Box Component Defaults */
-    --box-accent: var(--border-color);
-    --box-text: var(--accent-color);
+    
+    --theme-gradient: linear-gradient(135deg, #ff00ff 0%, #00ffff 100%) fixed;
 }
 
-.visually-hidden {
-    position: absolute;
-    inline-size: 1px;
-    block-size: 1px;
-    padding: 0;
-    margin: -1px;
-    overflow: hidden;
-    clip: rect(0, 0, 0, 0);
-    white-space: nowrap;
-    border: 0;
+/* ==========================================================================
+   Outer Borders (2px)
+   ========================================================================== */
+img,
+table,
+.download-grid,
+:is(.alert, details) {
+    border: var(--border-thick) solid transparent !important;
+    background: linear-gradient(var(--bg-color), var(--bg-color)) padding-box, var(--theme-gradient) border-box !important;
 }
 
+/* ==========================================================================
+   Inner Borders (1px Double Line Effect)
+   ========================================================================== */
+table :is(th, td),
+.download-item,
+.download-info-row {
+    border: var(--border-thin) solid transparent !important;
+    background: linear-gradient(var(--bg-color), var(--bg-color)) padding-box, var(--theme-gradient) border-box !important;
+}
+
+/* ==========================================================================
+   Base Layout
+   ========================================================================== */
 body {
     background-color: var(--bg-color);
     color: var(--text-color);
     font-family: 'Lexend', system-ui, 'Noto Sans JP', sans-serif;
     font-weight: 400;
-    text-rendering: optimizeLegibility;
-    -webkit-font-smoothing: antialiased;
-    overflow-x: hidden;
     line-height: 1.6;
     margin: 0;
     padding: var(--spacing-base);
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+    overflow-x: hidden;
 
     @media (max-width: 600px) {
         padding: var(--spacing-tight);
     }
 }
-a {
-    color: var(--accent-color);
-    text-decoration: none;
-    transition: color 0.2s;
-
-    &:hover { color: var(--accent-hover); }
-    &:visited { color: var(--accent-visited); }
-}
-
-:is(ul, ol) { padding-inline-start: 40px; }
 
 .container {
     max-inline-size: 840px;
     margin-inline: auto;
-    text-align: left;
 }
 
-/* コンテンツ末尾の余計なマージンを排除し、フッターとの隙間を正確に制御 */
-main > :last-child {
-    margin-block-end: 0;
+main > :last-child { margin-block-end: 0; }
+:is(main, section) > :is(p, ul, ol) { margin-block: var(--spacing-tight) 0; }
+:is(ul, ol) { padding-inline-start: 40px; }
+
+/* ==========================================================================
+   Header & Footer (No Vertical Borders / Centered Text)
+   ========================================================================== */
+.hero, .footer-content {
+    padding-block: var(--spacing-base);
+    text-align: center !important;
+    border-block: var(--border-thick) solid transparent !important;
+    border-inline: none !important;
+    background: linear-gradient(var(--bg-color), var(--bg-color)) padding-box, var(--theme-gradient) border-box !important;
 }
 
-/* コンテンツ内のテキスト・リストの余白を同期 */
-:is(main, section) > :is(p, ul, ol) {
-    margin-block: var(--spacing-tight) 0;
-}
-
-.hero, .section-header, th, .footer-content, .download-info-row {
-    text-align: center;
-}
-
-hr {
-    border: 0;
-    border-block-start: var(--border-thick) solid var(--border-color);
-    margin-block: var(--spacing-base) 0;
-}
-
-img {
-    border-radius: var(--radius-base);
-    max-inline-size: 100%;
+.hero-title-static {
+    text-align: center !important;
     display: block;
-    margin-block: var(--spacing-tight);
-    border: var(--border-thick) solid var(--border-color);
-    box-sizing: border-box;
 }
 
-.lazy-render-section {
-    content-visibility: auto;
-    contain-intrinsic-size: 1px 500px;
+/* ==========================================================================
+   Gradient Typography
+   ========================================================================== */
+a,
+.hero-title-static,
+table th,
+.icon-origin-box .symbol {
+    background: var(--theme-gradient);
+    -webkit-background-clip: text !important;
+    background-clip: text !important;
+    color: transparent !important;
+    -webkit-text-fill-color: transparent !important;
+}
+
+a {
+    text-decoration: none;
+    transition: filter 0.2s;
+    &:hover { filter: brightness(1.15); }
+    &:visited { filter: saturate(0.9) brightness(0.95); }
+}
+
+.hero-title-static {
+    font-size: clamp(1.6rem, 4vw, 2.5rem);
+    font-weight: bold;
+    margin: 0;
+    user-select: text;
+
+    @media (max-width: 600px) {
+        font-size: clamp(1.3rem, 7vw, 1.8rem);
+    }
 }
 
 h2.section-header {
-    inline-size: 100%;
-    background-color: var(--border-color);
-    color: var(--accent-color);
+    background: var(--theme-gradient);
+    color: #000000;
+    -webkit-text-fill-color: #000000;
+    font-size: 1.2em;
+    font-weight: bold;
+    text-align: center;
     padding-block: var(--sp-xs);
     margin-block: var(--spacing-base) 0;
-    font-size: 1.2em;
-    border-radius: var(--radius-base);
-    font-weight: bold;
 
-    & span { color: var(--accent-color); opacity: var(--op-low); }
+    & span {
+        color: #000000;
+        -webkit-text-fill-color: #000000;
+        opacity: var(--op-low);
+    }
 
     @media (max-width: 600px) {
         font-size: 1.1em;
@@ -143,111 +144,11 @@ h2.section-header {
     }
 }
 
-table {
-    inline-size: 100%;
-    border: var(--border-thick) solid var(--border-color);
-    border-collapse: separate;
-    border-spacing: var(--sp-gap);
-    background-color: var(--bg-color);
-    border-radius: var(--radius-base);
-    overflow: hidden;
-    margin-block: var(--spacing-base) 0;
-
-    &:not(.footer-table) {
-        @media (max-width: 600px) {
-            display: block;
-            overflow-x: auto;
-            -webkit-overflow-scrolling: touch;
-        }
-    }
-
-    & tr {
-        /* テーブルの描画負荷を軽減 */
-        contain: layout;
-    }
-
-    & :is(th, td) {
-        padding: var(--sp-xs);
-        border: var(--border-thin) solid var(--border-color);
-        background-color: var(--bg-color);
-        vertical-align: top;
-
-        @media (max-width: 600px) {
-            font-size: 0.85em;
-            word-break: break-word;
-        }
-    }
-
-    & th {
-        color: var(--accent-color);
-        background-color: var(--border-color);
-        text-align: center;
-        vertical-align: middle;
-    }
-}
-
-/* Box Component (Unification of Alert and Details) */
-:is(.alert, details) {
-    margin-block: var(--spacing-tight) 0;
-    padding: var(--sp-gap);
-    border: var(--border-thick) solid var(--border-color);
-    background: var(--bg-color);
-    border-radius: var(--radius-base);
-    overflow: hidden;
-    contain: layout;
-
-    & :is(.alert-title, summary) {
-        font-weight: bold;
-        padding: var(--sp-xs) var(--sp-md);
-        background: var(--header-bg);
-        color: var(--box-text);
-        border: var(--border-thin) solid var(--border-color);
-        border-radius: var(--radius-base);
-        cursor: pointer;
-    }
-
-    & :is(.alert-title, [open] summary) { margin-block-end: var(--sp-gap); }
-
-    & > :is(p, h3, h4, ul, ol, div, table, pre, img) {
-        background: var(--bg-color);
-        border: var(--border-thin) solid var(--border-color);
-        padding: var(--sp-sm);
-        border-radius: var(--radius-base);
-        margin-block: 0 var(--sp-gap);
-        &:last-child { margin-block-end: 0; }
-    }
-
-    & :is(ul, ol):not(.icon-origin-box *) {
-        padding-inline-start: 40px;
-        @media (max-width: 600px) { padding-inline-start: 25px; }
-    }
-
-    &.alert-warning { --box-text: #ffcc00; --header-bg: #221a00; }
-}
-
-details h3, details h4 { font-size: 1.1em; }
-
-.footer-info { font-size: 0.8em; margin-block-start: 20px; }
-
-.hero, .footer-content {
-    padding-block: var(--spacing-base);
-    border-block: var(--border-thick) solid var(--border-color);
-    background-color: var(--bg-color);
-}
-
-.footer-content {
-    margin-block-start: var(--spacing-base);
-    margin-block-end: 0;
-    & p { margin-block: 5px; }
-    & .easter-egg { color: inherit; &:visited { color: inherit; } }
-}
-
 code {
     background: linear-gradient(transparent 70%, rgba(184, 102, 255, 0.3) 70%);
     font-family: 'JetBrains Mono', monospace;
     color: var(--text-color);
     padding-inline: 2px;
-    border-radius: 0;
     font-weight: bold;
     cursor: pointer;
     transition: background 0.2s, color 0.2s;
@@ -264,33 +165,126 @@ code {
     &:active { background: var(--accent-color); color: var(--bg-color); }
 }
 
-.hero-title-static {
-    display: block;
-    inline-size: 100%;
-    text-align: center;
-    font-size: clamp(1.6rem, 4vw, 2.5rem);
-    font-weight: bold;
-    color: var(--accent-color);
-    margin-block: 0;
-    /* GPU加速を促す */
-    will-change: transform;
-    user-select: text;
+/* ==========================================================================
+   Separators & Images
+   ========================================================================== */
+hr {
+    border: 0;
+    block-size: var(--border-thick);
+    background: var(--theme-gradient);
+    margin-block: var(--spacing-base) 0;
+}
 
-    @media (max-width: 600px) {
-        font-size: clamp(1.3rem, 7vw, 1.8rem);
+img {
+    box-sizing: border-box;
+    max-inline-size: 100%;
+    margin-block: var(--spacing-tight);
+}
+
+.footer-content {
+    margin-block-start: var(--spacing-base);
+    & p { margin-block: 5px; margin-inline: auto; text-align: center; }
+    & .easter-egg { color: inherit; &:visited { color: inherit; } }
+}
+
+.footer-info { font-size: 0.8em; margin-block-start: 20px; text-align: center; }
+
+/* ==========================================================================
+   Box Component (Alert & Details)
+   ========================================================================== */
+:is(.alert, details) {
+    box-sizing: border-box;
+    padding: var(--sp-gap);
+    margin-block: var(--spacing-tight) 0;
+    contain: layout;
+
+    & :is(.alert-title, summary) {
+        box-sizing: border-box;
+        display: block;
+        inline-size: 100%;
+        padding: var(--sp-xs) var(--sp-md);
+        font-weight: bold;
+        cursor: pointer;
+        
+        position: relative;
+        z-index: 1;
+        
+        border: var(--border-thin) solid transparent !important;
+        background: linear-gradient(var(--bg-color), var(--bg-color)) padding-box, var(--theme-gradient) border-box !important;
+    }
+
+    & :is(.alert-title, summary) span,
+    & :is(.alert-title, summary) a,
+    & :is(.alert-title, summary) {
+        background: var(--theme-gradient) !important;
+        -webkit-background-clip: text !important;
+        background-clip: text !important;
+        color: transparent !important;
+        -webkit-text-fill-color: transparent !important;
+    }
+
+    & :is(.alert-title, [open] summary) { margin-block-end: var(--sp-gap); }
+
+    & > :is(p, h3, h4, ul, ol, div, table, pre, img) {
+        color: var(--text-color) !important;
+        -webkit-text-fill-color: initial !important;
+        padding: var(--sp-sm);
+        margin-block: 0 var(--sp-gap);
+        
+        border: var(--border-thin) solid transparent !important;
+        background: linear-gradient(var(--bg-color), var(--bg-color)) padding-box, var(--theme-gradient) border-box !important;
+        
+        &:last-child { margin-block-end: 0; }
+    }
+
+    & :is(ul, ol):not(.icon-origin-box *) {
+        padding-inline-start: 40px;
+        @media (max-width: 600px) { padding-inline-start: 25px; }
     }
 }
 
+details h3, details h4 { font-size: 1.1em; }
+
+/* ==========================================================================
+   Data Tables
+   ========================================================================== */
+table {
+    inline-size: 100%;
+    border-collapse: separate;
+    border-spacing: var(--sp-gap);
+    margin-block: var(--spacing-base) 0;
+
+    &:not(.footer-table) {
+        @media (max-width: 600px) {
+            display: block;
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+        }
+    }
+
+    & tr { contain: layout; }
+
+    & :is(th, td) {
+        padding: var(--sp-xs);
+        vertical-align: top;
+    }
+
+    & th {
+        font-weight: bold;
+        text-align: center;
+        vertical-align: middle;
+    }
+}
+
+/* ==========================================================================
+   Download Grid & Mask Icons
+   ========================================================================== */
 .download-grid {
     display: grid;
     grid-template-columns: repeat(4, 1fr);
-    border: var(--border-thick) solid var(--border-color);
-    background-color: var(--bg-color);
-    margin-block: var(--spacing-tight) 0;
-    padding: var(--sp-gap);
-    border-radius: var(--radius-base);
-    overflow: hidden;
     gap: var(--sp-gap);
+    padding: var(--sp-gap);
+    margin-block: var(--spacing-tight) 0;
 
     @media (max-width: 600px) {
         grid-template-columns: repeat(2, 1fr);
@@ -298,23 +292,20 @@ code {
 }
 
 .download-item {
-    padding-block: var(--spacing-tight);
-    padding-inline: var(--sp-sm);
-    text-align: center;
-    border: var(--border-thin) solid var(--border-color);
-    background-color: var(--bg-color);
     display: flex;
     flex-direction: column;
     align-items: center;
-    border-radius: var(--radius-base);
     gap: var(--sp-md);
+    padding-block: var(--spacing-tight);
+    padding-inline: var(--sp-sm);
+    text-align: center;
 
     @media (max-width: 600px) {
         padding-block: 20px;
         padding-inline: 5px;
     }
 
-    &.is-disabled { cursor: not-allowed; }
+    &.is-disabled { cursor: not-allowed; opacity: 0.3; }
 }
 
 .download-info-row {
@@ -322,31 +313,35 @@ code {
     padding-block: var(--sp-md);
     padding-inline: var(--sp-sm);
     text-align: center;
-    border: var(--border-thin) solid var(--border-color);
-    background-color: var(--bg-color);
 }
 
 .download-icon {
     inline-size: 48px;
     block-size: 48px;
     aspect-ratio: 1 / 1;
-    background-color: var(--accent-color);
-    mask-size: contain;
-    mask-repeat: no-repeat;
-    mask-position: center;
+    
+    background: var(--theme-gradient) !important;
+    
+    mask-size: contain !important;
+    mask-repeat: no-repeat !important;
+    mask-position: center !important;
+    -webkit-mask-size: contain !important;
+    -webkit-mask-repeat: no-repeat !important;
+    -webkit-mask-position: center !important;
 
-    &.icon-linux { mask-image: url('assets/linux.svg'); }
-    &.icon-windows { mask-image: url('assets/windows.svg'); }
-    &.icon-apple { mask-image: url('assets/apple.svg'); }
-    &.icon-codeberg { mask-image: url('assets/codeberg.svg'); }
+    &.icon-linux { mask-image: url('assets/linux.svg') !important; -webkit-mask-image: url('assets/linux.svg') !important; }
+    &.icon-windows { mask-image: url('assets/windows.svg') !important; -webkit-mask-image: url('assets/windows.svg') !important; }
+    &.icon-apple { mask-image: url('assets/apple.svg') !important; -webkit-mask-image: url('assets/apple.svg') !important; }
+    &.icon-codeberg { mask-image: url('assets/codeberg.svg') !important; -webkit-mask-image: url('assets/codeberg.svg') !important; }
 
     &.is-loading {
         mask-image: url('assets/loader.svg') !important;
-        background-color: var(--loading-color) !important;
+        -webkit-mask-image: url('assets/loader.svg') !important;
+        background: linear-gradient(135deg, rgba(110, 50, 190, 0.95), rgba(36, 16, 64, 0.98)) fixed !important;
     }
 
     &.is-missing {
-        background-color: var(--missing-color) !important;
+        background: linear-gradient(135deg, rgba(54, 18, 84, 0.9), rgba(18, 8, 32, 0.98)) fixed !important;
         opacity: 0.4;
     }
 }
@@ -358,8 +353,27 @@ code {
     gap: var(--sp-md);
     padding: var(--sp-sm) 0;
     flex-wrap: wrap;
-    & img { border: none; margin-block: 0; }
-    .symbol { font-size: 24px; font-weight: bold; }
+    & img { border: none !important; margin-block: 0; background: none !important; }
 }
 
 .tag-link { font-weight: bold; font-size: 0.9em; }
+
+/* ==========================================================================
+   Utilities
+   ========================================================================== */
+.visually-hidden {
+    position: absolute;
+    inline-size: 1px;
+    block-size: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+}
+
+.lazy-render-section {
+    content-visibility: auto;
+    contain-intrinsic-size: 1px 500px;
+}
