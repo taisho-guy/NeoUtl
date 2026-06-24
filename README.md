@@ -4,39 +4,30 @@
 
 <p align="center"><b>AviUtlを踏襲し凌駕する次世代動画編集ソフト</b></p>
 
-<p align="center">
-  <a href="https://aviqtl.taisho-guy.org">AviQtlのお部屋</a>
-  / <a href="https://codeberg.org/taisho-guy/AviQtl">Codebergリポジトリ</a>
-  / <a href="https://github.com/taisho-guy/AviQtl">GitHubミラー</a>
-  / <a href="https://codeberg.org/taisho-guy/AviQtl/releases">リリース</a>
-  / <a href="https://codeberg.org/taisho-guy/AviQtl/wiki/Home">Wiki</a>
-</p>
+## 開発終了のお知らせ
+### AviQtlは2026年5月末日を持って、開発を終了しました
+- 理由は以下のとおりです。
+  - Qt Quick独自のレンダリングループとCompute Shaderとの相性が悪く、実装が困難
+  - 同様に、ECSとの相性が悪く、最適化が困難
+- AviQtlはコミット履歴を含めて`aviqtl`ブランチに移動しました。現在の`main`ブランチには新規に開発しているNeoUtlが置かれています。
 
-## 開発休止のお知らせ
-### AviQtlは2026年5月末日を持って、開発を休止することに致しました
-理由は以下のとおりです。
-- Qt Quick独自のレンダリングループとCompute Shaderとの相性が悪く、実装が困難
-- 同様に、ECSとの相性が悪く、最適化が困難
-
-### 本プロジェクトによって得られた知見
+### AviQtlによって得られた知見
 - QtとFFmpegを使えば、動画編集ソフトの高品質なプロトタイプを高速に実装できる。
 - Compute Shaderの開通が難しい為、GPUゼロコピーを目指すならQt Quickベースのプレビュー実装は不適。
 - QMLとQSBを用いると、拡張性の高いアーキテクチャを構築できる（少なくともvertとfragは十分に機能する）。
-- Qtと他の描画エンジンとの相性は悪い。
-- Qt Quickの制約に縛られながら実装するため、実装は簡単でも肩身が狭い。
 
 ### AviQtlの今後
-- AviQtlの開発を再開する具体的な計画は立っておりません。Qtにアップデートが来、Compute Shaderをレンダリングループ内で簡単に扱えるようになれば、現在のアーキテクチャのまま開発を再開するかもしれません。しかし、近いうちにこれが実現することはないでしょう。Qtのアップデートを待つより、別の技術を検証するほうが現実的です。アーキテクチャを大幅に斬新して作り直すことを考えております。
-- **私は、AviUtlを踏襲し凌駕する動画編集ソフトの実装を諦めておりません。**
-   - 現在、`Qt Widgets`と`bgfx`の学習を進めております。
-   - bgfxはQRhiやQt Quickよりも自由度が高いですから、Compute Shaderの実装で詰まらない他、パフォーマンスの最適化が期待できます。
-   - Qtウィンドウにbgfxの描画結果をゼロコピーで渡す**不安定な**裏技があるそうです。これなら、オフスクリーンレンダリング（及びOpenGL）に依存する必要はありません。この方針で、`AviQtl 0.0.x`の成果物を移植しながら`AviQtl 0.1.x`として再開発するつもりです。
-- 私は受験生ですから、少なくとも2026年度はAviQtlの開発を休止します。
-- 開発休止中はプルリクエストをお受けできません。御了承下さい。
-- AviQtlのソースコード及び最終バージョンのリリースは[GNU Affero General Public License Version 3 or later](https://www.gnu.org/licenses/agpl-3.0.txt)で公開され続けます。しかし、動画編集ソフトとしての実用性はありません。今後のアップデートや互換性も保証しません。
-- AviQtlについて質問がある方は、[イシュー](https://codeberg.org/taisho-guy/AviQtl/issues)を作成するか、[Instagram](https://www.instagram.com/taisho_guy)や[X](https://x.com/taisho_guy)でDMを送って下さい。できる限りお答えします。
+- 開発リセット直後はコア機能を実装するためプルリクエストをお受けできません。御了承下さい。
+- AviQtlのソースコード及び最終バージョン（AviQtl 0.0.95）のリリースは、引き続き[GNU Affero General Public License Version 3 or later](https://www.gnu.org/licenses/agpl-3.0.txt)でライセンスされ、公開を続けます。しかし、動画編集ソフトとしての実用性はありません。AviQtlの今後のアップデートや互換性は保証されません。
+- AviQtlのコントリビューターだった[GT-610](https://codeberg.org/GT610)さんが、[AviQtl Plus](https://github.com/GT-610/AviQtl-Plus)としてAviQtlの開発を継続されています。もしAviQtlがお気に召したのであれば、是非AviQtl Plusをご確認下さい。
+- 現在の派生状況
 
-## [AviQtl](https://aviqtl.taisho-guy.org)とは
+  |**NeoUtl:**|新しい技術を採用して作り直している。|
+  |---|---|
+  |**AviQtl:**|Qt Quickベース。今後更新されない。|
+  |**AviQtl Plus:**|AviQtlの派生プロジェクト。|
+
+## AviQtlとは
 
 <img src="./assets/screenshot.webp">
 
@@ -48,8 +39,6 @@
 - GPUを使った**高速で強力なエフェクト**
 - VST3やLV2等の**音声エフェクト**に対応
 - **Linux**、**Windows**、**macOS**に対応
-
-### 詳細は[AviQtlのお部屋](https://aviqtl.taisho-guy.org)をご確認ください。
 
 ## インストール手順
 
