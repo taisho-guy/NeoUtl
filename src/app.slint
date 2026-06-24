@@ -1,0 +1,34 @@
+export component MainWindow inherits Window {
+    preferred-width: 800px;
+    preferred-height: 600px;
+    title: "NeoUtl - wgpu 3D Rotation Test";
+
+    in-out property <image> video-frame;
+    
+    callback request-render();
+
+    Timer {
+        interval: 16ms;
+        running: true;
+        triggered() => {
+            root.request-render();
+        }
+    }
+
+    VerticalLayout {
+        padding: 20px;
+        Text {
+            text: "NeoUtl: wgpu Render Pipeline Test (Rotating Tetrahedron)";
+            font-size: 20px;
+            horizontal-alignment: center;
+        }
+        Rectangle {
+            background: #1e1e1e;
+            Image {
+                source: root.video-frame;
+                width: 100%;
+                height: 100%;
+            }
+        }
+    }
+}

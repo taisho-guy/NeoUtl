@@ -1,0 +1,18 @@
+[package]
+name = "NeoUtl"
+version = "0.0.0"
+edition = "2024"
+
+[dependencies]
+slint = { version = "1.16", default-features = false, features = [
+    "std",
+    "backend-winit",
+    "renderer-femtovg-wgpu",
+    "unstable-wgpu-28",
+    "compat-1-2"
+] }
+
+wgpu = "28.0.0"
+ffmpeg-next = "8"
+tokio = { version = "1.52", features = ["rt-multi-thread", "sync"] }
+bytemuck = { version = "1.25", features = ["derive"] }
