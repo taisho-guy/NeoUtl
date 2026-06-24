@@ -41,11 +41,10 @@ cargo run
 |---|---|---|
 |2024|**Noa**|Rust(egui, wgpu)で実装。学習不足で断念。|
 |2025|**Rina**|C++(Qt Quick)で実装。プロトタイプとして成長。|
-|2026.5|**AviQtl Legacy**|Rinaの安定版。Qt Quickの技術的限界への到達を持って断念。|
-|2026.6|**AviQtl**|C++(Qt, bgfx)で実装中。|
-|2026.7|**NeoUtl**|Rust(Slint+wgpu)で実装中。|
+|2026.5|**AviQtl**|Rinaの安定版。Qt Quickの技術的限界への到達を持って断念。|
+|2026.6|**NeoUtl**|Rust(Slint+wgpu)で実装中。|
 
-主に`dev`で最新のRustベースのNeoUtlの開発を進めています。`main`はC++ベースの実装です。Rustでの検証が完了したら、`main`を`dev`の内容で置き換える予定です。
+`dev`でRustベースのNeoUtlの開発を進めています。`main`はC++ベースのNeoUtlです。Rustでの検証が完了したら、`main`を`dev`の内容で置き換える予定です。
 
 ## ライセンス
 
