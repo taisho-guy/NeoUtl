@@ -2,8 +2,6 @@
 use super::EcsWorld;
 use crate::objects::RenderKind;
 
-/// 現在のフレームでアクティブなオブジェクトの RenderKind をすべて抽出するシステム
-/// (SoA配列の time_ranges と render_kinds を zip して超高速にスキャン)
 pub fn get_active_render_kinds_system(world: &EcsWorld) -> Vec<RenderKind> {
     let current = world.resources.current_frame;
     let mut active_kinds = Vec::new();
