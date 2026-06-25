@@ -1,9 +1,17 @@
+// src/ecs/systems.rs
 use super::EcsWorld;
+use crate::objects::RenderKind;
 
-pub fn check_active_objects_system(world: &EcsWorld) -> bool {
+/// 現在のフレームでアクティブなオブジェクトの RenderKind をすべて抽出するシステム
+/// (SoA配列の time_ranges と render_kinds を zip して超高速にスキャン)
+pub fn get_active_render_kinds_system(world: &EcsWorld) -> Vec<RenderKind> {
     let current = world.resources.current_frame;
-    world
-        .time_ranges
-        .iter()
-        .any(|t| current >= t.start_frame && current < t.end_frame)
+    let mut active_kinds = Vec::new();
+
+    for (range, &kind) in world.time_ranges.iter().zip(world.render_kinds.iter()) {
+        if current >= range.start_frame && current < range.end_frame {
+            active_kinds.push(kind);
+        }
+    }
+    active_kinds
 }

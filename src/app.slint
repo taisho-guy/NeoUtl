@@ -1,3 +1,5 @@
+// src/app.slint
+
 export struct TimelineObject {
     id: int,
     start_frame: int,
@@ -6,18 +8,23 @@ export struct TimelineObject {
 
 export component MainWindow inherits Window {
     preferred-width: 800px;
-    preferred-height: 680px;
+    preferred-height: 650px;
     title: "NeoUtl";
 
     in-out property <image> video-frame;
     in-out property <int> current-frame: 0;
     in-out property <int> total-frames: 300;
     in-out property <[TimelineObject]> objects: [];
-    
-    callback request-render();
-    callback seek-timeline(float);
-    callback add-object-at(float);
+
+    callback add-object-at(float, int);
     callback delete-object(int);
+    callback seek-timeline(float);
+    callback request-render();
+
+    property <bool> show-context-menu: false;
+    property <length> menu-x: 0;
+    property <length> menu-y: 0;
+    property <float> click-ratio: 0.0;
 
     Timer {
         interval: 16ms;
@@ -25,20 +32,24 @@ export component MainWindow inherits Window {
         triggered() => { root.request-render(); }
     }
 
-    VerticalLayout {
-        padding: 20px;
-        spacing: 15px;
-        
-        Text {
-            text: "NeoUtl";
-            font-size: 20px;
-            horizontal-alignment: center;
+    FocusScope {
+        key-pressed(event) => { accept }
+        TouchArea {
+            pointer-event(e) => {
+                if (e.button == PointerEventButton.left && e.kind == PointerEventKind.down) {
+                    root.show-context-menu = false;
+                }
+            }
         }
+    }
+
+    VerticalLayout {
+        padding: 15px;
+        spacing: 10px;
 
         Rectangle {
             background: #121214;
             height: 400px;
-            border-radius: 6px;
             Image {
                 source: root.video-frame;
                 width: 100%;
@@ -46,72 +57,100 @@ export component MainWindow inherits Window {
             }
         }
 
-        HorizontalLayout {
-            Text {
-                text: "Frame: " + root.current-frame + " / " + root.total-frames;
-                font-size: 14px;
-                color: #e0e0e0;
+        Text {
+            text: "Timeline (右クリックでオブジェクトを追加 / 右クリックでオブジェクトを削除)";
+            color: #aaaaaa;
+        }
+
+        Rectangle {
+            background: #1e1e22;
+            border-radius: 4px;
+            height: 80px;
+
+            timeline-touch := TouchArea {
+                pointer-event(e) => {
+                    if (e.button == PointerEventButton.right && e.kind == PointerEventKind.down) {
+                        root.click-ratio = timeline-touch.pressed-x / timeline-touch.width;
+                        root.menu-x = timeline-touch.pressed-x;
+                        root.menu-y = timeline-touch.pressed-y + 30px; 
+                        root.show-context-menu = true;
+                    }
+                }
+            }
+
+            Rectangle {
+                background: #ff4500;
+                width: 2px;
+                x: (root.current-frame / root.total-frames) * parent.width;
+            }
+
+            for obj in root.objects : Rectangle {
+                background: #3a5fcd;
+                border-width: 1px;
+                border-color: #63b8ff;
+                border-radius: 2px;
+                y: 10px;
+                height: 40px;
+                x: (obj.start-frame / root.total-frames) * parent.width;
+                width: ((obj.end-frame - obj.start-frame) / root.total-frames) * parent.width;
+
+                Text {
+                    text: "ID: " + obj.id;
+                    color: white;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
+
+                obj-touch := TouchArea {
+                    pointer-event(e) => {
+                        if (e.button == PointerEventButton.right && e.kind == PointerEventKind.down) {
+                            root.delete-object(obj.id);
+                        }
+                    }
+                }
             }
         }
 
+        Text {
+            text: "Frame: " + root.current-frame + " / " + root.total-frames;
+            horizontal-alignment: center;
+        }
+    }
+
+    if (root.show-context-menu) : Rectangle {
+        x: root.menu-x;
+        y: root.menu-y;
+        width: 150px;
+        height: 60px;
+        background: #2d2d30;
+        border-width: 1px;
+        border-color: #434346;
+        border-radius: 4px;
+
         VerticalLayout {
-            spacing: 5px;
-            Text { 
-                text: "Timeline (Left-Click/Drag: Seek | Right-Click Blank: Add | Right-Click Object: Delete)"; 
-                font-size: 11px; 
-                color: #888888; 
+            padding: 2px;
+            
+            Rectangle {
+                background: item1-touch.has-hover ? #3e3e42 : #2d2d30;
+                height: 28px;
+                Text { text: "  + Add Tetrahedron"; color: white; vertical-alignment: center; }
+                item1-touch := TouchArea {
+                    clicked() => {
+                        root.add-object-at(root.click-ratio, 0); // 0 = Tetrahedron
+                        root.show-context-menu = false;
+                    }
+                }
             }
             
-            track := Rectangle {
-                background: #202024;
-                height: 60px;
-                border-radius: 4px;
-                border-width: 1px;
-                border-color: #303036;
-
-                track-touch := TouchArea {
-                    pointer-event(event) => {
-                        if (event.button == PointerEventButton.left && (event.kind == PointerEventKind.down || event.kind == PointerEventKind.move)) {
-                            root.seek-timeline(self.mouse-x / self.width);
-                        }
-                        if (event.button == PointerEventButton.right && event.kind == PointerEventKind.down) {
-                            root.add-object-at(self.mouse-x / self.width);
-                        }
+            Rectangle {
+                background: item2-touch.has-hover ? #3e3e42 : #2d2d30;
+                height: 28px;
+                Text { text: "  + Add Cube"; color: white; vertical-alignment: center; }
+                item2-touch := TouchArea {
+                    clicked() => {
+                        root.add-object-at(root.click-ratio, 1); // 1 = Cube
+                        root.show-context-menu = false;
                     }
-                }
-
-                for obj in root.objects : Rectangle {
-                    x: (obj.start_frame * track.width) / root.total-frames;
-                    width: ((obj.end_frame - obj.start_frame) * track.width) / root.total-frames;
-                    height: track.height - 12px;
-                    y: 6px;
-                    background: #2563eb;
-                    border-radius: 4px;
-                    border-width: 1px;
-                    border-color: #3b82f6;
-
-                    Text {
-                        text: "Tetrahedron [" + obj.start_frame + " - " + obj.end_frame + "f]";
-                        color: #ffffff;
-                        font-size: 11px;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
-                    }
-
-                    TouchArea {
-                        pointer-event(event) => {
-                            if (event.button == PointerEventButton.right && event.kind == PointerEventKind.down) {
-                                root.delete-object(obj.id);
-                            }
-                        }
-                    }
-                }
-
-                Rectangle {
-                    x: (root.current-frame * track.width) / root.total-frames;
-                    width: 2px;
-                    height: track.height;
-                    background: #ef4444;
                 }
             }
         }
