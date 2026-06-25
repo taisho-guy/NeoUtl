@@ -32,19 +32,9 @@ git switch dev
 cargo run
 ```
 
-
 ## `dev`ブランチで行われていること
 
-本プロジェクトは、以下の変遷を辿っています。
-
-| 年 | プロジェクト名 | 内容 |
-|---|---|---|
-|2024|**Noa**|Rust(egui, wgpu)で実装。学習不足で断念。|
-|2025|**Rina**|C++(Qt Quick)で実装。プロトタイプとして成長。|
-|2026.5|**AviQtl**|Rinaの安定版。Qt Quickの技術的限界への到達を持って断念。|
-|2026.6|**NeoUtl**|Rust(Slint+wgpu)で実装中。|
-
-`dev`でRustベースのNeoUtlの開発を進めています。`main`はC++ベースのNeoUtlです。Rustでの検証が完了したら、`main`を`dev`の内容で置き換える予定です。
+RustベースのNeoUtlの開発を進めています。`main`はC++ベースのNeoUtlです。Rustでの検証が完了したら、`main`を`dev`の内容で置き換える予定です。
 
 ## ライセンス
 
