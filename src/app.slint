@@ -16,15 +16,30 @@ export component MainWindow inherits Window {
     in-out property <int> total-frames: 300;
     in-out property <[TimelineObject]> objects: [];
 
-    callback add-object-at(float, int);
-    callback delete-object(int);
-    callback seek-timeline(float);
+    // ── Rust 側で実装するコールバック ──
+    callback add-object-at(float, int);          // (ratio, kind_idx)
+    callback delete-object(int);                 // (id)
+    callback seek-timeline(float);               // (ratio)
+    callback move-object(int, float);            // (id, new_start_ratio)
     callback request-render();
+    // オブジェクトのヒット判定。ratio を渡すと重なるオブジェクトの id を返す（なければ -1）
+    callback find-object-at(float) -> int;
+    // オブジェクトの start_frame ratio を返す
+    callback get-object-start-ratio(int) -> float;
 
+    // コンテキストメニュー
     property <bool> show-context-menu: false;
-    property <length> menu-x: 0;
-    property <length> menu-y: 0;
-    property <float> click-ratio: 0.0;
+    property <bool> menu-is-delete: false;   // true=削除メニュー, false=追加メニュー
+    property <int>  menu-target-id: -1;      // 削除対象 id
+    property <length> menu-x: 0px;
+    property <length> menu-y: 0px;
+    property <float>  click-ratio: 0.0;
+
+    // ドラッグ状態: 0=idle, 1=seeking, 2=dragging-object
+    property <int>    drag-mode: 0;
+    property <int>    dragging-obj-id: -1;
+    property <length> drag-mouse-start: 0px;
+    property <float>  drag-obj-start-ratio: 0.0;  // ドラッグ開始時のオブジェクト先頭 ratio
 
     Timer {
         interval: 16ms;
@@ -58,54 +73,98 @@ export component MainWindow inherits Window {
         }
 
         Text {
-            text: "Timeline (右クリックでオブジェクトを追加 / 右クリックでオブジェクトを削除)";
+            text: "Timeline  —  左ドラッグ: シーク  |  オブジェクト左ドラッグ: 移動  |  右クリック: メニュー";
             color: #aaaaaa;
+            font-size: 11px;
         }
 
-        Rectangle {
+        // ━━━ タイムライン本体 ━━━
+        timeline-rect := Rectangle {
             background: #1e1e22;
             border-radius: 4px;
             height: 80px;
 
-            timeline-touch := TouchArea {
-                pointer-event(e) => {
-                    if (e.button == PointerEventButton.right && e.kind == PointerEventKind.down) {
-                        root.click-ratio = timeline-touch.pressed-x / timeline-touch.width;
-                        root.menu-x = timeline-touch.pressed-x;
-                        root.menu-y = timeline-touch.pressed-y + 30px; 
-                        root.show-context-menu = true;
-                    }
-                }
-            }
-
+            // カーソルライン
             Rectangle {
                 background: #ff4500;
                 width: 2px;
+                height: parent.height;
                 x: (root.current-frame / root.total-frames) * parent.width;
             }
 
+            // オブジェクト矩形（描画のみ・イベントなし）
             for obj in root.objects : Rectangle {
-                background: #3a5fcd;
+                property <bool> is-drag: root.drag-mode == 2 && root.dragging-obj-id == obj.id;
+                background: is-drag ? #5a7fef : #3a5fcd;
                 border-width: 1px;
-                border-color: #63b8ff;
+                border-color: is-drag ? #aaccff : #63b8ff;
                 border-radius: 2px;
                 y: 10px;
-                height: 40px;
+                height: 60px;
                 x: (obj.start-frame / root.total-frames) * parent.width;
                 width: ((obj.end-frame - obj.start-frame) / root.total-frames) * parent.width;
-
                 Text {
-                    text: "ID: " + obj.id;
+                    text: "ID:" + obj.id;
                     color: white;
+                    font-size: 11px;
                     horizontal-alignment: center;
                     vertical-alignment: center;
                 }
+            }
 
-                obj-touch := TouchArea {
-                    pointer-event(e) => {
-                        if (e.button == PointerEventButton.right && e.kind == PointerEventKind.down) {
-                            root.delete-object(obj.id);
+            // ── タイムライン全体 TouchArea（唯一のイベント処理） ──
+            timeline-touch := TouchArea {
+                mouse-cursor: root.drag-mode == 2 ? MouseCursor.grabbing
+                            : root.drag-mode == 1 ? MouseCursor.col-resize
+                            : MouseCursor.default;
+
+                pointer-event(e) => {
+                    if (e.kind == PointerEventKind.down) {
+                        root.show-context-menu = false;
+                        let press-ratio = self.pressed-x / self.width;
+
+                        if (e.button == PointerEventButton.right) {
+                            // ヒット判定して削除 or 追加メニューを選択
+                            let hit-id = root.find-object-at(press-ratio);
+                            root.click-ratio = press-ratio;
+                            root.menu-target-id = hit-id;
+                            root.menu-is-delete = hit-id >= 0;
+                            root.menu-x = timeline-rect.absolute-position.x + self.pressed-x;
+                            root.menu-y = timeline-rect.absolute-position.y + self.pressed-y + 4px;
+                            root.show-context-menu = true;
+
+                        } else if (e.button == PointerEventButton.left) {
+                            root.drag-mouse-start = self.pressed-x;
+                            let hit-id = root.find-object-at(press-ratio);
+                            if (hit-id >= 0) {
+                                // オブジェクトドラッグ開始
+                                root.drag-mode = 2;
+                                root.dragging-obj-id = hit-id;
+                                root.drag-obj-start-ratio = root.get-object-start-ratio(hit-id);
+                            } else {
+                                // シーク開始
+                                root.drag-mode = 1;
+                                root.seek-timeline(press-ratio);
+                            }
                         }
+                    }
+
+                    if (e.kind == PointerEventKind.up || e.kind == PointerEventKind.cancel) {
+                        root.drag-mode = 0;
+                        root.dragging-obj-id = -1;
+                    }
+                }
+
+                moved() => {
+                    if (root.drag-mode == 1) {
+                        // シーク
+                        root.seek-timeline((self.mouse-x / self.width).clamp(0.0, 1.0));
+                    } else if (root.drag-mode == 2) {
+                        // オブジェクト移動:
+                        // ドラッグ開始時のオブジェクト先頭 ratio + マウス移動量 ratio
+                        let delta-ratio = (self.mouse-x - root.drag-mouse-start) / self.width;
+                        let new-ratio = (root.drag-obj-start-ratio + delta-ratio).clamp(0.0, 1.0);
+                        root.move-object(root.dragging-obj-id, new-ratio);
                     }
                 }
             }
@@ -114,43 +173,63 @@ export component MainWindow inherits Window {
         Text {
             text: "Frame: " + root.current-frame + " / " + root.total-frames;
             horizontal-alignment: center;
+            color: #cccccc;
         }
     }
 
+    // ━━━ コンテキストメニュー ━━━
     if (root.show-context-menu) : Rectangle {
         x: root.menu-x;
         y: root.menu-y;
-        width: 150px;
-        height: 60px;
+        width: 160px;
+        // 削除メニュー: 1項目(34px) + padding, 追加メニュー: 2項目
+        height: root.menu-is-delete ? 38px : 68px;
         background: #2d2d30;
         border-width: 1px;
-        border-color: #434346;
+        border-color: #555558;
         border-radius: 4px;
+        drop-shadow-blur: 8px;
+        drop-shadow-color: #00000066;
+        drop-shadow-offset-x: 2px;
+        drop-shadow-offset-y: 2px;
 
-        VerticalLayout {
+        // 削除メニュー（オブジェクト上で右クリックしたとき）
+        if (root.menu-is-delete) : VerticalLayout {
             padding: 2px;
-            
             Rectangle {
-                background: item1-touch.has-hover ? #3e3e42 : #2d2d30;
-                height: 28px;
-                Text { text: "  + Add Tetrahedron"; color: white; vertical-alignment: center; }
-                item1-touch := TouchArea {
+                background: del-touch.has-hover ? #5a1a1a : transparent;
+                height: 30px;
+                border-radius: 3px;
+                Text { text: "  🗑 Delete Object"; color: #ff8888; font-size: 12px; vertical-alignment: center; }
+                del-touch := TouchArea {
                     clicked() => {
-                        root.add-object-at(root.click-ratio, 0); // 0 = Tetrahedron
+                        root.delete-object(root.menu-target-id);
                         root.show-context-menu = false;
                     }
                 }
             }
-            
+        }
+
+        // 追加メニュー（空白で右クリックしたとき）
+        if (!root.menu-is-delete) : VerticalLayout {
+            padding: 2px;
+            spacing: 0px;
             Rectangle {
-                background: item2-touch.has-hover ? #3e3e42 : #2d2d30;
-                height: 28px;
-                Text { text: "  + Add Cube"; color: white; vertical-alignment: center; }
+                background: item1-touch.has-hover ? #3e3e42 : transparent;
+                height: 30px;
+                border-radius: 3px;
+                Text { text: "  ＋ Add Tetrahedron"; color: white; font-size: 12px; vertical-alignment: center; }
+                item1-touch := TouchArea {
+                    clicked() => { root.add-object-at(root.click-ratio, 0); root.show-context-menu = false; }
+                }
+            }
+            Rectangle {
+                background: item2-touch.has-hover ? #3e3e42 : transparent;
+                height: 30px;
+                border-radius: 3px;
+                Text { text: "  ＋ Add Cube"; color: white; font-size: 12px; vertical-alignment: center; }
                 item2-touch := TouchArea {
-                    clicked() => {
-                        root.add-object-at(root.click-ratio, 1); // 1 = Cube
-                        root.show-context-menu = false;
-                    }
+                    clicked() => { root.add-object-at(root.click-ratio, 1); root.show-context-menu = false; }
                 }
             }
         }

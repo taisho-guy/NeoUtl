@@ -34,7 +34,7 @@ impl EcsWorld {
         });
         self.render_kinds.push(kind);
 
-        self.update_total_frames();
+        self.update_total_frames_pub();
         id
     }
 
@@ -43,11 +43,13 @@ impl EcsWorld {
             self.entities.remove(index);
             self.time_ranges.remove(index);
             self.render_kinds.remove(index);
-            self.update_total_frames();
+            self.update_total_frames_pub();
         }
     }
 
-    fn update_total_frames(&mut self) {
+    /// total_frames を全オブジェクトの end_frame の最大値（最低300）に更新する。
+    /// ui/mod.rs からも呼び出せるよう pub に変更。
+    pub fn update_total_frames_pub(&mut self) {
         let max_end = self
             .time_ranges
             .iter()
