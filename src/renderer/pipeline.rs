@@ -1,10 +1,13 @@
+// src/renderer/pipeline.rs
+use crate::objects::{RenderKind, cube, tetrahedron};
 use slint::wgpu_29::wgpu;
 use std::sync::Arc;
 
 pub struct RenderEngine {
     pub device: Arc<wgpu::Device>,
     pub queue: Arc<wgpu::Queue>,
-    pub render_pipeline: wgpu::RenderPipeline,
+    pub tetrahedron_pipeline: wgpu::RenderPipeline,
+    pub cube_pipeline: wgpu::RenderPipeline,
     pub texture: wgpu::Texture,
     pub uniform_buffer: wgpu::Buffer,
     pub bind_group: wgpu::BindGroup,
@@ -15,11 +18,6 @@ impl RenderEngine {
     pub fn new(device: wgpu::Device, queue: wgpu::Queue) -> Self {
         let device = Arc::new(device);
         let queue = Arc::new(queue);
-
-        let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-            label: Some("Tetrahedron Shader"),
-            source: wgpu::ShaderSource::Wgsl(include_str!("../shader.wgsl").into()),
-        });
 
         let uniform_buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("Uniform Buffer"),
@@ -57,34 +55,17 @@ impl RenderEngine {
             immediate_size: 0,
         });
 
-        let render_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            label: Some("Render Pipeline"),
-            layout: Some(&pipeline_layout),
-            vertex: wgpu::VertexState {
-                module: &shader,
-                entry_point: Some("vs_main"),
-                buffers: &[],
-                compilation_options: Default::default(),
-            },
-            fragment: Some(wgpu::FragmentState {
-                module: &shader,
-                entry_point: Some("fs_main"),
-                targets: &[Some(wgpu::ColorTargetState {
-                    format: wgpu::TextureFormat::Rgba8Unorm,
-                    blend: Some(wgpu::BlendState::REPLACE),
-                    write_mask: wgpu::ColorWrites::ALL,
-                })],
-                compilation_options: Default::default(),
-            }),
-            primitive: wgpu::PrimitiveState {
-                topology: wgpu::PrimitiveTopology::TriangleList,
-                ..Default::default()
-            },
-            depth_stencil: None,
-            multisample: wgpu::MultisampleState::default(),
-            multiview_mask: None,
-            cache: None,
+        let tetra_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("Tetrahedron Shader"),
+            source: wgpu::ShaderSource::Wgsl(tetrahedron::WGSL_SHADER.into()),
         });
+        let tetrahedron_pipeline = Self::create_pipeline(&device, &pipeline_layout, &tetra_shader);
+
+        let cube_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("Cube Shader"),
+            source: wgpu::ShaderSource::Wgsl(cube::WGSL_SHADER.into()),
+        });
+        let cube_pipeline = Self::create_pipeline(&device, &pipeline_layout, &cube_shader);
 
         let texture = device.create_texture(&wgpu::TextureDescriptor {
             label: Some("Render Target Texture"),
@@ -104,7 +85,8 @@ impl RenderEngine {
         Self {
             device,
             queue,
-            render_pipeline,
+            tetrahedron_pipeline,
+            cube_pipeline,
             texture,
             uniform_buffer,
             bind_group,
@@ -112,12 +94,46 @@ impl RenderEngine {
         }
     }
 
-    /// メモリバッファを更新し、WGPUコマンドを発行してフレームを描画
-    pub fn render(&mut self, has_active_object: bool) {
-        self.angle += 0.03;
+    fn create_pipeline(
+        device: &wgpu::Device,
+        layout: &wgpu::PipelineLayout,
+        shader: &wgpu::ShaderModule,
+    ) -> wgpu::RenderPipeline {
+        device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("Pipeline"),
+            layout: Some(layout),
+            vertex: wgpu::VertexState {
+                module: shader,
+                entry_point: Some("vs_main"),
+                buffers: &[],
+                compilation_options: Default::default(),
+            },
+            fragment: Some(wgpu::FragmentState {
+                module: shader,
+                entry_point: Some("fs_main"),
+                targets: &[Some(wgpu::ColorTargetState {
+                    format: wgpu::TextureFormat::Rgba8Unorm,
+                    blend: Some(wgpu::BlendState::REPLACE),
+                    write_mask: wgpu::ColorWrites::ALL,
+                })],
+                compilation_options: Default::default(),
+            }),
+            primitive: wgpu::PrimitiveState {
+                topology: wgpu::PrimitiveTopology::TriangleList,
+                ..Default::default()
+            },
+            depth_stencil: None,
+            multisample: wgpu::MultisampleState::default(),
+            multiview_mask: None,
+            cache: None,
+        })
+    }
+
+    pub fn render(&mut self, active_kinds: &[RenderKind]) {
+        self.angle += 0.02;
         let angle_array = [self.angle];
-        let bytes = bytemuck::cast_slice(&angle_array);
-        self.queue.write_buffer(&self.uniform_buffer, 0, bytes);
+        self.queue
+            .write_buffer(&self.uniform_buffer, 0, bytemuck::cast_slice(&angle_array));
 
         let mut encoder = self
             .device
@@ -129,37 +145,43 @@ impl RenderEngine {
             .create_view(&wgpu::TextureViewDescriptor::default());
 
         {
-            let color_attachments = [Some(wgpu::RenderPassColorAttachment {
-                view: &view,
-                resolve_target: None,
-                ops: wgpu::Operations {
-                    load: wgpu::LoadOp::Clear(wgpu::Color {
-                        r: 0.05,
-                        g: 0.05,
-                        b: 0.07,
-                        a: 1.0,
-                    }),
-                    store: wgpu::StoreOp::Store,
-                },
-                depth_slice: None,
-            })];
-
             let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("Render Pass"),
-                color_attachments: color_attachments.as_slice(),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: &view,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(wgpu::Color {
+                            r: 0.05,
+                            g: 0.05,
+                            b: 0.07,
+                            a: 1.0,
+                        }),
+                        store: wgpu::StoreOp::Store,
+                    },
+                    depth_slice: None,
+                })],
                 depth_stencil_attachment: None,
                 timestamp_writes: None,
                 occlusion_query_set: None,
                 multiview_mask: None,
             });
 
-            if has_active_object {
-                render_pass.set_pipeline(&self.render_pipeline);
-                render_pass.set_bind_group(0, &self.bind_group, &[]);
-                render_pass.draw(0..12, 0..1);
+            for &kind in active_kinds {
+                match kind {
+                    RenderKind::Tetrahedron => {
+                        render_pass.set_pipeline(&self.tetrahedron_pipeline);
+                        render_pass.set_bind_group(0, &self.bind_group, &[]);
+                        render_pass.draw(0..tetrahedron::VERTEX_COUNT, 0..1);
+                    }
+                    RenderKind::Cube => {
+                        render_pass.set_pipeline(&self.cube_pipeline);
+                        render_pass.set_bind_group(0, &self.bind_group, &[]);
+                        render_pass.draw(0..cube::VERTEX_COUNT, 0..1);
+                    }
+                }
             }
         }
-
         self.queue.submit([encoder.finish()]);
     }
 }

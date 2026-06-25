@@ -1,3 +1,6 @@
+// src/ecs/components.rs
+pub use crate::objects::RenderKind;
+
 #[derive(Clone, Copy, Debug)]
 pub struct TimeRange {
     pub start_frame: i32,

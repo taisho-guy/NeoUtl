@@ -1,7 +1,9 @@
+// src/main.rs
 use slint::ComponentHandle;
 use std::sync::{Arc, Mutex};
 
 mod ecs;
+mod objects;
 mod renderer;
 mod ui;
 
@@ -13,9 +15,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .select()?;
 
     let app = MainWindow::new()?;
-
     let world_holder = Arc::new(Mutex::new(ecs::EcsWorld::new()));
-    let engine_holder: Arc<Mutex<Option<renderer::RenderEngine>>> = Arc::new(Mutex::new(None));
+    let engine_holder = Arc::new(Mutex::new(None));
 
     let engine_setup = engine_holder.clone();
     app.window()
@@ -33,7 +34,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         })?;
 
     ui::setup_ui_callbacks(&app, world_holder, engine_holder);
-
     app.run()?;
     Ok(())
 }

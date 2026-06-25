@@ -1,14 +1,16 @@
+// src/ecs/mod.rs
 pub mod components;
 pub mod resources;
 pub mod systems;
 
-use components::TimeRange;
+use components::{RenderKind, TimeRange};
 use resources::TimelineResource;
 
 pub struct EcsWorld {
-    pub entities: Vec<usize>,        // Entity IDの配列
-    pub time_ranges: Vec<TimeRange>, // 各Entityの時間範囲コンポーネント
-    pub resources: TimelineResource, // グローバルリソース
+    pub entities: Vec<usize>,
+    pub time_ranges: Vec<TimeRange>,
+    pub render_kinds: Vec<RenderKind>,
+    pub resources: TimelineResource,
 }
 
 impl EcsWorld {
@@ -16,12 +18,12 @@ impl EcsWorld {
         Self {
             entities: Vec::new(),
             time_ranges: Vec::new(),
+            render_kinds: Vec::new(),
             resources: TimelineResource::new(),
         }
     }
 
-    /// 新しいオブジェクトを生成・追加
-    pub fn add_object(&mut self, start: i32, duration: i32) -> usize {
+    pub fn add_object(&mut self, start: i32, duration: i32, kind: RenderKind) -> usize {
         let id = self.resources.next_id;
         self.resources.next_id += 1;
 
@@ -30,16 +32,17 @@ impl EcsWorld {
             start_frame: start,
             end_frame: start + duration,
         });
+        self.render_kinds.push(kind);
 
         self.update_total_frames();
         id
     }
 
-    /// 指定されたIDのオブジェクトをコンポーネント配列から削除
     pub fn delete_object(&mut self, id: usize) {
         if let Some(index) = self.entities.iter().position(|&e_id| e_id == id) {
             self.entities.remove(index);
-            self.time_ranges.remove(index); // 隙間を詰めて連続性を維持
+            self.time_ranges.remove(index);
+            self.render_kinds.remove(index);
             self.update_total_frames();
         }
     }
