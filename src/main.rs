@@ -28,7 +28,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             {
                 let mut engine_lock = engine_setup.lock().unwrap();
                 if engine_lock.is_none() {
-                    *engine_lock = Some(renderer::RenderEngine::new(device.clone(), queue.clone()));
+                    *engine_lock = Some(renderer::RenderEngine::new(
+                        device.clone(),
+                        queue.clone(),
+                        1920,
+                        1080,
+                    ));
                 }
             }
         })?;
