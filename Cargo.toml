@@ -13,9 +13,17 @@ slint = { version = "1.17", default-features = false, features = [
 ] }
 
 wgpu = "29"
+wgpu_text="29"
 ffmpeg-next = "8"
 tokio = { version = "1.52", features = ["rt-multi-thread", "sync"] }
 bytemuck = { version = "1.25", features = ["derive"] }
 
 [build-dependencies]
 slint-build = "1.17"
+
+[profile.release]
+opt-level = 3
+lto = "fat"
+codegen-units = 1
+panic = "abort"
+strip = true

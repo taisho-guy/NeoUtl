@@ -2,7 +2,7 @@
 use crate::MainWindow;
 use crate::TimelineObject;
 use crate::ecs::EcsWorld;
-use crate::ecs::systems::get_active_render_kinds_system;
+use crate::ecs::systems::get_active_objects_system;
 use crate::objects::RenderKind;
 use crate::renderer::RenderEngine;
 use slint::ComponentHandle;
@@ -38,7 +38,7 @@ pub fn setup_ui_callbacks(
                 0 => RenderKind::Tetrahedron,
                 _ => RenderKind::Cube,
             };
-            world.add_object(start, 90, kind);
+            world.add_object(start, 90, kind, None);
             sync_world_to_ui(&app, &world);
         }
     });
@@ -107,8 +107,8 @@ pub fn setup_ui_callbacks(
         let mut engine_lock = engine_ctrl.lock().unwrap();
         if let Some(ref mut engine) = *engine_lock {
             let world = world_ctrl.lock().unwrap();
-            let active_kinds = get_active_render_kinds_system(&world);
-            engine.render(&active_kinds);
+            let active_kinds = get_active_objects_system(&world);
+            engine.render(&active_kinds, &world.project);
             let imported_image = slint::Image::try_from(engine.texture.clone()).unwrap();
             if let Some(app) = app_weak.upgrade() {
                 app.set_video_frame(imported_image);
@@ -123,10 +123,17 @@ fn sync_world_to_ui(app: &MainWindow, world: &EcsWorld) {
         .entities
         .iter()
         .zip(world.time_ranges.iter())
-        .map(|(&id, &t)| TimelineObject {
+        .zip(world.render_kinds.iter())
+        .map(|((&id, &t), &kind)| TimelineObject {
             id: id as i32,
             start_frame: t.start_frame,
             end_frame: t.end_frame,
+            kind: kind as i32,
+            label: match kind {
+                RenderKind::Tetrahedron => "Tetrahedron".into(),
+                RenderKind::Cube => "Cube".into(),
+                RenderKind::Text => "Text".into(),
+            },
         })
         .collect();
     app.set_objects(slint::ModelRc::new(slint::VecModel::from(slint_objs)));
