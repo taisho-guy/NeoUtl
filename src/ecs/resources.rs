@@ -20,7 +20,6 @@ impl ProjectResource {
             height: 1080,
         }
     }
-
 }
 
 /// タイムライン状態（再生ヘッド・フレーム総数など）

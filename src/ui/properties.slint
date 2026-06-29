@@ -1,0 +1,94 @@
+// src/ui/properties.slint
+
+export component PropertiesWindow inherits Window {
+    title: "NeoUtl - 設定";
+    preferred-width: 360px;
+    preferred-height: 140px;
+    background: #0e0e12;
+
+    in-out property <int> fps: 30;
+    in-out property <int> res-width: 1920;
+    in-out property <int> res-height: 1080;
+
+    callback set-fps(int);
+    callback set-resolution(int, int);
+
+    VerticalLayout {
+        padding: 12px;
+        spacing: 10px;
+
+        VerticalLayout {
+            spacing: 5px;
+            Text { text: "FPS"; color: #55555e; font-size: 10px; }
+            HorizontalLayout {
+                spacing: 4px;
+                Rectangle {
+                    width: 34px; height: 24px; border-radius: 3px;
+                    background: root.fps == 24 ? #2a4db8 : #1e1e24;
+                    border-width: 1px; border-color: root.fps == 24 ? #6a90f0 : #303038;
+                    Text { text: "24"; color: root.fps == 24 ? #dde8ff : #666672;
+                           font-size: 11px; horizontal-alignment: center; vertical-alignment: center; }
+                    TouchArea { clicked() => { root.set-fps(24); } }
+                }
+                Rectangle {
+                    width: 34px; height: 24px; border-radius: 3px;
+                    background: root.fps == 30 ? #2a4db8 : #1e1e24;
+                    border-width: 1px; border-color: root.fps == 30 ? #6a90f0 : #303038;
+                    Text { text: "30"; color: root.fps == 30 ? #dde8ff : #666672;
+                           font-size: 11px; horizontal-alignment: center; vertical-alignment: center; }
+                    TouchArea { clicked() => { root.set-fps(30); } }
+                }
+                Rectangle {
+                    width: 34px; height: 24px; border-radius: 3px;
+                    background: root.fps == 60 ? #2a4db8 : #1e1e24;
+                    border-width: 1px; border-color: root.fps == 60 ? #6a90f0 : #303038;
+                    Text { text: "60"; color: root.fps == 60 ? #dde8ff : #666672;
+                           font-size: 11px; horizontal-alignment: center; vertical-alignment: center; }
+                    TouchArea { clicked() => { root.set-fps(60); } }
+                }
+                Rectangle {
+                    width: 40px; height: 24px; border-radius: 3px;
+                    background: root.fps == 120 ? #2a4db8 : #1e1e24;
+                    border-width: 1px; border-color: root.fps == 120 ? #6a90f0 : #303038;
+                    Text { text: "120"; color: root.fps == 120 ? #dde8ff : #666672;
+                           font-size: 11px; horizontal-alignment: center; vertical-alignment: center; }
+                    TouchArea { clicked() => { root.set-fps(120); } }
+                }
+            }
+        }
+
+        Rectangle { height: 1px; background: #24242c; }
+
+        VerticalLayout {
+            spacing: 5px;
+            Text { text: "解像度"; color: #55555e; font-size: 10px; }
+            HorizontalLayout {
+                spacing: 4px;
+                Rectangle {
+                    width: 40px; height: 24px; border-radius: 3px;
+                    background: root.res-width == 1280 ? #1e5c34 : #1e1e24;
+                    border-width: 1px; border-color: root.res-width == 1280 ? #4dc87a : #303038;
+                    Text { text: "HD"; color: root.res-width == 1280 ? #c0f0d0 : #666672;
+                           font-size: 11px; horizontal-alignment: center; vertical-alignment: center; }
+                    TouchArea { clicked() => { root.set-resolution(1280, 720); } }
+                }
+                Rectangle {
+                    width: 44px; height: 24px; border-radius: 3px;
+                    background: root.res-width == 1920 ? #1e5c34 : #1e1e24;
+                    border-width: 1px; border-color: root.res-width == 1920 ? #4dc87a : #303038;
+                    Text { text: "FHD"; color: root.res-width == 1920 ? #c0f0d0 : #666672;
+                           font-size: 11px; horizontal-alignment: center; vertical-alignment: center; }
+                    TouchArea { clicked() => { root.set-resolution(1920, 1080); } }
+                }
+                Rectangle {
+                    width: 34px; height: 24px; border-radius: 3px;
+                    background: root.res-width == 3840 ? #1e5c34 : #1e1e24;
+                    border-width: 1px; border-color: root.res-width == 3840 ? #4dc87a : #303038;
+                    Text { text: "4K"; color: root.res-width == 3840 ? #c0f0d0 : #666672;
+                           font-size: 11px; horizontal-alignment: center; vertical-alignment: center; }
+                    TouchArea { clicked() => { root.set-resolution(3840, 2160); } }
+                }
+            }
+        }
+    }
+}
