@@ -1,0 +1,132 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg
+   version="1.1"
+   width="447.31693"
+   height="143.17332"
+   viewBox="0 0 447.31693 143.17333"
+   id="svg3"
+   sodipodi:docname="splash.svg"
+   inkscape:version="1.4.4 (dcaf3e7d9e, 2026-05-05)"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns:xlink="http://www.w3.org/1999/xlink"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <sodipodi:namedview
+     id="namedview3"
+     pagecolor="#505050"
+     bordercolor="#eeeeee"
+     borderopacity="1"
+     inkscape:showpageshadow="0"
+     inkscape:pageopacity="0"
+     inkscape:pagecheckerboard="0"
+     inkscape:deskcolor="#505050"
+     inkscape:zoom="1.4686026"
+     inkscape:cx="145.37629"
+     inkscape:cy="116.09676"
+     inkscape:window-width="1536"
+     inkscape:window-height="893"
+     inkscape:window-x="0"
+     inkscape:window-y="0"
+     inkscape:window-maximized="1"
+     inkscape:current-layer="svg3" />
+  <defs
+     id="defs2">
+    <linearGradient
+       x1="0"
+       y1="0"
+       x2="660"
+       y2="0"
+       gradientUnits="userSpaceOnUse"
+       id="color-1">
+      <stop
+         offset="0"
+         stop-color="#80ffff"
+         id="stop1" />
+      <stop
+         offset="1"
+         stop-color="#ff80ff"
+         id="stop2" />
+    </linearGradient>
+    <linearGradient
+       inkscape:collect="always"
+       xlink:href="#color-1"
+       id="linearGradient5"
+       gradientUnits="userSpaceOnUse"
+       x1="0"
+       y1="0"
+       x2="660"
+       y2="0" />
+    <linearGradient
+       inkscape:collect="always"
+       xlink:href="#color-1"
+       id="linearGradient3"
+       gradientUnits="userSpaceOnUse"
+       x1="0"
+       y1="0"
+       x2="660"
+       y2="0" />
+    <linearGradient
+       inkscape:collect="always"
+       xlink:href="#color-1"
+       id="linearGradient5-3"
+       gradientUnits="userSpaceOnUse"
+       x1="0"
+       y1="0"
+       x2="660"
+       y2="0" />
+    <linearGradient
+       inkscape:collect="always"
+       xlink:href="#color-1"
+       id="linearGradient1"
+       gradientUnits="userSpaceOnUse"
+       x1="0"
+       y1="0"
+       x2="660"
+       y2="0" />
+    <filter
+       inkscape:collect="always"
+       style="color-interpolation-filters:sRGB"
+       id="filter1"
+       x="-0.16446364"
+       y="-1.7056254"
+       width="1.3289273"
+       height="4.4112509">
+      <feGaussianBlur
+         inkscape:collect="always"
+         stdDeviation="45.2275"
+         id="feGaussianBlur1" />
+    </filter>
+  </defs>
+  <g
+     id="g3-5"
+     transform="matrix(0.51,0,0,0.51,101.25846,-20.213339)"
+     style="filter:url(#filter1)">
+    <g
+       fill="url(#color-1)"
+       stroke="none"
+       stroke-miterlimit="10"
+       id="g2-3"
+       style="fill:url(#linearGradient5)">
+      <path
+         d="m -90,210 v -60 l 20,13 v 47 z m 60,-60 v 60 l -20,-13 v -47 z m 0,60 -60,-38 v -22 l 60,38 z m 60,-60 h 60 v 16 H 30 Z m 0,22 h 60 v 16 H 30 Z m 0,22 h 60 v 16 H 30 Z m 150,-45.82 c 17.574,0 31.82,14.246 31.82,31.82 0,17.574 -14.246,31.82 -31.82,31.82 -17.574,0 -31.82,-14.246 -31.82,-31.82 0,-17.574 14.246,-31.82 31.82,-31.82 z m 0,20 c -6.528,0 -11.82,5.292 -11.82,11.82 0,6.528 5.292,11.82 11.82,11.82 6.528,0 11.82,-5.292 11.82,-11.82 0,-6.528 -5.292,-11.82 -11.82,-11.82 z M 330,180 c 0,16.569 -13.431,30 -30,30 -16.569,0 -30,-13.431 -30,-30 z m -40,0 c 0,5.523 4.477,10 10,10 5.523,0 10,-4.477 10,-10 z m -20,0 v -30 h 20 v 30 z m 40,0 v -30 h 20 v 30 z m 100,30 v -60 h 20 v 60 z m -20,-60 h 60 v 20 h -60 z m 120,60 v -60 h 20 v 60 z m 0,-19.5 h 60 V 210 h -60 z"
+         id="path2-5"
+         style="fill:url(#linearGradient3)" />
+    </g>
+  </g>
+  <g
+     id="g3-5-5"
+     transform="matrix(0.51,0,0,0.51,101.25846,-20.213339)">
+    <g
+       fill="url(#color-1)"
+       stroke="none"
+       stroke-miterlimit="10"
+       id="g2-3-6"
+       style="fill:url(#linearGradient5-3)">
+      <path
+         d="m -90,210 v -60 l 20,13 v 47 z m 60,-60 v 60 l -20,-13 v -47 z m 0,60 -60,-38 v -22 l 60,38 z m 60,-60 h 60 v 16 H 30 Z m 0,22 h 60 v 16 H 30 Z m 0,22 h 60 v 16 H 30 Z m 150,-45.82 c 17.574,0 31.82,14.246 31.82,31.82 0,17.574 -14.246,31.82 -31.82,31.82 -17.574,0 -31.82,-14.246 -31.82,-31.82 0,-17.574 14.246,-31.82 31.82,-31.82 z m 0,20 c -6.528,0 -11.82,5.292 -11.82,11.82 0,6.528 5.292,11.82 11.82,11.82 6.528,0 11.82,-5.292 11.82,-11.82 0,-6.528 -5.292,-11.82 -11.82,-11.82 z M 330,180 c 0,16.569 -13.431,30 -30,30 -16.569,0 -30,-13.431 -30,-30 z m -40,0 c 0,5.523 4.477,10 10,10 5.523,0 10,-4.477 10,-10 z m -20,0 v -30 h 20 v 30 z m 40,0 v -30 h 20 v 30 z m 100,30 v -60 h 20 v 60 z m -20,-60 h 60 v 20 h -60 z m 120,60 v -60 h 20 v 60 z m 0,-19.5 h 60 V 210 h -60 z"
+         id="path2-5-2"
+         style="fill:url(#linearGradient1)" />
+    </g>
+  </g>
+</svg>
