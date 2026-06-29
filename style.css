@@ -244,6 +244,15 @@ code.is-copied {
     border-color: var(--accent-color) !important;
 }
 
+pre {
+    transform: translateY(0);
+    transition: transform 0.3s cubic-bezier(0.25, 1, 0.5, 1);
+}
+
+pre:hover {
+    transform: translateY(-2px);
+}
+
 pre code {
     background: rgba(12, 8, 22, 0.6);
     padding: 16px;
@@ -253,13 +262,13 @@ pre code {
     overflow-x: auto;
     color: var(--text-color);
     transition:
-        transform 0.3s cubic-bezier(0.25, 1, 0.5, 1),
-        border-color 0.3s cubic-bezier(0.25, 1, 0.5, 1);
+        border-color 0.3s cubic-bezier(0.25, 1, 0.5, 1),
+        background-color 0.3s cubic-bezier(0.25, 1, 0.5, 1);
 }
 
-pre code:hover {
+pre:hover code {
     border-color: var(--border-hover);
-    transform: translateY(-2px);
+    background-color: rgba(157, 78, 223, 0.15);
 }
 
 .download-grid,
@@ -480,7 +489,10 @@ details > ol {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
     gap: 20px;
-    margin-block-start: var(--spacing-tight);
+    padding: 16px;
+    margin-inline: -16px;
+    margin-block-start: calc(var(--spacing-tight) - 16px);
+    margin-block-end: -16px;
 }
 
 .link-card {
