@@ -7,6 +7,15 @@ use components::{KindId, ObjectId, TextContent, TimeRange};
 use resources::{ProjectResource, TimelineResource};
 use shipyard::{Get, IntoIter, UniqueView, UniqueViewMut, View, World};
 
+/// タイムラインUIに渡すオブジェクト情報（Slint型に非依存）
+#[derive(Clone, Debug)]
+pub struct TimelineData {
+    pub id: i32,
+    pub start_frame: i32,
+    pub end_frame: i32,
+    pub kind: i32,
+}
+
 pub struct EcsWorld {
     pub world: World,
 }
@@ -109,23 +118,18 @@ impl EcsWorld {
             .run(|project: UniqueView<ProjectResource>| project.clone())
     }
 
-    pub fn get_timeline_objects(&self) -> Vec<crate::TimelineObject> {
+    pub fn get_timeline_objects(&self) -> Vec<TimelineData> {
         self.world.run(
             |object_ids: View<ObjectId>, time_ranges: View<TimeRange>, kind_ids: View<KindId>| {
                 let mut objs = Vec::new();
                 for (_entity, (id, range, kind)) in
                     (&object_ids, &time_ranges, &kind_ids).iter().with_id()
                 {
-                    let label = crate::objects::registry()
-                        .get(kind.0 as usize)
-                        .map(|p| p.name.as_str())
-                        .unwrap_or("Unknown");
-                    objs.push(crate::TimelineObject {
+                    objs.push(TimelineData {
                         id: id.0 as i32,
                         start_frame: range.start_frame,
                         end_frame: range.end_frame,
                         kind: kind.0 as i32,
-                        label: label.into(),
                     });
                 }
                 objs

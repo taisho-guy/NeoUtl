@@ -16,12 +16,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .require_wgpu_29(slint::wgpu_29::WGPUConfiguration::default())
         .select()?;
 
-    let app = MainWindow::new()?;
+    let preview = PreviewWindow::new()?;
+    let timeline = TimelineWindow::new()?;
+    let props = PropertiesWindow::new()?;
+
     let world_holder = Arc::new(Mutex::new(ecs::EcsWorld::new()));
-    let engine_holder = Arc::new(Mutex::new(None));
+    let engine_holder = Arc::new(Mutex::new(None::<renderer::RenderEngine>));
 
     let engine_setup = engine_holder.clone();
-    app.window()
+    preview
+        .window()
         .set_rendering_notifier(move |state, graphics_api| {
             if let (
                 slint::RenderingState::RenderingSetup,
@@ -40,7 +44,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
         })?;
 
-    ui::setup_ui_callbacks(&app, world_holder, engine_holder);
-    app.run()?;
+    ui::setup_ui_callbacks(&preview, &timeline, &props, world_holder, engine_holder);
+
+    preview.show()?;
+    timeline.show()?;
+    props.show()?;
+    slint::run_event_loop()?;
     Ok(())
 }
