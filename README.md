@@ -1,5 +1,6 @@
 # NeoUtl
-AviUtlを踏襲し凌駕する次世代動画編集ソフト
+
+A free, open-source AviUtl clone. Compatible with Windows, macOS, and Linux. Supports VST, LADSPA, LV2, etc. Video editing software aiming to replace and surpass AviUtl.
 
 ## 目的
 
