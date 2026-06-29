@@ -1,12 +1,19 @@
 // src/ecs/components.rs
+use shipyard::Component;
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, Component)]
 pub struct TimeRange {
     pub start_frame: i32,
     pub end_frame: i32,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Copy, Debug, Component)]
+pub struct ObjectId(pub usize);
+
+#[derive(Clone, Copy, Debug, Component)]
+pub struct KindId(pub u32);
+
+#[derive(Clone, Debug, Component)]
 pub struct TextContent {
     pub text: String,
     pub x: f32,

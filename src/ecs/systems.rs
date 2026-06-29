@@ -1,6 +1,8 @@
 // src/ecs/systems.rs
 use super::EcsWorld;
-use crate::ecs::components::TextContent;
+use crate::ecs::components::{KindId, TextContent, TimeRange};
+use crate::ecs::resources::TimelineResource;
+use shipyard::{Get, IntoIter, UniqueView, View};
 
 pub struct ActiveObject {
     pub kind_id: u32,
@@ -8,18 +10,24 @@ pub struct ActiveObject {
 }
 
 pub fn get_active_objects_system(world: &EcsWorld) -> Vec<ActiveObject> {
-    let current = world.resources.current_frame;
+    world.world.run(
+        |timeline: UniqueView<TimelineResource>,
+         time_ranges: View<TimeRange>,
+         kind_ids: View<KindId>,
+         text_contents: View<TextContent>| {
+            let current = timeline.current_frame;
+            let mut active = Vec::new();
 
-    world
-        .time_ranges
-        .iter()
-        .zip(world.kind_ids.iter())
-        .zip(world.text_contents.iter())
-        .filter_map(|((range, &kind_id), text)| {
-            (current >= range.start_frame && current < range.end_frame).then(|| ActiveObject {
-                kind_id,
-                text_content: text.clone(),
-            })
-        })
-        .collect()
+            for (id, (range, kind)) in (&time_ranges, &kind_ids).iter().with_id() {
+                if current >= range.start_frame && current < range.end_frame {
+                    let text_content = text_contents.get(id).ok().cloned();
+                    active.push(ActiveObject {
+                        kind_id: kind.0,
+                        text_content,
+                    });
+                }
+            }
+            active
+        },
+    )
 }

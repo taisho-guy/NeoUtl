@@ -10,6 +10,7 @@ dependencies = [
  "ffmpeg-next",
  "libloading",
  "neoutl-object-api",
+ "shipyard",
  "slint",
  "slint-build",
  "tokio",
@@ -1787,6 +1788,7 @@ dependencies = [
  "allocator-api2",
  "equivalent",
  "foldhash 0.2.0",
+ "rayon",
 ]
 
 [[package]]
@@ -4269,6 +4271,29 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6662b5879511e06e8999a8a235d848113e942c9124f211511b16466ee2995f26"
 dependencies = [
  "serde_core",
+]
+
+[[package]]
+name = "shipyard"
+version = "0.11.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c2a32da2ebf2ece6a5bfda36bb6199dbd61be5b69f9e0e85855b84a002ebf07b"
+dependencies = [
+ "hashbrown 0.16.1",
+ "lock_api",
+ "rayon",
+ "shipyard_proc",
+]
+
+[[package]]
+name = "shipyard_proc"
+version = "0.6.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0e09f75ea0c5902cedcbb5889628232eb49d6d09728d7cc1a3f1736fa4e7ce7c"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
 ]
 
 [[package]]

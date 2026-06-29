@@ -4,11 +4,11 @@ A free, open-source AviUtl clone. Compatible with Windows, macOS, and Linux. Sup
 
 ## 目的
 
-**AviUtl 1.10**及び**ExEdit 0.92**の面影を残しつつ、より安全・高速・柔軟な動画編集ソフトを開発するプロジェクトです。クロスプラットフォームなAviUtlクローンの開発を通じ、AviUtlを「仕方なく」使う方々の最適解になることを目指しております。
+**AviUtl 1.10**及び**ExEdit 0.92**の操作感を持ちつつ、より安全・高速・柔軟な動画編集ソフトを開発するプロジェクトです。クロスプラットフォームなAviUtlクローンの開発を通じ、AviUtlを「仕方なく」使う方々の最適解になることを目指しております。
 
 ## 目標
 
-- [ ] 自由ライセンスかつ無料
+- [x] 自由ライセンスかつ無料
 - [ ] **Linux** / **macOS** / Windowsに対応
 - [ ] GPUを用いた**高速なプレビュー**
 - [ ] ECSによる**効率的な処理**
@@ -57,6 +57,19 @@ python3 BUILD.py
 ```
 
 実行可能ファイルは`build`以下に生成されます。
+
+## 採用技術
+
+NeoUtlはRust言語で実装されています。
+
+|項目|採用クレート|
+|---|---|
+|GUI|[Slint](https://slint.dev/)|
+|プレビュー|[wgpu](https://wgpu.rs/)|
+|ECS|[Shipyard](https://github.com/leudz/shipyard)|
+|非同期処理|[tokio](https://tokio.rs/)|
+|動画デコード・エンコード|[ffmpeg-next](https://github.com/zmwangx/rust-ffmpeg)|
+
 
 ## リンク
 
