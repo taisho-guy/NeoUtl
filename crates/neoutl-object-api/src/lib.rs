@@ -1,0 +1,27 @@
+// crates/neoutl-object-api/src/lib.rs
+
+#[repr(C)]
+pub struct ObjectMeta {
+    pub name: &'static str,
+}
+
+#[repr(C)]
+pub struct RenderContext {
+    pub version: u32,
+    pub render_pass_ptr: *mut (),
+    pub bind_group_ptr: *const (),
+    pub vertex_count: u32,
+    pub aspect: f32,
+    pub angle: f32,
+}
+
+#[repr(C)]
+pub struct ObjectVTable {
+    pub meta: unsafe extern "C" fn() -> *const ObjectMeta,
+    pub vertex_count: unsafe extern "C" fn() -> u32,
+    pub render: unsafe extern "C" fn(ctx: *const RenderContext),
+}
+
+pub const ENTRY_SYMBOL: &[u8] = b"neoutl_object_entry\0";
+
+pub type EntryFn = unsafe extern "C" fn() -> *const ObjectVTable;

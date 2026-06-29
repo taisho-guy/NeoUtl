@@ -1,0 +1,11 @@
+[package]
+name    = "neoutl-object-cube"
+version = "0.0.0"
+edition = "2024"
+
+[lib]
+name       = "neoutl_object_cube"
+crate-type = ["cdylib"]
+
+[dependencies]
+neoutl-object-api = { path = "../../neoutl-object-api" }
