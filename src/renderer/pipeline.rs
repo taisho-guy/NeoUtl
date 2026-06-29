@@ -19,7 +19,6 @@ pub struct RenderEngine {
     pub render_width: u32,
     pub render_height: u32,
     pipelines: HashMap<u32, (wgpu::RenderPipeline, u32)>,
-    pipeline_layout: wgpu::PipelineLayout,
 }
 
 fn load_font() -> Option<Vec<u8>> {
@@ -195,7 +194,6 @@ impl RenderEngine {
             render_width: width,
             render_height: height,
             pipelines,
-            pipeline_layout,
         }
     }
 
