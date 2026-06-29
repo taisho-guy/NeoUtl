@@ -1,12 +1,4 @@
 // src/objects/mod.rs
-pub mod cube;
-pub mod tetrahedron;
-pub mod text;
+pub mod loader;
 
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub enum RenderKind {
-    Tetrahedron = 0,
-    Cube = 1,
-    /// wgpu_text で描画されるテキストオブジェクト
-    Text = 2,
-}
+pub use loader::{by_kind_id, default_objects_dir, load_all, registry};

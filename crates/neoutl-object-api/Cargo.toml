@@ -1,0 +1,7 @@
+[package]
+name    = "neoutl-object-api"
+version = "0.0.0"
+edition = "2024"
+
+[lib]
+crate-type = ["rlib"]

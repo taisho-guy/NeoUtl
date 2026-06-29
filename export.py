@@ -1,42 +1,96 @@
 #!/usr/bin/env python3
-import os
-import json
 import argparse
+import json
+import os
 from datetime import datetime
 
 EXCLUDE_DIRS = {
-    ".git", "__pycache__", "build", "dist", "node_modules",
-    ".idea", ".vscode", "cmake-build-debug", "cmake-build-release",
-    "bin", "obj", "lib", ".build_tmp", "assets", "i18n", "target"
+    ".git",
+    "__pycache__",
+    "build",
+    "dist",
+    "node_modules",
+    ".idea",
+    ".vscode",
+    "cmake-build-debug",
+    "cmake-build-release",
+    "bin",
+    "obj",
+    "lib",
+    ".build_tmp",
+    "assets",
+    "i18n",
+    "target",
 }
 
 EXCLUDE_FILES = {
-    ".DS_Store", "Thumbs.db", "package-lock.json", "yarn.lock", "Icons.js"
+    ".DS_Store",
+    "Thumbs.db",
+    "package-lock.json",
+    "yarn.lock",
+    "Icons.js",
+    "Cargo.lock",
 }
 
 INCLUDE_EXTENSIONS = {
     # C/C++
-    ".cpp", ".hpp", ".c", ".h",
-    #Rust
-    ".rs", "wgsl", ".toml", ".slint", 
+    ".cpp",
+    ".hpp",
+    ".c",
+    ".h",
+    # Rust
+    ".rs",
+    ".wgsl",
+    ".toml",
+    ".slint",
     # Qt/QML
-    ".qml", ".qrc", ".ui", ".pro", ".pri", ".js",
+    ".qml",
+    ".qrc",
+    ".ui",
+    ".pro",
+    ".pri",
+    ".js",
     # Build Systems
-    ".cmake", "CMakeLists.txt", "Makefile",
+    ".cmake",
+    "CMakeLists.txt",
+    "Makefile",
     # Scripts
-    ".sh", ".bash", ".py", ".lua", ".fish",
+    ".sh",
+    ".bash",
+    ".py",
+    ".lua",
+    ".fish",
     # Config/Data
-    ".json", ".xml", ".yaml", ".yml", ".toml", ".ini", ".conf", ".clang-format", ".clang-tidy", ".gitignore",
+    ".json",
+    ".xml",
+    ".yaml",
+    ".yml",
+    ".toml",
+    ".ini",
+    ".conf",
+    ".clang-format",
+    ".clang-tidy",
+    ".gitignore",
     # Documentation
-    ".md", ".txt", ".rst",
+    ".md",
+    ".txt",
+    ".rst",
     # GLSL
-    ".glsl", ".frag", ".vert"
-    
+    ".glsl",
+    ".frag",
+    ".vert",
 }
 
 INCLUDE_FILENAMES = {
-    "CMakeLists.txt", "Makefile", "Dockerfile", "Vagrantfile", ".gitignore", "LICENSE", "README"
+    "CMakeLists.txt",
+    "Makefile",
+    "Dockerfile",
+    "Vagrantfile",
+    ".gitignore",
+    "LICENSE",
+    "README",
 }
+
 
 def is_text_file(filepath):
     """
@@ -44,13 +98,14 @@ def is_text_file(filepath):
     Reads the first 1024 bytes and checks for null bytes.
     """
     try:
-        with open(filepath, 'rb') as f:
+        with open(filepath, "rb") as f:
             chunk = f.read(1024)
-            if b'\x00' in chunk:
+            if b"\x00" in chunk:
                 return False
             return True
     except Exception:
         return False
+
 
 def generate_tree(abs_root, exclude_dirs):
     """
@@ -65,7 +120,7 @@ def generate_tree(abs_root, exclude_dirs):
         else:
             indent = "  " * level
             tree_str.append(f"{indent}├── {os.path.basename(root)}/")
-        
+
         sub_indent = "  " * (level + 1)
         for f in sorted(files):
             if f in EXCLUDE_FILES or f.startswith("."):
@@ -73,8 +128,9 @@ def generate_tree(abs_root, exclude_dirs):
             if "project_context" in f:
                 continue
             tree_str.append(f"{sub_indent}└── {f}")
-            
+
     return "\n".join(tree_str)
+
 
 def should_process(filepath, output_file):
     """
@@ -90,14 +146,15 @@ def should_process(filepath, output_file):
 
     if filename in EXCLUDE_FILES:
         return False
-    
+
     if filename in INCLUDE_FILENAMES:
         return True
-    
+
     if ext in INCLUDE_EXTENSIONS:
         return is_text_file(filepath)
-    
+
     return False
+
 
 def generate_export(output_file="project_context.json", root_dir="."):
     """
@@ -105,7 +162,7 @@ def generate_export(output_file="project_context.json", root_dir="."):
     """
     abs_root = os.path.abspath(root_dir)
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    
+
     print(f"🔍 Scanning structure...")
     tree_structure = generate_tree(abs_root, EXCLUDE_DIRS)
 
@@ -115,9 +172,9 @@ def generate_export(output_file="project_context.json", root_dir="."):
             "date": timestamp,
             "generated_by": "export.py",
             "structure": tree_structure,
-            "summary": {}
+            "summary": {},
         },
-        "files": []
+        "files": [],
     }
 
     extension_counts = {}
@@ -137,23 +194,30 @@ def generate_export(output_file="project_context.json", root_dir="."):
                     rel_path = os.path.relpath(filepath, abs_root)
                     ext = os.path.splitext(filename)[1].lower()
                     try:
-                        with open(filepath, 'r', encoding='utf-8', errors='replace') as f:
+                        with open(
+                            filepath, "r", encoding="utf-8", errors="replace"
+                        ) as f:
                             content = f.read()
 
                         extension_counts[ext] = extension_counts.get(ext, 0) + 1
-                        
-                        project_data["files"].append({
-                            "path": rel_path,
-                            "size": len(content),
-                            "extension": ext,
-                            "content": content
-                        })
+
+                        project_data["files"].append(
+                            {
+                                "path": rel_path,
+                                "size": len(content),
+                                "extension": ext,
+                                "content": content,
+                            }
+                        )
                     except Exception as e:
                         print(f"⚠️ Skipping {rel_path}: {e}")
 
-        project_data["meta"]["summary"] = {"file_counts": extension_counts, "total_files": len(project_data["files"])}
+        project_data["meta"]["summary"] = {
+            "file_counts": extension_counts,
+            "total_files": len(project_data["files"]),
+        }
 
-        with open(output_file, 'w', encoding='utf-8') as out:
+        with open(output_file, "w", encoding="utf-8") as out:
             json.dump(project_data, out, indent=2, ensure_ascii=False)
 
         print(f"✅ Export completed: {output_file}")
@@ -161,11 +225,14 @@ def generate_export(output_file="project_context.json", root_dir="."):
     except IOError as e:
         print(f"❌ Error writing output file: {e}")
 
+
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Export project source code to a single text file.")
+    parser = argparse.ArgumentParser(
+        description="Export project source code to a single text file."
+    )
     parser.add_argument("-o", "--output", help="Output filename")
     parser.add_argument("-d", "--dir", default=".", help="Root directory to scan")
-    
+
     args = parser.parse_args()
 
     output_file = args.output

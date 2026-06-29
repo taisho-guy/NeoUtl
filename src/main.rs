@@ -10,6 +10,8 @@ mod ui;
 slint::include_modules!();
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
+    objects::load_all(&objects::default_objects_dir());
+
     slint::BackendSelector::new()
         .require_wgpu_29(slint::wgpu_29::WGPUConfiguration::default())
         .select()?;
@@ -26,9 +28,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 slint::GraphicsAPI::WGPU29 { device, queue, .. },
             ) = (state, graphics_api)
             {
-                let mut engine_lock = engine_setup.lock().unwrap();
-                if engine_lock.is_none() {
-                    *engine_lock = Some(renderer::RenderEngine::new(
+                let mut lock = engine_setup.lock().unwrap();
+                if lock.is_none() {
+                    *lock = Some(renderer::RenderEngine::new(
                         device.clone(),
                         queue.clone(),
                         1920,

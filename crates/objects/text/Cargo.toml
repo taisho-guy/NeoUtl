@@ -1,0 +1,11 @@
+[package]
+name    = "neoutl-object-text"
+version = "0.0.0"
+edition = "2024"
+
+[lib]
+name       = "neoutl_object_text"
+crate-type = ["cdylib"]
+
+[dependencies]
+neoutl-object-api = { path = "../../neoutl-object-api" }
