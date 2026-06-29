@@ -110,7 +110,7 @@ fn build_pipelines_from_registry(
         .iter()
         .filter_map(|plugin| {
             let wgsl_path = format!(
-                "crates/objects/{}/src/{}.wgsl",
+                "crates/objects/{}/{}.wgsl",
                 plugin.name.to_lowercase(),
                 plugin.name.to_lowercase(),
             );
