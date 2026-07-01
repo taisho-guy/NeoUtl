@@ -35,24 +35,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup MSYS2
-        if: runner.os == 'Windows'
-        uses: msys2/setup-msys2@v2
-        with:
-          msystem: MINGW64
-          update: true
-          install: >-
-            mingw-w64-x86_64-toolchain
-            mingw-w64-x86_64-rust
-            mingw-w64-x86_64-ffmpeg
-            mingw-w64-x86_64-pkgconf
       - name: Install native dependencies
         if: runner.os != 'Windows'
         shell: bash
         run: ${{ matrix.install_cmd }}
 
       - name: Setup Rust toolchain
-        if: runner.os != 'Windows'
         uses: dtolnay/rust-toolchain@stable
 
       - name: Cache cargo registry
@@ -73,34 +61,27 @@ jobs:
           PKG_CONFIG: pkg-config
         run: cargo build --release --locked
 
-      - name: Build (Windows)
+      - name: Setup vcpkg (Windows / MSVC)
         if: runner.os == 'Windows'
-        shell: msys2 {0}
-        env:
-          # clang/bindgen経由の失敗を避けるため、コンパイラはmingw-gccを強制
-          CC: gcc
-          CXX: g++
-          PKG_CONFIG: pkg-config
+        uses: lukka/run-vcpkg@v11
+        with:
+          vcpkgDirectory: ${{ github.workspace }}/vcpkg
+          runVcpkg: |
+            ./vcpkg install ffmpeg:x64-windows --recurse --clean-after-build
+          vcpkgTriplet: x64-windows
 
-          # ffmpeg-sys-next に依存する構成を安定化
-          # まずpkg-configベースで取得させる（だめなら後段で切替）
-          FFMPEG_SYS_NEXT_USE_PKG_CONFIG: "1"
+      - name: Build (Windows / MSVC)
+        if: runner.os == 'Windows'
+        shell: bash
+        env:
+          # ffmpeg-sys-next: pkg-configを使わず vcpkg 側の導入先を探索
+          FFMPEG_SYS_NEXT_USE_PKG_CONFIG: "0"
+          VCPKG_ROOT: ${{ github.workspace }}/vcpkg
+          VCPKG_DEFAULT_TRIPLET: x64-windows
         run: |
           set -euo pipefail
-
-          # 失敗原因の切り分けのため一度クリーン
           cargo clean
-
-          # 1st attempt: pkg-config
-          if cargo build --release --locked --target x86_64-pc-windows-gnu; then
-            exit 0
-          fi
-
-          echo "First attempt failed; retry with FFMPEG_SYS_NEXT_USE_PKG_CONFIG=0"
-
-          # 2nd attempt: pkg-configを使わずに構築（環境によりヘッダ/Lib探索が変わるため）
-          export FFMPEG_SYS_NEXT_USE_PKG_CONFIG="0"
-          cargo build --release --locked --target x86_64-pc-windows-gnu
+          cargo build --release --locked --target x86_64-pc-windows-msvc
 
       - name: Collect artifact (Unix)
         if: runner.os != 'Windows'
@@ -117,7 +98,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p dist/${{ matrix.artifact_name }}
-          cp "target/x86_64-pc-windows-gnu/release/${{ matrix.binary_name }}" "dist/${{ matrix.artifact_name }}/"
+          cp "target/x86_64-pc-windows-msvc/release/${{ matrix.binary_name }}" "dist/${{ matrix.artifact_name }}/"
           cp README.md "dist/${{ matrix.artifact_name }}/"
 
       - name: Upload artifact
