@@ -18,22 +18,16 @@ jobs:
         include:
           - os: ubuntu-24.04
             os_name: Linux
-            shell: bash
-            target: ""
             artifact_name: neoutl-linux-x86_64
             binary_name: NeoUtl
             install_cmd: sudo apt-get update && sudo apt-get install -y --no-install-recommends pkg-config clang cmake ninja-build libxkbcommon-dev libwayland-dev libegl1-mesa-dev libudev-dev libasound2-dev libfontconfig1-dev libfreetype6-dev libexpat1-dev libavutil-dev libavcodec-dev libavformat-dev libavfilter-dev libavdevice-dev libswresample-dev libswscale-dev ffmpeg
           - os: macos-14
             os_name: macOS
-            shell: bash
-            target: ""
             artifact_name: neoutl-macos-aarch64
             binary_name: NeoUtl
             install_cmd: brew update && brew install ffmpeg
           - os: windows-2022
             os_name: Windows
-            shell: msys2 {0}
-            target: x86_64-pc-windows-gnu
             artifact_name: neoutl-windows-x86_64
             binary_name: NeoUtl.exe
     runs-on: ${{ matrix.os }}
@@ -61,8 +55,8 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
 
       - name: Add Rust target
-        if: matrix.target != ''
-        run: rustup target add ${{ matrix.target }}
+        if: runner.os == 'Windows'
+        run: rustup target add x86_64-pc-windows-gnu
         shell: bash
 
       - name: Cache cargo registry
@@ -76,23 +70,37 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-cargo-
 
-      - name: Build
-        shell: ${{ matrix.shell }}
+      - name: Build (Unix)
+        if: runner.os != 'Windows'
+        shell: bash
+        env:
+          PKG_CONFIG: pkg-config
+        run: cargo build --release --locked
+
+      - name: Build (Windows)
+        if: runner.os == 'Windows'
+        shell: msys2 {0}
         env:
           PKG_CONFIG: pkg-config
           CARGO_TARGET_X86_64_PC_WINDOWS_GNU_LINKER: x86_64-w64-mingw32-gcc
-        run: ${{ matrix.target != '' && format('cargo build --release --locked --target {0}', matrix.target) || 'cargo build --release --locked' }}
+        run: cargo build --release --locked --target x86_64-pc-windows-gnu
 
-      - name: Collect artifact
+      - name: Collect artifact (Unix)
+        if: runner.os != 'Windows'
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p dist/${{ matrix.artifact_name }}
-          if [ -n "${{ matrix.target }}" ]; then
-            cp "target/${{ matrix.target }}/release/${{ matrix.binary_name }}" "dist/${{ matrix.artifact_name }}/"
-          else
-            cp "target/release/${{ matrix.binary_name }}" "dist/${{ matrix.artifact_name }}/"
-          fi
+          cp "target/release/${{ matrix.binary_name }}" "dist/${{ matrix.artifact_name }}/"
+          cp README.md "dist/${{ matrix.artifact_name }}/"
+
+      - name: Collect artifact (Windows)
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist/${{ matrix.artifact_name }}
+          cp "target/x86_64-pc-windows-gnu/release/${{ matrix.binary_name }}" "dist/${{ matrix.artifact_name }}/"
           cp README.md "dist/${{ matrix.artifact_name }}/"
 
       - name: Upload artifact
