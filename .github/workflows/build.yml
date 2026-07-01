@@ -24,7 +24,7 @@ jobs:
             os_name: Linux
             artifact_name: neoutl-linux-x86_64
             binary_name: NeoUtl
-            install_cmd: sudo apt-get update && sudo apt-get install -y --no-install-recommends pkg-config clang cmake ninja-build libxkbcommon-dev libwayland-dev libegl1-mesa-dev libudev-dev libasound2-dev ffmpeg
+            install_cmd: sudo apt-get update && sudo apt-get install -y --no-install-recommends pkg-config clang cmake ninja-build libxkbcommon-dev libwayland-dev libegl1-mesa-dev libudev-dev libasound2-dev libfontconfig1-dev libfreetype6-dev libexpat1-dev ffmpeg
           - os: macos-14
             os_name: macOS
             artifact_name: neoutl-macos-aarch64
@@ -34,7 +34,7 @@ jobs:
             os_name: Windows
             artifact_name: neoutl-windows-x86_64
             binary_name: NeoUtl.exe
-            install_cmd: choco install ffmpeg -y --no-progress
+            install_cmd: echo "Using vcpkg for FFmpeg"
     runs-on: ${{ matrix.os }}
 
     steps:
@@ -43,6 +43,15 @@ jobs:
       - name: Install native dependencies
         shell: bash
         run: ${{ matrix.install_cmd }}
+
+      - name: Install FFmpeg via vcpkg
+        if: runner.os == 'Windows'
+        uses: lukka/run-vcpkg@v11
+        with:
+          vcpkgArguments: ffmpeg[core]
+          vcpkgTriplet: x64-windows
+          doNotUpdateVcpkgFromGithub: true
+          vcpkgGitCommitId: "HEAD"
 
       - name: Setup Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -60,6 +69,8 @@ jobs:
 
       - name: Build
         shell: bash
+        env:
+          VCPKG_ROOT: ${{ runner.os == 'Windows' && env.VCPKG_INSTALLATION_ROOT || '' }}
         run: cargo build --release --locked
 
       - name: Collect artifact
@@ -67,11 +78,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p dist/${{ matrix.artifact_name }}
-          if [ "${{ runner.os }}" = "Windows" ]; then
-            cp "target/release/${{ matrix.binary_name }}" "dist/${{ matrix.artifact_name }}/"
-          else
-            cp "target/release/${{ matrix.binary_name }}" "dist/${{ matrix.artifact_name }}/"
-          fi
+          cp "target/release/${{ matrix.binary_name }}" "dist/${{ matrix.artifact_name }}/"
           cp README.md "dist/${{ matrix.artifact_name }}/"
 
       - name: Upload artifact
