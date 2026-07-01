@@ -77,8 +77,30 @@ jobs:
         if: runner.os == 'Windows'
         shell: msys2 {0}
         env:
+          # clang/bindgen経由の失敗を避けるため、コンパイラはmingw-gccを強制
+          CC: gcc
+          CXX: g++
           PKG_CONFIG: pkg-config
-        run: cargo build --release --locked --target x86_64-pc-windows-gnu
+
+          # ffmpeg-sys-next に依存する構成を安定化
+          # まずpkg-configベースで取得させる（だめなら後段で切替）
+          FFMPEG_SYS_NEXT_USE_PKG_CONFIG: "1"
+        run: |
+          set -euo pipefail
+
+          # 失敗原因の切り分けのため一度クリーン
+          cargo clean
+
+          # 1st attempt: pkg-config
+          if cargo build --release --locked --target x86_64-pc-windows-gnu; then
+            exit 0
+          fi
+
+          echo "First attempt failed; retry with FFMPEG_SYS_NEXT_USE_PKG_CONFIG=0"
+
+          # 2nd attempt: pkg-configを使わずに構築（環境によりヘッダ/Lib探索が変わるため）
+          export FFMPEG_SYS_NEXT_USE_PKG_CONFIG="0"
+          cargo build --release --locked --target x86_64-pc-windows-gnu
 
       - name: Collect artifact (Unix)
         if: runner.os != 'Windows'
