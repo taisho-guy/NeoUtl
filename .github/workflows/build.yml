@@ -48,11 +48,13 @@ jobs:
           vcpkgGitCommitId: 5b1214315250939257ef5d62ecdcbca18cf4fb1c
           vcpkgGitURL: https://github.com/microsoft/vcpkg.git
           runVcpkgInstall: false
+          doNotCache: true
 
       - name: Install FFmpeg packages with vcpkg
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
+          $env:VCPKG_BINARY_SOURCES = "clear"
           & "${{ github.workspace }}/vcpkg/vcpkg.exe" install ffmpeg:x64-windows
 
       - name: Setup Rust toolchain
