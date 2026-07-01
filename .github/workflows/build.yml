@@ -1,0 +1,114 @@
+name: Build
+
+on:
+  push:
+    branches:
+      - main
+      - dev
+      - aviqtl
+    tags:
+      - "*"
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: ${{ matrix.os_name }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-24.04
+            os_name: Linux
+            artifact_name: neoutl-linux-x86_64
+            binary_name: NeoUtl
+            install_cmd: sudo apt-get update && sudo apt-get install -y --no-install-recommends pkg-config clang cmake ninja-build libxkbcommon-dev libwayland-dev libegl1-mesa-dev libudev-dev libasound2-dev ffmpeg
+          - os: macos-14
+            os_name: macOS
+            artifact_name: neoutl-macos-aarch64
+            binary_name: NeoUtl
+            install_cmd: brew update && brew install ffmpeg
+          - os: windows-2022
+            os_name: Windows
+            artifact_name: neoutl-windows-x86_64
+            binary_name: NeoUtl.exe
+            install_cmd: choco install ffmpeg -y --no-progress
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install native dependencies
+        shell: bash
+        run: ${{ matrix.install_cmd }}
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+
+      - name: Build
+        shell: bash
+        run: cargo build --release --locked
+
+      - name: Collect artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist/${{ matrix.artifact_name }}
+          if [ "${{ runner.os }}" = "Windows" ]; then
+            cp "target/release/${{ matrix.binary_name }}" "dist/${{ matrix.artifact_name }}/"
+          else
+            cp "target/release/${{ matrix.binary_name }}" "dist/${{ matrix.artifact_name }}/"
+          fi
+          cp README.md "dist/${{ matrix.artifact_name }}/"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact_name }}
+          path: dist/${{ matrix.artifact_name }}
+          if-no-files-found: error
+          retention-days: 7
+
+  release:
+    name: Codeberg Release
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+
+      - name: Create Codeberg Release
+        uses: akkuman/gitea-release-action@v1
+        env:
+          GITEA_TOKEN: ${{ secrets.CODEBERG_TOKEN }}
+        with:
+          server_url: https://codeberg.org
+          token: ${{ secrets.CODEBERG_TOKEN }}
+          repository: taisho-guy/NeoUtl
+          draft: false
+          prerelease: ${{ contains(github.ref_name, 'Unstable') }}
+          tag_name: ${{ github.ref_name }}
+          name: ${{ github.ref_name }}
+          body: ""
+          files: |
+            dist/neoutl-linux-x86_64/**
+            dist/neoutl-macos-aarch64/**
+            dist/neoutl-windows-x86_64/**
