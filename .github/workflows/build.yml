@@ -43,21 +43,17 @@ jobs:
           update: true
           install: >-
             mingw-w64-x86_64-toolchain
+            mingw-w64-x86_64-rust
             mingw-w64-x86_64-ffmpeg
             mingw-w64-x86_64-pkgconf
-
       - name: Install native dependencies
         if: runner.os != 'Windows'
         shell: bash
         run: ${{ matrix.install_cmd }}
 
       - name: Setup Rust toolchain
+        if: runner.os != 'Windows'
         uses: dtolnay/rust-toolchain@stable
-
-      - name: Add Rust target
-        if: runner.os == 'Windows'
-        run: rustup target add x86_64-pc-windows-gnu
-        shell: bash
 
       - name: Cache cargo registry
         uses: actions/cache@v4
@@ -82,7 +78,6 @@ jobs:
         shell: msys2 {0}
         env:
           PKG_CONFIG: pkg-config
-          CARGO_TARGET_X86_64_PC_WINDOWS_GNU_LINKER: x86_64-w64-mingw32-gcc
         run: cargo build --release --locked --target x86_64-pc-windows-gnu
 
       - name: Collect artifact (Unix)
