@@ -18,47 +18,52 @@ jobs:
         include:
           - os: ubuntu-24.04
             os_name: Linux
+            shell: bash
+            target: ""
             artifact_name: neoutl-linux-x86_64
             binary_name: NeoUtl
             install_cmd: sudo apt-get update && sudo apt-get install -y --no-install-recommends pkg-config clang cmake ninja-build libxkbcommon-dev libwayland-dev libegl1-mesa-dev libudev-dev libasound2-dev libfontconfig1-dev libfreetype6-dev libexpat1-dev libavutil-dev libavcodec-dev libavformat-dev libavfilter-dev libavdevice-dev libswresample-dev libswscale-dev ffmpeg
           - os: macos-14
             os_name: macOS
+            shell: bash
+            target: ""
             artifact_name: neoutl-macos-aarch64
             binary_name: NeoUtl
             install_cmd: brew update && brew install ffmpeg
           - os: windows-2022
             os_name: Windows
+            shell: msys2 {0}
+            target: x86_64-pc-windows-gnu
             artifact_name: neoutl-windows-x86_64
             binary_name: NeoUtl.exe
-            install_cmd: choco install pkgconfiglite -y --no-progress
     runs-on: ${{ matrix.os }}
 
     steps:
       - uses: actions/checkout@v4
 
+      - name: Setup MSYS2
+        if: runner.os == 'Windows'
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          update: true
+          install: >-
+            mingw-w64-x86_64-toolchain
+            mingw-w64-x86_64-ffmpeg
+            mingw-w64-x86_64-pkgconf
+
       - name: Install native dependencies
+        if: runner.os != 'Windows'
         shell: bash
         run: ${{ matrix.install_cmd }}
 
-      - name: Install FFmpeg via vcpkg
-        if: runner.os == 'Windows'
-        uses: lukka/run-vcpkg@v11
-        with:
-          vcpkgDirectory: ${{ github.workspace }}/vcpkg
-          vcpkgGitCommitId: 5b1214315250939257ef5d62ecdcbca18cf4fb1c
-          vcpkgGitURL: https://github.com/microsoft/vcpkg.git
-          runVcpkgInstall: false
-          doNotCache: true
-
-      - name: Install FFmpeg packages with vcpkg
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          $env:VCPKG_BINARY_SOURCES = "clear"
-          & "${{ github.workspace }}/vcpkg/vcpkg.exe" install ffmpeg:x64-windows
-
       - name: Setup Rust toolchain
         uses: dtolnay/rust-toolchain@stable
+
+      - name: Add Rust target
+        if: matrix.target != ''
+        run: rustup target add ${{ matrix.target }}
+        shell: bash
 
       - name: Cache cargo registry
         uses: actions/cache@v4
@@ -72,18 +77,22 @@ jobs:
             ${{ runner.os }}-cargo-
 
       - name: Build
-        shell: bash
+        shell: ${{ matrix.shell }}
         env:
           PKG_CONFIG: pkg-config
-          PKG_CONFIG_PATH: ${{ runner.os == 'Windows' && format('{0}/vcpkg/installed/x64-windows/lib/pkgconfig', github.workspace) || '' }}
-        run: cargo build --release --locked
+          CARGO_TARGET_X86_64_PC_WINDOWS_GNU_LINKER: x86_64-w64-mingw32-gcc
+        run: ${{ matrix.target != '' && format('cargo build --release --locked --target {0}', matrix.target) || 'cargo build --release --locked' }}
 
       - name: Collect artifact
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p dist/${{ matrix.artifact_name }}
-          cp "target/release/${{ matrix.binary_name }}" "dist/${{ matrix.artifact_name }}/"
+          if [ -n "${{ matrix.target }}" ]; then
+            cp "target/${{ matrix.target }}/release/${{ matrix.binary_name }}" "dist/${{ matrix.artifact_name }}/"
+          else
+            cp "target/release/${{ matrix.binary_name }}" "dist/${{ matrix.artifact_name }}/"
+          fi
           cp README.md "dist/${{ matrix.artifact_name }}/"
 
       - name: Upload artifact
