@@ -20,7 +20,7 @@ jobs:
             os_name: Linux
             artifact_name: neoutl-linux-x86_64
             binary_name: NeoUtl
-            install_cmd: sudo apt-get update && sudo apt-get install -y --no-install-recommends pkg-config clang cmake ninja-build libxkbcommon-dev libwayland-dev libegl1-mesa-dev libudev-dev libasound2-dev libfontconfig1-dev libfreetype6-dev libexpat1-dev ffmpeg
+            install_cmd: sudo apt-get update && sudo apt-get install -y --no-install-recommends pkg-config clang cmake ninja-build libxkbcommon-dev libwayland-dev libegl1-mesa-dev libudev-dev libasound2-dev libfontconfig1-dev libfreetype6-dev libexpat1-dev libavutil-dev libavcodec-dev libavformat-dev libavfilter-dev libavdevice-dev libswresample-dev libswscale-dev ffmpeg
           - os: macos-14
             os_name: macOS
             artifact_name: neoutl-macos-aarch64
@@ -30,7 +30,7 @@ jobs:
             os_name: Windows
             artifact_name: neoutl-windows-x86_64
             binary_name: NeoUtl.exe
-            install_cmd: echo "Using vcpkg for FFmpeg"
+            install_cmd: choco install pkgconfiglite -y --no-progress
     runs-on: ${{ matrix.os }}
 
     steps:
@@ -44,10 +44,16 @@ jobs:
         if: runner.os == 'Windows'
         uses: lukka/run-vcpkg@v11
         with:
-          vcpkgArguments: ffmpeg[core]
-          vcpkgTriplet: x64-windows
-          doNotUpdateVcpkgFromGithub: true
-          vcpkgGitCommitId: "HEAD"
+          vcpkgDirectory: ${{ github.workspace }}/vcpkg
+          vcpkgGitCommitId: 5b1214315250939257ef5d62ecdcbca18cf4fb1c
+          vcpkgGitURL: https://github.com/microsoft/vcpkg.git
+          runVcpkgInstall: false
+
+      - name: Install FFmpeg packages with vcpkg
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          & "${{ github.workspace }}/vcpkg/vcpkg.exe" install ffmpeg:x64-windows
 
       - name: Setup Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -66,7 +72,8 @@ jobs:
       - name: Build
         shell: bash
         env:
-          VCPKG_ROOT: ${{ runner.os == 'Windows' && env.VCPKG_INSTALLATION_ROOT || '' }}
+          PKG_CONFIG: pkg-config
+          PKG_CONFIG_PATH: ${{ runner.os == 'Windows' && format('{0}/vcpkg/installed/x64-windows/lib/pkgconfig', github.workspace) || '' }}
         run: cargo build --release --locked
 
       - name: Collect artifact
