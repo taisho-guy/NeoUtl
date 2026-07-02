@@ -1,4 +1,4 @@
-<h1 style="text-align:center;">NeoUtl</h1>
+<h1 align="center">NeoUtl</h1>
 <p align="center">
 <a href="https://neoutl.taisho-guy.org">NeoUtlのお部屋</a> /
 <a href="https://codeberg.org/taisho-guy/NeoUtl">Codebergリポジトリ</a> /
@@ -7,7 +7,7 @@
 <a href="https://codeberg.org/taisho-guy/NeoUtl/wiki/Home">Wiki</a> /
 <a href="https://zenn.dev/taisho_guy/articles/2fa8e91a6c0a07">Zenn</a>
 </p>
-<p style="text-align:center;">
+<p align="center">
     Video editing software aiming to replace and surpass AviUtl. Compatible with Windows, macOS, and Linux.
 </p>
 
