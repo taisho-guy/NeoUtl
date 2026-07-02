@@ -1,6 +1,15 @@
-# NeoUtl
-
-A free, open-source AviUtl clone. Compatible with Windows, macOS, and Linux. Supports VST, LADSPA, LV2, etc. Video editing software aiming to replace and surpass AviUtl.
+<h1 style="text-align:center;">NeoUtl</h1>
+<p align="center">
+<a href="https://neoutl.taisho-guy.org">NeoUtlのお部屋</a> /
+<a href="https://codeberg.org/taisho-guy/NeoUtl">Codebergリポジトリ</a> /
+<a href="https://github.com/taisho-guy/NeoUtl">GitHubミラー</a> /
+<a href="https://codeberg.org/taisho-guy/NeoUtl/releases">リリース</a> /
+<a href="https://codeberg.org/taisho-guy/NeoUtl/wiki/Home">Wiki</a> /
+<a href="https://zenn.dev/taisho_guy/articles/2fa8e91a6c0a07">Zenn</a>
+</p>
+<p style="text-align:center;">
+    Video editing software aiming to replace and surpass AviUtl. Compatible with Windows, macOS, and Linux.
+</p>
 
 ## 目的
 
@@ -69,29 +78,6 @@ NeoUtlはRust言語で実装されています。
 |ECS|[Shipyard](https://github.com/leudz/shipyard)|
 |非同期処理|[tokio](https://tokio.rs/)|
 |動画デコード・エンコード|[ffmpeg-next](https://github.com/zmwangx/rust-ffmpeg)|
-
-
-## リンク
-
-### [NeoUtlのお部屋](https://neoutl.taisho-guy.org)
-
-公式サイト。エンドユーザー向けの情報を提供しています。
-
-### [Codebergリポジトリ](https://codeberg.org/taisho-guy/NeoUtl)
-
-公式リポジトリ。ソースコードや開発者向けの情報を提供しています。
-
-### [GitHubミラー](https://github.com/taisho-guy/NeoUtl)
-
-Codebergと同様のソースコードをホスト。
-
-### [リリース](https://codeberg.org/taisho-guy/NeoUtl/releases)
-
-Linux / macOS / WIndows向けの実行可能ファイルを提供しています。
-
-### [Wiki](https://codeberg.org/taisho-guy/NeoUtl/wiki/Home)
-
-公式Wiki。各項目における詳細な情報を提供しています。
 
 ## 派生
 
