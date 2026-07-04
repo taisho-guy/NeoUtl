@@ -85,25 +85,56 @@ jobs:
           cargo clean
           cargo build --release --locked --target x86_64-pc-windows-msvc
 
-      - name: Collect artifact (Unix)
-        if: runner.os != 'Windows'
-        shell: bash
+      - name: Collect artifact (Linux)
+        if: runner.os == 'Linux'
         run: |
-          mkdir -p dist/${{ matrix.artifact_name }}
-          cp "target/release/${{ matrix.binary_name }}" "dist/${{ matrix.artifact_name }}/"
+          mkdir -p dist
+          zip -r dist/${{ matrix.artifact_name }}.zip \
+            target/release/${{ matrix.binary_name }} \
+            target/release/objects
+
+      - name: Create .app bundle (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          mkdir -p NeoUtl.app/Contents/MacOS
+          mkdir -p NeoUtl.app/Contents/Resources
+          cp target/release/${{ matrix.binary_name }} NeoUtl.app/Contents/MacOS/
+          cat > NeoUtl.app/Contents/Info.plist <<EOF
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+           "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>CFBundleName</key>
+            <string>NeoUtl</string>
+            <key>CFBundleExecutable</key>
+            <string>NeoUtl</string>
+            <key>CFBundleIdentifier</key>
+            <string>org.codeberg.taisho-guy.NeoUtl</string>
+            <key>CFBundleVersion</key>
+            <string>${{ github.ref_name }}</string>
+            <key>CFBundlePackageType</key>
+            <string>APPL</string>
+          </dict>
+          </plist>
+          EOF
+          zip -r dist/${{ matrix.artifact_name }}.zip NeoUtl.app
 
       - name: Collect artifact (Windows)
         if: runner.os == 'Windows'
-        shell: bash
         run: |
-          mkdir -p dist/${{ matrix.artifact_name }}
-          cp "target/x86_64-pc-windows-msvc/release/${{ matrix.binary_name }}" "dist/${{ matrix.artifact_name }}/"
+          mkdir -p dist
+          powershell Compress-Archive -Path `
+            "target/x86_64-pc-windows-msvc/release/${{ matrix.binary_name }}", `
+            "target/x86_64-pc-windows-msvc/release/objects", `
+            "${{ github.workspace }}/vcpkg/installed/x64-windows/bin/*" `
+            -DestinationPath "dist/${{ matrix.artifact_name }}.zip"
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact_name }}
-          path: dist/${{ matrix.artifact_name }}
+          path: dist/${{ matrix.artifact_name }}.zip
           if-no-files-found: error
           retention-days: 7
 
@@ -134,6 +165,6 @@ jobs:
           name: ${{ github.ref_name }}
           body: ""
           files: |
-            dist/neoutl-linux-x86_64/**
-            dist/neoutl-macos-aarch64/**
-            dist/neoutl-windows-x86_64/**
+            dist/neoutl-linux-x86_64.zip
+            dist/neoutl-macos-aarch64.zip
+            dist/neoutl-windows-x86_64.zip
