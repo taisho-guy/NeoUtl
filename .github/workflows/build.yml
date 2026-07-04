@@ -50,7 +50,15 @@ jobs:
           PKG_CONFIG: pkg-config
         run: cargo build --release --locked
 
-      - name: Install ffmpeg and runtime (Windows)
+      - name: Setup vcpkg (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          git clone https://github.com/microsoft/vcpkg.git
+          .\vcpkg\bootstrap-vcpkg.bat
+          .\vcpkg\vcpkg.exe install ffmpeg:x64-windows
+          echo "VCPKG_ROOT=$PWD/vcpkg" >> $env:GITHUB_ENV
+
+      - name: Install ffmpeg binaries (Windows)
         if: runner.os == 'Windows'
         run: |
           choco install ffmpeg -y
@@ -68,9 +76,9 @@ jobs:
         if: runner.os == 'Windows'
         shell: bash
         env:
-          FFMPEG_SYS_NEXT_USE_PKG_CONFIG: "0"
-          FFMPEG_SYS_NEXT_NO_VCPKG: "1"
-          FFMPEG_SYS_NEXT_DISABLE_PKG_CONFIG: "1"
+          # vcpkg を使うので pkg-config 無効化は不要
+          FFMPEG_SYS_NEXT_USE_PKG_CONFIG: "1"
+          FFMPEG_SYS_NEXT_NO_VCPKG: "0"
         run: |
           set -euo pipefail
           cargo clean
