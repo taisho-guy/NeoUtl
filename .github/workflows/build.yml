@@ -89,7 +89,7 @@ jobs:
           cat > NeoUtl.app/Contents/Info.plist <<EOF
           <?xml version="1.0" encoding="UTF-8"?>
           <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
-          "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+           "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
           <plist version="1.0">
           <dict>
             <key>CFBundleName</key>
@@ -151,6 +151,6 @@ jobs:
           name: ${{ github.ref_name }}
           body: ""
           files: |
-            dist/neoutl-linux-x86_64.zip
-            dist/neoutl-macos-aarch64.zip
-            dist/neoutl-windows-x86_64.zip
+            dist/neoutl-linux-x86_64/neoutl-linux-x86_64.zip
+            dist/neoutl-macos-aarch64/neoutl-macos-aarch64.zip
+            dist/neoutl-windows-x86_64/neoutl-windows-x86_64.zip
