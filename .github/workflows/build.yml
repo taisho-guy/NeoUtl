@@ -80,6 +80,7 @@ jobs:
           runVcpkgInstall: |
             ffmpeg:x64-windows
           vcpkgGitCommitId: ${{ steps.get-vcpkg-commit.outputs.commit }}
+          doNotUpdateVcpkg: true
 
       - name: Build (Windows / MSVC)
         if: runner.os == 'Windows'
