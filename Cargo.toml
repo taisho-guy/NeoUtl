@@ -12,13 +12,13 @@ resolver = "2"
 neoutl-object-api = { path = "crates/neoutl-object-api" }
 
 [package]
-name    = "NeoUtl"
+name = "NeoUtl"
 version = "0.0.0"
 edition = "2024"
 
 [dependencies]
 neoutl-object-api.workspace = true
-libloading  = "0.8"
+libloading = "0.9"
 slint = { version = "1.17", default-features = false, features = [
     "std",
     "backend-winit",
@@ -26,19 +26,19 @@ slint = { version = "1.17", default-features = false, features = [
     "unstable-wgpu-29",
     "compat-1-2",
 ] }
-wgpu        = "29"
-wgpu_text   = "29"
+wgpu = "29"
+wgpu_text = "29"
 ffmpeg-next = "8"
-tokio       = { version = "1.52", features = ["rt-multi-thread", "sync"] }
-bytemuck    = { version = "1.25", features = ["derive"] }
-shipyard = "0.11.4"
+tokio = { version = "1.52", features = ["rt-multi-thread", "sync"] }
+bytemuck = { version = "1.25", features = ["derive"] }
+shipyard = "0.11"
 
 [build-dependencies]
 slint-build = "1.17"
 
 [profile.release]
-opt-level     = 3
-lto           = "fat"
+opt-level = 3
+lto = "fat"
 codegen-units = 1
-panic         = "abort"
-strip         = true
+panic = "abort"
+strip = true
