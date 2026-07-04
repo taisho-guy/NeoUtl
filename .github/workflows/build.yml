@@ -58,25 +58,10 @@ jobs:
           .\vcpkg\vcpkg.exe install ffmpeg:x64-windows
           echo "VCPKG_ROOT=$PWD/vcpkg" >> $env:GITHUB_ENV
 
-      - name: Install ffmpeg binaries (Windows)
-        if: runner.os == 'Windows'
-        run: |
-          choco install ffmpeg -y
-          choco install vcredist140 -y
-          mkdir -p dist/ffmpeg
-          copy C:\\ProgramData\\chocolatey\\bin\\ffmpeg.exe dist\\ffmpeg\\
-          copy C:\\ProgramData\\chocolatey\\lib\\ffmpeg\\tools\\ffmpeg\\bin\\*.dll dist\\ffmpeg\\
-          # VC++ ランタイム DLL を System32 からコピー
-          copy C:\\Windows\\System32\\vcruntime140.dll dist\\ffmpeg\\ || echo "vcruntime140.dll not found"
-          copy C:\\Windows\\System32\\vcruntime140_1.dll dist\\ffmpeg\\ || echo "vcruntime140_1.dll not found"
-          copy C:\\Windows\\System32\\msvcp140.dll dist\\ffmpeg\\ || echo "msvcp140.dll not found"
-          copy C:\\Windows\\System32\\concrt140.dll dist\\ffmpeg\\ || echo "concrt140.dll not found"
-
       - name: Build (Windows / MSVC)
         if: runner.os == 'Windows'
         shell: bash
         env:
-          # vcpkg を使うので pkg-config 無効化は不要
           FFMPEG_SYS_NEXT_USE_PKG_CONFIG: "1"
           FFMPEG_SYS_NEXT_NO_VCPKG: "0"
         run: |
@@ -104,7 +89,7 @@ jobs:
           cat > NeoUtl.app/Contents/Info.plist <<EOF
           <?xml version="1.0" encoding="UTF-8"?>
           <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
-           "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
           <plist version="1.0">
           <dict>
             <key>CFBundleName</key>
@@ -128,8 +113,7 @@ jobs:
           mkdir -p dist
           powershell Compress-Archive -Path `
             "target/x86_64-pc-windows-msvc/release/${{ matrix.binary_name }}", `
-            "target/x86_64-pc-windows-msvc/release/objects", `
-            "dist/ffmpeg/*" `
+            "target/x86_64-pc-windows-msvc/release/objects" `
             -DestinationPath "dist/${{ matrix.artifact_name }}.zip"
 
       - name: Upload artifact
