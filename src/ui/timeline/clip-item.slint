@@ -1,0 +1,140 @@
+// src/ui/timeline/clip-item.slint
+import { TimelineObject } from "../types.slint";
+
+export component ClipItem inherits Rectangle {
+    in property <TimelineObject> obj;
+    in property <float>          scale: 1.0;
+    in property <length>         layer-height: 24px;
+    in property <bool>           locked: false;
+
+    callback clicked(int);
+    callback moved(int /* id */, int /* new-start-frame */, int /* new-layer */);
+    callback resized(int /* id */, int /* new-start-frame */, int /* new-end-frame */);
+    callback context-requested(int /* id */, length /* x */, length /* y */);
+
+    property <color> base-color:
+        obj.kind == 0 ? #2a4db8 :
+        obj.kind == 1 ? #256e3c :
+                        #6a2db8;
+
+    property <bool>   dragging: false;
+    property <length> drag-anchor-x: 0px;
+    property <int>    drag-start-frame: 0;
+    property <int>    drag-start-layer: 0;
+    property <int>    preview-start: obj.start-frame;
+    property <int>    preview-layer: obj.layer;
+    property <int>    preview-end: obj.end-frame;
+
+    x: root.preview-start * root.scale * 1px;
+    y: root.preview-layer * root.layer-height + root.layer-height * 0.1;
+    width: max(4px, (root.preview-end - root.preview-start) * root.scale * 1px);
+    height: root.layer-height * 0.8;
+
+    background: obj.selected ? base-color.brighter(40%) : base-color;
+    border-width: obj.selected ? 2px : 1px;
+    border-color: obj.selected ? #ffffff : base-color.darker(30%);
+    border-radius: 3px;
+
+    Text {
+        text: obj.label;
+        color: white;
+        font-size: 10px;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+        overflow: elide;
+        width: parent.width - 12px;
+        x: 6px;
+    }
+
+    body-touch := TouchArea {
+        mouse-cursor: root.locked ? MouseCursor.not-allowed : (root.dragging ? MouseCursor.grabbing : MouseCursor.grab);
+
+        pointer-event(e) => {
+            if (root.locked) { return; }
+            if (e.kind == PointerEventKind.down && e.button == PointerEventButton.left) {
+                root.clicked(obj.id);
+                root.dragging = true;
+                root.drag-anchor-x = self.pressed-x;
+                root.drag-start-frame = obj.start-frame;
+                root.drag-start-layer = obj.layer;
+            }
+            if (e.kind == PointerEventKind.down && e.button == PointerEventButton.right) {
+                root.clicked(obj.id);
+                root.context-requested(obj.id, self.absolute-position.x + self.pressed-x, self.absolute-position.y + self.pressed-y);
+            }
+            if (e.kind == PointerEventKind.up || e.kind == PointerEventKind.cancel) {
+                if (root.dragging) {
+                    root.dragging = false;
+                    root.moved(obj.id, root.preview-start, root.preview-layer);
+                }
+            }
+        }
+
+        moved() => {
+            if (!root.dragging) { return; }
+            root.preview-start = max(0, root.drag-start-frame + floor((self.mouse-x - root.drag-anchor-x) / root.scale / 1px));
+            root.preview-layer = max(0, root.drag-start-layer + floor((self.mouse-y - self.pressed-y) / root.layer-height));
+        }
+    }
+
+    left-handle := TouchArea {
+        width: 6px;
+        height: parent.height;
+        mouse-cursor: root.locked ? MouseCursor.not-allowed : MouseCursor.col-resize;
+        property <bool> resizing: false;
+        property <int>  start-frame: 0;
+        property <int>  end-frame: 0;
+        property <length> anchor-x: 0px;
+
+        pointer-event(e) => {
+            if (root.locked) { return; }
+            if (e.kind == PointerEventKind.down) {
+                self.resizing = true;
+                self.anchor-x = self.pressed-x;
+                self.start-frame = obj.start-frame;
+                self.end-frame = obj.end-frame;
+            }
+            if (e.kind == PointerEventKind.up || e.kind == PointerEventKind.cancel) {
+                if (self.resizing) {
+                    self.resizing = false;
+                    root.resized(obj.id, root.preview-start, root.preview-end);
+                }
+            }
+        }
+        moved() => {
+            if (!self.resizing) { return; }
+            root.preview-start = min(self.end-frame - 1, max(0, self.start-frame + floor((self.mouse-x - self.anchor-x) / root.scale / 1px)));
+        }
+    }
+
+    right-handle := TouchArea {
+        x: parent.width - 6px;
+        width: 6px;
+        height: parent.height;
+        mouse-cursor: root.locked ? MouseCursor.not-allowed : MouseCursor.col-resize;
+        property <bool> resizing: false;
+        property <int>  start-frame: 0;
+        property <int>  end-frame: 0;
+        property <length> anchor-x: 0px;
+
+        pointer-event(e) => {
+            if (root.locked) { return; }
+            if (e.kind == PointerEventKind.down) {
+                self.resizing = true;
+                self.anchor-x = self.pressed-x;
+                self.start-frame = obj.start-frame;
+                self.end-frame = obj.end-frame;
+            }
+            if (e.kind == PointerEventKind.up || e.kind == PointerEventKind.cancel) {
+                if (self.resizing) {
+                    self.resizing = false;
+                    root.resized(obj.id, root.preview-start, root.preview-end);
+                }
+            }
+        }
+        moved() => {
+            if (!self.resizing) { return; }
+            root.preview-end = max(self.start-frame + 1, self.end-frame + floor((self.mouse-x - self.anchor-x) / root.scale / 1px));
+        }
+    }
+}

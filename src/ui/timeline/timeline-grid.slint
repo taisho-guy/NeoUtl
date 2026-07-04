@@ -1,0 +1,29 @@
+// src/ui/timeline/timeline-grid.slint
+export component TimelineGrid inherits Rectangle {
+    in property <float>  scale: 1.0;
+    in property <int>    frame-interval: 30;
+    in property <int>    layer-count: 128;
+    in property <length> layer-height: 24px;
+
+    background: #17171b;
+
+    for i in root.layer-count : Rectangle {
+        y: i * root.layer-height;
+        width: parent.width;
+        height: root.layer-height;
+        background: mod(i, 2) == 0 ? #ffffff05 : transparent;
+        border-width: 1px;
+        border-color: #ffffff0d;
+    }
+
+    property <int> line-count: root.width > 0px && root.scale > 0
+        ? ceil(root.width / (root.scale * 1px) / max(1, root.frame-interval)) + 1
+        : 0;
+
+    for i in root.line-count : Rectangle {
+        x: i * root.frame-interval * root.scale * 1px;
+        width: 1px;
+        height: parent.height;
+        background: #ffffff14;
+    }
+}

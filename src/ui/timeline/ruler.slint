@@ -1,0 +1,96 @@
+// src/ui/timeline/ruler.slint
+export component Ruler inherits Rectangle {
+    in property <float>  scale: 1.0;
+    in property <length> scroll-x: 0px;
+    in property <int>    fps: 30;
+    in property <int>    current-frame: 0;
+    in property <int>    total-frames: 300;
+    in property <length> header-width: 60px;
+
+    callback scrub(int);
+    callback zoom(float);
+
+    height: 32px;
+    background: #1a1a20;
+    border-width: 1px;
+    border-color: #2a2a32;
+
+    function frame-interval() -> int {
+        return root.scale > 3.0 ? 10 : root.scale > 1.0 ? 30 : root.scale > 0.3 ? 60 : 300;
+    }
+    function px-to-frame(px: length) -> int {
+        return max(0, floor((px + root.scroll-x) / root.scale / 1px));
+    }
+
+    HorizontalLayout {
+        Rectangle {
+            width: root.header-width;
+            background: #202028;
+            border-width: 1px;
+            border-color: #2a2a32;
+            Text {
+                text: round(root.scale * 100) + "%";
+                color: #8899aa;
+                font-size: 10px;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+            }
+        }
+
+        body := Rectangle {
+            clip: true;
+            background: #1a1a20;
+
+            property <int> interval: root.frame-interval();
+            property <int> start-tick: floor(root.scroll-x / root.scale / 1px / body.interval) * body.interval;
+            property <int> tick-count: ceil(body.width / root.scale / 1px / body.interval) + 2;
+
+            for i in body.tick-count : Rectangle {
+                property <int>    frame: body.start-tick + i * body.interval;
+                property <length> tick-x: frame * root.scale * 1px - root.scroll-x;
+                property <bool>   is-second: mod(frame, max(1, root.fps)) == 0;
+
+                x: tick-x;
+                width: 1px;
+                height: is-second ? parent.height : parent.height * 0.5;
+                y: parent.height - self.height;
+                background: is-second ? #8899aa : #45454e;
+
+                Text {
+                    x: 3px;
+                    y: -parent.y + 2px;
+                    text: is-second ? round(frame / max(1, root.fps)) + "s" : frame;
+                    color: #6a6a76;
+                    font-size: 9px;
+                }
+            }
+
+            playhead := Rectangle {
+                x: root.current-frame * root.scale * 1px - root.scroll-x;
+                width: 2px;
+                height: parent.height;
+                background: #ff4500;
+            }
+
+            TouchArea {
+                pointer-event(e) => {
+                    if (e.kind == PointerEventKind.down && e.button == PointerEventButton.left) {
+                        root.scrub(root.px-to-frame(self.pressed-x));
+                    }
+                }
+                moved() => {
+                    if (self.pressed) {
+                        root.scrub(root.px-to-frame(self.mouse-x));
+                    }
+                }
+                scroll-event(e) => {
+                    if (e.delta-y != 0) {
+                        root.zoom(e.delta-y > 0 ? root.scale * 1.1 : root.scale * 0.9);
+                        return accept;
+                    }
+                    reject
+                }
+            }
+        }
+    }
+}

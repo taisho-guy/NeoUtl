@@ -1,0 +1,68 @@
+// src/ui/timeline/layer-header.slint
+import { LayerState } from "../types.slint";
+
+export component LayerHeader inherits Rectangle {
+    in property <length>          header-width: 60px;
+    in property <length>          layer-height: 24px;
+    in property <int>             layer-count: 128;
+    in property <length>          scroll-y: 0px;
+    in property <int>             selected-layer: 0;
+    in property <[LayerState]>    layer-states: [];
+
+    callback toggle-visible(int);
+    callback toggle-locked(int);
+    callback select-layer(int);
+
+    width: header-width;
+    background: #202028;
+    clip: true;
+
+    for i in root.layer-count : Rectangle {
+        property <LayerState> state: root.layer-states[i];
+        property <bool>       selected: i == root.selected-layer;
+
+        y: i * root.layer-height - root.scroll-y;
+        width: root.header-width;
+        height: root.layer-height;
+        background: !state.visible ? #16161a
+                  : state.locked   ? #4a2a2a
+                  : selected       ? #35354a
+                  : mod(i, 2) == 0 ? #24242c : #202028;
+        border-width: selected ? 2px : 1px;
+        border-color: selected ? #6a8fff : #2a2a32;
+
+        header-touch := TouchArea {
+            pointer-event(e) => {
+                if (e.kind != PointerEventKind.down) { return; }
+                root.select-layer(i);
+                if (e.button == PointerEventButton.left) {
+                    root.toggle-visible(i);
+                } else if (e.button == PointerEventButton.right) {
+                    root.toggle-locked(i);
+                }
+            }
+        }
+
+        Text {
+            text: i + 1;
+            color: !state.visible ? #555560 : state.locked ? #ffb0b0 : selected ? white : #ccccd6;
+            font-size: 11px;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+        }
+
+        if (state.locked) : Text {
+            x: parent.width - 12px;
+            y: 2px;
+            text: "🔒";
+            font-size: 8px;
+        }
+        if (!state.visible) : Text {
+            x: parent.width - 12px;
+            y: parent.height - 12px;
+            text: "—";
+            color: #555560;
+            font-size: 8px;
+        }
+    }
+}
