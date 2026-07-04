@@ -61,6 +61,17 @@ jobs:
           PKG_CONFIG: pkg-config
         run: cargo build --release --locked
 
+      - name: Clone vcpkg latest (Windows)
+        if: runner.os == 'Windows'
+        run: git clone --depth 1 https://github.com/microsoft/vcpkg ${{ github.workspace }}/vcpkg
+
+      - name: Get vcpkg commit id (Windows)
+        if: runner.os == 'Windows'
+        id: get-vcpkg-commit
+        run: |
+          cd ${{ github.workspace }}/vcpkg
+          echo "commit=$(git rev-parse HEAD)" >> $GITHUB_OUTPUT
+
       - name: Setup vcpkg (Windows / MSVC)
         if: runner.os == 'Windows'
         uses: lukka/run-vcpkg@v11
@@ -68,6 +79,7 @@ jobs:
           vcpkgDirectory: ${{ github.workspace }}/vcpkg
           runVcpkgInstall: |
             ffmpeg:x64-windows
+          vcpkgGitCommitId: ${{ steps.get-vcpkg-commit.outputs.commit }}
 
       - name: Build (Windows / MSVC)
         if: runner.os == 'Windows'
