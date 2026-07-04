@@ -13,6 +13,9 @@ pub struct ObjectId(pub usize);
 #[derive(Clone, Copy, Debug, Component)]
 pub struct KindId(pub u32);
 
+#[derive(Clone, Copy, Debug, Component)]
+pub struct Layer(pub i32);
+
 #[derive(Clone, Debug, Component)]
 pub struct TextContent {
     pub text: String,

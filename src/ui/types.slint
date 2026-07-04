@@ -2,8 +2,15 @@
 
 export struct TimelineObject {
     id: int,
-    start_frame: int,
-    end_frame: int,
+    start-frame: int,
+    end-frame: int,
     kind: int,
+    layer: int,
     label: string,
+    selected: bool,
+}
+
+export struct LayerState {
+    visible: bool,
+    locked: bool,
 }

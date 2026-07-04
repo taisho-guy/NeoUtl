@@ -1,0 +1,86 @@
+// src/ui/timeline/timeline-view.slint
+import { ScrollView } from "std-widgets.slint";
+import { TimelineObject, LayerState } from "../types.slint";
+import { TimelineGrid } from "timeline-grid.slint";
+import { ClipItem } from "clip-item.slint";
+
+export component TimelineView inherits Rectangle {
+    in property <float>            scale: 1.0;
+    in property <int>              frame-interval: 30;
+    in property <int>              total-frames: 300;
+    in property <int>              layer-count: 128;
+    in property <length>           layer-height: 24px;
+    in property <int>              current-frame: 0;
+    in property <[TimelineObject]> objects: [];
+    in property <[LayerState]>     layer-states: [];
+
+    out property <length> scroll-x: -scroller.viewport-x;
+    out property <length> scroll-y: -scroller.viewport-y;
+
+    callback seek(int);
+    callback add-object-at(int /* frame */, int /* layer */);
+    callback context-menu(length, length, int /* frame */, int /* layer */, int /* hit-id */);
+    callback select-object(int);
+    callback move-object(int, int, int);
+    callback resize-object(int, int, int);
+
+    function px-to-frame(px: length) -> int {
+        return max(0, floor((px + root.scroll-x) / root.scale / 1px));
+    }
+    function px-to-layer(px: length) -> int {
+        return max(0, floor((px + root.scroll-y) / root.layer-height));
+    }
+    function is-layer-locked(layer: int) -> bool {
+        return layer >= 0 && layer < root.layer-states.length && root.layer-states[layer].locked;
+    }
+
+    background: #17171b;
+
+    scroller := ScrollView {
+        width: parent.width;
+        height: parent.height;
+
+        content := Rectangle {
+            width: max(root.width, root.total-frames * root.scale * 1px);
+            height: root.layer-count * root.layer-height;
+
+            TimelineGrid {
+                width: 100%;
+                height: 100%;
+                scale: root.scale;
+                frame-interval: root.frame-interval;
+                layer-count: root.layer-count;
+                layer-height: root.layer-height;
+            }
+
+            for obj in root.objects : ClipItem {
+                obj: obj;
+                scale: root.scale;
+                layer-height: root.layer-height;
+                locked: root.is-layer-locked(obj.layer);
+                clicked(id) => { root.select-object(id); }
+                moved(id, start, layer) => { root.move-object(id, start, layer); }
+                resized(id, start, end) => { root.resize-object(id, start, end); }
+                context-requested(id, x, y) => { root.context-menu(x, y, 0, 0, id); }
+            }
+
+            Rectangle {
+                x: root.current-frame * root.scale * 1px;
+                width: 2px;
+                height: parent.height;
+                background: #ff450088;
+            }
+
+            bg-touch := TouchArea {
+                pointer-event(e) => {
+                    if (e.kind != PointerEventKind.down) { return; }
+                    if (e.button == PointerEventButton.left) {
+                        root.seek(root.px-to-frame(self.pressed-x));
+                    } else if (e.button == PointerEventButton.right) {
+                        root.context-menu(self.absolute-position.x + self.pressed-x, self.absolute-position.y + self.pressed-y, root.px-to-frame(self.pressed-x), root.px-to-layer(self.pressed-y), -1);
+                    }
+                }
+            }
+        }
+    }
+}

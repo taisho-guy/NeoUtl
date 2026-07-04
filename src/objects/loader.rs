@@ -15,22 +15,34 @@ pub struct ObjectPlugin {
 
 static REGISTRY: OnceLock<Vec<ObjectPlugin>> = OnceLock::new();
 
+const KIND_ORDER: [&str; 3] = [
+    "neoutl_object_tetrahedron",
+    "neoutl_object_cube",
+    "neoutl_object_text",
+];
+
 pub fn load_all(objects_dir: &Path) {
     REGISTRY.get_or_init(|| {
-        let mut plugins = Vec::new();
         let entries = match std::fs::read_dir(objects_dir) {
             Ok(e) => e,
             Err(err) => {
                 eprintln!("[NeoUtl] objects/ 読み込み失敗: {err}");
-                return plugins;
+                return Vec::new();
             }
         };
-        for entry in entries.flatten() {
-            let path = entry.path();
-            if !is_dylib(&path) {
+        let candidates: Vec<PathBuf> = entries
+            .flatten()
+            .map(|e| e.path())
+            .filter(|p| is_dylib(p))
+            .collect();
+
+        let mut plugins = Vec::new();
+        for (kind_id, stem) in KIND_ORDER.iter().enumerate() {
+            let Some(path) = candidates.iter().find(|p| stem_matches(p, stem)) else {
+                eprintln!("[NeoUtl] プラグイン未検出: {stem}");
                 continue;
-            }
-            match load_one(&path, plugins.len() as u32) {
+            };
+            match load_one(path, kind_id as u32) {
                 Ok(plugin) => {
                     eprintln!(
                         "[NeoUtl] プラグイン登録: {} (kind_id={})",
@@ -43,6 +55,13 @@ pub fn load_all(objects_dir: &Path) {
         }
         plugins
     });
+}
+
+fn stem_matches(path: &Path, stem: &str) -> bool {
+    path.file_stem()
+        .and_then(OsStr::to_str)
+        .map(|s| s == stem || s == format!("lib{stem}"))
+        .unwrap_or(false)
 }
 
 pub fn registry() -> &'static [ObjectPlugin] {

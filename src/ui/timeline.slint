@@ -1,37 +1,52 @@
 // src/ui/timeline.slint
-import { TimelineObject } from "types.slint";
+import { TimelineObject, LayerState } from "types.slint";
+import { Ruler } from "timeline/ruler.slint";
+import { LayerHeader } from "timeline/layer-header.slint";
+import { TimelineView } from "timeline/timeline-view.slint";
 
 export component TimelineWindow inherits Window {
     title: "NeoUtl - 拡張編集";
-    preferred-width: 820px;
-    preferred-height: 180px;
+    preferred-width: 1000px;
+    preferred-height: 320px;
     background: #0e0e12;
 
     in-out property <int>              current-frame: 0;
     in-out property <int>              total-frames: 300;
+    in-out property <int>              layer-count: 128;
+    in-out property <float>            zoom-scale: 1.0;
+    in-out property <int>              selected-layer: 0;
     in-out property <[TimelineObject]> objects: [];
+    in-out property <[LayerState]>     layer-states: [];
 
-    callback seek-timeline(float);
-    callback add-object-at(float, int);
+    callback seek-timeline(int);
+    callback add-object-at(int /* frame */, int /* layer */, int /* kind */);
     callback delete-object(int);
-    callback move-object(int, float);
-    callback find-object-at(float) -> int;
-    callback get-object-start-ratio(int) -> float;
+    callback select-object(int);
+    callback move-object(int /* id */, int /* start-frame */, int /* layer */);
+    callback resize-object(int /* id */, int /* start-frame */, int /* end-frame */);
+    callback set-zoom(float);
+    callback toggle-layer-visible(int);
+    callback toggle-layer-locked(int);
+
+    property <int>    header-width: 60;
+    property <int>    layer-height: 24;
+    property <int>    frame-interval: root.zoom-scale > 3.0 ? 10 : root.zoom-scale > 1.0 ? 30 : root.zoom-scale > 0.3 ? 60 : 300;
 
     property <bool>   show-context-menu: false;
     property <bool>   menu-is-delete: false;
     property <int>    menu-target-id: -1;
+    property <int>    menu-frame: 0;
+    property <int>    menu-layer: 0;
     property <length> menu-x: 0px;
     property <length> menu-y: 0px;
-    property <float>  click-ratio: 0.0;
-
-    property <int>    drag-mode: 0;
-    property <int>    dragging-obj-id: -1;
-    property <length> drag-mouse-start: 0px;
-    property <float>  drag-obj-start-ratio: 0.0;
 
     FocusScope {
-        key-pressed(event) => { accept }
+        key-pressed(event) => {
+            if (event.text == Key.Delete && root.menu-target-id >= 0) {
+                root.delete-object(root.menu-target-id);
+            }
+            accept
+        }
         TouchArea {
             pointer-event(e) => {
                 if (e.button == PointerEventButton.left && e.kind == PointerEventKind.down) {
@@ -42,109 +57,58 @@ export component TimelineWindow inherits Window {
     }
 
     VerticalLayout {
-        padding: 8px;
-        spacing: 6px;
-
-        Text {
-            text: "左ドラッグ: シーク  |  オブジェクト左ドラッグ: 移動  |  右クリック: メニュー";
-            color: #555560;
-            font-size: 10px;
-            horizontal-alignment: center;
-            height: 14px;
+        Rectangle {
+            height: 32px;
+            HorizontalLayout {
+                Rectangle { width: root.header-width * 1px; background: #202028; }
+                Ruler {
+                    scale: root.zoom-scale;
+                    scroll-x: view.scroll-x;
+                    fps: 30;
+                    current-frame: root.current-frame;
+                    total-frames: root.total-frames;
+                    header-width: root.header-width * 1px;
+                    scrub(frame) => { root.seek-timeline(frame); }
+                    zoom(new-scale) => { root.zoom-scale = max(0.1, min(10.0, new-scale)); root.set-zoom(root.zoom-scale); }
+                }
+            }
         }
 
-        timeline-rect := Rectangle {
-            background: #1a1a20;
-            border-radius: 4px;
-            border-width: 1px;
-            border-color: #2a2a32;
-
-            Rectangle {
-                background: #ff4500;
-                width: 2px;
-                height: parent.height;
-                x: (root.current-frame / root.total-frames) * parent.width;
+        HorizontalLayout {
+            LayerHeader {
+                header-width: root.header-width * 1px;
+                layer-height: root.layer-height * 1px;
+                layer-count: root.layer-count;
+                scroll-y: view.scroll-y;
+                selected-layer: root.selected-layer;
+                layer-states: root.layer-states;
+                toggle-visible(layer) => { root.toggle-layer-visible(layer); }
+                toggle-locked(layer) => { root.toggle-layer-locked(layer); }
+                select-layer(layer) => { root.selected-layer = layer; }
             }
 
-            for obj in root.objects : Rectangle {
-                property <bool>  is-drag: root.drag-mode == 2 && root.dragging-obj-id == obj.id;
-                property <color> base-color:
-                    obj.kind == 0 ? #2a4db8 :
-                    obj.kind == 1 ? #256e3c :
-                                    #6a2db8;
-                property <color> drag-color:
-                    obj.kind == 0 ? #4a6fd8 :
-                    obj.kind == 1 ? #3d9e5c :
-                                    #8a4dd8;
-                property <color> border-color-val:
-                    obj.kind == 0 ? #6a90f0 :
-                    obj.kind == 1 ? #5dc87a :
-                                    #aa70f0;
+            view := TimelineView {
+                scale: root.zoom-scale;
+                frame-interval: root.frame-interval;
+                total-frames: root.total-frames;
+                layer-count: root.layer-count;
+                layer-height: root.layer-height * 1px;
+                current-frame: root.current-frame;
+                objects: root.objects;
+                layer-states: root.layer-states;
 
-                background: is-drag ? drag-color : base-color;
-                border-width: 1px;
-                border-color: is-drag ? border-color-val : base-color.darker(0.3);
-                border-radius: 3px;
-                y: 8px;
-                height: parent.height - 16px;
-                x: (obj.start-frame / root.total-frames) * parent.width;
-                width: ((obj.end-frame - obj.start-frame) / root.total-frames) * parent.width;
-
-                Text {
-                    text: obj.label;
-                    color: white;
-                    font-size: 10px;
-                    horizontal-alignment: center;
-                    vertical-alignment: center;
-                    overflow: elide;
-                }
-            }
-
-            timeline-touch := TouchArea {
-                mouse-cursor: root.drag-mode == 2 ? MouseCursor.grabbing
-                            : root.drag-mode == 1 ? MouseCursor.col-resize
-                            : MouseCursor.default;
-
-                pointer-event(e) => {
-                    if (e.kind == PointerEventKind.down) {
-                        root.show-context-menu = false;
-                        let press-ratio = self.pressed-x / self.width;
-
-                        if (e.button == PointerEventButton.right) {
-                            let hit-id = root.find-object-at(press-ratio);
-                            root.click-ratio = press-ratio;
-                            root.menu-target-id = hit-id;
-                            root.menu-is-delete = hit-id >= 0;
-                            root.menu-x = timeline-rect.absolute-position.x + self.pressed-x;
-                            root.menu-y = timeline-rect.absolute-position.y + self.pressed-y + 4px;
-                            root.show-context-menu = true;
-                        } else if (e.button == PointerEventButton.left) {
-                            root.drag-mouse-start = self.pressed-x;
-                            let hit-id = root.find-object-at(press-ratio);
-                            if (hit-id >= 0) {
-                                root.drag-mode = 2;
-                                root.dragging-obj-id = hit-id;
-                                root.drag-obj-start-ratio = root.get-object-start-ratio(hit-id);
-                            } else {
-                                root.drag-mode = 1;
-                                root.seek-timeline(press-ratio);
-                            }
-                        }
-                    }
-                    if (e.kind == PointerEventKind.up || e.kind == PointerEventKind.cancel) {
-                        root.drag-mode = 0;
-                        root.dragging-obj-id = -1;
-                    }
-                }
-
-                moved() => {
-                    if (root.drag-mode == 1) {
-                        root.seek-timeline((self.mouse-x / self.width).clamp(0.0, 1.0));
-                    } else if (root.drag-mode == 2) {
-                        let delta = (self.mouse-x - root.drag-mouse-start) / self.width;
-                        let new-r = (root.drag-obj-start-ratio + delta).clamp(0.0, 1.0);
-                        root.move-object(root.dragging-obj-id, new-r);
-                    }
+                seek(frame) => { root.seek-timeline(frame); }
+                select-object(id) => { root.select-object(id); }
+                move-object(id, start, layer) => { root.move-object(id, start, layer); }
+                resize-object(id, start, end) => { root.resize-object(id, start, end); }
+                context-menu(x, y, frame, layer, hit-id) => {
+                    root.menu-frame = frame;
+                    root.menu-layer = layer;
+                    root.menu-target-id = hit-id;
+                    root.menu-is-delete = hit-id >= 0;
+                    root.menu-x = x;
+                    root.menu-y = y + 4px;
+                    root.show-context-menu = true;
                 }
             }
         }
@@ -187,7 +151,7 @@ export component TimelineWindow inherits Window {
                 border-radius: 3px;
                 Text { text: "  ＋  Add Tetrahedron"; color: #8aabff; font-size: 12px; vertical-alignment: center; }
                 t-touch := TouchArea {
-                    clicked() => { root.add-object-at(root.click-ratio, 0); root.show-context-menu = false; }
+                    clicked() => { root.add-object-at(root.menu-frame, root.menu-layer, 0); root.show-context-menu = false; }
                 }
             }
 
@@ -197,7 +161,7 @@ export component TimelineWindow inherits Window {
                 border-radius: 3px;
                 Text { text: "  ＋  Add Cube"; color: #6ad8a0; font-size: 12px; vertical-alignment: center; }
                 c-touch := TouchArea {
-                    clicked() => { root.add-object-at(root.click-ratio, 1); root.show-context-menu = false; }
+                    clicked() => { root.add-object-at(root.menu-frame, root.menu-layer, 1); root.show-context-menu = false; }
                 }
             }
 
@@ -207,7 +171,7 @@ export component TimelineWindow inherits Window {
                 border-radius: 3px;
                 Text { text: "  ＋  Add Text"; color: #c0a0ff; font-size: 12px; vertical-alignment: center; }
                 tx-touch := TouchArea {
-                    clicked() => { root.add-object-at(root.click-ratio, 2); root.show-context-menu = false; }
+                    clicked() => { root.add-object-at(root.menu-frame, root.menu-layer, 2); root.show-context-menu = false; }
                 }
             }
         }

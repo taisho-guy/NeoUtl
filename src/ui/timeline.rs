@@ -1,8 +1,8 @@
 // src/ui/timeline.rs
 use crate::ecs::{EcsWorld, TimelineData, components::TextContent};
 use crate::objects::registry;
-use crate::{PreviewWindow, TimelineObject, TimelineWindow};
-use slint::{ComponentHandle, ModelRc, VecModel, Weak};
+use crate::{LayerState, PreviewWindow, TimelineObject, TimelineWindow};
+use slint::{ComponentHandle, Model, ModelRc, VecModel, Weak};
 use std::sync::{Arc, Mutex};
 
 pub fn setup(
@@ -16,10 +16,9 @@ pub fn setup(
             timeline.as_weak(),
             preview_weak.clone(),
         );
-        timeline.on_seek_timeline(move |ratio| {
+        timeline.on_seek_timeline(move |frame| {
             let mut world = wc.lock().unwrap();
-            let clamped =
-                ((ratio * world.total_frames() as f32) as i32).clamp(0, world.total_frames());
+            let clamped = frame.clamp(0, world.total_frames());
             world.set_current_frame(clamped);
             if let Some(t) = tw.upgrade() {
                 t.set_current_frame(clamped);
@@ -32,15 +31,14 @@ pub fn setup(
 
     {
         let (wc, tw) = (world_holder.clone(), timeline.as_weak());
-        timeline.on_add_object_at(move |ratio, kind_idx| {
+        timeline.on_add_object_at(move |frame, layer, kind_idx| {
             if let Some(t) = tw.upgrade() {
                 let mut world = wc.lock().unwrap();
-                let start = (ratio * world.total_frames() as f32) as i32;
                 let text = registry()
                     .get(kind_idx as usize)
                     .filter(|p| p.name == "Text")
                     .map(|_| TextContent::default());
-                world.add_object(start, 90, kind_idx as u32, text);
+                world.add_object(frame.max(0), 90, kind_idx as u32, layer.max(0), text);
                 sync(&t, &world);
             }
         });
@@ -49,6 +47,9 @@ pub fn setup(
     {
         let (wc, tw) = (world_holder.clone(), timeline.as_weak());
         timeline.on_delete_object(move |id| {
+            if id < 0 {
+                return;
+            }
             if let Some(t) = tw.upgrade() {
                 let mut world = wc.lock().unwrap();
                 world.delete_object(id as usize);
@@ -58,28 +59,86 @@ pub fn setup(
     }
 
     {
+        let tw = timeline.as_weak();
+        timeline.on_select_object(move |id| {
+            if let Some(t) = tw.upgrade() {
+                let objs = t.get_objects();
+                let updated: Vec<TimelineObject> = objs
+                    .iter()
+                    .map(|mut o| {
+                        o.selected = o.id == id;
+                        o
+                    })
+                    .collect();
+                t.set_objects(ModelRc::new(VecModel::from(updated)));
+            }
+        });
+    }
+
+    {
         let (wc, tw) = (world_holder.clone(), timeline.as_weak());
-        timeline.on_move_object(move |id, ratio| {
+        timeline.on_move_object(move |id, start, layer| {
             if let Some(t) = tw.upgrade() {
                 let mut world = wc.lock().unwrap();
-                let total = world.total_frames();
-                let new_start = ((ratio * total as f32) as i32).clamp(0, total);
-                world.move_object(id as usize, new_start);
+                world.move_object(id as usize, start, layer);
                 sync(&t, &world);
             }
         });
     }
 
     {
-        let wc = world_holder.clone();
-        timeline.on_find_object_at(move |ratio| wc.lock().unwrap().find_object_at(ratio));
+        let (wc, tw) = (world_holder.clone(), timeline.as_weak());
+        timeline.on_resize_object(move |id, start, end| {
+            if let Some(t) = tw.upgrade() {
+                let mut world = wc.lock().unwrap();
+                world.resize_object(id as usize, start, end);
+                sync(&t, &world);
+            }
+        });
     }
 
     {
-        let wc = world_holder.clone();
-        timeline.on_get_object_start_ratio(move |id| {
-            wc.lock().unwrap().get_object_start_ratio(id as usize)
+        let (wc, tw) = (world_holder.clone(), timeline.as_weak());
+        timeline.on_set_zoom(move |scale| {
+            let mut world = wc.lock().unwrap();
+            world.set_zoom(scale);
+            if let Some(t) = tw.upgrade() {
+                t.set_zoom_scale(world.zoom());
+            }
         });
+    }
+
+    {
+        let (wc, tw) = (world_holder.clone(), timeline.as_weak());
+        timeline.on_toggle_layer_visible(move |layer| {
+            if let Some(t) = tw.upgrade() {
+                let mut world = wc.lock().unwrap();
+                let current = world.layer_states();
+                let visible = current.get(layer as usize).map(|s| s.0).unwrap_or(true);
+                world.set_layer_visible(layer as usize, !visible);
+                sync(&t, &world);
+            }
+        });
+    }
+
+    {
+        let (wc, tw) = (world_holder.clone(), timeline.as_weak());
+        timeline.on_toggle_layer_locked(move |layer| {
+            if let Some(t) = tw.upgrade() {
+                let mut world = wc.lock().unwrap();
+                let current = world.layer_states();
+                let locked = current.get(layer as usize).map(|s| s.1).unwrap_or(false);
+                world.set_layer_locked(layer as usize, !locked);
+                sync(&t, &world);
+            }
+        });
+    }
+
+    {
+        let world = world_holder.lock().unwrap();
+        sync(timeline, &world);
+        timeline.set_zoom_scale(world.zoom());
+        timeline.set_layer_count(world.layer_count());
     }
 }
 
@@ -94,12 +153,36 @@ fn to_slint(data: &TimelineData) -> TimelineObject {
         start_frame: data.start_frame,
         end_frame: data.end_frame,
         kind: data.kind,
+        layer: data.layer,
         label,
+        selected: false,
     }
 }
 
 fn sync(timeline: &TimelineWindow, world: &EcsWorld) {
     timeline.set_total_frames(world.total_frames());
-    let objs: Vec<TimelineObject> = world.get_timeline_objects().iter().map(to_slint).collect();
+
+    let selected_id = timeline
+        .get_objects()
+        .iter()
+        .find(|o| o.selected)
+        .map(|o| o.id);
+
+    let objs: Vec<TimelineObject> = world
+        .get_timeline_objects()
+        .iter()
+        .map(to_slint)
+        .map(|mut o| {
+            o.selected = Some(o.id) == selected_id;
+            o
+        })
+        .collect();
     timeline.set_objects(ModelRc::new(VecModel::from(objs)));
+
+    let states: Vec<LayerState> = world
+        .layer_states()
+        .iter()
+        .map(|&(visible, locked)| LayerState { visible, locked })
+        .collect();
+    timeline.set_layer_states(ModelRc::new(VecModel::from(states)));
 }
