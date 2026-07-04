@@ -108,20 +108,21 @@ fn build_pipelines_from_registry(
     registry()
         .iter()
         .filter_map(|plugin| {
-            let wgsl_path = format!(
-                "crates/objects/{}/{}.wgsl",
-                plugin.name.to_lowercase(),
-                plugin.name.to_lowercase(),
-            );
-            let wgsl = std::fs::read_to_string(&wgsl_path).ok()?;
             let vertex_count = unsafe { ((*plugin.vtable).vertex_count)() };
             if vertex_count == 0 {
                 return None;
             }
+            let src = unsafe { ((*plugin.vtable).wgsl)() };
+            if src.ptr.is_null() {
+                return None;
+            }
+            let wgsl = unsafe {
+                std::str::from_utf8_unchecked(std::slice::from_raw_parts(src.ptr, src.len))
+            };
             Some((
                 plugin.kind_id,
                 (
-                    build_pipeline(device, layout, &wgsl, &plugin.name),
+                    build_pipeline(device, layout, wgsl, &plugin.name),
                     vertex_count,
                 ),
             ))
