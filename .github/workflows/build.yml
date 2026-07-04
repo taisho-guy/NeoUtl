@@ -65,22 +65,13 @@ jobs:
         if: runner.os == 'Windows'
         run: git clone --depth 1 https://github.com/microsoft/vcpkg ${{ github.workspace }}/vcpkg
 
-      - name: Get vcpkg commit id (Windows)
+      - name: Bootstrap vcpkg (Windows)
         if: runner.os == 'Windows'
-        id: get-vcpkg-commit
-        run: |
-          cd ${{ github.workspace }}/vcpkg
-          echo "commit=$(git rev-parse HEAD)" >> $GITHUB_OUTPUT
+        run: ${{ github.workspace }}/vcpkg/bootstrap-vcpkg.bat
 
-      - name: Setup vcpkg (Windows / MSVC)
+      - name: Install ffmpeg via vcpkg (Windows)
         if: runner.os == 'Windows'
-        uses: lukka/run-vcpkg@v11
-        with:
-          vcpkgDirectory: ${{ github.workspace }}/vcpkg
-          runVcpkgInstall: |
-            ffmpeg:x64-windows
-          vcpkgGitCommitId: ${{ steps.get-vcpkg-commit.outputs.commit }}
-          doNotUpdateVcpkg: true
+        run: ${{ github.workspace }}/vcpkg/vcpkg install ffmpeg:x64-windows
 
       - name: Build (Windows / MSVC)
         if: runner.os == 'Windows'
