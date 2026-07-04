@@ -26,10 +26,11 @@
 
 ## インストール方法
 
-NeoUtlは現在ビルドをリリースしておりません。NeoUtlの源流である [AviQtl](https://codeberg.org/taisho-guy/NeoUtl/releases/tag/0.0.95-Unstable) や [AviQtl Plus](https://github.com/GT-610/NeoUtl-Plus/releases) をお試し下さい。
+NeoUtlは現在ビルドをリリースしておりません。NeoUtlの源流である [AviQtl](https://codeberg.org/taisho-guy/NeoUtl/releases/tag/0.0.95-Unstable) や [AviQtl Plus](https://github.com/GT-610/AviQtl-Plus/releases) をお試し下さい。
 
 ## ビルド方法
 
+### 共通作業
 
 ```fish
 git clone "https://codeberg.org/taisho-guy/NeoUtl.git"
@@ -38,8 +39,8 @@ git clone "https://codeberg.org/taisho-guy/NeoUtl.git"
 ```fish
 cd NeoUtl
 ```
-
-### NeoUtlの場合
+<details>
+<summary>NeoUtlの場合</summary>
   
 予めRust、Clang、Mold、FFmpegをインストールしてください。
 
@@ -53,7 +54,10 @@ cargo build
 
 実行可能ファイルは`target/debug`あるいは`target/release`以下に生成されます。
 
-### AviQtlの場合
+</details>
+
+<details>
+<summary>AviQtlの場合</summary>
 
 予めPython3、PySide6をインストールしてください。
 
@@ -66,6 +70,8 @@ python3 BUILD.py
 ```
 
 実行可能ファイルは`build`以下に生成されます。
+
+</details>
 
 ## 採用技術
 
