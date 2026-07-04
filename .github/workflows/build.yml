@@ -16,17 +16,17 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: ubuntu-24.04
+          - os: ubuntu-latest
             os_name: Linux
             artifact_name: neoutl-linux-x86_64
             binary_name: NeoUtl
             install_cmd: sudo apt-get update && sudo apt-get install -y --no-install-recommends pkg-config clang cmake ninja-build libxkbcommon-dev libwayland-dev libegl1-mesa-dev libudev-dev libasound2-dev libfontconfig1-dev libfreetype6-dev libexpat1-dev libavutil-dev libavcodec-dev libavformat-dev libavfilter-dev libavdevice-dev libswresample-dev libswscale-dev ffmpeg
-          - os: macos-14
+          - os: macos-latest
             os_name: macOS
             artifact_name: neoutl-macos-aarch64
             binary_name: NeoUtl
             install_cmd: brew untap aws/tap || true && brew update && brew install ffmpeg
-          - os: windows-2022
+          - os: windows-latest
             os_name: Windows
             artifact_name: neoutl-windows-x86_64
             binary_name: NeoUtl.exe
@@ -61,6 +61,9 @@ jobs:
       - name: Build (Windows / MSVC)
         if: runner.os == 'Windows'
         shell: bash
+        env:
+          FFMPEG_SYS_NEXT_USE_PKG_CONFIG: "0"
+          FFMPEG_SYS_NEXT_NO_VCPKG: "1"
         run: |
           set -euo pipefail
           cargo clean
@@ -80,7 +83,9 @@ jobs:
           mkdir -p dist
           mkdir -p NeoUtl.app/Contents/MacOS
           mkdir -p NeoUtl.app/Contents/Resources
+          mkdir -p NeoUtl.app/Contents/Frameworks
           cp target/release/${{ matrix.binary_name }} NeoUtl.app/Contents/MacOS/
+          cp /usr/local/opt/ffmpeg/lib/*.dylib NeoUtl.app/Contents/Frameworks/ || true
           cat > NeoUtl.app/Contents/Info.plist <<EOF
           <?xml version="1.0" encoding="UTF-8"?>
           <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
