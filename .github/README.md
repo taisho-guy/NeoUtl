@@ -11,6 +11,10 @@
     Video editing software aiming to replace and surpass AviUtl. Compatible with Windows, macOS, and Linux.
 </p>
 
+> [!IMPORTANT]
+> - NeoUtlは[Codeberg](https://codeberg.org/taisho-guy/NeoUtl)で開発されています。GitHubの本リポジトリはミラーです。イシューやプルリクエストの作成等はCodebergでお受け致します。
+> - AviQtlをお探しですか？[こちら](https://codeberg.org/taisho-guy/NeoUtl/src/branch/aviqtl)をご覧下さい。
+
 ## 目的
 
 **AviUtl 1.10**及び**ExEdit 0.92**の操作感を持ちつつ、より安全・高速・柔軟な動画編集ソフトを開発するプロジェクトです。クロスプラットフォームなAviUtlクローンの開発を通じ、AviUtlを「仕方なく」使う方々の最適解になることを目指しております。
