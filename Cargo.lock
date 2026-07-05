@@ -9,6 +9,7 @@ dependencies = [
  "bytemuck",
  "ffmpeg-next",
  "libloading 0.9.0",
+ "lucide-slint",
  "neoutl-object-api",
  "shipyard",
  "slint",
@@ -2737,6 +2738,12 @@ checksum = "0fae87c125b03c1d2c0150c90365d7d6bcc53fb73a9acaef207d2d065860f062"
 dependencies = [
  "imgref",
 ]
+
+[[package]]
+name = "lucide-slint"
+version = "1.23.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "be75611ac0c5fbecd750f1e64ec280170d3464d5d2d7e931bafb22148e415edd"
 
 [[package]]
 name = "lyon_algorithms"
