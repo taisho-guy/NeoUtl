@@ -1,0 +1,24 @@
+// src/ui/common.slint
+import { IconDisplay, IconSet, Icon } from "@lucide";
+
+export component IconButton inherits Rectangle {
+    in property <Icon> icon;
+    in property <color> stroke: #e0e0e0;
+    in property <length> icon-size: 18px;
+    callback clicked();
+
+    width: 32px;
+    height: 32px;
+    border-radius: 4px;
+    background: touch.pressed ? #303038 : touch.has-hover ? #26262c : transparent;
+
+    IconDisplay {
+        icon: root.icon;
+        stroke: root.stroke;
+        size: root.icon-size;
+    }
+
+    touch := TouchArea {
+        clicked() => { root.clicked(); }
+    }
+}

@@ -30,8 +30,10 @@ ffmpeg-next = "8"
 tokio = { version = "1.52", features = ["rt-multi-thread", "sync"] }
 bytemuck = { version = "1.25", features = ["derive"] }
 shipyard = "0.11"
+lucide-slint = "1.23.0"
 
 [build-dependencies]
+lucide-slint = "1.23.0"
 slint-build = "1.17"
 
 [profile.release]

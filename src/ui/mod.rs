@@ -16,7 +16,12 @@ pub fn setup_ui_callbacks(
     world_holder: Arc<Mutex<EcsWorld>>,
     engine_holder: Arc<Mutex<Option<RenderEngine>>>,
 ) {
-    preview::setup(preview_win, world_holder.clone(), engine_holder.clone());
+    preview::setup(
+        preview_win,
+        timeline_win.as_weak(),
+        world_holder.clone(),
+        engine_holder.clone(),
+    );
     timeline::setup(
         timeline_win,
         preview_win.as_weak(),

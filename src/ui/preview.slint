@@ -1,9 +1,12 @@
 // src/ui/preview.slint
+import { Slider, SpinBox } from "std-widgets.slint";
+import { IconSet } from "@lucide";
+import { IconButton } from "common.slint";
 
 export component PreviewWindow inherits Window {
     title: "NeoUtl";
     preferred-width: 800px;
-    preferred-height: 500px;
+    preferred-height: 560px;
     background: #0e0e12;
 
     in-out property <image> video-frame;
@@ -12,13 +15,53 @@ export component PreviewWindow inherits Window {
     in-out property <int>   fps: 30;
     in-out property <int>   res-width: 1920;
     in-out property <int>   res-height: 1080;
+    in-out property <bool>  is-playing: false;
+    in-out property <int>   speed-percent: 100;
 
     callback request-render();
+    callback toggle-play();
+    callback seek(int);
+    callback step-frame(int);
+    callback set-speed(int);
+    callback new-project();
+    callback open-project();
+    callback save-project();
+    callback save-project-as();
+    callback export-media();
+    callback quit();
+    callback undo();
+    callback redo();
+    callback show-timeline();
+    callback show-properties();
+
+    changed current-frame => { seek-slider.value = root.current-frame; }
 
     Timer {
         interval: 16ms;
         running: true;
         triggered() => { root.request-render(); }
+    }
+
+    MenuBar {
+        Menu {
+            title: "ファイル";
+            MenuItem { title: "新規プロジェクト"; activated() => { root.new-project(); } }
+            MenuItem { title: "プロジェクトを開く"; activated() => { root.open-project(); } }
+            MenuItem { title: "上書き保存"; activated() => { root.save-project(); } }
+            MenuItem { title: "名前を付けて保存"; activated() => { root.save-project-as(); } }
+            MenuItem { title: "メディアの書き出し"; activated() => { root.export-media(); } }
+            MenuItem { title: "終了"; activated() => { root.quit(); } }
+        }
+        Menu {
+            title: "編集";
+            MenuItem { title: "元に戻す"; activated() => { root.undo(); } }
+            MenuItem { title: "やり直す"; activated() => { root.redo(); } }
+        }
+        Menu {
+            title: "表示";
+            MenuItem { title: "タイムライン"; activated() => { root.show-timeline(); } }
+            MenuItem { title: "プロパティ"; activated() => { root.show-properties(); } }
+        }
     }
 
     VerticalLayout {
@@ -47,6 +90,83 @@ export component PreviewWindow inherits Window {
             color: #888894;
             font-size: 11px;
             height: 18px;
+        }
+
+        Rectangle {
+            height: 34px;
+            background: #16161c;
+            border-radius: 4px;
+
+            seek-slider := Slider {
+                x: 8px;
+                width: parent.width - 16px;
+                height: parent.height;
+                minimum: 0;
+                maximum: root.total-frames;
+                changed(v) => { root.seek(round(v)); }
+            }
+        }
+
+        Rectangle {
+            height: 44px;
+            background: #16161c;
+            border-radius: 4px;
+
+            HorizontalLayout {
+                padding-left: 10px;
+                padding-right: 10px;
+                spacing: 10px;
+                alignment: space-between;
+
+                Text {
+                    text: root.current-frame + " / " + root.total-frames;
+                    color: #cccccc;
+                    font-size: 12px;
+                    font-family: "Monospace";
+                    vertical-alignment: center;
+                    min-width: 90px;
+                }
+
+                HorizontalLayout {
+                    spacing: 2px;
+                    alignment: center;
+
+                    IconButton {
+                        icon: IconSet.ChevronLeft;
+                        clicked() => { root.step-frame(-1); }
+                    }
+
+                    IconButton {
+                        icon: root.is-playing ? IconSet.Pause : IconSet.Play;
+                        clicked() => { root.toggle-play(); }
+                    }
+
+                    IconButton {
+                        icon: IconSet.ChevronRight;
+                        clicked() => { root.step-frame(1); }
+                    }
+                }
+
+                HorizontalLayout {
+                    spacing: 6px;
+                    alignment: end;
+
+                    Text {
+                        text: "速度";
+                        color: #888894;
+                        font-size: 12px;
+                        vertical-alignment: center;
+                    }
+
+                    SpinBox {
+                        minimum: 10;
+                        maximum: 400;
+                        value: root.speed-percent;
+                        width: 90px;
+                        edited(v) => { root.speed-percent = v; root.set-speed(v); }
+                    }
+                }
+            }
         }
     }
 }
