@@ -75,3 +75,55 @@ impl LayerStates {
         }
     }
 }
+
+/// シーン単体の設定（AviQtl::Core::SceneSettings 相当）
+#[derive(Clone, Debug)]
+pub struct SceneMeta {
+    pub id: i32,
+    pub name: String,
+    pub width: u32,
+    pub height: u32,
+    pub fps: u32,
+    pub total_frames: i32,
+    pub layer_states: Vec<(bool, bool)>,
+}
+
+impl SceneMeta {
+    pub fn new(id: i32, name: impl Into<String>) -> Self {
+        Self {
+            id,
+            name: name.into(),
+            width: 1920,
+            height: 1080,
+            fps: 30,
+            total_frames: 300,
+            layer_states: vec![(true, false); DEFAULT_LAYER_COUNT],
+        }
+    }
+}
+
+/// プロジェクト内の全シーンとアクティブシーン（AviQtl::Core::DocumentModel 相当）
+#[derive(Unique)]
+pub struct SceneResource {
+    pub scenes: Vec<SceneMeta>,
+    pub active_scene: i32,
+    pub next_scene_id: i32,
+}
+
+impl SceneResource {
+    pub fn new() -> Self {
+        Self {
+            scenes: vec![SceneMeta::new(0, "Scene 1")],
+            active_scene: 0,
+            next_scene_id: 1,
+        }
+    }
+
+    pub fn find(&self, id: i32) -> Option<&SceneMeta> {
+        self.scenes.iter().find(|s| s.id == id)
+    }
+
+    pub fn find_mut(&mut self, id: i32) -> Option<&mut SceneMeta> {
+        self.scenes.iter_mut().find(|s| s.id == id)
+    }
+}

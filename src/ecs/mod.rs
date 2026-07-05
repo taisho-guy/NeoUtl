@@ -1,12 +1,17 @@
 // src/ecs/mod.rs
 pub mod components;
+pub mod effects;
 pub mod resources;
 pub mod systems;
+pub mod transform;
 
-use components::{KindId, Layer, ObjectId, TextContent, TimeRange};
-use resources::{LayerStates, ProjectResource, TimelineResource};
+use components::{AudioParams, KindId, Layer, ObjectId, SceneId, TextContent, TimeRange};
+use effects::EffectStack;
+use resources::{LayerStates, ProjectResource, SceneMeta, SceneResource, TimelineResource};
 use shipyard::{Get, IntoIter, UniqueView, UniqueViewMut, View, ViewMut, World};
+use transform::{GlobalMatrix, Transform, compute_global_matrix};
 
+/// タイムラインUIに渡すオブジェクト情報（Slint型に非依存）
 #[derive(Clone, Debug)]
 pub struct TimelineData {
     pub id: i32,
@@ -26,6 +31,7 @@ impl EcsWorld {
         world.add_unique(TimelineResource::new());
         world.add_unique(ProjectResource::new());
         world.add_unique(LayerStates::new(resources::DEFAULT_LAYER_COUNT));
+        world.add_unique(SceneResource::new());
         Self { world }
     }
 
@@ -36,22 +42,14 @@ impl EcsWorld {
         kind_id: u32,
         layer: i32,
         text: Option<TextContent>,
-    ) -> Option<usize> {
-        let layer = layer.max(0);
-        let locked = self
-            .world
-            .run(|states: UniqueView<LayerStates>| states.locked(layer as usize));
-        if locked {
-            return None;
-        }
-
-        let id = self
-            .world
-            .run(|mut timeline: UniqueViewMut<TimelineResource>| {
+    ) -> usize {
+        let (id, scene_id) = self.world.run(
+            |mut timeline: UniqueViewMut<TimelineResource>, scenes: UniqueView<SceneResource>| {
                 let id = timeline.next_id;
                 timeline.next_id += 1;
-                id
-            });
+                (id, scenes.active_scene)
+            },
+        );
 
         let entity = self.world.add_entity((
             ObjectId(id),
@@ -61,6 +59,11 @@ impl EcsWorld {
             },
             KindId(kind_id),
             Layer(layer),
+            SceneId(scene_id),
+            Transform::default(),
+            GlobalMatrix::default(),
+            AudioParams::default(),
+            EffectStack::default(),
         ));
 
         if let Some(t) = text {
@@ -68,7 +71,7 @@ impl EcsWorld {
         }
 
         self.update_total_frames();
-        Some(id)
+        id
     }
 
     pub fn delete_object(&mut self, id: usize) {
@@ -163,16 +166,22 @@ impl EcsWorld {
 
     pub fn get_timeline_objects(&self) -> Vec<TimelineData> {
         self.world.run(
-            |object_ids: View<ObjectId>,
+            |scenes: UniqueView<SceneResource>,
+             object_ids: View<ObjectId>,
              time_ranges: View<TimeRange>,
              kind_ids: View<KindId>,
-             layers: View<Layer>| {
+             layers: View<Layer>,
+             scene_ids: View<SceneId>| {
+                let active = scenes.active_scene;
                 let mut objs = Vec::new();
-                for (_entity, (id, range, kind, layer)) in
-                    (&object_ids, &time_ranges, &kind_ids, &layers)
+                for (_entity, (id, range, kind, layer, scene)) in
+                    (&object_ids, &time_ranges, &kind_ids, &layers, &scene_ids)
                         .iter()
                         .with_id()
                 {
+                    if scene.0 != active {
+                        continue;
+                    }
                     objs.push(TimelineData {
                         id: id.0 as i32,
                         start_frame: range.start_frame,
@@ -187,14 +196,6 @@ impl EcsWorld {
     }
 
     pub fn move_object(&mut self, object_id: usize, new_start: i32, new_layer: i32) {
-        let new_layer = new_layer.max(0);
-        let locked = self
-            .world
-            .run(|states: UniqueView<LayerStates>| states.locked(new_layer as usize));
-        if locked {
-            return;
-        }
-
         self.world.run(
             |object_ids: View<ObjectId>,
              mut time_ranges: ViewMut<TimeRange>,
@@ -207,7 +208,7 @@ impl EcsWorld {
                             range.end_frame = new_start + dur;
                         }
                         if let Ok(mut layer) = (&mut layers).get(entity) {
-                            layer.0 = new_layer;
+                            layer.0 = new_layer.max(0);
                         }
                         break;
                     }
@@ -236,16 +237,220 @@ impl EcsWorld {
 
     pub fn find_object_at(&self, frame: i32, layer: i32) -> i32 {
         self.world.run(
-            |object_ids: View<ObjectId>, time_ranges: View<TimeRange>, layers: View<Layer>| {
-                for (_entity, (id, range, l)) in
-                    (&object_ids, &time_ranges, &layers).iter().with_id()
+            |scenes: UniqueView<SceneResource>,
+             object_ids: View<ObjectId>,
+             time_ranges: View<TimeRange>,
+             layers: View<Layer>,
+             scene_ids: View<SceneId>| {
+                let active = scenes.active_scene;
+                for (_entity, (id, range, l, s)) in (&object_ids, &time_ranges, &layers, &scene_ids)
+                    .iter()
+                    .with_id()
                 {
-                    if l.0 == layer && frame >= range.start_frame && frame < range.end_frame {
+                    if s.0 == active
+                        && l.0 == layer
+                        && frame >= range.start_frame
+                        && frame < range.end_frame
+                    {
                         return id.0 as i32;
                     }
                 }
                 -1
             },
         )
+    }
+
+    fn find_entity(&self, object_id: usize) -> Option<shipyard::EntityId> {
+        self.world.run(|object_ids: View<ObjectId>| {
+            object_ids
+                .iter()
+                .with_id()
+                .find(|(_, id)| id.0 == object_id)
+                .map(|(e, _)| e)
+        })
+    }
+
+    // --- Transform / GlobalMatrix ---
+
+    pub fn get_transform(&self, object_id: usize) -> Option<Transform> {
+        let entity = self.find_entity(object_id)?;
+        self.world
+            .run(|transforms: View<Transform>| transforms.get(entity).ok().copied())
+    }
+
+    pub fn set_transform(&mut self, object_id: usize, t: Transform) {
+        let Some(entity) = self.find_entity(object_id) else {
+            return;
+        };
+        self.world.run(
+            |mut transforms: ViewMut<Transform>, mut matrices: ViewMut<GlobalMatrix>| {
+                if let Ok(mut slot) = (&mut transforms).get(entity) {
+                    *slot = t;
+                }
+                if let Ok(mut matrix) = (&mut matrices).get(entity) {
+                    *matrix = compute_global_matrix(&t);
+                }
+            },
+        );
+    }
+
+    pub fn recompute_global_matrices(&mut self) {
+        self.world.run(
+            |transforms: View<Transform>, mut matrices: ViewMut<GlobalMatrix>| {
+                for (entity, t) in transforms.iter().with_id() {
+                    if let Ok(mut matrix) = (&mut matrices).get(entity) {
+                        *matrix = compute_global_matrix(t);
+                    }
+                }
+            },
+        );
+    }
+
+    pub fn get_global_matrix(&self, object_id: usize) -> Option<[f32; 16]> {
+        let entity = self.find_entity(object_id)?;
+        self.world
+            .run(|matrices: View<GlobalMatrix>| matrices.get(entity).ok().map(|m| m.0))
+    }
+
+    // --- EffectStack ---
+
+    pub fn add_effect(&mut self, object_id: usize, effect_id: &str) {
+        if effects::find_effect(effect_id).is_none() {
+            return;
+        }
+        let Some(entity) = self.find_entity(object_id) else {
+            return;
+        };
+        self.world.run(|mut stacks: ViewMut<EffectStack>| {
+            if let Ok(mut stack) = (&mut stacks).get(entity) {
+                stack.push(effect_id);
+            }
+        });
+    }
+
+    pub fn remove_effect(&mut self, object_id: usize, index: usize) {
+        let Some(entity) = self.find_entity(object_id) else {
+            return;
+        };
+        self.world.run(|mut stacks: ViewMut<EffectStack>| {
+            if let Ok(mut stack) = (&mut stacks).get(entity) {
+                stack.remove(index);
+            }
+        });
+    }
+
+    pub fn set_effect_param(&mut self, object_id: usize, index: usize, key: &str, value: f32) {
+        let Some(entity) = self.find_entity(object_id) else {
+            return;
+        };
+        self.world.run(|mut stacks: ViewMut<EffectStack>| {
+            if let Ok(mut stack) = (&mut stacks).get(entity) {
+                stack.set_param(index, key, value);
+            }
+        });
+    }
+
+    pub fn get_effects(&self, object_id: usize) -> Vec<effects::EffectInstance> {
+        let Some(entity) = self.find_entity(object_id) else {
+            return Vec::new();
+        };
+        self.world.run(|stacks: View<EffectStack>| {
+            stacks.get(entity).map(|s| s.0.clone()).unwrap_or_default()
+        })
+    }
+
+    // --- AudioParams ---
+
+    pub fn set_audio_params(&mut self, object_id: usize, volume: f32, pan: f32, mute: bool) {
+        let Some(entity) = self.find_entity(object_id) else {
+            return;
+        };
+        self.world.run(|mut audio: ViewMut<AudioParams>| {
+            if let Ok(mut slot) = (&mut audio).get(entity) {
+                slot.volume = volume;
+                slot.pan = pan;
+                slot.mute = mute;
+            }
+        });
+    }
+
+    pub fn get_audio_params(&self, object_id: usize) -> Option<AudioParams> {
+        let entity = self.find_entity(object_id)?;
+        self.world
+            .run(|audio: View<AudioParams>| audio.get(entity).ok().copied())
+    }
+
+    // --- Scene ---
+
+    pub fn add_scene(&mut self, name: impl Into<String>) -> i32 {
+        self.world.run(|mut scenes: UniqueViewMut<SceneResource>| {
+            let id = scenes.next_scene_id;
+            scenes.next_scene_id += 1;
+            scenes.scenes.push(SceneMeta::new(id, name));
+            id
+        })
+    }
+
+    pub fn remove_scene(&mut self, scene_id: i32) {
+        let mut removed_entities = Vec::new();
+        self.world
+            .run(|object_ids: View<ObjectId>, scene_ids: View<SceneId>| {
+                for (entity, (_, s)) in (&object_ids, &scene_ids).iter().with_id() {
+                    if s.0 == scene_id {
+                        removed_entities.push(entity);
+                    }
+                }
+            });
+        for entity in removed_entities {
+            self.world.delete_entity(entity);
+        }
+        self.world.run(|mut scenes: UniqueViewMut<SceneResource>| {
+            scenes.scenes.retain(|s| s.id != scene_id);
+            if scenes.active_scene == scene_id {
+                scenes.active_scene = scenes.scenes.first().map(|s| s.id).unwrap_or(0);
+            }
+        });
+    }
+
+    pub fn switch_scene(&mut self, scene_id: i32) -> bool {
+        let current_states = self.layer_states();
+        let switched = self
+            .world
+            .run(|mut scenes: UniqueViewMut<SceneResource>| -> bool {
+                if scenes.find(scene_id).is_none() {
+                    return false;
+                }
+                let active = scenes.active_scene;
+                if let Some(prev) = scenes.find_mut(active) {
+                    prev.layer_states = current_states.clone();
+                }
+                scenes.active_scene = scene_id;
+                true
+            });
+        if switched {
+            let (total_frames, target_states) = self.world.run(
+                |scenes: UniqueView<SceneResource>| -> (i32, Vec<(bool, bool)>) {
+                    let scene = scenes.find(scene_id).expect("checked above");
+                    (scene.total_frames, scene.layer_states.clone())
+                },
+            );
+            self.world
+                .run(|mut states: UniqueViewMut<LayerStates>| states.0 = target_states);
+            self.world
+                .run(|mut timeline: UniqueViewMut<TimelineResource>| {
+                    timeline.total_frames = total_frames;
+                });
+        }
+        switched
+    }
+
+    pub fn active_scene(&self) -> i32 {
+        self.world
+            .run(|scenes: UniqueView<SceneResource>| scenes.active_scene)
+    }
+
+    pub fn scenes(&self) -> Vec<SceneMeta> {
+        self.world
+            .run(|scenes: UniqueView<SceneResource>| scenes.scenes.clone())
     }
 }

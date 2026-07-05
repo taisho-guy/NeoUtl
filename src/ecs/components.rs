@@ -16,6 +16,26 @@ pub struct KindId(pub u32);
 #[derive(Clone, Copy, Debug, Component)]
 pub struct Layer(pub i32);
 
+#[derive(Clone, Copy, Debug, Component)]
+pub struct SceneId(pub i32);
+
+#[derive(Clone, Copy, Debug, Component)]
+pub struct AudioParams {
+    pub volume: f32,
+    pub pan: f32,
+    pub mute: bool,
+}
+
+impl Default for AudioParams {
+    fn default() -> Self {
+        Self {
+            volume: 1.0,
+            pan: 0.0,
+            mute: false,
+        }
+    }
+}
+
 #[derive(Clone, Debug, Component)]
 pub struct TextContent {
     pub text: String,
