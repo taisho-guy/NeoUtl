@@ -1,5 +1,6 @@
 #[repr(C)]
 pub struct ObjectMeta {
+    pub stable_id: &'static str,
     pub name: &'static str,
 }
 

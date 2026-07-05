@@ -1,7 +1,10 @@
 use neoutl_object_api::{EntryFn, ObjectMeta, ObjectVTable, RenderContext, WgslSource};
 use std::sync::OnceLock;
 
-static META: ObjectMeta = ObjectMeta { name: "Cube" };
+static META: ObjectMeta = ObjectMeta {
+    stable_id: "neoutl.object.cube",
+    name: "Cube",
+};
 static VTABLE: OnceLock<ObjectVTable> = OnceLock::new();
 static WGSL: &str = include_str!("../cube.wgsl");
 

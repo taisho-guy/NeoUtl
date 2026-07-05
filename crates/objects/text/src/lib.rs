@@ -1,7 +1,10 @@
 use neoutl_object_api::{EntryFn, ObjectMeta, ObjectVTable, RenderContext, WgslSource};
 use std::sync::OnceLock;
 
-static META: ObjectMeta = ObjectMeta { name: "Text" };
+static META: ObjectMeta = ObjectMeta {
+    stable_id: "neoutl.object.text",
+    name: "Text",
+};
 static VTABLE: OnceLock<ObjectVTable> = OnceLock::new();
 
 unsafe extern "C" fn meta() -> *const ObjectMeta {
