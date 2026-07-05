@@ -30,11 +30,9 @@
 
 開発ロードマップは[TODO.md](https://codeberg.org/taisho-guy/NeoUtl/src/branch/main/TODO.md)でご確認下さい。
 
-現在はコアの実装が中心で、動画編集ができる状態ではありません。
-
 ## インストール方法
 
-NeoUtlは現在ビルドをリリースしておりません。NeoUtlの源流である [AviQtl](https://codeberg.org/taisho-guy/NeoUtl/releases/tag/0.0.95-Unstable) や [AviQtl Plus](https://github.com/GT-610/AviQtl-Plus/releases) をお試し下さい。
+現在のNeoUtlはコアの実装が中心で、動画編集ができる状態ではありません。NeoUtlを試したい場合は、元祖である [AviQtl](https://codeberg.org/taisho-guy/NeoUtl/releases/tag/0.0.95-Unstable) や [AviQtl Plus](https://github.com/GT-610/AviQtl-Plus/releases) をお試し下さい。採用技術が一切異なりますが、方向性は同じです。
 
 ## ビルド方法
 
