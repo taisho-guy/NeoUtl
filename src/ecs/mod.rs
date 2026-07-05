@@ -328,6 +328,20 @@ impl EcsWorld {
         });
     }
 
+    pub fn reorder_effect(&mut self, object_id: usize, from: usize, to: usize) {
+        let Some(entity) = self.find_entity(object_id) else {
+            return;
+        };
+        self.world.run(|mut stacks: ViewMut<EffectStack>| {
+            if let Ok(mut stack) = (&mut stacks).get(entity) {
+                if from < stack.0.len() && to < stack.0.len() {
+                    let item = stack.0.remove(from);
+                    stack.0.insert(to, item);
+                }
+            }
+        });
+    }
+
     pub fn set_effect_enabled(&mut self, object_id: usize, index: usize, enabled: bool) {
         let Some(entity) = self.find_entity(object_id) else {
             return;

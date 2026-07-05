@@ -1,10 +1,21 @@
 // src/ui/properties.rs
-use crate::ecs::{EcsWorld, effects::EffectMetadata, effects::find_effect};
-use crate::{EffectRow, ParamRow, PropertiesWindow};
+use crate::ecs::{
+    EcsWorld, effects::EFFECT_REGISTRY, effects::EffectMetadata, effects::find_effect,
+};
+use crate::{CatalogRow, EffectRow, ParamRow, PropertiesWindow};
 use slint::{ComponentHandle, ModelRc, VecModel};
 use std::sync::{Arc, Mutex};
 
 pub fn setup(props: &PropertiesWindow, world_holder: Arc<Mutex<EcsWorld>>) {
+    let catalog: Vec<CatalogRow> = EFFECT_REGISTRY
+        .iter()
+        .map(|m| CatalogRow {
+            id: m.id.into(),
+            name: m.name.into(),
+        })
+        .collect();
+    props.set_effect_catalog(ModelRc::new(VecModel::from(catalog)));
+
     {
         let wc = world_holder.clone();
         let pw = props.as_weak();
@@ -106,6 +117,38 @@ pub fn setup(props: &PropertiesWindow, world_holder: Arc<Mutex<EcsWorld>>) {
             wc.lock()
                 .unwrap()
                 .set_effect_param(id as usize, index as usize, key.as_str(), value);
+        });
+    }
+
+    {
+        let wc = world_holder.clone();
+        let pw = props.as_weak();
+        props.on_add_effect(move |effect_id| {
+            let Some(p) = pw.upgrade() else { return };
+            let id = p.get_object_id();
+            if id < 0 {
+                return;
+            }
+            wc.lock()
+                .unwrap()
+                .add_effect(id as usize, effect_id.as_str());
+            refresh(&p, &wc.lock().unwrap());
+        });
+    }
+
+    {
+        let wc = world_holder.clone();
+        let pw = props.as_weak();
+        props.on_move_effect(move |from, to| {
+            let Some(p) = pw.upgrade() else { return };
+            let id = p.get_object_id();
+            if id < 0 || from < 0 || to < 0 {
+                return;
+            }
+            wc.lock()
+                .unwrap()
+                .reorder_effect(id as usize, from as usize, to as usize);
+            refresh(&p, &wc.lock().unwrap());
         });
     }
 }

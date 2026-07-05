@@ -1,42 +1,100 @@
 // src/ui/properties.slint
-import { EffectRow, ParamRow } from "types.slint";
+import { EffectRow, ParamRow, CatalogRow } from "types.slint";
 
-component NumberField inherits Rectangle {
+component PropertyRow inherits Rectangle {
     in property <string> label;
     in property <float> value;
-    in property <float> step: 1.0;
+    in property <float> min: -1000;
+    in property <float> max: 1000;
     callback changed(float);
 
     height: 22px;
 
-    Text {
-        width: 60px;
-        text: label;
-        color: #8a8a96;
-        font-size: 10px;
-        vertical-alignment: center;
-        height: 100%;
+    function clamp(v: float) -> float {
+        return v < min ? min : v > max ? max : v;
     }
 
-    Rectangle {
-        x: 64px;
-        width: parent.width - 64px;
-        height: 20px;
-        border-radius: 3px;
-        background: #1e1e24;
-        border-width: 1px;
-        border-color: #303038;
+    HorizontalLayout {
+        spacing: 4px;
 
-        TextInput {
-            x: 6px;
-            width: parent.width - 12px;
-            height: 100%;
-            text: value;
-            color: #dde3ee;
-            font-size: 11px;
-            vertical-alignment: center;
-            input-type: InputType.decimal;
-            accepted => { root.changed(self.text.to-float()); }
+        Rectangle {
+            background: #1e1e24;
+            Rectangle {
+                x: 0;
+                width: parent.width * ((root.value - root.min) / (root.max - root.min));
+                height: 100%;
+                background: #2a4db8;
+            }
+            TouchArea {
+                moved => {
+                    if (self.pressed) {
+                        root.changed(root.clamp(root.min + (self.mouse-x / parent.width) * (root.max - root.min)));
+                    }
+                }
+            }
+        }
+
+        Rectangle {
+            width: 64px;
+            border-radius: 3px;
+            background: #16161b;
+            border-width: 1px;
+            border-color: #303038;
+            TextInput {
+                x: 4px;
+                width: parent.width - 8px;
+                height: 100%;
+                text: value;
+                color: #dde3ee;
+                font-size: 11px;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+                input-type: InputType.decimal;
+                accepted => { root.changed(root.clamp(self.text.to-float())); }
+            }
+        }
+
+        Rectangle {
+            width: 74px;
+            background: #202026;
+            Text { text: label; color: #b0b0ba; font-size: 11px; horizontal-alignment: center; vertical-alignment: center; width: 100%; height: 100%; }
+        }
+
+        Rectangle {
+            width: 64px;
+            border-radius: 3px;
+            background: #16161b;
+            border-width: 1px;
+            border-color: #303038;
+            TextInput {
+                x: 4px;
+                width: parent.width - 8px;
+                height: 100%;
+                text: value;
+                color: #dde3ee;
+                font-size: 11px;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+                input-type: InputType.decimal;
+                accepted => { root.changed(root.clamp(self.text.to-float())); }
+            }
+        }
+
+        Rectangle {
+            background: #1e1e24;
+            Rectangle {
+                x: 0;
+                width: parent.width * ((root.value - root.min) / (root.max - root.min));
+                height: 100%;
+                background: #2a4db8;
+            }
+            TouchArea {
+                moved => {
+                    if (self.pressed) {
+                        root.changed(root.clamp(root.min + (self.mouse-x / parent.width) * (root.max - root.min)));
+                    }
+                }
+            }
         }
     }
 }
@@ -84,8 +142,8 @@ component SectionHeader inherits Text {
 
 export component PropertiesWindow inherits Window {
     title: "NeoUtl - オブジェクト設定";
-    preferred-width: 320px;
-    preferred-height: 480px;
+    preferred-width: 620px;
+    preferred-height: 560px;
     background: #0e0e12;
 
     in-out property <int> object-id: -1;
@@ -114,6 +172,8 @@ export component PropertiesWindow inherits Window {
 
     in-out property <[EffectRow]> effects: [];
     in-out property <[ParamRow]> params: [];
+    in property <[CatalogRow]> effect-catalog: [];
+    in-out property <bool> catalog-open: false;
 
     callback set-transform(float, float, float, float, float, float, float, float, float);
     callback set-text(string, float, float, float);
@@ -121,6 +181,8 @@ export component PropertiesWindow inherits Window {
     callback set-effect-enabled(int, bool);
     callback remove-effect(int);
     callback set-param(int, string, float);
+    callback add-effect(string);
+    callback move-effect(int, int);
 
     function emit-transform() {
         root.set-transform(root.tx, root.ty, root.tz, root.scale-x, root.scale-y, root.rot-x, root.rot-y, root.rot-z, root.obj-opacity);
@@ -143,15 +205,15 @@ export component PropertiesWindow inherits Window {
             if has-transform: VerticalLayout {
                 spacing: 4px;
                 SectionHeader { text: "トランスフォーム"; }
-                NumberField { label: "X"; value: root.tx; changed(v) => { root.tx = v; root.emit-transform(); } }
-                NumberField { label: "Y"; value: root.ty; changed(v) => { root.ty = v; root.emit-transform(); } }
-                NumberField { label: "Z"; value: root.tz; changed(v) => { root.tz = v; root.emit-transform(); } }
-                NumberField { label: "拡大率X"; value: root.scale-x; changed(v) => { root.scale-x = v; root.emit-transform(); } }
-                NumberField { label: "拡大率Y"; value: root.scale-y; changed(v) => { root.scale-y = v; root.emit-transform(); } }
-                NumberField { label: "回転X"; value: root.rot-x; changed(v) => { root.rot-x = v; root.emit-transform(); } }
-                NumberField { label: "回転Y"; value: root.rot-y; changed(v) => { root.rot-y = v; root.emit-transform(); } }
-                NumberField { label: "回転Z"; value: root.rot-z; changed(v) => { root.rot-z = v; root.emit-transform(); } }
-                NumberField { label: "不透明度"; value: root.obj-opacity; changed(v) => { root.obj-opacity = v; root.emit-transform(); } }
+                PropertyRow { label: "X"; value: root.tx; min: -1000; max: 1000; changed(v) => { root.tx = v; root.emit-transform(); } }
+                PropertyRow { label: "Y"; value: root.ty; min: -1000; max: 1000; changed(v) => { root.ty = v; root.emit-transform(); } }
+                PropertyRow { label: "Z"; value: root.tz; min: -1000; max: 1000; changed(v) => { root.tz = v; root.emit-transform(); } }
+                PropertyRow { label: "拡大率X"; value: root.scale-x; min: 0; max: 10; changed(v) => { root.scale-x = v; root.emit-transform(); } }
+                PropertyRow { label: "拡大率Y"; value: root.scale-y; min: 0; max: 10; changed(v) => { root.scale-y = v; root.emit-transform(); } }
+                PropertyRow { label: "X軸回転"; value: root.rot-x; min: -360; max: 360; changed(v) => { root.rot-x = v; root.emit-transform(); } }
+                PropertyRow { label: "Y軸回転"; value: root.rot-y; min: -360; max: 360; changed(v) => { root.rot-y = v; root.emit-transform(); } }
+                PropertyRow { label: "Z軸回転"; value: root.rot-z; min: -360; max: 360; changed(v) => { root.rot-z = v; root.emit-transform(); } }
+                PropertyRow { label: "不透明度"; value: root.obj-opacity; min: 0; max: 1; changed(v) => { root.obj-opacity = v; root.emit-transform(); } }
             }
 
             if has-text: VerticalLayout {
@@ -176,22 +238,47 @@ export component PropertiesWindow inherits Window {
                         accepted => { root.text-content = self.text; root.set-text(self.text, root.text-x, root.text-y, root.text-font-size); }
                     }
                 }
-                NumberField { label: "X"; value: root.text-x; changed(v) => { root.text-x = v; root.set-text(root.text-content, v, root.text-y, root.text-font-size); } }
-                NumberField { label: "Y"; value: root.text-y; changed(v) => { root.text-y = v; root.set-text(root.text-content, root.text-x, v, root.text-font-size); } }
-                NumberField { label: "フォントサイズ"; value: root.text-font-size; changed(v) => { root.text-font-size = v; root.set-text(root.text-content, root.text-x, root.text-y, v); } }
+                PropertyRow { label: "X"; value: root.text-x; min: -1000; max: 1000; changed(v) => { root.text-x = v; root.set-text(root.text-content, v, root.text-y, root.text-font-size); } }
+                PropertyRow { label: "Y"; value: root.text-y; min: -1000; max: 1000; changed(v) => { root.text-y = v; root.set-text(root.text-content, root.text-x, v, root.text-font-size); } }
+                PropertyRow { label: "フォントサイズ"; value: root.text-font-size; min: 1; max: 500; changed(v) => { root.text-font-size = v; root.set-text(root.text-content, root.text-x, root.text-y, v); } }
             }
 
             if has-audio: VerticalLayout {
                 spacing: 4px;
                 Rectangle { height: 1px; background: #24242c; }
                 SectionHeader { text: "オーディオ"; }
-                NumberField { label: "音量"; value: root.volume; changed(v) => { root.volume = v; root.set-audio(v, root.pan, root.mute); } }
-                NumberField { label: "パン"; value: root.pan; changed(v) => { root.pan = v; root.set-audio(root.volume, v, root.mute); } }
+                PropertyRow { label: "音量"; value: root.volume; min: 0; max: 2; changed(v) => { root.volume = v; root.set-audio(v, root.pan, root.mute); } }
+                PropertyRow { label: "パン"; value: root.pan; min: -1; max: 1; changed(v) => { root.pan = v; root.set-audio(root.volume, v, root.mute); } }
                 ToggleField { label: "ミュート"; checked: root.mute; toggled => { root.mute = !root.mute; root.set-audio(root.volume, root.pan, root.mute); } }
             }
 
             Rectangle { height: 1px; background: #24242c; }
-            SectionHeader { text: "エフェクト"; }
+
+            HorizontalLayout {
+                height: 20px;
+                spacing: 6px;
+                SectionHeader { text: "エフェクト"; vertical-alignment: center; height: 100%; }
+                Rectangle {
+                    width: 60px;
+                    height: 18px;
+                    border-radius: 3px;
+                    background: #1e1e24;
+                    border-width: 1px;
+                    border-color: #303038;
+                    Text { text: "追加"; color: #8a8a96; font-size: 10px; horizontal-alignment: center; vertical-alignment: center; width: 100%; height: 100%; }
+                    TouchArea { clicked() => { root.catalog-open = !root.catalog-open; } }
+                }
+            }
+
+            if root.catalog-open: VerticalLayout {
+                spacing: 1px;
+                for c[k] in root.effect-catalog: Rectangle {
+                    height: 20px;
+                    background: #16161b;
+                    Text { x: 6px; text: c.name; color: #b0b0ba; font-size: 10px; vertical-alignment: center; height: 100%; }
+                    TouchArea { clicked() => { root.add-effect(c.id); root.catalog-open = false; } }
+                }
+            }
 
             for eff[i] in root.effects: VerticalLayout {
                 spacing: 2px;
@@ -221,6 +308,22 @@ export component PropertiesWindow inherits Window {
                         }
 
                         Rectangle {
+                            width: 14px;
+                            height: 14px;
+                            visible: eff.index > 0;
+                            Text { text: "▲"; color: #888894; font-size: 9px; horizontal-alignment: center; vertical-alignment: center; width: 100%; height: 100%; }
+                            TouchArea { clicked() => { root.move-effect(eff.index, eff.index - 1); } }
+                        }
+
+                        Rectangle {
+                            width: 14px;
+                            height: 14px;
+                            visible: eff.index < root.effects.length - 1;
+                            Text { text: "▼"; color: #888894; font-size: 9px; horizontal-alignment: center; vertical-alignment: center; width: 100%; height: 100%; }
+                            TouchArea { clicked() => { root.move-effect(eff.index, eff.index + 1); } }
+                        }
+
+                        Rectangle {
                             width: 18px;
                             height: 18px;
                             TouchArea { clicked() => { root.remove-effect(eff.index); } }
@@ -233,9 +336,11 @@ export component PropertiesWindow inherits Window {
                     height: p.effect-index == eff.index ? 22px : 0px;
                     clip: true;
 
-                    if p.effect-index == eff.index: NumberField {
+                    if p.effect-index == eff.index: PropertyRow {
                         label: p.key;
                         value: p.value;
+                        min: 0;
+                        max: 100;
                         changed(v) => { root.set-param(eff.index, p.key, v); }
                     }
                 }
