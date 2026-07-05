@@ -2,6 +2,7 @@ use neoutl_object_api::{EntryFn, ObjectMeta, ObjectVTable, RenderContext, WgslSo
 use std::sync::OnceLock;
 
 static META: ObjectMeta = ObjectMeta {
+    stable_id: "neoutl.object.tetrahedron",
     name: "Tetrahedron",
 };
 static VTABLE: OnceLock<ObjectVTable> = OnceLock::new();

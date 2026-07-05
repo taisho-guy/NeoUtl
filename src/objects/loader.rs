@@ -7,6 +7,7 @@ use std::{
 };
 
 pub struct ObjectPlugin {
+    pub stable_id: String,
     pub name: String,
     pub kind_id: u32,
     pub vtable: &'static ObjectVTable,
@@ -14,12 +15,6 @@ pub struct ObjectPlugin {
 }
 
 static REGISTRY: OnceLock<Vec<ObjectPlugin>> = OnceLock::new();
-
-const KIND_ORDER: [&str; 3] = [
-    "neoutl_object_tetrahedron",
-    "neoutl_object_cube",
-    "neoutl_object_text",
-];
 
 pub fn load_all(objects_dir: &Path) {
     REGISTRY.get_or_init(|| {
@@ -36,32 +31,27 @@ pub fn load_all(objects_dir: &Path) {
             .filter(|p| is_dylib(p))
             .collect();
 
-        let mut plugins = Vec::new();
-        for (kind_id, stem) in KIND_ORDER.iter().enumerate() {
-            let Some(path) = candidates.iter().find(|p| stem_matches(p, stem)) else {
-                eprintln!("[NeoUtl] プラグイン未検出: {stem}");
-                continue;
-            };
-            match load_one(path, kind_id as u32) {
-                Ok(plugin) => {
-                    eprintln!(
-                        "[NeoUtl] プラグイン登録: {} (kind_id={})",
-                        plugin.name, plugin.kind_id
-                    );
-                    plugins.push(plugin);
+        let mut plugins: Vec<ObjectPlugin> = candidates
+            .iter()
+            .filter_map(|path| match load_one(path) {
+                Ok(p) => Some(p),
+                Err(err) => {
+                    eprintln!("[NeoUtl] プラグイン読み込み失敗 {}: {err}", path.display());
+                    None
                 }
-                Err(err) => eprintln!("[NeoUtl] プラグイン読み込み失敗 {}: {err}", path.display()),
-            }
+            })
+            .collect();
+
+        plugins.sort_by(|a, b| a.stable_id.cmp(&b.stable_id));
+        for (kind_id, plugin) in plugins.iter_mut().enumerate() {
+            plugin.kind_id = kind_id as u32;
+            eprintln!(
+                "[NeoUtl] プラグイン登録: {} ({}, kind_id={})",
+                plugin.name, plugin.stable_id, plugin.kind_id
+            );
         }
         plugins
     });
-}
-
-fn stem_matches(path: &Path, stem: &str) -> bool {
-    path.file_stem()
-        .and_then(OsStr::to_str)
-        .map(|s| s == stem || s == format!("lib{stem}"))
-        .unwrap_or(false)
 }
 
 pub fn registry() -> &'static [ObjectPlugin] {
@@ -72,6 +62,10 @@ pub fn by_kind_id(kind_id: u32) -> Option<&'static ObjectPlugin> {
     registry().iter().find(|p| p.kind_id == kind_id)
 }
 
+pub fn by_stable_id(stable_id: &str) -> Option<&'static ObjectPlugin> {
+    registry().iter().find(|p| p.stable_id == stable_id)
+}
+
 pub fn default_objects_dir() -> PathBuf {
     std::env::current_exe()
         .ok()
@@ -79,15 +73,15 @@ pub fn default_objects_dir() -> PathBuf {
         .unwrap_or_else(|| PathBuf::from("objects"))
 }
 
-fn load_one(path: &Path, kind_id: u32) -> Result<ObjectPlugin, Box<dyn std::error::Error>> {
+fn load_one(path: &Path) -> Result<ObjectPlugin, Box<dyn std::error::Error>> {
     let lib = unsafe { Library::new(path) }?;
     let entry: Symbol<EntryFn> = unsafe { lib.get(ENTRY_SYMBOL) }?;
     let vtable: &'static ObjectVTable = unsafe { &*entry() };
     let meta = unsafe { &*((vtable.meta)()) };
-    let name = meta.name.to_owned();
     Ok(ObjectPlugin {
-        name,
-        kind_id,
+        stable_id: meta.stable_id.to_owned(),
+        name: meta.name.to_owned(),
+        kind_id: 0,
         vtable,
         _lib: lib,
     })

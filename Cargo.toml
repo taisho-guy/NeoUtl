@@ -2,9 +2,7 @@
 members = [
     ".",
     "crates/neoutl-object-api",
-    "crates/objects/tetrahedron",
-    "crates/objects/cube",
-    "crates/objects/text",
+    "crates/objects/*",
 ]
 resolver = "2"
 
