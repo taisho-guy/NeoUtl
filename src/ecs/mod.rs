@@ -7,7 +7,6 @@ use components::{KindId, Layer, ObjectId, TextContent, TimeRange};
 use resources::{LayerStates, ProjectResource, TimelineResource};
 use shipyard::{Get, IntoIter, UniqueView, UniqueViewMut, View, ViewMut, World};
 
-/// タイムラインUIに渡すオブジェクト情報（Slint型に非依存）
 #[derive(Clone, Debug)]
 pub struct TimelineData {
     pub id: i32,
@@ -37,7 +36,15 @@ impl EcsWorld {
         kind_id: u32,
         layer: i32,
         text: Option<TextContent>,
-    ) -> usize {
+    ) -> Option<usize> {
+        let layer = layer.max(0);
+        let locked = self
+            .world
+            .run(|states: UniqueView<LayerStates>| states.locked(layer as usize));
+        if locked {
+            return None;
+        }
+
         let id = self
             .world
             .run(|mut timeline: UniqueViewMut<TimelineResource>| {
@@ -61,7 +68,7 @@ impl EcsWorld {
         }
 
         self.update_total_frames();
-        id
+        Some(id)
     }
 
     pub fn delete_object(&mut self, id: usize) {
@@ -180,6 +187,14 @@ impl EcsWorld {
     }
 
     pub fn move_object(&mut self, object_id: usize, new_start: i32, new_layer: i32) {
+        let new_layer = new_layer.max(0);
+        let locked = self
+            .world
+            .run(|states: UniqueView<LayerStates>| states.locked(new_layer as usize));
+        if locked {
+            return;
+        }
+
         self.world.run(
             |object_ids: View<ObjectId>,
              mut time_ranges: ViewMut<TimeRange>,
@@ -192,7 +207,7 @@ impl EcsWorld {
                             range.end_frame = new_start + dur;
                         }
                         if let Ok(mut layer) = (&mut layers).get(entity) {
-                            layer.0 = new_layer.max(0);
+                            layer.0 = new_layer;
                         }
                         break;
                     }
