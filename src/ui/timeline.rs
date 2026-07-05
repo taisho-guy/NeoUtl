@@ -1,13 +1,14 @@
 // src/ui/timeline.rs
 use crate::ecs::{EcsWorld, TimelineData, components::TextContent};
 use crate::objects::registry;
-use crate::{LayerState, PreviewWindow, TimelineObject, TimelineWindow};
+use crate::{LayerState, PreviewWindow, PropertiesWindow, TimelineObject, TimelineWindow};
 use slint::{ComponentHandle, Model, ModelRc, VecModel, Weak};
 use std::sync::{Arc, Mutex};
 
 pub fn setup(
     timeline: &TimelineWindow,
     preview_weak: Weak<PreviewWindow>,
+    props_weak: Weak<PropertiesWindow>,
     world_holder: Arc<Mutex<EcsWorld>>,
 ) {
     {
@@ -59,7 +60,7 @@ pub fn setup(
     }
 
     {
-        let tw = timeline.as_weak();
+        let (wc, tw, pw) = (world_holder.clone(), timeline.as_weak(), props_weak.clone());
         timeline.on_select_object(move |id| {
             if let Some(t) = tw.upgrade() {
                 let objs = t.get_objects();
@@ -71,6 +72,10 @@ pub fn setup(
                     })
                     .collect();
                 t.set_objects(ModelRc::new(VecModel::from(updated)));
+            }
+            if let Some(p) = pw.upgrade() {
+                let world = wc.lock().unwrap();
+                crate::ui::properties::select_object(&p, &world, id);
             }
         });
     }

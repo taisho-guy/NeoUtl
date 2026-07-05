@@ -1,6 +1,6 @@
 // src/ui/mod.rs
 mod preview;
-mod properties;
+pub mod properties;
 mod timeline;
 
 use crate::ecs::EcsWorld;
@@ -17,11 +17,11 @@ pub fn setup_ui_callbacks(
     engine_holder: Arc<Mutex<Option<RenderEngine>>>,
 ) {
     preview::setup(preview_win, world_holder.clone(), engine_holder.clone());
-    timeline::setup(timeline_win, preview_win.as_weak(), world_holder.clone());
-    properties::setup(
-        props_win,
+    timeline::setup(
+        timeline_win,
         preview_win.as_weak(),
-        world_holder,
-        engine_holder,
+        props_win.as_weak(),
+        world_holder.clone(),
     );
+    properties::setup(props_win, world_holder);
 }

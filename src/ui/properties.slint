@@ -1,94 +1,244 @@
 // src/ui/properties.slint
+import { EffectRow, ParamRow } from "types.slint";
+
+component NumberField inherits Rectangle {
+    in property <string> label;
+    in property <float> value;
+    in property <float> step: 1.0;
+    callback changed(float);
+
+    height: 22px;
+
+    Text {
+        width: 60px;
+        text: label;
+        color: #8a8a96;
+        font-size: 10px;
+        vertical-alignment: center;
+        height: 100%;
+    }
+
+    Rectangle {
+        x: 64px;
+        width: parent.width - 64px;
+        height: 20px;
+        border-radius: 3px;
+        background: #1e1e24;
+        border-width: 1px;
+        border-color: #303038;
+
+        TextInput {
+            x: 6px;
+            width: parent.width - 12px;
+            height: 100%;
+            text: value;
+            color: #dde3ee;
+            font-size: 11px;
+            vertical-alignment: center;
+            input-type: InputType.decimal;
+            accepted => { root.changed(self.text.to-float()); }
+        }
+    }
+}
+
+component ToggleField inherits Rectangle {
+    in property <string> label;
+    in property <bool> checked;
+    callback toggled();
+
+    height: 22px;
+
+    Text {
+        text: label;
+        color: #b0b0ba;
+        font-size: 11px;
+        vertical-alignment: center;
+        height: 100%;
+    }
+
+    Rectangle {
+        x: parent.width - 36px;
+        width: 36px;
+        height: 18px;
+        border-radius: 9px;
+        background: checked ? #2a4db8 : #303038;
+
+        Rectangle {
+            x: checked ? parent.width - 16px : 2px;
+            y: 2px;
+            width: 14px;
+            height: 14px;
+            border-radius: 7px;
+            background: #e8e8ee;
+        }
+
+        TouchArea { clicked() => { root.toggled(); } }
+    }
+}
+
+component SectionHeader inherits Text {
+    color: #55555e;
+    font-size: 10px;
+    font-weight: 700;
+}
 
 export component PropertiesWindow inherits Window {
-    title: "NeoUtl - 設定";
-    preferred-width: 360px;
-    preferred-height: 140px;
+    title: "NeoUtl - オブジェクト設定";
+    preferred-width: 320px;
+    preferred-height: 480px;
     background: #0e0e12;
 
-    in-out property <int> fps: 30;
-    in-out property <int> res-width: 1920;
-    in-out property <int> res-height: 1080;
+    in-out property <int> object-id: -1;
 
-    callback set-fps(int);
-    callback set-resolution(int, int);
+    in-out property <bool> has-transform: false;
+    in-out property <float> tx: 0;
+    in-out property <float> ty: 0;
+    in-out property <float> tz: 0;
+    in-out property <float> scale-x: 1;
+    in-out property <float> scale-y: 1;
+    in-out property <float> rot-x: 0;
+    in-out property <float> rot-y: 0;
+    in-out property <float> rot-z: 0;
+    in-out property <float> obj-opacity: 1;
 
-    VerticalLayout {
-        padding: 12px;
-        spacing: 10px;
+    in-out property <bool> has-text: false;
+    in-out property <string> text-content: "";
+    in-out property <float> text-x: 0;
+    in-out property <float> text-y: 0;
+    in-out property <float> text-font-size: 48;
 
-        VerticalLayout {
-            spacing: 5px;
-            Text { text: "FPS"; color: #55555e; font-size: 10px; }
-            HorizontalLayout {
+    in-out property <bool> has-audio: false;
+    in-out property <float> volume: 1;
+    in-out property <float> pan: 0;
+    in-out property <bool> mute: false;
+
+    in-out property <[EffectRow]> effects: [];
+    in-out property <[ParamRow]> params: [];
+
+    callback set-transform(float, float, float, float, float, float, float, float, float);
+    callback set-text(string, float, float, float);
+    callback set-audio(float, float, bool);
+    callback set-effect-enabled(int, bool);
+    callback remove-effect(int);
+    callback set-param(int, string, float);
+
+    function emit-transform() {
+        root.set-transform(root.tx, root.ty, root.tz, root.scale-x, root.scale-y, root.rot-x, root.rot-y, root.rot-z, root.obj-opacity);
+    }
+
+    if object-id < 0: Text {
+        text: "オブジェクト未選択";
+        color: #55555e;
+        font-size: 12px;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+        width: 100%;
+        height: 100%;
+    }
+
+    if object-id >= 0: VerticalLayout {
+            padding: 10px;
+            spacing: 8px;
+
+            if has-transform: VerticalLayout {
                 spacing: 4px;
+                SectionHeader { text: "トランスフォーム"; }
+                NumberField { label: "X"; value: root.tx; changed(v) => { root.tx = v; root.emit-transform(); } }
+                NumberField { label: "Y"; value: root.ty; changed(v) => { root.ty = v; root.emit-transform(); } }
+                NumberField { label: "Z"; value: root.tz; changed(v) => { root.tz = v; root.emit-transform(); } }
+                NumberField { label: "拡大率X"; value: root.scale-x; changed(v) => { root.scale-x = v; root.emit-transform(); } }
+                NumberField { label: "拡大率Y"; value: root.scale-y; changed(v) => { root.scale-y = v; root.emit-transform(); } }
+                NumberField { label: "回転X"; value: root.rot-x; changed(v) => { root.rot-x = v; root.emit-transform(); } }
+                NumberField { label: "回転Y"; value: root.rot-y; changed(v) => { root.rot-y = v; root.emit-transform(); } }
+                NumberField { label: "回転Z"; value: root.rot-z; changed(v) => { root.rot-z = v; root.emit-transform(); } }
+                NumberField { label: "不透明度"; value: root.obj-opacity; changed(v) => { root.obj-opacity = v; root.emit-transform(); } }
+            }
+
+            if has-text: VerticalLayout {
+                spacing: 4px;
+                Rectangle { height: 1px; background: #24242c; }
+                SectionHeader { text: "テキスト"; }
                 Rectangle {
-                    width: 34px; height: 24px; border-radius: 3px;
-                    background: root.fps == 24 ? #2a4db8 : #1e1e24;
-                    border-width: 1px; border-color: root.fps == 24 ? #6a90f0 : #303038;
-                    Text { text: "24"; color: root.fps == 24 ? #dde8ff : #666672;
-                           font-size: 11px; horizontal-alignment: center; vertical-alignment: center; }
-                    TouchArea { clicked() => { root.set-fps(24); } }
+                    height: 44px;
+                    border-radius: 3px;
+                    background: #1e1e24;
+                    border-width: 1px;
+                    border-color: #303038;
+
+                    TextInput {
+                        x: 6px; y: 4px;
+                        width: parent.width - 12px;
+                        height: parent.height - 8px;
+                        text: root.text-content;
+                        color: #dde3ee;
+                        font-size: 11px;
+                        wrap: word-wrap;
+                        accepted => { root.text-content = self.text; root.set-text(self.text, root.text-x, root.text-y, root.text-font-size); }
+                    }
                 }
+                NumberField { label: "X"; value: root.text-x; changed(v) => { root.text-x = v; root.set-text(root.text-content, v, root.text-y, root.text-font-size); } }
+                NumberField { label: "Y"; value: root.text-y; changed(v) => { root.text-y = v; root.set-text(root.text-content, root.text-x, v, root.text-font-size); } }
+                NumberField { label: "フォントサイズ"; value: root.text-font-size; changed(v) => { root.text-font-size = v; root.set-text(root.text-content, root.text-x, root.text-y, v); } }
+            }
+
+            if has-audio: VerticalLayout {
+                spacing: 4px;
+                Rectangle { height: 1px; background: #24242c; }
+                SectionHeader { text: "オーディオ"; }
+                NumberField { label: "音量"; value: root.volume; changed(v) => { root.volume = v; root.set-audio(v, root.pan, root.mute); } }
+                NumberField { label: "パン"; value: root.pan; changed(v) => { root.pan = v; root.set-audio(root.volume, v, root.mute); } }
+                ToggleField { label: "ミュート"; checked: root.mute; toggled => { root.mute = !root.mute; root.set-audio(root.volume, root.pan, root.mute); } }
+            }
+
+            Rectangle { height: 1px; background: #24242c; }
+            SectionHeader { text: "エフェクト"; }
+
+            for eff[i] in root.effects: VerticalLayout {
+                spacing: 2px;
+
                 Rectangle {
-                    width: 34px; height: 24px; border-radius: 3px;
-                    background: root.fps == 30 ? #2a4db8 : #1e1e24;
-                    border-width: 1px; border-color: root.fps == 30 ? #6a90f0 : #303038;
-                    Text { text: "30"; color: root.fps == 30 ? #dde8ff : #666672;
-                           font-size: 11px; horizontal-alignment: center; vertical-alignment: center; }
-                    TouchArea { clicked() => { root.set-fps(30); } }
+                    height: 24px;
+                    background: #16161b;
+
+                    HorizontalLayout {
+                        padding-left: 4px;
+                        padding-right: 4px;
+                        spacing: 6px;
+
+                        ToggleField {
+                            width: 30px;
+                            label: "";
+                            checked: eff.enabled;
+                            toggled => { root.set-effect-enabled(eff.index, !eff.enabled); }
+                        }
+
+                        Text {
+                            text: eff.name;
+                            color: #c8c8d2;
+                            font-size: 11px;
+                            vertical-alignment: center;
+                            height: 100%;
+                        }
+
+                        Rectangle {
+                            width: 18px;
+                            height: 18px;
+                            TouchArea { clicked() => { root.remove-effect(eff.index); } }
+                            Text { text: "×"; color: #888894; horizontal-alignment: center; vertical-alignment: center; width: 100%; height: 100%; }
+                        }
+                    }
                 }
-                Rectangle {
-                    width: 34px; height: 24px; border-radius: 3px;
-                    background: root.fps == 60 ? #2a4db8 : #1e1e24;
-                    border-width: 1px; border-color: root.fps == 60 ? #6a90f0 : #303038;
-                    Text { text: "60"; color: root.fps == 60 ? #dde8ff : #666672;
-                           font-size: 11px; horizontal-alignment: center; vertical-alignment: center; }
-                    TouchArea { clicked() => { root.set-fps(60); } }
-                }
-                Rectangle {
-                    width: 40px; height: 24px; border-radius: 3px;
-                    background: root.fps == 120 ? #2a4db8 : #1e1e24;
-                    border-width: 1px; border-color: root.fps == 120 ? #6a90f0 : #303038;
-                    Text { text: "120"; color: root.fps == 120 ? #dde8ff : #666672;
-                           font-size: 11px; horizontal-alignment: center; vertical-alignment: center; }
-                    TouchArea { clicked() => { root.set-fps(120); } }
+
+                for p[j] in root.params: Rectangle {
+                    height: p.effect-index == eff.index ? 22px : 0px;
+                    clip: true;
+
+                    if p.effect-index == eff.index: NumberField {
+                        label: p.key;
+                        value: p.value;
+                        changed(v) => { root.set-param(eff.index, p.key, v); }
+                    }
                 }
             }
-        }
-
-        Rectangle { height: 1px; background: #24242c; }
-
-        VerticalLayout {
-            spacing: 5px;
-            Text { text: "解像度"; color: #55555e; font-size: 10px; }
-            HorizontalLayout {
-                spacing: 4px;
-                Rectangle {
-                    width: 40px; height: 24px; border-radius: 3px;
-                    background: root.res-width == 1280 ? #1e5c34 : #1e1e24;
-                    border-width: 1px; border-color: root.res-width == 1280 ? #4dc87a : #303038;
-                    Text { text: "HD"; color: root.res-width == 1280 ? #c0f0d0 : #666672;
-                           font-size: 11px; horizontal-alignment: center; vertical-alignment: center; }
-                    TouchArea { clicked() => { root.set-resolution(1280, 720); } }
-                }
-                Rectangle {
-                    width: 44px; height: 24px; border-radius: 3px;
-                    background: root.res-width == 1920 ? #1e5c34 : #1e1e24;
-                    border-width: 1px; border-color: root.res-width == 1920 ? #4dc87a : #303038;
-                    Text { text: "FHD"; color: root.res-width == 1920 ? #c0f0d0 : #666672;
-                           font-size: 11px; horizontal-alignment: center; vertical-alignment: center; }
-                    TouchArea { clicked() => { root.set-resolution(1920, 1080); } }
-                }
-                Rectangle {
-                    width: 34px; height: 24px; border-radius: 3px;
-                    background: root.res-width == 3840 ? #1e5c34 : #1e1e24;
-                    border-width: 1px; border-color: root.res-width == 3840 ? #4dc87a : #303038;
-                    Text { text: "4K"; color: root.res-width == 3840 ? #c0f0d0 : #666672;
-                           font-size: 11px; horizontal-alignment: center; vertical-alignment: center; }
-                    TouchArea { clicked() => { root.set-resolution(3840, 2160); } }
-                }
-            }
-        }
     }
 }
