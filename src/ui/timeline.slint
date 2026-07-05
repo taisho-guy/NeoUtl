@@ -10,13 +10,13 @@ export component TimelineWindow inherits Window {
     preferred-height: 320px;
     background: #0e0e12;
 
-    in-out property <int>              current-frame: 0;
-    in-out property <int>              total-frames: 300;
-    in-out property <int>              layer-count: 128;
-    in-out property <float>            zoom-scale: 1.0;
-    in-out property <int>              selected-layer: 0;
+    in-out property <int> current-frame: 0;
+    in-out property <int> total-frames: 300;
+    in-out property <int> layer-count: 128;
+    in-out property <float> zoom-scale: 1.0;
+    in-out property <int> selected-layer: 0;
     in-out property <[TimelineObject]> objects: [];
-    in-out property <[LayerState]>     layer-states: [];
+    in-out property <[LayerState]> layer-states: [];
 
     callback seek-timeline(int);
     callback add-object-at(int /* frame */, int /* layer */, int /* kind */);
@@ -28,15 +28,20 @@ export component TimelineWindow inherits Window {
     callback toggle-layer-visible(int);
     callback toggle-layer-locked(int);
 
-    property <int>    header-width: 60;
-    property <int>    layer-height: 24;
-    property <int>    frame-interval: root.zoom-scale > 3.0 ? 10 : root.zoom-scale > 1.0 ? 30 : root.zoom-scale > 0.3 ? 60 : 300;
+    property <int> header-width: 60;
+    property <int> layer-height: 24;
+    property <int> frame-interval: root.zoom-scale > 3.0 ? 10 : root.zoom-scale > 1.0 ? 30 : root.zoom-scale > 0.3 ? 60 : 300;
 
-    property <bool>   show-context-menu: false;
-    property <bool>   menu-is-delete: false;
-    property <int>    menu-target-id: -1;
-    property <int>    menu-frame: 0;
-    property <int>    menu-layer: 0;
+    property <length> scroll-x: 0px;
+    property <length> scroll-y: 0px;
+    property <length> content-width: root.total-frames * root.zoom-scale * 1px;
+    property <length> content-height: root.layer-count * root.layer-height * 1px;
+
+    property <bool> show-context-menu: false;
+    property <bool> menu-is-delete: false;
+    property <int> menu-target-id: -1;
+    property <int> menu-frame: 0;
+    property <int> menu-layer: 0;
     property <length> menu-x: 0px;
     property <length> menu-y: 0px;
 
@@ -57,34 +62,31 @@ export component TimelineWindow inherits Window {
     }
 
     VerticalLayout {
-        Rectangle {
-            height: 32px;
-            HorizontalLayout {
-                Rectangle { width: root.header-width * 1px; background: #202028; }
-                Ruler {
-                    scale: root.zoom-scale;
-                    scroll-x: view.scroll-x;
-                    fps: 30;
-                    current-frame: root.current-frame;
-                    total-frames: root.total-frames;
-                    header-width: root.header-width * 1px;
-                    scrub(frame) => { root.seek-timeline(frame); }
-                    zoom(new-scale) => { root.zoom-scale = max(0.1, min(10.0, new-scale)); root.set-zoom(root.zoom-scale); }
-                }
-            }
+        Ruler {
+            scale: root.zoom-scale;
+            scroll-x: root.scroll-x;
+            fps: 30;
+            current-frame: root.current-frame;
+            total-frames: root.total-frames;
+            header-width: root.header-width * 1px;
+            scrub(frame) => { root.seek-timeline(frame); }
+            zoom(new-scale) => { root.zoom-scale = max(0.1, min(10.0, new-scale)); root.set-zoom(root.zoom-scale); }
         }
 
         HorizontalLayout {
-            LayerHeader {
+            layer-header := LayerHeader {
                 header-width: root.header-width * 1px;
                 layer-height: root.layer-height * 1px;
                 layer-count: root.layer-count;
-                scroll-y: view.scroll-y;
+                scroll-y: root.scroll-y;
                 selected-layer: root.selected-layer;
                 layer-states: root.layer-states;
                 toggle-visible(layer) => { root.toggle-layer-visible(layer); }
                 toggle-locked(layer) => { root.toggle-layer-locked(layer); }
                 select-layer(layer) => { root.selected-layer = layer; }
+                scroll-requested(dy) => {
+                    root.scroll-y = max(0px, min(root.scroll-y - dy, max(0px, root.content-height - layer-header.height)));
+                }
             }
 
             view := TimelineView {
@@ -96,11 +98,16 @@ export component TimelineWindow inherits Window {
                 current-frame: root.current-frame;
                 objects: root.objects;
                 layer-states: root.layer-states;
+                scroll-x: root.scroll-x;
+                scroll-y: root.scroll-y;
 
                 seek(frame) => { root.seek-timeline(frame); }
                 select-object(id) => { root.select-object(id); }
                 move-object(id, start, layer) => { root.move-object(id, start, layer); }
                 resize-object(id, start, end) => { root.resize-object(id, start, end); }
+                scroll-requested(dx) => {
+                    root.scroll-x = max(0px, min(root.scroll-x - dx, max(0px, root.content-width - view.width)));
+                }
                 context-menu(x, y, frame, layer, hit-id) => {
                     root.menu-frame = frame;
                     root.menu-layer = layer;
@@ -114,7 +121,7 @@ export component TimelineWindow inherits Window {
         }
     }
 
-    if (root.show-context-menu) : Rectangle {
+    if (root.show-context-menu): Rectangle {
         x: root.menu-x;
         y: root.menu-y;
         width: 170px;
@@ -128,20 +135,26 @@ export component TimelineWindow inherits Window {
         drop-shadow-offset-x: 2px;
         drop-shadow-offset-y: 2px;
 
-        if (root.menu-is-delete) : VerticalLayout {
+        if (root.menu-is-delete): VerticalLayout {
             padding: 4px;
             Rectangle {
                 background: del-touch.has-hover ? #4a1515 : transparent;
                 height: 30px;
                 border-radius: 3px;
-                Text { text: "  🗑  Delete Object"; color: #ff8888; font-size: 12px; vertical-alignment: center; }
+                Text {
+                    text: "  🗑  Delete Object";
+                    color: #ff8888;
+                    font-size: 12px;
+                    vertical-alignment: center;
+                }
+
                 del-touch := TouchArea {
                     clicked() => { root.delete-object(root.menu-target-id); root.show-context-menu = false; }
                 }
             }
         }
 
-        if (!root.menu-is-delete) : VerticalLayout {
+        if (!root.menu-is-delete): VerticalLayout {
             padding: 4px;
             spacing: 1px;
 
@@ -149,7 +162,13 @@ export component TimelineWindow inherits Window {
                 background: t-touch.has-hover ? #303038 : transparent;
                 height: 30px;
                 border-radius: 3px;
-                Text { text: "  ＋  Add Tetrahedron"; color: #8aabff; font-size: 12px; vertical-alignment: center; }
+                Text {
+                    text: "  ＋  Add Tetrahedron";
+                    color: #8aabff;
+                    font-size: 12px;
+                    vertical-alignment: center;
+                }
+
                 t-touch := TouchArea {
                     clicked() => { root.add-object-at(root.menu-frame, root.menu-layer, 0); root.show-context-menu = false; }
                 }
@@ -159,7 +178,13 @@ export component TimelineWindow inherits Window {
                 background: c-touch.has-hover ? #303038 : transparent;
                 height: 30px;
                 border-radius: 3px;
-                Text { text: "  ＋  Add Cube"; color: #6ad8a0; font-size: 12px; vertical-alignment: center; }
+                Text {
+                    text: "  ＋  Add Cube";
+                    color: #6ad8a0;
+                    font-size: 12px;
+                    vertical-alignment: center;
+                }
+
                 c-touch := TouchArea {
                     clicked() => { root.add-object-at(root.menu-frame, root.menu-layer, 1); root.show-context-menu = false; }
                 }
@@ -169,7 +194,13 @@ export component TimelineWindow inherits Window {
                 background: tx-touch.has-hover ? #303038 : transparent;
                 height: 30px;
                 border-radius: 3px;
-                Text { text: "  ＋  Add Text"; color: #c0a0ff; font-size: 12px; vertical-alignment: center; }
+                Text {
+                    text: "  ＋  Add Text";
+                    color: #c0a0ff;
+                    font-size: 12px;
+                    vertical-alignment: center;
+                }
+
                 tx-touch := TouchArea {
                     clicked() => { root.add-object-at(root.menu-frame, root.menu-layer, 2); root.show-context-menu = false; }
                 }
