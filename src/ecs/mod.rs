@@ -328,6 +328,17 @@ impl EcsWorld {
         });
     }
 
+    pub fn set_effect_enabled(&mut self, object_id: usize, index: usize, enabled: bool) {
+        let Some(entity) = self.find_entity(object_id) else {
+            return;
+        };
+        self.world.run(|mut stacks: ViewMut<EffectStack>| {
+            if let Ok(mut stack) = (&mut stacks).get(entity) {
+                stack.set_enabled(index, enabled);
+            }
+        });
+    }
+
     pub fn remove_effect(&mut self, object_id: usize, index: usize) {
         let Some(entity) = self.find_entity(object_id) else {
             return;
@@ -357,6 +368,28 @@ impl EcsWorld {
         self.world.run(|stacks: View<EffectStack>| {
             stacks.get(entity).map(|s| s.0.clone()).unwrap_or_default()
         })
+    }
+
+    // --- TextContent ---
+
+    pub fn get_text(&self, object_id: usize) -> Option<TextContent> {
+        let entity = self.find_entity(object_id)?;
+        self.world
+            .run(|texts: View<TextContent>| texts.get(entity).ok().cloned())
+    }
+
+    pub fn set_text(&mut self, object_id: usize, text: String, x: f32, y: f32, font_size: f32) {
+        let Some(entity) = self.find_entity(object_id) else {
+            return;
+        };
+        self.world.run(|mut texts: ViewMut<TextContent>| {
+            if let Ok(mut slot) = (&mut texts).get(entity) {
+                slot.text = text;
+                slot.x = x;
+                slot.y = y;
+                slot.font_size = font_size;
+            }
+        });
     }
 
     // --- AudioParams ---
