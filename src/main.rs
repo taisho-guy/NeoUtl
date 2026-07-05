@@ -3,6 +3,7 @@ use slint::ComponentHandle;
 use std::sync::{Arc, Mutex};
 
 mod ecs;
+mod media;
 mod objects;
 mod renderer;
 mod ui;
