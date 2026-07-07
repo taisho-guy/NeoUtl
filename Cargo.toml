@@ -1,9 +1,23 @@
 [workspace]
-members = [".", "crates/neoutl-object-api", "crates/objects/*"]
+members = [
+    ".",
+    "crates/neoutl-object-api",
+    "crates/objects/*",
+    "crates/neoutl-media-api",
+    "crates/neoutl-media-ffmpeg",
+    "crates/neoutl-media-gpuvideo",
+    "crates/neoutl-media-symphonia",
+    "crates/neoutl-media-image",
+]
 resolver = "2"
 
 [workspace.dependencies]
 neoutl-object-api = { path = "crates/neoutl-object-api" }
+neoutl-media-api = { path = "crates/neoutl-media-api" }
+neoutl-media-ffmpeg = { path = "crates/neoutl-media-ffmpeg" }
+neoutl-media-gpuvideo = { path = "crates/neoutl-media-gpuvideo" }
+neoutl-media-symphonia = { path = "crates/neoutl-media-symphonia" }
+neoutl-media-image = { path = "crates/neoutl-media-image" }
 
 [package]
 name = "NeoUtl"
@@ -12,6 +26,11 @@ edition = "2024"
 
 [dependencies]
 neoutl-object-api.workspace = true
+neoutl-media-api.workspace = true
+neoutl-media-ffmpeg.workspace = true
+neoutl-media-gpuvideo.workspace = true
+neoutl-media-symphonia.workspace = true
+neoutl-media-image.workspace = true
 libloading = "0.9"
 slint = { version = "1.17", default-features = false, features = [
     "std",
@@ -22,14 +41,13 @@ slint = { version = "1.17", default-features = false, features = [
 ] }
 wgpu = "29"
 wgpu_text = "29"
-ffmpeg-next = "8"
 tokio = { version = "1.52", features = ["rt-multi-thread", "sync"] }
 bytemuck = { version = "1.25", features = ["derive"] }
 shipyard = "0.11"
 lucide-slint = "1.23"
 image = "0.25"
 image-extras = "0.1"
-gpu-video = "0.4"
+ffmpeg-next = "8"
 
 [build-dependencies]
 lucide-slint = "1.23.0"

@@ -1,0 +1,10 @@
+[package]
+name = "neoutl-media-gpuvideo"
+version = "0.0.0"
+edition = "2024"
+
+[dependencies]
+neoutl-media-api = { path = "../neoutl-media-api" }
+gpu-video = "0.4"
+wgpu = "29"
+symphonia = { version = "0.6", features = ["isomp4", "mkv"] }
