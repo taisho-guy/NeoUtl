@@ -1,16 +1,6 @@
 // src/media/mod.rs
-pub mod audio;
 pub mod cache;
-pub mod image;
 pub mod text;
-pub mod video;
-
-#[derive(Clone, Debug)]
-pub struct DecodedFrame {
-    pub width: u32,
-    pub height: u32,
-    pub rgba: Vec<u8>,
-}
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum MediaKind {

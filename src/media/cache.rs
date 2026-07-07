@@ -1,20 +1,33 @@
 // src/media/cache.rs
-use super::audio::{self, AudioBuffer};
-use super::image::ImageDecoder;
-use super::video::VideoDecoder;
-use super::{DecodedFrame, MediaKind, detect_kind};
+use super::{MediaKind, detect_kind};
+use neoutl_media_api::{AudioBuffer, ImageSource, VideoSource};
+use slint::wgpu_29::wgpu;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, OnceLock};
 
 pub enum MediaHandle {
-    Video(VideoDecoder),
-    Image(ImageDecoder),
+    Video(Box<dyn VideoSource>),
+    Image(Box<dyn ImageSource>),
     Audio(Arc<AudioBuffer>),
 }
 
 pub struct MediaCache {
     entries: HashMap<PathBuf, MediaHandle>,
+}
+
+fn open_video(path: &Path) -> Result<Box<dyn VideoSource>, String> {
+    match neoutl_media_gpuvideo::GpuVideoDecoder::open(path) {
+        Ok(decoder) => Ok(Box::new(decoder)),
+        Err(_) => neoutl_media_ffmpeg::FfmpegVideoDecoder::open(path)
+            .map(|decoder| Box::new(decoder) as Box<dyn VideoSource>)
+            .map_err(|e| e.to_string()),
+    }
+}
+
+fn open_image(path: &Path) -> Result<Box<dyn ImageSource>, String> {
+    neoutl_media_image::StaticImageDecoder::open(path)
+        .map(|decoder| Box::new(decoder) as Box<dyn ImageSource>)
 }
 
 impl MediaCache {
@@ -29,25 +42,27 @@ impl MediaCache {
             let kind =
                 detect_kind(path).ok_or_else(|| format!("未対応の拡張子: {}", path.display()))?;
             let handle = match kind {
-                MediaKind::Video => {
-                    MediaHandle::Video(VideoDecoder::open(path).map_err(|e| e.to_string())?)
+                MediaKind::Video => MediaHandle::Video(open_video(path)?),
+                MediaKind::Image => MediaHandle::Image(open_image(path)?),
+                MediaKind::Audio => {
+                    MediaHandle::Audio(Arc::new(neoutl_media_symphonia::decode_full(path)?))
                 }
-                MediaKind::Image => {
-                    MediaHandle::Image(ImageDecoder::open(path).map_err(|e| e.to_string())?)
-                }
-                MediaKind::Audio => MediaHandle::Audio(Arc::new(
-                    audio::decode_full(path).map_err(|e| e.to_string())?,
-                )),
             };
             self.entries.insert(path.to_path_buf(), handle);
         }
         Ok(self.entries.get_mut(path).unwrap())
     }
 
-    pub fn frame_at(&mut self, path: &Path, frame_index: i64) -> Result<DecodedFrame, String> {
+    pub fn frame_at(
+        &mut self,
+        path: &Path,
+        frame_index: i64,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+    ) -> Result<wgpu::Texture, String> {
         match self.load(path)? {
-            MediaHandle::Video(decoder) => decoder.frame_at(frame_index).map_err(|e| e.to_string()),
-            MediaHandle::Image(decoder) => Ok(decoder.frame().clone()),
+            MediaHandle::Video(decoder) => decoder.frame_texture(device, queue, frame_index),
+            MediaHandle::Image(decoder) => Ok(decoder.texture(device, queue)),
             MediaHandle::Audio(_) => Err(format!(
                 "音声ファイルに映像フレームは存在しません: {}",
                 path.display()
