@@ -1,0 +1,7 @@
+[package]
+name = "neoutl-media-api"
+version = "0.0.0"
+edition = "2024"
+
+[dependencies]
+wgpu = "29"

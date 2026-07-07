@@ -1,0 +1,8 @@
+[package]
+name = "neoutl-media-symphonia"
+version = "0.0.0"
+edition = "2024"
+
+[dependencies]
+neoutl-media-api = { path = "../neoutl-media-api" }
+symphonia = { version = "0.6", features = ["all"] }
