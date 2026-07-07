@@ -1,9 +1,5 @@
 [workspace]
-members = [
-    ".",
-    "crates/neoutl-object-api",
-    "crates/objects/*",
-]
+members = [".", "crates/neoutl-object-api", "crates/objects/*"]
 resolver = "2"
 
 [workspace.dependencies]
@@ -30,9 +26,10 @@ ffmpeg-next = "8"
 tokio = { version = "1.52", features = ["rt-multi-thread", "sync"] }
 bytemuck = { version = "1.25", features = ["derive"] }
 shipyard = "0.11"
-lucide-slint = "1.23.0"
-image = "0.25.10"
-image-extras = "0.1.1"
+lucide-slint = "1.23"
+image = "0.25"
+image-extras = "0.1"
+gpu-video = "0.4"
 
 [build-dependencies]
 lucide-slint = "1.23.0"
