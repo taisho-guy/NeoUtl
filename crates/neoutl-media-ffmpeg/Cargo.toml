@@ -1,9 +1,0 @@
-[package]
-name = "neoutl-media-ffmpeg"
-version = "0.0.0"
-edition = "2024"
-
-[dependencies]
-neoutl-media-api = { path = "../neoutl-media-api" }
-ffmpeg-next = "8"
-wgpu = "29"
