@@ -10,10 +10,10 @@ dependencies = [
  "libloading 0.9.0",
  "lucide-slint",
  "neoutl-media-api",
- "neoutl-media-ffmpeg",
- "neoutl-media-gpuvideo",
- "neoutl-media-image",
- "neoutl-media-symphonia",
+ "neoutl-media-ffmpeg-decoder",
+ "neoutl-media-gpuvideo-decoder",
+ "neoutl-media-image-decoder",
+ "neoutl-media-symphonia-decoder",
  "neoutl-object-api",
  "shipyard",
  "slint",
@@ -3022,7 +3022,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "neoutl-media-ffmpeg"
+name = "neoutl-media-ffmpeg-decoder"
 version = "0.0.0"
 dependencies = [
  "ffmpeg-next",
@@ -3031,7 +3031,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "neoutl-media-gpuvideo"
+name = "neoutl-media-gpuvideo-decoder"
 version = "0.0.0"
 dependencies = [
  "gpu-video",
@@ -3041,7 +3041,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "neoutl-media-image"
+name = "neoutl-media-image-decoder"
 version = "0.0.0"
 dependencies = [
  "image",
@@ -3050,7 +3050,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "neoutl-media-symphonia"
+name = "neoutl-media-symphonia-decoder"
 version = "0.0.0"
 dependencies = [
  "neoutl-media-api",

@@ -4,20 +4,18 @@ members = [
     "crates/neoutl-object-api",
     "crates/objects/*",
     "crates/neoutl-media-api",
-    "crates/neoutl-media-ffmpeg",
-    "crates/neoutl-media-gpuvideo",
-    "crates/neoutl-media-symphonia",
-    "crates/neoutl-media-image",
+    "crates/media/*",
 ]
 resolver = "2"
 
 [workspace.dependencies]
 neoutl-object-api = { path = "crates/neoutl-object-api" }
 neoutl-media-api = { path = "crates/neoutl-media-api" }
-neoutl-media-ffmpeg = { path = "crates/neoutl-media-ffmpeg" }
-neoutl-media-gpuvideo = { path = "crates/neoutl-media-gpuvideo" }
-neoutl-media-symphonia = { path = "crates/neoutl-media-symphonia" }
-neoutl-media-image = { path = "crates/neoutl-media-image" }
+
+neoutl-media-ffmpeg-decoder = { path = "crates/media/ffmpeg-decoder" }
+neoutl-media-gpuvideo-decoder = { path = "crates/media/gpuvideo-decoder" }
+neoutl-media-symphonia-decoder = { path = "crates/media/symphonia-decoder" }
+neoutl-media-image-decoder = { path = "crates/media/image-decoder" }
 
 [package]
 name = "NeoUtl"
@@ -27,10 +25,10 @@ edition = "2024"
 [dependencies]
 neoutl-object-api.workspace = true
 neoutl-media-api.workspace = true
-neoutl-media-ffmpeg.workspace = true
-neoutl-media-gpuvideo.workspace = true
-neoutl-media-symphonia.workspace = true
-neoutl-media-image.workspace = true
+neoutl-media-ffmpeg-decoder.workspace = true
+neoutl-media-gpuvideo-decoder.workspace = true
+neoutl-media-symphonia-decoder.workspace = true
+neoutl-media-image-decoder.workspace = true
 libloading = "0.9"
 slint = { version = "1.17", default-features = false, features = [
     "std",

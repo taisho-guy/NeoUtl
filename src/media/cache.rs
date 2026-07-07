@@ -17,16 +17,16 @@ pub struct MediaCache {
 }
 
 fn open_video(path: &Path) -> Result<Box<dyn VideoSource>, String> {
-    match neoutl_media_gpuvideo::GpuVideoDecoder::open(path) {
+    match neoutl_media_gpuvideo_decoder::GpuVideoDecoder::open(path) {
         Ok(decoder) => Ok(Box::new(decoder)),
-        Err(_) => neoutl_media_ffmpeg::FfmpegVideoDecoder::open(path)
+        Err(_) => neoutl_media_ffmpeg_decoder::FfmpegVideoDecoder::open(path)
             .map(|decoder| Box::new(decoder) as Box<dyn VideoSource>)
             .map_err(|e| e.to_string()),
     }
 }
 
 fn open_image(path: &Path) -> Result<Box<dyn ImageSource>, String> {
-    neoutl_media_image::StaticImageDecoder::open(path)
+    neoutl_media_image_decoder::StaticImageDecoder::open(path)
         .map(|decoder| Box::new(decoder) as Box<dyn ImageSource>)
 }
 
@@ -45,7 +45,7 @@ impl MediaCache {
                 MediaKind::Video => MediaHandle::Video(open_video(path)?),
                 MediaKind::Image => MediaHandle::Image(open_image(path)?),
                 MediaKind::Audio => {
-                    MediaHandle::Audio(Arc::new(neoutl_media_symphonia::decode_full(path)?))
+                    MediaHandle::Audio(Arc::new(neoutl_media_symphonia_decoder::decode_full(path)?))
                 }
             };
             self.entries.insert(path.to_path_buf(), handle);

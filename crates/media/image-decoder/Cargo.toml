@@ -1,0 +1,9 @@
+[package]
+name = "neoutl-media-image-decoder"
+version = "0.0.0"
+edition = "2024"
+
+[dependencies]
+neoutl-media-api = { path = "../../neoutl-media-api" }
+image = "0.25"
+wgpu = "29"
