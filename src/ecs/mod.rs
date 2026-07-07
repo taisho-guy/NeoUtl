@@ -4,7 +4,9 @@ pub mod effects;
 pub mod resources;
 pub mod systems;
 pub mod transform;
+pub mod types;
 
+use crate::ecs::types::EffectInstance;
 use components::{AudioParams, KindId, Layer, ObjectId, SceneId, TextContent, TimeRange};
 use effects::EffectStack;
 use resources::{LayerStates, ProjectResource, SceneMeta, SceneResource, TimelineResource};
@@ -370,12 +372,12 @@ impl EcsWorld {
         };
         self.world.run(|mut stacks: ViewMut<EffectStack>| {
             if let Ok(mut stack) = (&mut stacks).get(entity) {
-                stack.set_param(index, key, value);
+                stack.set_param_f32(index, key, value);
             }
         });
     }
 
-    pub fn get_effects(&self, object_id: usize) -> Vec<effects::EffectInstance> {
+    pub fn get_effects(&self, object_id: usize) -> Vec<EffectInstance> {
         let Some(entity) = self.find_entity(object_id) else {
             return Vec::new();
         };

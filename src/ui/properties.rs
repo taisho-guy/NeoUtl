@@ -219,10 +219,14 @@ fn refresh(props: &PropertiesWindow, world: &EcsWorld) {
         let mut keys: Vec<&String> = e.params.keys().collect();
         keys.sort();
         for k in keys {
+            let value = match e.params[k].static_value {
+                crate::ecs::types::Value::Number(n) => n,
+                _ => 0.0,
+            };
             params.push(ParamRow {
                 effect_index: i as i32,
                 key: k.clone().into(),
-                value: e.params[k],
+                value,
             });
         }
     }

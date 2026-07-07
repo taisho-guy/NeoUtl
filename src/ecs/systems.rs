@@ -1,9 +1,10 @@
 // src/ecs/systems.rs
 use super::EcsWorld;
 use crate::ecs::components::{AudioParams, KindId, SceneId, TextContent, TimeRange};
-use crate::ecs::effects::{EffectStack, compute_effect_params};
+use crate::ecs::effects::{EffectStack, compute_effect_params_at};
 use crate::ecs::resources::{SceneResource, TimelineResource};
 use crate::ecs::transform::{GlobalMatrix, Transform};
+use crate::ecs::types::Value;
 use shipyard::{Get, IntoIter, UniqueView, View};
 use std::collections::HashMap;
 
@@ -13,7 +14,7 @@ pub struct ActiveObject {
     pub global_matrix: [f32; 16],
     pub opacity: f32,
     pub audio: AudioParams,
-    pub effects: Vec<(String, HashMap<String, f32>)>,
+    pub effects: Vec<(String, HashMap<String, Value>)>,
 }
 
 pub fn get_active_objects_system(world: &EcsWorld) -> Vec<ActiveObject> {
@@ -49,7 +50,7 @@ pub fn get_active_objects_system(world: &EcsWorld) -> Vec<ActiveObject> {
                 let audio = audio_params.get(id).copied().unwrap_or_default();
                 let effects = effect_stacks
                     .get(id)
-                    .map(compute_effect_params)
+                    .map(|stack| compute_effect_params_at(stack, current))
                     .unwrap_or_default();
 
                 active.push(ActiveObject {
