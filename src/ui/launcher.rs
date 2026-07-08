@@ -35,7 +35,7 @@ pub fn setup(window: &LauncherWindow, on_launch: Rc<dyn Fn(ProjectMeta)>) {
     {
         let weak = window.as_weak();
         let on_launch = on_launch.clone();
-        window.on_create_project(move |name, fps, width, height| {
+        window.on_create_project(move |name, fps, width, height, sample_rate, channels| {
             let trimmed = name.trim();
             if trimmed.is_empty() {
                 if let Some(w) = weak.upgrade() {
@@ -48,6 +48,8 @@ pub fn setup(window: &LauncherWindow, on_launch: Rc<dyn Fn(ProjectMeta)>) {
                 fps.max(1) as u32,
                 width.max(1) as u32,
                 height.max(1) as u32,
+                sample_rate.max(1) as u32,
+                channels.max(1) as u32,
             );
             match result {
                 Ok(meta) => on_launch(meta),

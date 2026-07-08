@@ -14,6 +14,10 @@ pub struct ProjectResource {
     pub width: u32,
     /// 出力高さ（ピクセル）
     pub height: u32,
+    /// 音声サンプリングレート（Hz）
+    pub audio_sample_rate: u32,
+    /// 音声チャンネル数（1=モノラル, 2=ステレオ）
+    pub audio_channels: u32,
 }
 
 impl ProjectResource {
@@ -24,6 +28,8 @@ impl ProjectResource {
             fps: 30,
             width: 1920,
             height: 1080,
+            audio_sample_rate: 48000,
+            audio_channels: 2,
         }
     }
 }

@@ -179,6 +179,14 @@ impl EcsWorld {
             });
     }
 
+    pub fn set_audio_format(&mut self, sample_rate: u32, channels: u32) {
+        self.world
+            .run(|mut project: UniqueViewMut<ProjectResource>| {
+                project.audio_sample_rate = sample_rate;
+                project.audio_channels = channels;
+            });
+    }
+
     pub fn get_timeline_objects(&self) -> Vec<TimelineData> {
         self.world.run(
             |scenes: UniqueView<SceneResource>,

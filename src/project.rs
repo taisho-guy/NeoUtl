@@ -9,6 +9,8 @@ pub struct ProjectMeta {
     pub fps: u32,
     pub width: u32,
     pub height: u32,
+    pub audio_sample_rate: u32,
+    pub audio_channels: u32,
 }
 
 pub fn projects_dir() -> PathBuf {
@@ -47,6 +49,8 @@ fn serialize(meta: &ProjectMeta) -> String {
         ("fps", meta.fps.to_string()),
         ("width", meta.width.to_string()),
         ("height", meta.height.to_string()),
+        ("audio_sample_rate", meta.audio_sample_rate.to_string()),
+        ("audio_channels", meta.audio_channels.to_string()),
     ])
 }
 
@@ -64,6 +68,8 @@ pub fn load_project(dir: &Path) -> Option<ProjectMeta> {
         fps: config_format::get_u32(&map, "fps", 30),
         width: config_format::get_u32(&map, "width", 1920),
         height: config_format::get_u32(&map, "height", 1080),
+        audio_sample_rate: config_format::get_u32(&map, "audio_sample_rate", 48000),
+        audio_channels: config_format::get_u32(&map, "audio_channels", 2),
     })
 }
 
@@ -89,6 +95,8 @@ pub fn create_project(
     fps: u32,
     width: u32,
     height: u32,
+    audio_sample_rate: u32,
+    audio_channels: u32,
 ) -> std::io::Result<ProjectMeta> {
     let base_name = sanitize_dir_name(name);
     let base_dir = projects_dir();
@@ -108,6 +116,8 @@ pub fn create_project(
         fps,
         width,
         height,
+        audio_sample_rate,
+        audio_channels,
     };
     std::fs::write(meta_path(&meta.dir), serialize(&meta))?;
     Ok(meta)
