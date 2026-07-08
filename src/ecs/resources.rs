@@ -4,6 +4,10 @@ use shipyard::Unique;
 /// 動画プロジェクト全体の設定（FPS・解像度等）
 #[derive(Clone, Debug, Unique)]
 pub struct ProjectResource {
+    /// プロジェクト名
+    pub name: String,
+    /// プロジェクトディレクトリ（未保存時はNone）
+    pub dir: Option<std::path::PathBuf>,
     /// フレームレート（frames per second）
     pub fps: u32,
     /// 出力幅（ピクセル）
@@ -15,6 +19,8 @@ pub struct ProjectResource {
 impl ProjectResource {
     pub fn new() -> Self {
         Self {
+            name: String::new(),
+            dir: None,
             fps: 30,
             width: 1920,
             height: 1080,

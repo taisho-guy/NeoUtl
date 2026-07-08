@@ -1,4 +1,5 @@
 // src/ui/system-settings.slint
+import { Button } from "common.slint";
 import { SettingsSidebar } from "system-settings/sidebar.slint";
 import { GeneralPage } from "system-settings/general.slint";
 import { AppearancePage } from "system-settings/appearance.slint";
@@ -6,33 +7,6 @@ import { PerformancePage } from "system-settings/performance.slint";
 import { DecodePage } from "system-settings/decode.slint";
 import { TimelineDefaultsPage } from "system-settings/timeline-defaults.slint";
 import { ExportPage } from "system-settings/export.slint";
-
-component SettingsButton inherits Rectangle {
-    in property <string> label;
-    in property <bool> primary: false;
-    callback clicked();
-
-    width: 88px;
-    height: 28px;
-    border-radius: 4px;
-    border-width: 1px;
-    border-color: root.primary ? #3a5fd9 : #33333c;
-    background: root.primary
-        ? (touch.pressed ? #2244aa : touch.has-hover ? #3a5fd9 : #2a4db8)
-        : (touch.pressed ? #202028 : touch.has-hover ? #26262c : #1a1a20);
-
-    Text {
-        text: root.label;
-        color: #ffffff;
-        font-size: 11px;
-        horizontal-alignment: center;
-        vertical-alignment: center;
-        width: 100%;
-        height: 100%;
-    }
-
-    touch := TouchArea { clicked() => { root.clicked(); } }
-}
 
 export component SystemSettingsWindow inherits Window {
     title: "NeoUtl - システム設定";
@@ -158,12 +132,12 @@ export component SystemSettingsWindow inherits Window {
                     horizontal-stretch: 1;
                 }
 
-                SettingsButton {
+                Button {
                     label: "再読込";
                     clicked => { root.reload-settings(); }
                 }
 
-                SettingsButton {
+                Button {
                     label: "保存";
                     primary: true;
                     clicked => { root.save-settings(); }

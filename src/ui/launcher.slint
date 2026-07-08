@@ -1,0 +1,158 @@
+// src/ui/launcher.slint
+import { LineEdit, SpinBox } from "std-widgets.slint";
+import { Button } from "common.slint";
+import { ProjectListItem } from "types.slint";
+
+component ProjectRow inherits Rectangle {
+    in property <ProjectListItem> item;
+    callback open();
+
+    height: 46px;
+    border-radius: 4px;
+    background: touch.pressed ? #202028 : touch.has-hover ? #26262c : transparent;
+
+    VerticalLayout {
+        padding: 6px;
+        spacing: 2px;
+
+        Text {
+            text: root.item.name;
+            color: #ffffff;
+            font-size: 12px;
+        }
+
+        Text {
+            text: root.item.width + " × " + root.item.height + "  " + root.item.fps + "fps";
+            color: #888894;
+            font-size: 10px;
+        }
+    }
+
+    touch := TouchArea {
+        clicked => { root.open(); }
+    }
+}
+
+export component LauncherWindow inherits Window {
+    title: "NeoUtl - プロジェクト";
+    preferred-width: 640px;
+    preferred-height: 420px;
+    background: #0e0e12;
+
+    in-out property <[ProjectListItem]> projects: [];
+    in-out property <string> new-name: "";
+    in-out property <int> new-fps: 30;
+    in-out property <int> new-width: 1920;
+    in-out property <int> new-height: 1080;
+    in-out property <string> status-message: "";
+
+    callback create-project(string, int, int, int);
+    callback open-project(string);
+    callback refresh();
+
+    HorizontalLayout {
+        padding: 12px;
+        spacing: 12px;
+
+        Rectangle {
+            width: 300px;
+            background: #16161c;
+            border-radius: 4px;
+
+            VerticalLayout {
+                padding: 8px;
+                spacing: 6px;
+
+                Text {
+                    text: "既存プロジェクト";
+                    color: #cccccc;
+                    font-size: 12px;
+                }
+
+                Rectangle {
+                    vertical-stretch: 1;
+
+                    if root.projects.length == 0: Text {
+                        text: "プロジェクトがありません";
+                        color: #55555e;
+                        font-size: 11px;
+                    }
+
+                    Flickable {
+                        VerticalLayout {
+                            spacing: 2px;
+                            for item in root.projects: ProjectRow {
+                                item: item;
+                                open => { root.open-project(item.path); }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        Rectangle {
+            background: #16161c;
+            border-radius: 4px;
+
+            VerticalLayout {
+                padding: 12px;
+                spacing: 10px;
+
+                Text {
+                    text: "新規プロジェクト";
+                    color: #cccccc;
+                    font-size: 12px;
+                }
+
+                Text { text: "名前"; color: #888894; font-size: 10px; }
+                LineEdit {
+                    text: root.new-name;
+                    edited(t) => { root.new-name = t; }
+                }
+
+                Text { text: "フレームレート (fps)"; color: #888894; font-size: 10px; }
+                SpinBox {
+                    minimum: 1;
+                    maximum: 240;
+                    value: root.new-fps;
+                    edited(v) => { root.new-fps = v; }
+                }
+
+                Text { text: "幅 (px)"; color: #888894; font-size: 10px; }
+                SpinBox {
+                    minimum: 16;
+                    maximum: 7680;
+                    value: root.new-width;
+                    edited(v) => { root.new-width = v; }
+                }
+
+                Text { text: "高さ (px)"; color: #888894; font-size: 10px; }
+                SpinBox {
+                    minimum: 16;
+                    maximum: 7680;
+                    value: root.new-height;
+                    edited(v) => { root.new-height = v; }
+                }
+
+                Rectangle { vertical-stretch: 1; }
+
+                Text {
+                    text: root.status-message;
+                    color: #e07a7a;
+                    font-size: 10px;
+                    wrap: word-wrap;
+                }
+
+                Button {
+                    label: "作成して開く";
+                    primary: true;
+                    width: 100%;
+                    clicked => {
+                        root.create-project(root.new-name, root.new-fps, root.new-width, root.new-height);
+                    }
+                }
+            }
+        }
+    }
+}
