@@ -1,0 +1,25 @@
+// src/ui/system-settings/appearance.slint
+import { ToggleField, IntField } from "fields.slint";
+
+export component AppearancePage inherits VerticalLayout {
+    in property <bool> theme-dark: true;
+    in property <int> ui-scale-percent: 100;
+    callback changed(bool, int);
+
+    padding: 10px;
+    spacing: 10px;
+
+    ToggleField {
+        label: "ダークテーマ";
+        checked: root.theme-dark;
+        toggled => { root.changed(!root.theme-dark, root.ui-scale-percent); }
+    }
+
+    IntField {
+        label: "UIスケール（%）";
+        value: root.ui-scale-percent;
+        min: 50;
+        max: 200;
+        changed(v) => { root.changed(root.theme-dark, v); }
+    }
+}

@@ -9,7 +9,11 @@ pub mod types;
 use crate::ecs::types::EffectInstance;
 use components::{AudioParams, KindId, Layer, ObjectId, SceneId, TextContent, TimeRange};
 use effects::EffectStack;
-use resources::{LayerStates, ProjectResource, SceneMeta, SceneResource, TimelineResource};
+use resources::{
+    LayerStates, ProjectResource, SceneMeta, SceneResource, SystemSettingsResource,
+    TimelineResource,
+};
+
 use shipyard::{Get, IntoIter, UniqueView, UniqueViewMut, View, ViewMut, World};
 use transform::{GlobalMatrix, Transform, compute_global_matrix};
 
@@ -34,6 +38,7 @@ impl EcsWorld {
         world.add_unique(ProjectResource::new());
         world.add_unique(LayerStates::new(resources::DEFAULT_LAYER_COUNT));
         world.add_unique(SceneResource::new());
+        world.add_unique(SystemSettingsResource::new());
         Self { world }
     }
 
@@ -501,5 +506,14 @@ impl EcsWorld {
     pub fn scenes(&self) -> Vec<SceneMeta> {
         self.world
             .run(|scenes: UniqueView<SceneResource>| scenes.scenes.clone())
+    }
+    pub fn get_system_settings(&self) -> SystemSettingsResource {
+        self.world
+            .run(|s: UniqueView<SystemSettingsResource>| s.clone())
+    }
+
+    pub fn set_system_settings(&mut self, s: SystemSettingsResource) {
+        self.world
+            .run(|mut slot: UniqueViewMut<SystemSettingsResource>| *slot = s);
     }
 }

@@ -20,6 +20,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let preview = PreviewWindow::new()?;
     let timeline = TimelineWindow::new()?;
     let props = PropertiesWindow::new()?;
+    let settings = SystemSettingsWindow::new()?;
 
     let world_holder = Arc::new(Mutex::new(ecs::EcsWorld::new()));
     let engine_holder = Arc::new(Mutex::new(None::<renderer::RenderEngine>));
@@ -45,7 +46,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
         })?;
 
-    ui::setup_ui_callbacks(&preview, &timeline, &props, world_holder, engine_holder);
+    ui::setup_ui_callbacks(
+        &preview,
+        &timeline,
+        &props,
+        &settings,
+        world_holder,
+        engine_holder,
+    );
 
     preview.show()?;
     timeline.show()?;

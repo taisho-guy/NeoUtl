@@ -1,5 +1,6 @@
 // src/ui/preview.rs
 use crate::PreviewWindow;
+use crate::SystemSettingsWindow;
 use crate::TimelineWindow;
 use crate::ecs::{EcsWorld, systems::get_active_objects_system};
 use crate::renderer::RenderEngine;
@@ -26,6 +27,7 @@ fn apply_frame(
 pub fn setup(
     preview: &PreviewWindow,
     timeline_weak: Weak<TimelineWindow>,
+    settings_weak: Weak<SystemSettingsWindow>,
     world_holder: Arc<Mutex<EcsWorld>>,
     engine_holder: Arc<Mutex<Option<RenderEngine>>>,
 ) {
@@ -115,6 +117,15 @@ pub fn setup(
     preview.on_redo(|| {});
     preview.on_show_timeline(|| {});
     preview.on_show_properties(|| {});
+
+    preview.on_show_system_settings({
+        let settings_weak = settings_weak.clone();
+        move || {
+            if let Some(w) = settings_weak.upgrade() {
+                let _ = w.show();
+            }
+        }
+    });
 
     preview.on_quit(|| {
         let _ = slint::quit_event_loop();

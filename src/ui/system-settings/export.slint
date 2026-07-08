@@ -1,0 +1,25 @@
+// src/ui/system-settings/export.slint
+import { ChoiceField } from "fields.slint";
+
+export component ExportPage inherits VerticalLayout {
+    in property <int> export-container: 0;
+    in property <int> export-codec: 0;
+    callback changed(int, int);
+
+    padding: 10px;
+    spacing: 10px;
+
+    ChoiceField {
+        label: "コンテナ形式";
+        options: ["MP4", "MOV", "MKV"];
+        selected: root.export-container;
+        changed(v) => { root.changed(v, root.export-codec); }
+    }
+
+    ChoiceField {
+        label: "映像コーデック";
+        options: ["H.264", "HEVC", "AV1"];
+        selected: root.export-codec;
+        changed(v) => { root.changed(root.export-container, v); }
+    }
+}

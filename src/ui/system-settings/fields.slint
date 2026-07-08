@@ -1,0 +1,124 @@
+// src/ui/system-settings/fields.slint
+
+export component ToggleField inherits Rectangle {
+    in property <string> label;
+    in property <bool> checked;
+    callback toggled();
+
+    height: 28px;
+
+    Text {
+        text: root.label;
+        color: #b0b0ba;
+        font-size: 11px;
+        vertical-alignment: center;
+        height: 100%;
+    }
+
+    Rectangle {
+        x: parent.width - 36px;
+        width: 36px;
+        height: 18px;
+        border-radius: 9px;
+        background: root.checked ? #2a4db8 : #303038;
+
+        Rectangle {
+            x: root.checked ? parent.width - 16px : 2px;
+            y: 2px;
+            width: 14px;
+            height: 14px;
+            border-radius: 7px;
+            background: #e8e8ee;
+        }
+
+        TouchArea { clicked() => { root.toggled(); } }
+    }
+}
+
+export component IntField inherits Rectangle {
+    in property <string> label;
+    in property <int> value;
+    in property <int> min: 0;
+    in property <int> max: 1000;
+    callback changed(int);
+
+    height: 28px;
+
+    function clamp(v: int) -> int {
+        return v < root.min ? root.min : v > root.max ? root.max : v;
+    }
+
+    Text {
+        text: root.label;
+        color: #b0b0ba;
+        font-size: 11px;
+        vertical-alignment: center;
+        height: 100%;
+        width: parent.width - 80px;
+    }
+
+    Rectangle {
+        x: parent.width - 72px;
+        width: 72px;
+        border-radius: 3px;
+        background: #16161b;
+        border-width: 1px;
+        border-color: #303038;
+
+        TextInput {
+            x: 4px;
+            width: parent.width - 8px;
+            height: 100%;
+            text: root.value;
+            color: #dde3ee;
+            font-size: 11px;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+            input-type: InputType.number;
+            accepted => { root.changed(root.clamp(self.text.to-float())); }
+        }
+    }
+}
+
+export component ChoiceField inherits Rectangle {
+    in property <string> label;
+    in property <[string]> options: [];
+    in property <int> selected: 0;
+    callback changed(int);
+
+    height: 48px;
+
+    VerticalLayout {
+        spacing: 4px;
+
+        Text {
+            text: root.label;
+            color: #b0b0ba;
+            font-size: 11px;
+        }
+
+        HorizontalLayout {
+            spacing: 4px;
+
+            for opt[i] in root.options: Rectangle {
+                height: 24px;
+                border-radius: 3px;
+                background: i == root.selected ? #2a4db8 : #1e1e24;
+                border-width: 1px;
+                border-color: #303038;
+
+                Text {
+                    text: opt;
+                    color: i == root.selected ? #ffffff : #b0b0ba;
+                    font-size: 10px;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                    width: 100%;
+                    height: 100%;
+                }
+
+                TouchArea { clicked() => { root.changed(i); } }
+            }
+        }
+    }
+}

@@ -127,3 +127,40 @@ impl SceneResource {
         self.scenes.iter_mut().find(|s| s.id == id)
     }
 }
+
+/// システム全体の設定（AviQtl::Core::SettingsManager 相当）
+#[derive(Clone, Debug, Unique)]
+pub struct SystemSettingsResource {
+    pub autosave_enabled: bool,
+    pub autosave_interval_sec: i32,
+    pub theme_dark: bool,
+    pub ui_scale_percent: i32,
+    pub worker_threads: i32,
+    pub audio_max_block_size: i32,
+    /// 0: 自動 (GPU優先, 失敗時CPU) / 1: GPU固定 / 2: CPU固定
+    pub decode_backend: i32,
+    pub default_snap: bool,
+    pub magnetic_snap_range: i32,
+    /// 0: MP4 / 1: MOV / 2: MKV
+    pub export_container: i32,
+    /// 0: H.264 / 1: HEVC / 2: AV1
+    pub export_codec: i32,
+}
+
+impl SystemSettingsResource {
+    pub fn new() -> Self {
+        Self {
+            autosave_enabled: true,
+            autosave_interval_sec: 300,
+            theme_dark: true,
+            ui_scale_percent: 100,
+            worker_threads: 0,
+            audio_max_block_size: 4096,
+            decode_backend: 0,
+            default_snap: true,
+            magnetic_snap_range: 10,
+            export_container: 0,
+            export_codec: 0,
+        }
+    }
+}
