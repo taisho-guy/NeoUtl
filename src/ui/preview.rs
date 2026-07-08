@@ -1,21 +1,46 @@
 // src/ui/preview.rs
-use crate::PreviewWindow;
-use crate::SystemSettingsWindow;
-use crate::TimelineWindow;
-use crate::ecs::{EcsWorld, systems::get_active_objects_system};
+use crate::app_state::{self, SharedAppState};
+use crate::ecs::systems::get_active_objects_system;
 use crate::renderer::RenderEngine;
-use slint::{ComponentHandle, Weak};
-use std::sync::{Arc, Mutex};
+use crate::{
+    PreviewWindow, ProjectTabItem, PropertiesWindow, SystemSettingsWindow, TimelineWindow,
+};
+use slint::{ComponentHandle, Model, ModelRc, VecModel, Weak};
+use std::cell::RefCell;
+use std::rc::Rc;
+
+pub type GpuSlot = Rc<RefCell<Option<(slint::wgpu_29::wgpu::Device, slint::wgpu_29::wgpu::Queue)>>>;
+
+/// WGPUデバイス/キューは全プロジェクト共通のため一度だけ取得し、以後のRenderEngine生成に使い回す。
+pub fn install_rendering_notifier(preview: &PreviewWindow, gpu_slot: GpuSlot) {
+    preview
+        .window()
+        .set_rendering_notifier(move |state, graphics_api| {
+            if let (
+                slint::RenderingState::RenderingSetup,
+                slint::GraphicsAPI::WGPU29 { device, queue, .. },
+            ) = (state, graphics_api)
+            {
+                let mut slot = gpu_slot.borrow_mut();
+                if slot.is_none() {
+                    *slot = Some((device.clone(), queue.clone()));
+                }
+            }
+        })
+        .expect("rendering notifier登録失敗");
+}
 
 fn apply_frame(
     frame: i32,
-    world_holder: &Arc<Mutex<EcsWorld>>,
+    state: &SharedAppState,
     preview_weak: &Weak<PreviewWindow>,
     timeline_weak: &Weak<TimelineWindow>,
 ) {
+    let world_holder = app_state::active_world(state);
     let mut world = world_holder.lock().unwrap();
     let clamped = frame.clamp(0, world.total_frames());
     world.set_current_frame(clamped);
+    drop(world);
     if let Some(p) = preview_weak.upgrade() {
         p.set_current_frame(clamped);
     }
@@ -24,26 +49,93 @@ fn apply_frame(
     }
 }
 
+fn sync_project_tabs(state: &SharedAppState, preview: &PreviewWindow) {
+    let s = state.lock().unwrap();
+    let tabs: Vec<ProjectTabItem> = s
+        .sessions
+        .iter()
+        .enumerate()
+        .map(|(i, sess)| ProjectTabItem {
+            index: i as i32,
+            name: sess.meta.name.clone().into(),
+            active: i == s.active,
+        })
+        .collect();
+    drop(s);
+    preview.set_project_tabs(ModelRc::new(VecModel::from(tabs)));
+}
+
+/// アクティブプロジェクト切替時、プレビュー・タイムライン・プロパティ各ウィンドウを再同期する。
+pub fn sync_active_session(
+    state: &SharedAppState,
+    preview_weak: &Weak<PreviewWindow>,
+    timeline_weak: &Weak<TimelineWindow>,
+    props_weak: &Weak<PropertiesWindow>,
+) {
+    let world_holder = app_state::active_world(state);
+    let world = world_holder.lock().unwrap();
+    let proj = world.get_project();
+    let total = world.total_frames();
+    drop(world);
+
+    if let Some(p) = preview_weak.upgrade() {
+        p.set_fps(proj.fps as i32);
+        p.set_res_width(proj.width as i32);
+        p.set_res_height(proj.height as i32);
+        p.set_total_frames(total);
+        p.set_current_frame(0);
+        p.set_is_playing(false);
+        sync_project_tabs(state, &p);
+    }
+    crate::ui::timeline::sync_active_session(state, timeline_weak);
+    if let Some(pr) = props_weak.upgrade() {
+        pr.set_object_id(-1);
+    }
+}
+
 pub fn setup(
     preview: &PreviewWindow,
     timeline_weak: Weak<TimelineWindow>,
+    props_weak: Weak<PropertiesWindow>,
     settings_weak: Weak<SystemSettingsWindow>,
-    world_holder: Arc<Mutex<EcsWorld>>,
-    engine_holder: Arc<Mutex<Option<RenderEngine>>>,
+    state: SharedAppState,
+    gpu_slot: GpuSlot,
 ) {
     let preview_weak = preview.as_weak();
+    sync_project_tabs(&state, preview);
+    {
+        let world_holder = app_state::active_world(&state);
+        let world = world_holder.lock().unwrap();
+        let proj = world.get_project();
+        preview.set_fps(proj.fps as i32);
+        preview.set_res_width(proj.width as i32);
+        preview.set_res_height(proj.height as i32);
+        preview.set_total_frames(world.total_frames());
+    }
 
     preview.on_request_render({
         let preview_weak = preview_weak.clone();
         let timeline_weak = timeline_weak.clone();
-        let world_holder = world_holder.clone();
+        let state = state.clone();
+        let gpu_slot = gpu_slot.clone();
         move || {
+            let world_holder = app_state::active_world(&state);
+            let engine_holder = app_state::active_engine(&state);
+
             {
+                let world = world_holder.lock().unwrap();
+                let proj = world.get_project();
+                let active = get_active_objects_system(&world);
+                drop(world);
+
                 let mut engine_lock = engine_holder.lock().unwrap();
+                if engine_lock.is_none() {
+                    if let Some((device, queue)) = gpu_slot.borrow().clone() {
+                        *engine_lock =
+                            Some(RenderEngine::new(device, queue, proj.width, proj.height));
+                    }
+                }
                 if let Some(ref mut engine) = *engine_lock {
-                    let world = world_holder.lock().unwrap();
-                    let active = get_active_objects_system(&world);
-                    let proj = world.get_project();
                     engine.render(&active, &proj);
                     let img = slint::Image::try_from(engine.texture.clone()).unwrap();
                     if let Some(p) = preview_weak.upgrade() {
@@ -59,9 +151,9 @@ pub fn setup(
                     let next = p.get_current_frame() + step.max(1);
                     if next >= total {
                         p.set_is_playing(false);
-                        apply_frame(total, &world_holder, &preview_weak, &timeline_weak);
+                        apply_frame(total, &state, &preview_weak, &timeline_weak);
                     } else {
-                        apply_frame(next, &world_holder, &preview_weak, &timeline_weak);
+                        apply_frame(next, &state, &preview_weak, &timeline_weak);
                     }
                 }
             }
@@ -81,20 +173,20 @@ pub fn setup(
     preview.on_seek({
         let preview_weak = preview_weak.clone();
         let timeline_weak = timeline_weak.clone();
-        let world_holder = world_holder.clone();
+        let state = state.clone();
         move |frame| {
-            apply_frame(frame, &world_holder, &preview_weak, &timeline_weak);
+            apply_frame(frame, &state, &preview_weak, &timeline_weak);
         }
     });
 
     preview.on_step_frame({
         let preview_weak = preview_weak.clone();
         let timeline_weak = timeline_weak.clone();
-        let world_holder = world_holder.clone();
+        let state = state.clone();
         move |delta| {
             if let Some(p) = preview_weak.upgrade() {
                 let next = p.get_current_frame() + delta;
-                apply_frame(next, &world_holder, &preview_weak, &timeline_weak);
+                apply_frame(next, &state, &preview_weak, &timeline_weak);
             }
         }
     });
@@ -108,15 +200,76 @@ pub fn setup(
         }
     });
 
-    preview.on_new_project(|| {});
-    preview.on_open_project(|| {});
+    preview.on_switch_project_tab({
+        let state = state.clone();
+        let preview_weak = preview_weak.clone();
+        let timeline_weak = timeline_weak.clone();
+        let props_weak = props_weak.clone();
+        move |index| {
+            {
+                let mut s = state.lock().unwrap();
+                if (index as usize) < s.sessions.len() {
+                    s.active = index as usize;
+                }
+            }
+            sync_active_session(&state, &preview_weak, &timeline_weak, &props_weak);
+        }
+    });
+
+    preview.on_close_project_tab({
+        let state = state.clone();
+        let preview_weak = preview_weak.clone();
+        let timeline_weak = timeline_weak.clone();
+        let props_weak = props_weak.clone();
+        move |index| {
+            let should_quit = {
+                let mut s = state.lock().unwrap();
+                if s.sessions.len() <= 1 {
+                    true
+                } else {
+                    let idx = index as usize;
+                    if idx < s.sessions.len() {
+                        s.sessions.remove(idx);
+                        if s.active >= s.sessions.len() {
+                            s.active = s.sessions.len() - 1;
+                        } else if idx < s.active {
+                            s.active -= 1;
+                        }
+                    }
+                    false
+                }
+            };
+            if should_quit {
+                let _ = slint::quit_event_loop();
+            } else {
+                sync_active_session(&state, &preview_weak, &timeline_weak, &props_weak);
+            }
+        }
+    });
+
     preview.on_save_project(|| {});
     preview.on_save_project_as(|| {});
     preview.on_export_media(|| {});
     preview.on_undo(|| {});
     preview.on_redo(|| {});
-    preview.on_show_timeline(|| {});
-    preview.on_show_properties(|| {});
+
+    preview.on_show_timeline({
+        let timeline_weak = timeline_weak.clone();
+        move || {
+            if let Some(t) = timeline_weak.upgrade() {
+                let _ = t.show();
+            }
+        }
+    });
+
+    preview.on_show_properties({
+        let props_weak = props_weak.clone();
+        move || {
+            if let Some(p) = props_weak.upgrade() {
+                let _ = p.show();
+            }
+        }
+    });
 
     preview.on_show_system_settings({
         let settings_weak = settings_weak.clone();

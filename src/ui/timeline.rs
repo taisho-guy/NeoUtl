@@ -1,26 +1,26 @@
 // src/ui/timeline.rs
-use crate::ecs::{EcsWorld, TimelineData, components::TextContent};
+use crate::app_state::{self, SharedAppState};
+use crate::ecs::{EcsWorld, components::TextContent};
 use crate::objects::registry;
-use crate::{LayerState, PreviewWindow, PropertiesWindow, TimelineObject, TimelineWindow};
+use crate::{
+    LayerState, PreviewWindow, PropertiesWindow, SceneTabItem, TimelineObject, TimelineWindow,
+};
 use slint::{ComponentHandle, Model, ModelRc, VecModel, Weak};
-use std::sync::{Arc, Mutex};
 
 pub fn setup(
     timeline: &TimelineWindow,
     preview_weak: Weak<PreviewWindow>,
     props_weak: Weak<PropertiesWindow>,
-    world_holder: Arc<Mutex<EcsWorld>>,
+    state: SharedAppState,
 ) {
     {
-        let (wc, tw, pw) = (
-            world_holder.clone(),
-            timeline.as_weak(),
-            preview_weak.clone(),
-        );
+        let (state, tw, pw) = (state.clone(), timeline.as_weak(), preview_weak.clone());
         timeline.on_seek_timeline(move |frame| {
-            let mut world = wc.lock().unwrap();
+            let world_holder = app_state::active_world(&state);
+            let mut world = world_holder.lock().unwrap();
             let clamped = frame.clamp(0, world.total_frames());
             world.set_current_frame(clamped);
+            drop(world);
             if let Some(t) = tw.upgrade() {
                 t.set_current_frame(clamped);
             }
@@ -31,10 +31,11 @@ pub fn setup(
     }
 
     {
-        let (wc, tw) = (world_holder.clone(), timeline.as_weak());
+        let (state, tw) = (state.clone(), timeline.as_weak());
         timeline.on_add_object_at(move |frame, layer, kind_idx| {
             if let Some(t) = tw.upgrade() {
-                let mut world = wc.lock().unwrap();
+                let world_holder = app_state::active_world(&state);
+                let mut world = world_holder.lock().unwrap();
                 let text = registry()
                     .get(kind_idx as usize)
                     .filter(|p| p.name == "Text")
@@ -46,13 +47,14 @@ pub fn setup(
     }
 
     {
-        let (wc, tw) = (world_holder.clone(), timeline.as_weak());
+        let (state, tw) = (state.clone(), timeline.as_weak());
         timeline.on_delete_object(move |id| {
             if id < 0 {
                 return;
             }
             if let Some(t) = tw.upgrade() {
-                let mut world = wc.lock().unwrap();
+                let world_holder = app_state::active_world(&state);
+                let mut world = world_holder.lock().unwrap();
                 world.delete_object(id as usize);
                 sync(&t, &world);
             }
@@ -60,7 +62,7 @@ pub fn setup(
     }
 
     {
-        let (wc, tw, pw) = (world_holder.clone(), timeline.as_weak(), props_weak.clone());
+        let (state, tw, pw) = (state.clone(), timeline.as_weak(), props_weak.clone());
         timeline.on_select_object(move |id| {
             if let Some(t) = tw.upgrade() {
                 let objs = t.get_objects();
@@ -74,17 +76,19 @@ pub fn setup(
                 t.set_objects(ModelRc::new(VecModel::from(updated)));
             }
             if let Some(p) = pw.upgrade() {
-                let world = wc.lock().unwrap();
+                let world_holder = app_state::active_world(&state);
+                let world = world_holder.lock().unwrap();
                 crate::ui::properties::select_object(&p, &world, id);
             }
         });
     }
 
     {
-        let (wc, tw) = (world_holder.clone(), timeline.as_weak());
+        let (state, tw) = (state.clone(), timeline.as_weak());
         timeline.on_move_object(move |id, start, layer| {
             if let Some(t) = tw.upgrade() {
-                let mut world = wc.lock().unwrap();
+                let world_holder = app_state::active_world(&state);
+                let mut world = world_holder.lock().unwrap();
                 world.move_object(id as usize, start, layer);
                 sync(&t, &world);
             }
@@ -92,10 +96,11 @@ pub fn setup(
     }
 
     {
-        let (wc, tw) = (world_holder.clone(), timeline.as_weak());
+        let (state, tw) = (state.clone(), timeline.as_weak());
         timeline.on_resize_object(move |id, start, end| {
             if let Some(t) = tw.upgrade() {
-                let mut world = wc.lock().unwrap();
+                let world_holder = app_state::active_world(&state);
+                let mut world = world_holder.lock().unwrap();
                 world.resize_object(id as usize, start, end);
                 sync(&t, &world);
             }
@@ -103,9 +108,10 @@ pub fn setup(
     }
 
     {
-        let (wc, tw) = (world_holder.clone(), timeline.as_weak());
+        let (state, tw) = (state.clone(), timeline.as_weak());
         timeline.on_set_zoom(move |scale| {
-            let mut world = wc.lock().unwrap();
+            let world_holder = app_state::active_world(&state);
+            let mut world = world_holder.lock().unwrap();
             world.set_zoom(scale);
             if let Some(t) = tw.upgrade() {
                 t.set_zoom_scale(world.zoom());
@@ -114,10 +120,11 @@ pub fn setup(
     }
 
     {
-        let (wc, tw) = (world_holder.clone(), timeline.as_weak());
+        let (state, tw) = (state.clone(), timeline.as_weak());
         timeline.on_toggle_layer_visible(move |layer| {
             if let Some(t) = tw.upgrade() {
-                let mut world = wc.lock().unwrap();
+                let world_holder = app_state::active_world(&state);
+                let mut world = world_holder.lock().unwrap();
                 let current = world.layer_states();
                 let visible = current.get(layer as usize).map(|s| s.0).unwrap_or(true);
                 world.set_layer_visible(layer as usize, !visible);
@@ -127,10 +134,11 @@ pub fn setup(
     }
 
     {
-        let (wc, tw) = (world_holder.clone(), timeline.as_weak());
+        let (state, tw) = (state.clone(), timeline.as_weak());
         timeline.on_toggle_layer_locked(move |layer| {
             if let Some(t) = tw.upgrade() {
-                let mut world = wc.lock().unwrap();
+                let world_holder = app_state::active_world(&state);
+                let mut world = world_holder.lock().unwrap();
                 let current = world.layer_states();
                 let locked = current.get(layer as usize).map(|s| s.1).unwrap_or(false);
                 world.set_layer_locked(layer as usize, !locked);
@@ -140,14 +148,66 @@ pub fn setup(
     }
 
     {
-        let world = world_holder.lock().unwrap();
-        sync(timeline, &world);
-        timeline.set_zoom_scale(world.zoom());
-        timeline.set_layer_count(world.layer_count());
+        let (state, tw) = (state.clone(), timeline.as_weak());
+        timeline.on_switch_scene_tab(move |id| {
+            if let Some(t) = tw.upgrade() {
+                let world_holder = app_state::active_world(&state);
+                let mut world = world_holder.lock().unwrap();
+                if world.switch_scene(id) {
+                    sync(&t, &world);
+                    sync_scene_tabs(&t, &world);
+                }
+            }
+        });
     }
+
+    {
+        let (state, tw) = (state.clone(), timeline.as_weak());
+        timeline.on_add_scene_tab(move || {
+            if let Some(t) = tw.upgrade() {
+                let world_holder = app_state::active_world(&state);
+                let mut world = world_holder.lock().unwrap();
+                let count = world.scenes().len();
+                let id = world.add_scene(format!("Scene {}", count + 1));
+                world.switch_scene(id);
+                sync(&t, &world);
+                sync_scene_tabs(&t, &world);
+            }
+        });
+    }
+
+    {
+        let (state, tw) = (state.clone(), timeline.as_weak());
+        timeline.on_close_scene_tab(move |id| {
+            if let Some(t) = tw.upgrade() {
+                let world_holder = app_state::active_world(&state);
+                let mut world = world_holder.lock().unwrap();
+                if world.scenes().len() > 1 {
+                    world.remove_scene(id);
+                    sync(&t, &world);
+                    sync_scene_tabs(&t, &world);
+                }
+            }
+        });
+    }
+
+    sync_active_session(&state, &timeline.as_weak());
 }
 
-fn to_slint(data: &TimelineData) -> TimelineObject {
+/// アクティブプロジェクト切替時、タイムライン全体（オブジェクト・レイヤー・シーンタブ）を再同期する。
+pub fn sync_active_session(state: &SharedAppState, timeline_weak: &Weak<TimelineWindow>) {
+    let Some(t) = timeline_weak.upgrade() else {
+        return;
+    };
+    let world_holder = app_state::active_world(state);
+    let world = world_holder.lock().unwrap();
+    sync(&t, &world);
+    sync_scene_tabs(&t, &world);
+    t.set_zoom_scale(world.zoom());
+    t.set_layer_count(world.layer_count());
+}
+
+fn to_slint(data: &crate::ecs::TimelineData) -> TimelineObject {
     let label = registry()
         .get(data.kind as usize)
         .map(|p| p.name.as_str())
@@ -190,4 +250,18 @@ fn sync(timeline: &TimelineWindow, world: &EcsWorld) {
         .map(|&(visible, locked)| LayerState { visible, locked })
         .collect();
     timeline.set_layer_states(ModelRc::new(VecModel::from(states)));
+}
+
+fn sync_scene_tabs(timeline: &TimelineWindow, world: &EcsWorld) {
+    let active = world.active_scene();
+    let tabs: Vec<SceneTabItem> = world
+        .scenes()
+        .iter()
+        .map(|s| SceneTabItem {
+            id: s.id,
+            name: s.name.clone().into(),
+            active: s.id == active,
+        })
+        .collect();
+    timeline.set_scene_tabs(ModelRc::new(VecModel::from(tabs)));
 }
