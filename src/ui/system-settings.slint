@@ -7,10 +7,37 @@ import { DecodePage } from "system-settings/decode.slint";
 import { TimelineDefaultsPage } from "system-settings/timeline-defaults.slint";
 import { ExportPage } from "system-settings/export.slint";
 
+component SettingsButton inherits Rectangle {
+    in property <string> label;
+    in property <bool> primary: false;
+    callback clicked();
+
+    width: 88px;
+    height: 28px;
+    border-radius: 4px;
+    border-width: 1px;
+    border-color: root.primary ? #3a5fd9 : #33333c;
+    background: root.primary
+        ? (touch.pressed ? #2244aa : touch.has-hover ? #3a5fd9 : #2a4db8)
+        : (touch.pressed ? #202028 : touch.has-hover ? #26262c : #1a1a20);
+
+    Text {
+        text: root.label;
+        color: #ffffff;
+        font-size: 11px;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+        width: 100%;
+        height: 100%;
+    }
+
+    touch := TouchArea { clicked() => { root.clicked(); } }
+}
+
 export component SystemSettingsWindow inherits Window {
     title: "NeoUtl - システム設定";
     preferred-width: 640px;
-    preferred-height: 420px;
+    preferred-height: 460px;
     background: #0e0e12;
 
     in-out property <int> selected-category: 0;
@@ -32,78 +59,114 @@ export component SystemSettingsWindow inherits Window {
     in-out property <int> export-container: 0;
     in-out property <int> export-codec: 0;
 
+    in-out property <string> save-status: "";
+
     callback set-general(bool, int);
     callback set-appearance(bool, int);
     callback set-performance(int, int);
     callback set-decode(int);
     callback set-timeline-defaults(bool, int);
     callback set-export(int, int);
+    callback save-settings();
+    callback reload-settings();
 
-    HorizontalLayout {
-        SettingsSidebar {
-            selected: root.selected-category;
-            categories: ["一般", "外観", "パフォーマンス", "デコード", "タイムライン", "エクスポート"];
-            select(i) => { root.selected-category = i; }
+    VerticalLayout {
+        HorizontalLayout {
+            SettingsSidebar {
+                selected: root.selected-category;
+                categories: ["一般", "外観", "パフォーマンス", "デコード", "タイムライン", "エクスポート"];
+                select(i) => { root.selected-category = i; }
+            }
+
+            Rectangle {
+                background: #0e0e12;
+
+                if root.selected-category == 0: GeneralPage {
+                    autosave-enabled: root.autosave-enabled;
+                    autosave-interval-sec: root.autosave-interval-sec;
+                    changed(enabled, interval) => {
+                        root.autosave-enabled = enabled;
+                        root.autosave-interval-sec = interval;
+                        root.set-general(enabled, interval);
+                    }
+                }
+
+                if root.selected-category == 1: AppearancePage {
+                    theme-dark: root.theme-dark;
+                    ui-scale-percent: root.ui-scale-percent;
+                    changed(dark, scale) => {
+                        root.theme-dark = dark;
+                        root.ui-scale-percent = scale;
+                        root.set-appearance(dark, scale);
+                    }
+                }
+
+                if root.selected-category == 2: PerformancePage {
+                    worker-threads: root.worker-threads;
+                    audio-max-block-size: root.audio-max-block-size;
+                    changed(threads, block) => {
+                        root.worker-threads = threads;
+                        root.audio-max-block-size = block;
+                        root.set-performance(threads, block);
+                    }
+                }
+
+                if root.selected-category == 3: DecodePage {
+                    decode-backend: root.decode-backend;
+                    changed(backend) => {
+                        root.decode-backend = backend;
+                        root.set-decode(backend);
+                    }
+                }
+
+                if root.selected-category == 4: TimelineDefaultsPage {
+                    default-snap: root.default-snap;
+                    magnetic-snap-range: root.magnetic-snap-range;
+                    changed(snap, range) => {
+                        root.default-snap = snap;
+                        root.magnetic-snap-range = range;
+                        root.set-timeline-defaults(snap, range);
+                    }
+                }
+
+                if root.selected-category == 5: ExportPage {
+                    export-container: root.export-container;
+                    export-codec: root.export-codec;
+                    changed(container, codec) => {
+                        root.export-container = container;
+                        root.export-codec = codec;
+                        root.set-export(container, codec);
+                    }
+                }
+            }
         }
 
         Rectangle {
-            background: #0e0e12;
+            height: 40px;
+            background: #16161b;
 
-            if root.selected-category == 0: GeneralPage {
-                autosave-enabled: root.autosave-enabled;
-                autosave-interval-sec: root.autosave-interval-sec;
-                changed(enabled, interval) => {
-                    root.autosave-enabled = enabled;
-                    root.autosave-interval-sec = interval;
-                    root.set-general(enabled, interval);
+            HorizontalLayout {
+                padding: 6px;
+                spacing: 8px;
+                alignment: end;
+
+                Text {
+                    text: root.save-status;
+                    color: #8a8a94;
+                    font-size: 10px;
+                    vertical-alignment: center;
+                    horizontal-stretch: 1;
                 }
-            }
 
-            if root.selected-category == 1: AppearancePage {
-                theme-dark: root.theme-dark;
-                ui-scale-percent: root.ui-scale-percent;
-                changed(dark, scale) => {
-                    root.theme-dark = dark;
-                    root.ui-scale-percent = scale;
-                    root.set-appearance(dark, scale);
+                SettingsButton {
+                    label: "再読込";
+                    clicked => { root.reload-settings(); }
                 }
-            }
 
-            if root.selected-category == 2: PerformancePage {
-                worker-threads: root.worker-threads;
-                audio-max-block-size: root.audio-max-block-size;
-                changed(threads, block) => {
-                    root.worker-threads = threads;
-                    root.audio-max-block-size = block;
-                    root.set-performance(threads, block);
-                }
-            }
-
-            if root.selected-category == 3: DecodePage {
-                decode-backend: root.decode-backend;
-                changed(backend) => {
-                    root.decode-backend = backend;
-                    root.set-decode(backend);
-                }
-            }
-
-            if root.selected-category == 4: TimelineDefaultsPage {
-                default-snap: root.default-snap;
-                magnetic-snap-range: root.magnetic-snap-range;
-                changed(snap, range) => {
-                    root.default-snap = snap;
-                    root.magnetic-snap-range = range;
-                    root.set-timeline-defaults(snap, range);
-                }
-            }
-
-            if root.selected-category == 5: ExportPage {
-                export-container: root.export-container;
-                export-codec: root.export-codec;
-                changed(container, codec) => {
-                    root.export-container = container;
-                    root.export-codec = codec;
-                    root.set-export(container, codec);
+                SettingsButton {
+                    label: "保存";
+                    primary: true;
+                    clicked => { root.save-settings(); }
                 }
             }
         }
