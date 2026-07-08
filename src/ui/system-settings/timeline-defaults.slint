@@ -1,0 +1,25 @@
+// src/ui/system-settings/timeline-defaults.slint
+import { ToggleField, IntField } from "fields.slint";
+
+export component TimelineDefaultsPage inherits VerticalLayout {
+    in property <bool> default-snap: true;
+    in property <int> magnetic-snap-range: 10;
+    callback changed(bool, int);
+
+    padding: 10px;
+    spacing: 10px;
+
+    ToggleField {
+        label: "スナップを既定で有効化";
+        checked: root.default-snap;
+        toggled => { root.changed(!root.default-snap, root.magnetic-snap-range); }
+    }
+
+    IntField {
+        label: "磁力スナップ範囲（px）";
+        value: root.magnetic-snap-range;
+        min: 0;
+        max: 100;
+        changed(v) => { root.changed(root.default-snap, v); }
+    }
+}

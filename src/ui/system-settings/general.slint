@@ -1,0 +1,25 @@
+// src/ui/system-settings/general.slint
+import { ToggleField, IntField } from "fields.slint";
+
+export component GeneralPage inherits VerticalLayout {
+    in property <bool> autosave-enabled: true;
+    in property <int> autosave-interval-sec: 300;
+    callback changed(bool, int);
+
+    padding: 10px;
+    spacing: 10px;
+
+    ToggleField {
+        label: "自動保存を有効化";
+        checked: root.autosave-enabled;
+        toggled => { root.changed(!root.autosave-enabled, root.autosave-interval-sec); }
+    }
+
+    IntField {
+        label: "自動保存間隔（秒）";
+        value: root.autosave-interval-sec;
+        min: 10;
+        max: 3600;
+        changed(v) => { root.changed(root.autosave-enabled, v); }
+    }
+}

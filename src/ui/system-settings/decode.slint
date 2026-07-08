@@ -1,0 +1,17 @@
+// src/ui/system-settings/decode.slint
+import { ChoiceField } from "fields.slint";
+
+export component DecodePage inherits VerticalLayout {
+    in property <int> decode-backend: 0;
+    callback changed(int);
+
+    padding: 10px;
+    spacing: 10px;
+
+    ChoiceField {
+        label: "映像デコードバックエンド";
+        options: ["自動", "GPU固定", "CPU固定"];
+        selected: root.decode-backend;
+        changed(v) => { root.changed(v); }
+    }
+}

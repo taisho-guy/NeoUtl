@@ -1,0 +1,32 @@
+// src/ui/system-settings/sidebar.slint
+
+export component SettingsSidebar inherits Rectangle {
+    in property <int> selected: 0;
+    in property <[string]> categories: [];
+    callback select(int);
+
+    width: 160px;
+    background: #16161b;
+
+    VerticalLayout {
+        padding: 4px;
+        spacing: 2px;
+
+        for c[i] in root.categories: Rectangle {
+            height: 30px;
+            border-radius: 3px;
+            background: i == root.selected ? #2a4db8 : (touch.has-hover ? #202028 : transparent);
+
+            Text {
+                x: 8px;
+                text: c;
+                color: i == root.selected ? #ffffff : #b0b0ba;
+                font-size: 11px;
+                vertical-alignment: center;
+                height: 100%;
+            }
+
+            touch := TouchArea { clicked() => { root.select(i); } }
+        }
+    }
+}

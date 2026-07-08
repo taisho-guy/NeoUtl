@@ -1,0 +1,27 @@
+// src/ui/system-settings/performance.slint
+import { IntField } from "fields.slint";
+
+export component PerformancePage inherits VerticalLayout {
+    in property <int> worker-threads: 0;
+    in property <int> audio-max-block-size: 4096;
+    callback changed(int, int);
+
+    padding: 10px;
+    spacing: 10px;
+
+    IntField {
+        label: "ワーカースレッド数（0=自動）";
+        value: root.worker-threads;
+        min: 0;
+        max: 64;
+        changed(v) => { root.changed(v, root.audio-max-block-size); }
+    }
+
+    IntField {
+        label: "オーディオ最大ブロックサイズ";
+        value: root.audio-max-block-size;
+        min: 64;
+        max: 16384;
+        changed(v) => { root.changed(root.worker-threads, v); }
+    }
+}

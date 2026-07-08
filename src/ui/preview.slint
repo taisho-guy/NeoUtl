@@ -33,6 +33,7 @@ export component PreviewWindow inherits Window {
     callback redo();
     callback show-timeline();
     callback show-properties();
+    callback show-system-settings();
 
     changed current-frame => { seek-slider.value = root.current-frame; }
 
@@ -56,6 +57,7 @@ export component PreviewWindow inherits Window {
             title: "編集";
             MenuItem { title: "元に戻す"; activated() => { root.undo(); } }
             MenuItem { title: "やり直す"; activated() => { root.redo(); } }
+            MenuItem { title: "システム設定"; activated() => { root.show-system-settings(); } }
         }
         Menu {
             title: "表示";

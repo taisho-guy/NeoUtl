@@ -1,0 +1,111 @@
+// src/ui/system-settings.slint
+import { SettingsSidebar } from "system-settings/sidebar.slint";
+import { GeneralPage } from "system-settings/general.slint";
+import { AppearancePage } from "system-settings/appearance.slint";
+import { PerformancePage } from "system-settings/performance.slint";
+import { DecodePage } from "system-settings/decode.slint";
+import { TimelineDefaultsPage } from "system-settings/timeline-defaults.slint";
+import { ExportPage } from "system-settings/export.slint";
+
+export component SystemSettingsWindow inherits Window {
+    title: "NeoUtl - システム設定";
+    preferred-width: 640px;
+    preferred-height: 420px;
+    background: #0e0e12;
+
+    in-out property <int> selected-category: 0;
+
+    in-out property <bool> autosave-enabled: true;
+    in-out property <int> autosave-interval-sec: 300;
+
+    in-out property <bool> theme-dark: true;
+    in-out property <int> ui-scale-percent: 100;
+
+    in-out property <int> worker-threads: 0;
+    in-out property <int> audio-max-block-size: 4096;
+
+    in-out property <int> decode-backend: 0;
+
+    in-out property <bool> default-snap: true;
+    in-out property <int> magnetic-snap-range: 10;
+
+    in-out property <int> export-container: 0;
+    in-out property <int> export-codec: 0;
+
+    callback set-general(bool, int);
+    callback set-appearance(bool, int);
+    callback set-performance(int, int);
+    callback set-decode(int);
+    callback set-timeline-defaults(bool, int);
+    callback set-export(int, int);
+
+    HorizontalLayout {
+        SettingsSidebar {
+            selected: root.selected-category;
+            categories: ["一般", "外観", "パフォーマンス", "デコード", "タイムライン", "エクスポート"];
+            select(i) => { root.selected-category = i; }
+        }
+
+        Rectangle {
+            background: #0e0e12;
+
+            if root.selected-category == 0: GeneralPage {
+                autosave-enabled: root.autosave-enabled;
+                autosave-interval-sec: root.autosave-interval-sec;
+                changed(enabled, interval) => {
+                    root.autosave-enabled = enabled;
+                    root.autosave-interval-sec = interval;
+                    root.set-general(enabled, interval);
+                }
+            }
+
+            if root.selected-category == 1: AppearancePage {
+                theme-dark: root.theme-dark;
+                ui-scale-percent: root.ui-scale-percent;
+                changed(dark, scale) => {
+                    root.theme-dark = dark;
+                    root.ui-scale-percent = scale;
+                    root.set-appearance(dark, scale);
+                }
+            }
+
+            if root.selected-category == 2: PerformancePage {
+                worker-threads: root.worker-threads;
+                audio-max-block-size: root.audio-max-block-size;
+                changed(threads, block) => {
+                    root.worker-threads = threads;
+                    root.audio-max-block-size = block;
+                    root.set-performance(threads, block);
+                }
+            }
+
+            if root.selected-category == 3: DecodePage {
+                decode-backend: root.decode-backend;
+                changed(backend) => {
+                    root.decode-backend = backend;
+                    root.set-decode(backend);
+                }
+            }
+
+            if root.selected-category == 4: TimelineDefaultsPage {
+                default-snap: root.default-snap;
+                magnetic-snap-range: root.magnetic-snap-range;
+                changed(snap, range) => {
+                    root.default-snap = snap;
+                    root.magnetic-snap-range = range;
+                    root.set-timeline-defaults(snap, range);
+                }
+            }
+
+            if root.selected-category == 5: ExportPage {
+                export-container: root.export-container;
+                export-codec: root.export-codec;
+                changed(container, codec) => {
+                    root.export-container = container;
+                    root.export-codec = codec;
+                    root.set-export(container, codec);
+                }
+            }
+        }
+    }
+}
