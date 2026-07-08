@@ -1,12 +1,12 @@
 // src/ui/properties.rs
+use crate::app_state::{self, SharedAppState};
 use crate::ecs::{
     EcsWorld, effects::EFFECT_REGISTRY, effects::EffectMetadata, effects::find_effect,
 };
 use crate::{CatalogRow, EffectRow, ParamRow, PropertiesWindow};
 use slint::{ComponentHandle, ModelRc, VecModel};
-use std::sync::{Arc, Mutex};
 
-pub fn setup(props: &PropertiesWindow, world_holder: Arc<Mutex<EcsWorld>>) {
+pub fn setup(props: &PropertiesWindow, state: SharedAppState) {
     let catalog: Vec<CatalogRow> = EFFECT_REGISTRY
         .iter()
         .map(|m| CatalogRow {
@@ -17,7 +17,7 @@ pub fn setup(props: &PropertiesWindow, world_holder: Arc<Mutex<EcsWorld>>) {
     props.set_effect_catalog(ModelRc::new(VecModel::from(catalog)));
 
     {
-        let wc = world_holder.clone();
+        let state = state.clone();
         let pw = props.as_weak();
         props.on_set_transform(move |x, y, z, sx, sy, rx, ry, rz, op| {
             let Some(p) = pw.upgrade() else { return };
@@ -25,7 +25,8 @@ pub fn setup(props: &PropertiesWindow, world_holder: Arc<Mutex<EcsWorld>>) {
             if id < 0 {
                 return;
             }
-            let mut world = wc.lock().unwrap();
+            let world_holder = app_state::active_world(&state);
+            let mut world = world_holder.lock().unwrap();
             world.set_transform(
                 id as usize,
                 crate::ecs::transform::Transform {
@@ -44,7 +45,7 @@ pub fn setup(props: &PropertiesWindow, world_holder: Arc<Mutex<EcsWorld>>) {
     }
 
     {
-        let wc = world_holder.clone();
+        let state = state.clone();
         let pw = props.as_weak();
         props.on_set_text(move |text, x, y, font_size| {
             let Some(p) = pw.upgrade() else { return };
@@ -52,14 +53,18 @@ pub fn setup(props: &PropertiesWindow, world_holder: Arc<Mutex<EcsWorld>>) {
             if id < 0 {
                 return;
             }
-            wc.lock()
-                .unwrap()
-                .set_text(id as usize, text.to_string(), x, y, font_size);
+            app_state::active_world(&state).lock().unwrap().set_text(
+                id as usize,
+                text.to_string(),
+                x,
+                y,
+                font_size,
+            );
         });
     }
 
     {
-        let wc = world_holder.clone();
+        let state = state.clone();
         let pw = props.as_weak();
         props.on_set_audio(move |volume, pan, mute| {
             let Some(p) = pw.upgrade() else { return };
@@ -67,14 +72,15 @@ pub fn setup(props: &PropertiesWindow, world_holder: Arc<Mutex<EcsWorld>>) {
             if id < 0 {
                 return;
             }
-            wc.lock()
+            app_state::active_world(&state)
+                .lock()
                 .unwrap()
                 .set_audio_params(id as usize, volume, pan, mute);
         });
     }
 
     {
-        let wc = world_holder.clone();
+        let state = state.clone();
         let pw = props.as_weak();
         props.on_set_effect_enabled(move |index, enabled| {
             let Some(p) = pw.upgrade() else { return };
@@ -82,15 +88,15 @@ pub fn setup(props: &PropertiesWindow, world_holder: Arc<Mutex<EcsWorld>>) {
             if id < 0 {
                 return;
             }
-            wc.lock()
-                .unwrap()
-                .set_effect_enabled(id as usize, index as usize, enabled);
-            refresh(&p, &wc.lock().unwrap());
+            let world_holder = app_state::active_world(&state);
+            let mut world = world_holder.lock().unwrap();
+            world.set_effect_enabled(id as usize, index as usize, enabled);
+            refresh(&p, &world);
         });
     }
 
     {
-        let wc = world_holder.clone();
+        let state = state.clone();
         let pw = props.as_weak();
         props.on_remove_effect(move |index| {
             let Some(p) = pw.upgrade() else { return };
@@ -98,15 +104,15 @@ pub fn setup(props: &PropertiesWindow, world_holder: Arc<Mutex<EcsWorld>>) {
             if id < 0 {
                 return;
             }
-            wc.lock()
-                .unwrap()
-                .remove_effect(id as usize, index as usize);
-            refresh(&p, &wc.lock().unwrap());
+            let world_holder = app_state::active_world(&state);
+            let mut world = world_holder.lock().unwrap();
+            world.remove_effect(id as usize, index as usize);
+            refresh(&p, &world);
         });
     }
 
     {
-        let wc = world_holder.clone();
+        let state = state.clone();
         let pw = props.as_weak();
         props.on_set_param(move |index, key, value| {
             let Some(p) = pw.upgrade() else { return };
@@ -114,14 +120,15 @@ pub fn setup(props: &PropertiesWindow, world_holder: Arc<Mutex<EcsWorld>>) {
             if id < 0 {
                 return;
             }
-            wc.lock()
+            app_state::active_world(&state)
+                .lock()
                 .unwrap()
                 .set_effect_param(id as usize, index as usize, key.as_str(), value);
         });
     }
 
     {
-        let wc = world_holder.clone();
+        let state = state.clone();
         let pw = props.as_weak();
         props.on_add_effect(move |effect_id| {
             let Some(p) = pw.upgrade() else { return };
@@ -129,15 +136,15 @@ pub fn setup(props: &PropertiesWindow, world_holder: Arc<Mutex<EcsWorld>>) {
             if id < 0 {
                 return;
             }
-            wc.lock()
-                .unwrap()
-                .add_effect(id as usize, effect_id.as_str());
-            refresh(&p, &wc.lock().unwrap());
+            let world_holder = app_state::active_world(&state);
+            let mut world = world_holder.lock().unwrap();
+            world.add_effect(id as usize, effect_id.as_str());
+            refresh(&p, &world);
         });
     }
 
     {
-        let wc = world_holder.clone();
+        let state = state.clone();
         let pw = props.as_weak();
         props.on_move_effect(move |from, to| {
             let Some(p) = pw.upgrade() else { return };
@@ -145,10 +152,10 @@ pub fn setup(props: &PropertiesWindow, world_holder: Arc<Mutex<EcsWorld>>) {
             if id < 0 || from < 0 || to < 0 {
                 return;
             }
-            wc.lock()
-                .unwrap()
-                .reorder_effect(id as usize, from as usize, to as usize);
-            refresh(&p, &wc.lock().unwrap());
+            let world_holder = app_state::active_world(&state);
+            let mut world = world_holder.lock().unwrap();
+            world.reorder_effect(id as usize, from as usize, to as usize);
+            refresh(&p, &world);
         });
     }
 }

@@ -2,11 +2,12 @@
 import { Slider, SpinBox } from "std-widgets.slint";
 import { IconSet } from "@lucide";
 import { IconButton } from "common.slint";
+import { ProjectTabItem } from "types.slint";
 
 export component PreviewWindow inherits Window {
     title: "NeoUtl";
     preferred-width: 800px;
-    preferred-height: 560px;
+    preferred-height: 590px;
     background: #0e0e12;
 
     in-out property <image> video-frame;
@@ -17,6 +18,7 @@ export component PreviewWindow inherits Window {
     in-out property <int>   res-height: 1080;
     in-out property <bool>  is-playing: false;
     in-out property <int>   speed-percent: 100;
+    in-out property <[ProjectTabItem]> project-tabs: [];
 
     callback request-render();
     callback toggle-play();
@@ -34,6 +36,8 @@ export component PreviewWindow inherits Window {
     callback show-timeline();
     callback show-properties();
     callback show-system-settings();
+    callback switch-project-tab(int);
+    callback close-project-tab(int);
 
     changed current-frame => { seek-slider.value = root.current-frame; }
 
@@ -69,6 +73,54 @@ export component PreviewWindow inherits Window {
     VerticalLayout {
         padding: 10px;
         spacing: 6px;
+
+        Rectangle {
+            height: 28px;
+            background: #16161c;
+            border-radius: 4px;
+
+            HorizontalLayout {
+                padding: 4px;
+                spacing: 2px;
+
+                for tab[i] in root.project-tabs: Rectangle {
+                    width: 140px;
+                    border-radius: 3px;
+                    background: tab.active ? #2a2a32 : (pt.has-hover ? #202026 : transparent);
+                    border-width: tab.active ? 1px : 0px;
+                    border-color: #3a5fd9;
+
+                    HorizontalLayout {
+                        padding-left: 8px;
+                        spacing: 4px;
+
+                        Text {
+                            text: tab.name;
+                            color: tab.active ? #ffffff : #999aa4;
+                            font-size: 11px;
+                            vertical-alignment: center;
+                            horizontal-stretch: 1;
+                            overflow: elide;
+                        }
+
+                        IconButton {
+                            icon: IconSet.X;
+                            icon-size: 11px;
+                            clicked() => { root.close-project-tab(tab.index); }
+                        }
+                    }
+
+                    pt := TouchArea {
+                        clicked() => { root.switch-project-tab(tab.index); }
+                    }
+                }
+
+                IconButton {
+                    icon: IconSet.Plus;
+                    clicked() => { root.new-project(); }
+                }
+            }
+        }
 
         Rectangle {
             background: #0a0a0e;

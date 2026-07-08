@@ -1,5 +1,7 @@
 // src/ui/timeline.slint
-import { TimelineObject, LayerState } from "types.slint";
+import { IconSet } from "@lucide";
+import { IconButton } from "common.slint";
+import { TimelineObject, LayerState, SceneTabItem } from "types.slint";
 import { Ruler } from "timeline/ruler.slint";
 import { LayerHeader } from "timeline/layer-header.slint";
 import { TimelineView } from "timeline/timeline-view.slint";
@@ -7,7 +9,8 @@ import { TimelineView } from "timeline/timeline-view.slint";
 export component TimelineWindow inherits Window {
     title: "NeoUtl - 拡張編集";
     preferred-width: 1000px;
-    preferred-height: 320px;
+    preferred-height: 348px;
+    min-height: 200px;
     background: #0e0e12;
 
     in-out property <int> current-frame: 0;
@@ -17,6 +20,7 @@ export component TimelineWindow inherits Window {
     in-out property <int> selected-layer: 0;
     in-out property <[TimelineObject]> objects: [];
     in-out property <[LayerState]> layer-states: [];
+    in-out property <[SceneTabItem]> scene-tabs: [];
 
     callback seek-timeline(int);
     callback add-object-at(int /* frame */, int /* layer */, int /* kind */);
@@ -27,6 +31,9 @@ export component TimelineWindow inherits Window {
     callback set-zoom(float);
     callback toggle-layer-visible(int);
     callback toggle-layer-locked(int);
+    callback switch-scene-tab(int);
+    callback add-scene-tab();
+    callback close-scene-tab(int);
 
     property <int> header-width: 60;
     property <int> layer-height: 24;
@@ -62,6 +69,53 @@ export component TimelineWindow inherits Window {
     }
 
     VerticalLayout {
+        Rectangle {
+            height: 28px;
+            background: #16161c;
+
+            HorizontalLayout {
+                padding: 4px;
+                spacing: 2px;
+
+                for tab[i] in root.scene-tabs: Rectangle {
+                    width: 120px;
+                    border-radius: 3px;
+                    background: tab.active ? #2a2a32 : (st.has-hover ? #202026 : transparent);
+                    border-width: tab.active ? 1px : 0px;
+                    border-color: #3a5fd9;
+
+                    HorizontalLayout {
+                        padding-left: 8px;
+                        spacing: 4px;
+
+                        Text {
+                            text: tab.name;
+                            color: tab.active ? #ffffff : #999aa4;
+                            font-size: 11px;
+                            vertical-alignment: center;
+                            horizontal-stretch: 1;
+                            overflow: elide;
+                        }
+
+                        IconButton {
+                            icon: IconSet.X;
+                            icon-size: 11px;
+                            clicked() => { root.close-scene-tab(tab.id); }
+                        }
+                    }
+
+                    st := TouchArea {
+                        clicked() => { root.switch-scene-tab(tab.id); }
+                    }
+                }
+
+                IconButton {
+                    icon: IconSet.Plus;
+                    clicked() => { root.add-scene-tab(); }
+                }
+            }
+        }
+
         Ruler {
             scale: root.zoom-scale;
             scroll-x: root.scroll-x;
@@ -74,6 +128,7 @@ export component TimelineWindow inherits Window {
         }
 
         HorizontalLayout {
+            vertical-stretch: 1;
             layer-header := LayerHeader {
                 header-width: root.header-width * 1px;
                 layer-height: root.layer-height * 1px;
