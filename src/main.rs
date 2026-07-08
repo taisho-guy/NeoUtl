@@ -34,6 +34,7 @@ fn build_main_app(meta: &project::ProjectMeta) -> Result<AppHandles, Box<dyn std
         world.set_project_meta(meta.name.clone(), meta.dir.clone());
         world.set_fps(meta.fps);
         world.set_resolution(meta.width, meta.height);
+        world.set_audio_format(meta.audio_sample_rate, meta.audio_channels);
     }
     let engine_holder = Arc::new(Mutex::new(None::<renderer::RenderEngine>));
 

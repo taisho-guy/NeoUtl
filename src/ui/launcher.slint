@@ -44,9 +44,11 @@ export component LauncherWindow inherits Window {
     in-out property <int> new-fps: 30;
     in-out property <int> new-width: 1920;
     in-out property <int> new-height: 1080;
+    in-out property <int> new-sample-rate: 48000;
+    in-out property <int> new-channels: 2;
     in-out property <string> status-message: "";
 
-    callback create-project(string, int, int, int);
+    callback create-project(string, int, int, int, int, int);
     callback open-project(string);
     callback refresh();
 
@@ -135,6 +137,22 @@ export component LauncherWindow inherits Window {
                     edited(v) => { root.new-height = v; }
                 }
 
+                Text { text: "サンプリングレート (Hz)"; color: #888894; font-size: 10px; }
+                SpinBox {
+                    minimum: 8000;
+                    maximum: 192000;
+                    value: root.new-sample-rate;
+                    edited(v) => { root.new-sample-rate = v; }
+                }
+
+                Text { text: "チャンネル数（1=モノラル, 2=ステレオ）"; color: #888894; font-size: 10px; }
+                SpinBox {
+                    minimum: 1;
+                    maximum: 8;
+                    value: root.new-channels;
+                    edited(v) => { root.new-channels = v; }
+                }
+
                 Rectangle { vertical-stretch: 1; }
 
                 Text {
@@ -149,7 +167,14 @@ export component LauncherWindow inherits Window {
                     primary: true;
                     width: 100%;
                     clicked => {
-                        root.create-project(root.new-name, root.new-fps, root.new-width, root.new-height);
+                        root.create-project(
+                            root.new-name,
+                            root.new-fps,
+                            root.new-width,
+                            root.new-height,
+                            root.new-sample-rate,
+                            root.new-channels,
+                        );
                     }
                 }
             }
