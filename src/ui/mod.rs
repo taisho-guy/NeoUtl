@@ -1,4 +1,5 @@
 // src/ui/mod.rs
+pub mod launcher;
 mod preview;
 pub mod properties;
 pub mod system_settings;

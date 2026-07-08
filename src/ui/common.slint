@@ -22,3 +22,30 @@ export component IconButton inherits Rectangle {
         clicked() => { root.clicked(); }
     }
 }
+
+export component Button inherits Rectangle {
+    in property <string> label;
+    in property <bool> primary: false;
+    callback clicked();
+
+    width: 88px;
+    height: 28px;
+    border-radius: 4px;
+    border-width: 1px;
+    border-color: root.primary ? #3a5fd9 : #33333c;
+    background: root.primary
+        ? (touch.pressed ? #2244aa : touch.has-hover ? #3a5fd9 : #2a4db8)
+        : (touch.pressed ? #202028 : touch.has-hover ? #26262c : #1a1a20);
+
+    Text {
+        text: root.label;
+        color: #ffffff;
+        font-size: 11px;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+        width: 100%;
+        height: 100%;
+    }
+
+    touch := TouchArea { clicked() => { root.clicked(); } }
+}

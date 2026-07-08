@@ -1,8 +1,8 @@
 // src/ui/system_settings.rs
 use crate::SystemSettingsWindow;
+use crate::config_format;
 use crate::ecs::{EcsWorld, resources::SystemSettingsResource};
 use slint::ComponentHandle;
-use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
@@ -17,30 +17,19 @@ fn settings_path() -> PathBuf {
 }
 
 fn serialize(s: &SystemSettingsResource) -> String {
-    format!(
-        "autosave_enabled = {}\n\
-         autosave_interval_sec = {}\n\
-         theme_dark = {}\n\
-         ui_scale_percent = {}\n\
-         worker_threads = {}\n\
-         audio_max_block_size = {}\n\
-         decode_backend = {}\n\
-         default_snap = {}\n\
-         magnetic_snap_range = {}\n\
-         export_container = {}\n\
-         export_codec = {}\n",
-        s.autosave_enabled,
-        s.autosave_interval_sec,
-        s.theme_dark,
-        s.ui_scale_percent,
-        s.worker_threads,
-        s.audio_max_block_size,
-        s.decode_backend,
-        s.default_snap,
-        s.magnetic_snap_range,
-        s.export_container,
-        s.export_codec,
-    )
+    config_format::format_kv(&[
+        ("autosave_enabled", s.autosave_enabled.to_string()),
+        ("autosave_interval_sec", s.autosave_interval_sec.to_string()),
+        ("theme_dark", s.theme_dark.to_string()),
+        ("ui_scale_percent", s.ui_scale_percent.to_string()),
+        ("worker_threads", s.worker_threads.to_string()),
+        ("audio_max_block_size", s.audio_max_block_size.to_string()),
+        ("decode_backend", s.decode_backend.to_string()),
+        ("default_snap", s.default_snap.to_string()),
+        ("magnetic_snap_range", s.magnetic_snap_range.to_string()),
+        ("export_container", s.export_container.to_string()),
+        ("export_codec", s.export_codec.to_string()),
+    ])
 }
 
 fn save_to_disk(s: &SystemSettingsResource) -> std::io::Result<()> {
@@ -51,64 +40,47 @@ fn save_to_disk(s: &SystemSettingsResource) -> std::io::Result<()> {
     std::fs::write(path, serialize(s))
 }
 
-fn parse_toml_pairs(source: &str) -> HashMap<String, String> {
-    let mut map = HashMap::new();
-    let Ok(mut parser) = tree_sitter_language_pack::get_parser("toml") else {
-        return map;
-    };
-    let Some(tree) = parser.parse(source) else {
-        return map;
-    };
-    let bytes = source.as_bytes();
-    let root = tree.root_node();
-    let text_of = |node: &tree_sitter_language_pack::Node| -> String {
-        let r = node.byte_range();
-        String::from_utf8_lossy(&bytes[r.start..r.end])
-            .trim()
-            .to_string()
-    };
-
-    for i in 0..root.child_count() {
-        let Some(node) = root.child(i as u32) else {
-            continue;
-        };
-        if node.kind() != "pair" {
-            continue;
-        }
-        let key_node = node.child_by_field_name("key");
-        let value_node = node.child_by_field_name("value");
-        if let (Some(k), Some(v)) = (key_node, value_node) {
-            map.insert(text_of(&k), text_of(&v));
-        }
-    }
-    map
-}
-
 fn load_from_disk() -> Option<SystemSettingsResource> {
     let content = std::fs::read_to_string(settings_path()).ok()?;
-    let map = parse_toml_pairs(&content);
+    let map = config_format::parse_kv(&content);
     let defaults = SystemSettingsResource::new();
 
-    let get_bool =
-        |key: &str, fallback: bool| map.get(key).map(|v| v == "true").unwrap_or(fallback);
-    let get_int = |key: &str, fallback: i32| {
-        map.get(key)
-            .and_then(|v| v.parse::<i32>().ok())
-            .unwrap_or(fallback)
-    };
-
     Some(SystemSettingsResource {
-        autosave_enabled: get_bool("autosave_enabled", defaults.autosave_enabled),
-        autosave_interval_sec: get_int("autosave_interval_sec", defaults.autosave_interval_sec),
-        theme_dark: get_bool("theme_dark", defaults.theme_dark),
-        ui_scale_percent: get_int("ui_scale_percent", defaults.ui_scale_percent),
-        worker_threads: get_int("worker_threads", defaults.worker_threads),
-        audio_max_block_size: get_int("audio_max_block_size", defaults.audio_max_block_size),
-        decode_backend: get_int("decode_backend", defaults.decode_backend),
-        default_snap: get_bool("default_snap", defaults.default_snap),
-        magnetic_snap_range: get_int("magnetic_snap_range", defaults.magnetic_snap_range),
-        export_container: get_int("export_container", defaults.export_container),
-        export_codec: get_int("export_codec", defaults.export_codec),
+        autosave_enabled: config_format::get_bool(
+            &map,
+            "autosave_enabled",
+            defaults.autosave_enabled,
+        ),
+        autosave_interval_sec: config_format::get_int(
+            &map,
+            "autosave_interval_sec",
+            defaults.autosave_interval_sec,
+        ),
+        theme_dark: config_format::get_bool(&map, "theme_dark", defaults.theme_dark),
+        ui_scale_percent: config_format::get_int(
+            &map,
+            "ui_scale_percent",
+            defaults.ui_scale_percent,
+        ),
+        worker_threads: config_format::get_int(&map, "worker_threads", defaults.worker_threads),
+        audio_max_block_size: config_format::get_int(
+            &map,
+            "audio_max_block_size",
+            defaults.audio_max_block_size,
+        ),
+        decode_backend: config_format::get_int(&map, "decode_backend", defaults.decode_backend),
+        default_snap: config_format::get_bool(&map, "default_snap", defaults.default_snap),
+        magnetic_snap_range: config_format::get_int(
+            &map,
+            "magnetic_snap_range",
+            defaults.magnetic_snap_range,
+        ),
+        export_container: config_format::get_int(
+            &map,
+            "export_container",
+            defaults.export_container,
+        ),
+        export_codec: config_format::get_int(&map, "export_codec", defaults.export_codec),
     })
 }
 

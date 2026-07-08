@@ -171,6 +171,14 @@ impl EcsWorld {
             .run(|project: UniqueView<ProjectResource>| project.clone())
     }
 
+    pub fn set_project_meta(&mut self, name: String, dir: std::path::PathBuf) {
+        self.world
+            .run(|mut project: UniqueViewMut<ProjectResource>| {
+                project.name = name;
+                project.dir = Some(dir);
+            });
+    }
+
     pub fn get_timeline_objects(&self) -> Vec<TimelineData> {
         self.world.run(
             |scenes: UniqueView<SceneResource>,
