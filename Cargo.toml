@@ -5,6 +5,7 @@ members = [
     "crates/objects/*",
     "crates/neoutl-media-api",
     "crates/media/*",
+    "crates/xtask",
 ]
 resolver = "2"
 

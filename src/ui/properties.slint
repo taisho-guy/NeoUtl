@@ -35,26 +35,6 @@ component PropertyRow inherits Rectangle {
         }
 
         Rectangle {
-            width: 64px;
-            border-radius: 3px;
-            background: #16161b;
-            border-width: 1px;
-            border-color: #303038;
-            TextInput {
-                x: 4px;
-                width: parent.width - 8px;
-                height: 100%;
-                text: value;
-                color: #dde3ee;
-                font-size: 11px;
-                horizontal-alignment: center;
-                vertical-alignment: center;
-                input-type: InputType.decimal;
-                accepted => { root.changed(root.clamp(self.text.to-float())); }
-            }
-        }
-
-        Rectangle {
             width: 74px;
             background: #202026;
             Text { text: label; color: #b0b0ba; font-size: 11px; horizontal-alignment: center; vertical-alignment: center; width: 100%; height: 100%; }
@@ -77,23 +57,6 @@ component PropertyRow inherits Rectangle {
                 vertical-alignment: center;
                 input-type: InputType.decimal;
                 accepted => { root.changed(root.clamp(self.text.to-float())); }
-            }
-        }
-
-        Rectangle {
-            background: #1e1e24;
-            Rectangle {
-                x: 0;
-                width: parent.width * ((root.value - root.min) / (root.max - root.min));
-                height: 100%;
-                background: #2a4db8;
-            }
-            TouchArea {
-                moved => {
-                    if (self.pressed) {
-                        root.changed(root.clamp(root.min + (self.mouse-x / parent.width) * (root.max - root.min)));
-                    }
-                }
             }
         }
     }
@@ -134,6 +97,26 @@ component ToggleField inherits Rectangle {
     }
 }
 
+component ColorField inherits Rectangle {
+    in property <string> label;
+    in property <float> r;
+    in property <float> g;
+    in property <float> b;
+    in property <float> a;
+    callback changed(float, float, float, float);
+
+    height: 84px;
+
+    VerticalLayout {
+        spacing: 2px;
+        Text { text: label; color: #55555e; font-size: 10px; }
+        PropertyRow { label: "R"; value: root.r; min: 0; max: 1; changed(v) => { root.changed(v, root.g, root.b, root.a); } }
+        PropertyRow { label: "G"; value: root.g; min: 0; max: 1; changed(v) => { root.changed(root.r, v, root.b, root.a); } }
+        PropertyRow { label: "B"; value: root.b; min: 0; max: 1; changed(v) => { root.changed(root.r, root.g, v, root.a); } }
+        PropertyRow { label: "A"; value: root.a; min: 0; max: 1; changed(v) => { root.changed(root.r, root.g, root.b, v); } }
+    }
+}
+
 component SectionHeader inherits Text {
     color: #55555e;
     font-size: 10px;
@@ -143,7 +126,7 @@ component SectionHeader inherits Text {
 export component PropertiesWindow inherits Window {
     title: "NeoUtl - オブジェクト設定";
     preferred-width: 620px;
-    preferred-height: 560px;
+    preferred-height: 640px;
     background: #0e0e12;
 
     in-out property <int> object-id: -1;
@@ -165,6 +148,15 @@ export component PropertiesWindow inherits Window {
     in-out property <float> text-y: 0;
     in-out property <float> text-font-size: 48;
 
+    in-out property <bool> has-shape: false;
+    in-out property <float> shape-sides: 4;
+    in-out property <float> shape-extrude-depth: 0;
+    in-out property <float> shape-stroke-width: 0;
+    in-out property <float> shape-r: 1;
+    in-out property <float> shape-g: 1;
+    in-out property <float> shape-b: 1;
+    in-out property <float> shape-a: 1;
+
     in-out property <bool> has-audio: false;
     in-out property <float> volume: 1;
     in-out property <float> pan: 0;
@@ -177,15 +169,21 @@ export component PropertiesWindow inherits Window {
 
     callback set-transform(float, float, float, float, float, float, float, float, float);
     callback set-text(string, float, float, float);
+    callback set-shape(float, float, float, float, float, float, float);
     callback set-audio(float, float, bool);
     callback set-effect-enabled(int, bool);
     callback remove-effect(int);
     callback set-param(int, string, float);
+    callback set-param-bool(int, string, bool);
     callback add-effect(string);
     callback move-effect(int, int);
 
     function emit-transform() {
         root.set-transform(root.tx, root.ty, root.tz, root.scale-x, root.scale-y, root.rot-x, root.rot-y, root.rot-z, root.obj-opacity);
+    }
+
+    function emit-shape() {
+        root.set-shape(root.shape-sides, root.shape-extrude-depth, root.shape-stroke-width, root.shape-r, root.shape-g, root.shape-b, root.shape-a);
     }
 
     if object-id < 0: Text {
@@ -198,7 +196,8 @@ export component PropertiesWindow inherits Window {
         height: 100%;
     }
 
-    if object-id >= 0: VerticalLayout {
+    if object-id >= 0: Flickable {
+        VerticalLayout {
             padding: 10px;
             spacing: 8px;
 
@@ -241,6 +240,20 @@ export component PropertiesWindow inherits Window {
                 PropertyRow { label: "X"; value: root.text-x; min: -1000; max: 1000; changed(v) => { root.text-x = v; root.set-text(root.text-content, v, root.text-y, root.text-font-size); } }
                 PropertyRow { label: "Y"; value: root.text-y; min: -1000; max: 1000; changed(v) => { root.text-y = v; root.set-text(root.text-content, root.text-x, v, root.text-font-size); } }
                 PropertyRow { label: "フォントサイズ"; value: root.text-font-size; min: 1; max: 500; changed(v) => { root.text-font-size = v; root.set-text(root.text-content, root.text-x, root.text-y, v); } }
+            }
+
+            if has-shape: VerticalLayout {
+                spacing: 4px;
+                Rectangle { height: 1px; background: #24242c; }
+                SectionHeader { text: "図形"; }
+                PropertyRow { label: "辺の数"; value: root.shape-sides; min: 3; max: 32; changed(v) => { root.shape-sides = v; root.emit-shape(); } }
+                PropertyRow { label: "押し出し量"; value: root.shape-extrude-depth; min: 0; max: 5; changed(v) => { root.shape-extrude-depth = v; root.emit-shape(); } }
+                PropertyRow { label: "線幅"; value: root.shape-stroke-width; min: 0; max: 50; changed(v) => { root.shape-stroke-width = v; root.emit-shape(); } }
+                ColorField {
+                    label: "塗り色";
+                    r: root.shape-r; g: root.shape-g; b: root.shape-b; a: root.shape-a;
+                    changed(r, g, b, a) => { root.shape-r = r; root.shape-g = g; root.shape-b = b; root.shape-a = a; root.emit-shape(); }
+                }
             }
 
             if has-audio: VerticalLayout {
@@ -332,18 +345,34 @@ export component PropertiesWindow inherits Window {
                     }
                 }
 
+                // paramsはParamSchema.kindに応じて Float=PropertyRow / Bool=ToggleField / Color=非スライダー簡易表示 に分岐する。
                 for p[j] in root.params: Rectangle {
                     height: p.effect-index == eff.index ? 22px : 0px;
                     clip: true;
 
-                    if p.effect-index == eff.index: PropertyRow {
-                        label: p.key;
+                    if p.effect-index == eff.index && p.kind == 0: PropertyRow {
+                        label: p.label;
+                        value: p.value;
+                        min: p.min;
+                        max: p.max;
+                        changed(v) => { root.set-param(eff.index, p.key, v); }
+                    }
+
+                    if p.effect-index == eff.index && p.kind == 1: ToggleField {
+                        label: p.label;
+                        checked: p.value > 0.5;
+                        toggled => { root.set-param-bool(eff.index, p.key, p.value <= 0.5); }
+                    }
+
+                    if p.effect-index == eff.index && p.kind == 2: PropertyRow {
+                        label: p.label;
                         value: p.value;
                         min: 0;
-                        max: 100;
+                        max: 1;
                         changed(v) => { root.set-param(eff.index, p.key, v); }
                     }
                 }
             }
+        }
     }
 }

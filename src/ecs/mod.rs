@@ -7,7 +7,9 @@ pub mod transform;
 pub mod types;
 
 use crate::ecs::types::EffectInstance;
-use components::{AudioParams, KindId, Layer, ObjectId, SceneId, TextContent, TimeRange};
+use components::{
+    AudioParams, KindId, Layer, ObjectId, SceneId, ShapeParams, TextContent, TimeRange,
+};
 use effects::EffectStack;
 use resources::{
     LayerStates, ProjectResource, SceneMeta, SceneResource, SystemSettingsResource,
@@ -15,7 +17,7 @@ use resources::{
 };
 
 use shipyard::{Get, IntoIter, UniqueView, UniqueViewMut, View, ViewMut, World};
-use transform::{GlobalMatrix, Transform, compute_global_matrix};
+use transform::{Camera, GlobalMatrix, Transform, compute_global_matrix};
 
 /// タイムラインUIに渡すオブジェクト情報（Slint型に非依存）
 #[derive(Clone, Debug)]
@@ -73,6 +75,7 @@ impl EcsWorld {
         world.add_unique(LayerStates::new(resources::DEFAULT_LAYER_COUNT));
         world.add_unique(SceneResource::new());
         world.add_unique(SystemSettingsResource::new());
+        world.add_unique(Camera::default());
         Self { world }
     }
 
@@ -112,6 +115,22 @@ impl EcsWorld {
         }
 
         self.update_total_frames();
+        id
+    }
+
+    /// 図形オブジェクトを追加する。ShapeParamsコンポーネントを併せて付与する。
+    pub fn add_shape_object(
+        &mut self,
+        start: i32,
+        duration: i32,
+        kind_id: u32,
+        layer: i32,
+        shape: ShapeParams,
+    ) -> usize {
+        let id = self.add_object(start, duration, kind_id, layer, None);
+        if let Some(entity) = self.find_entity(id) {
+            self.world.add_component(entity, shape);
+        }
         id
     }
 
@@ -222,8 +241,6 @@ impl EcsWorld {
     }
 
     /// アクティブシーンの解像度・FPSをProjectResourceへ確定反映する唯一の窓口。
-    /// switch_scene・update_scene_settings・restore_scenesはすべてここを経由し、
-    /// 反映ロジックの重複・乖離を防ぐ。
     fn apply_scene_resolution(&mut self, width: u32, height: u32, fps: u32) {
         self.world
             .run(|mut project: UniqueViewMut<ProjectResource>| {
@@ -233,7 +250,6 @@ impl EcsWorld {
             });
     }
 
-    /// ディスクから復元したシーン一覧・アクティブIDをそのまま反映する（プロジェクト読込直後専用）。
     pub fn restore_scenes(&mut self, active_scene: i32, scenes: Vec<SceneMeta>) {
         self.world.run(|mut res: UniqueViewMut<SceneResource>| {
             let next_scene_id = scenes.iter().map(|s| s.id).max().unwrap_or(0) + 1;
@@ -398,6 +414,17 @@ impl EcsWorld {
             .run(|matrices: View<GlobalMatrix>| matrices.get(entity).ok().map(|m| m.0))
     }
 
+    // --- Camera ---
+
+    pub fn get_camera(&self) -> Camera {
+        self.world.run(|camera: UniqueView<Camera>| *camera)
+    }
+
+    pub fn set_camera(&mut self, camera: Camera) {
+        self.world
+            .run(|mut slot: UniqueViewMut<Camera>| *slot = camera);
+    }
+
     // --- EffectStack ---
 
     pub fn add_effect(&mut self, object_id: usize, effect_id: &str) {
@@ -461,6 +488,23 @@ impl EcsWorld {
         });
     }
 
+    pub fn set_effect_param_bool(
+        &mut self,
+        object_id: usize,
+        index: usize,
+        key: &str,
+        value: bool,
+    ) {
+        let Some(entity) = self.find_entity(object_id) else {
+            return;
+        };
+        self.world.run(|mut stacks: ViewMut<EffectStack>| {
+            if let Ok(mut stack) = (&mut stacks).get(entity) {
+                stack.set_param_bool(index, key, value);
+            }
+        });
+    }
+
     pub fn get_effects(&self, object_id: usize) -> Vec<EffectInstance> {
         let Some(entity) = self.find_entity(object_id) else {
             return Vec::new();
@@ -492,6 +536,25 @@ impl EcsWorld {
         });
     }
 
+    // --- ShapeParams ---
+
+    pub fn get_shape(&self, object_id: usize) -> Option<ShapeParams> {
+        let entity = self.find_entity(object_id)?;
+        self.world
+            .run(|shapes: View<ShapeParams>| shapes.get(entity).ok().copied())
+    }
+
+    pub fn set_shape(&mut self, object_id: usize, shape: ShapeParams) {
+        let Some(entity) = self.find_entity(object_id) else {
+            return;
+        };
+        self.world.run(|mut shapes: ViewMut<ShapeParams>| {
+            if let Ok(mut slot) = (&mut shapes).get(entity) {
+                *slot = shape;
+            }
+        });
+    }
+
     // --- AudioParams ---
 
     pub fn set_audio_params(&mut self, object_id: usize, volume: f32, pan: f32, mute: bool) {
@@ -515,8 +578,6 @@ impl EcsWorld {
 
     // --- Scene ---
 
-    /// 新規シーンを追加する。幅・高さ・FPSはプロジェクトの現在値を初期値として継承する
-    /// （AviQtl::UI::TimelineService::createSceneInternal相当。既定値はグローバル設定でなくプロジェクト値を採用）。
     pub fn add_scene(&mut self, name: impl Into<String>) -> i32 {
         let project = self.get_project();
         self.world.run(|mut scenes: UniqueViewMut<SceneResource>| {
@@ -552,9 +613,6 @@ impl EcsWorld {
         });
     }
 
-    /// シーン切替。解像度・FPSはシーンの値をプロジェクト設定へ確実に反映する
-    /// （プレビュー・レンダーエンジンはProjectResourceを参照するため、
-    /// 呼び出し元はこの後にレンダーターゲット再構築を行うこと）。
     pub fn switch_scene(&mut self, scene_id: i32) -> bool {
         let current_states = self.layer_states();
         let switched = self
@@ -609,9 +667,6 @@ impl EcsWorld {
             .run(|scenes: UniqueView<SceneResource>| scenes.find(scene_id).map(SceneSettings::from))
     }
 
-    /// シーン設定ウィンドウの確定内容を反映する。
-    /// 幅・高さ・FPSはシーン単位のメタデータとして保持し、
-    /// アクティブシーンの場合はプロジェクト設定（プレビュー解像度・出力FPS）へも即時反映する。
     pub fn update_scene_settings(&mut self, scene_id: i32, s: SceneSettings) -> bool {
         let updated = self
             .world

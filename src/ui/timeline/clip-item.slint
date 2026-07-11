@@ -12,10 +12,8 @@ export component ClipItem inherits Rectangle {
     callback resized(int /* id */, int /* new-start-frame */, int /* new-end-frame */);
     callback context-requested(int /* id */, length /* x */, length /* y */);
 
-    property <color> base-color:
-        obj.kind == 0 ? #2a4db8 :
-        obj.kind == 1 ? #256e3c :
-                        #6a2db8;
+    property <[color]> kind-palette: [#2a4db8, #256e3c, #6a2db8, #b8862a, #2ab8a8, #b82a5f];
+    property <color> base-color: root.kind-palette[mod(obj.kind, root.kind-palette.length)];
 
     property <bool>   dragging: false;
     property <length> drag-anchor-x: 0px;

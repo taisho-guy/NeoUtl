@@ -1,7 +1,8 @@
 // src/ui/properties.rs
 use crate::app_state::{self, SharedAppState};
 use crate::ecs::{
-    EcsWorld, effects::EFFECT_REGISTRY, effects::EffectMetadata, effects::find_effect,
+    EcsWorld, components::ShapeParams, effects::EFFECT_REGISTRY, effects::EffectMetadata,
+    effects::ParamKind, effects::find_effect,
 };
 use crate::{CatalogRow, EffectRow, ParamRow, PropertiesWindow};
 use slint::{ComponentHandle, ModelRc, VecModel};
@@ -66,6 +67,26 @@ pub fn setup(props: &PropertiesWindow, state: SharedAppState) {
     {
         let state = state.clone();
         let pw = props.as_weak();
+        props.on_set_shape(move |sides, extrude_depth, stroke_width, r, g, b, a| {
+            let Some(p) = pw.upgrade() else { return };
+            let id = p.get_object_id();
+            if id < 0 {
+                return;
+            }
+            let world_holder = app_state::active_world(&state);
+            let mut world = world_holder.lock().unwrap();
+            let mut shape = world.get_shape(id as usize).unwrap_or_default();
+            shape.sides = sides.max(3.0) as u32;
+            shape.extrude_depth = extrude_depth.max(0.0);
+            shape.stroke_width = stroke_width.max(0.0);
+            shape.fill_color = [r, g, b, a];
+            world.set_shape(id as usize, shape);
+        });
+    }
+
+    {
+        let state = state.clone();
+        let pw = props.as_weak();
         props.on_set_audio(move |volume, pan, mute| {
             let Some(p) = pw.upgrade() else { return };
             let id = p.get_object_id();
@@ -124,6 +145,22 @@ pub fn setup(props: &PropertiesWindow, state: SharedAppState) {
                 .lock()
                 .unwrap()
                 .set_effect_param(id as usize, index as usize, key.as_str(), value);
+        });
+    }
+
+    {
+        let state = state.clone();
+        let pw = props.as_weak();
+        props.on_set_param_bool(move |index, key, value| {
+            let Some(p) = pw.upgrade() else { return };
+            let id = p.get_object_id();
+            if id < 0 {
+                return;
+            }
+            let world_holder = app_state::active_world(&state);
+            let mut world = world_holder.lock().unwrap();
+            world.set_effect_param_bool(id as usize, index as usize, key.as_str(), value);
+            refresh(&p, &world);
         });
     }
 
@@ -197,6 +234,20 @@ fn refresh(props: &PropertiesWindow, world: &EcsWorld) {
         props.set_has_text(false);
     }
 
+    let shape: ShapeParams = world.get_shape(oid).unwrap_or_default();
+    if world.get_shape(oid).is_some() {
+        props.set_has_shape(true);
+        props.set_shape_sides(shape.sides as f32);
+        props.set_shape_extrude_depth(shape.extrude_depth);
+        props.set_shape_stroke_width(shape.stroke_width);
+        props.set_shape_r(shape.fill_color[0]);
+        props.set_shape_g(shape.fill_color[1]);
+        props.set_shape_b(shape.fill_color[2]);
+        props.set_shape_a(shape.fill_color[3]);
+    } else {
+        props.set_has_shape(false);
+    }
+
     if let Some(audio) = world.get_audio_params(oid) {
         props.set_has_audio(true);
         props.set_volume(audio.volume);
@@ -221,19 +272,41 @@ fn refresh(props: &PropertiesWindow, world: &EcsWorld) {
         .collect();
     props.set_effects(ModelRc::new(VecModel::from(rows)));
 
+    // パラメータ行はEFFECT_REGISTRYのParamSchema（label/kind/min/max）から生成する。
+    // ハードコード撤廃: キー名の見た目・レンジは全てエフェクト定義側で決まる。
     let mut params = Vec::new();
     for (i, e) in instances.iter().enumerate() {
-        let mut keys: Vec<&String> = e.params.keys().collect();
-        keys.sort();
-        for k in keys {
-            let value = match e.params[k].static_value {
-                crate::ecs::types::Value::Number(n) => n,
-                _ => 0.0,
-            };
+        let Some(meta) = find_effect(&e.effect_id) else {
+            continue;
+        };
+        for schema in meta.params {
+            let value = e
+                .params
+                .get(schema.key)
+                .map(|p| match &p.static_value {
+                    crate::ecs::types::Value::Number(n) => *n,
+                    crate::ecs::types::Value::Bool(b) => {
+                        if *b {
+                            1.0
+                        } else {
+                            0.0
+                        }
+                    }
+                    _ => 0.0,
+                })
+                .unwrap_or(schema.default);
             params.push(ParamRow {
                 effect_index: i as i32,
-                key: k.clone().into(),
+                key: schema.key.into(),
+                label: schema.label.into(),
                 value,
+                kind: match schema.kind {
+                    ParamKind::Float => 0,
+                    ParamKind::Bool => 1,
+                    ParamKind::Color => 2,
+                },
+                min: schema.min,
+                max: schema.max,
             });
         }
     }

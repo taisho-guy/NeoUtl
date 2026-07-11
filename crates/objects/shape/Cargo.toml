@@ -1,10 +1,10 @@
 [package]
-name    = "neoutl-object-tetrahedron"
+name    = "neoutl-object-shape"
 version = "0.0.0"
 edition = "2024"
 
 [lib]
-name       = "neoutl_object_tetrahedron"
+name       = "neoutl_object_shape"
 crate-type = ["cdylib"]
 
 [dependencies]
