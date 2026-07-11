@@ -102,7 +102,7 @@ git switch main
 ```
 
 ```fish
-cargo build
+cargo xtask build
 ```
 
 実行可能ファイルは`target/debug`あるいは`target/release`以下に生成されます。
