@@ -221,6 +221,31 @@ impl EcsWorld {
             });
     }
 
+    /// ディスクから復元したシーン一覧・アクティブIDをそのまま反映する（プロジェクト読込直後専用）。
+    pub fn restore_scenes(&mut self, active_scene: i32, scenes: Vec<SceneMeta>) {
+        self.world.run(|mut res: UniqueViewMut<SceneResource>| {
+            let next_scene_id = scenes.iter().map(|s| s.id).max().unwrap_or(0) + 1;
+            res.scenes = scenes;
+            res.active_scene = active_scene;
+            res.next_scene_id = next_scene_id;
+        });
+        let (width, height, fps) = self.world.run(|scenes: UniqueView<SceneResource>| {
+            let s = scenes.find(active_scene);
+            (
+                s.map(|s| s.width).unwrap_or(1920),
+                s.map(|s| s.height).unwrap_or(1080),
+                s.map(|s| s.fps).unwrap_or(30),
+            )
+        });
+        self.world
+            .run(|mut project: UniqueViewMut<ProjectResource>| {
+                project.width = width;
+                project.height = height;
+                project.fps = fps;
+            });
+        self.update_total_frames();
+    }
+
     pub fn get_timeline_objects(&self) -> Vec<TimelineData> {
         self.world.run(
             |scenes: UniqueView<SceneResource>,
@@ -523,6 +548,9 @@ impl EcsWorld {
         });
     }
 
+    /// シーン切替。解像度・FPSはシーンの値をプロジェクト設定へ確実に反映する
+    /// （プレビュー・レンダーエンジンはProjectResourceを参照するため、
+    /// 呼び出し元はこの後にレンダーターゲット再構築を行うこと）。
     pub fn switch_scene(&mut self, scene_id: i32) -> bool {
         let current_states = self.layer_states();
         let switched = self
@@ -539,10 +567,16 @@ impl EcsWorld {
                 true
             });
         if switched {
-            let (total_frames, target_states) = self.world.run(
-                |scenes: UniqueView<SceneResource>| -> (i32, Vec<(bool, bool)>) {
+            let (total_frames, target_states, width, height, fps) = self.world.run(
+                |scenes: UniqueView<SceneResource>| -> (i32, Vec<(bool, bool)>, u32, u32, u32) {
                     let scene = scenes.find(scene_id).expect("checked above");
-                    (scene.total_frames, scene.layer_states.clone())
+                    (
+                        scene.total_frames,
+                        scene.layer_states.clone(),
+                        scene.width,
+                        scene.height,
+                        scene.fps,
+                    )
                 },
             );
             self.world
@@ -550,6 +584,12 @@ impl EcsWorld {
             self.world
                 .run(|mut timeline: UniqueViewMut<TimelineResource>| {
                     timeline.total_frames = total_frames;
+                });
+            self.world
+                .run(|mut project: UniqueViewMut<ProjectResource>| {
+                    project.width = width;
+                    project.height = height;
+                    project.fps = fps;
                 });
         }
         switched
@@ -571,10 +611,11 @@ impl EcsWorld {
     }
 
     /// シーン設定ウィンドウの確定内容を反映する。
-    /// 幅・高さ・FPSはシーン単位のメタデータとして保持するのみで、
-    /// プレビュー解像度・出力FPSへの反映は現状未対応（既知の制約）。
+    /// 幅・高さ・FPSはシーン単位のメタデータとして保持し、
+    /// アクティブシーンの場合はプロジェクト設定（プレビュー解像度・出力FPS）へも即時反映する。
     pub fn update_scene_settings(&mut self, scene_id: i32, s: SceneSettings) -> bool {
-        self.world
+        let updated = self
+            .world
             .run(|mut scenes: UniqueViewMut<SceneResource>| -> bool {
                 let Some(meta) = scenes.find_mut(scene_id) else {
                     return false;
@@ -591,7 +632,16 @@ impl EcsWorld {
                 meta.enable_snap = s.enable_snap;
                 meta.magnetic_snap_range = s.magnetic_snap_range;
                 true
-            })
+            });
+        if updated && self.active_scene() == scene_id {
+            self.world
+                .run(|mut project: UniqueViewMut<ProjectResource>| {
+                    project.width = s.width;
+                    project.height = s.height;
+                    project.fps = s.fps;
+                });
+        }
+        updated
     }
 
     pub fn get_system_settings(&self) -> SystemSettingsResource {

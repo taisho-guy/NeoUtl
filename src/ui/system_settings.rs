@@ -1,6 +1,5 @@
 // src/ui/system_settings.rs
 use crate::SystemSettingsWindow;
-use crate::config_format;
 use crate::ecs::{EcsWorld, resources::SystemSettingsResource};
 use slint::ComponentHandle;
 use std::path::PathBuf;
@@ -11,25 +10,9 @@ fn settings_path() -> PathBuf {
         .ok()
         .and_then(|p| {
             p.parent()
-                .map(|d| d.join("settings").join("system-settings.toml"))
+                .map(|d| d.join("settings").join("system-settings.yaml"))
         })
-        .unwrap_or_else(|| PathBuf::from("settings/system-settings.toml"))
-}
-
-fn serialize(s: &SystemSettingsResource) -> String {
-    config_format::format_kv(&[
-        ("autosave_enabled", s.autosave_enabled.to_string()),
-        ("autosave_interval_sec", s.autosave_interval_sec.to_string()),
-        ("theme_dark", s.theme_dark.to_string()),
-        ("ui_scale_percent", s.ui_scale_percent.to_string()),
-        ("worker_threads", s.worker_threads.to_string()),
-        ("audio_max_block_size", s.audio_max_block_size.to_string()),
-        ("decode_backend", s.decode_backend.to_string()),
-        ("default_snap", s.default_snap.to_string()),
-        ("magnetic_snap_range", s.magnetic_snap_range.to_string()),
-        ("export_container", s.export_container.to_string()),
-        ("export_codec", s.export_codec.to_string()),
-    ])
+        .unwrap_or_else(|| PathBuf::from("settings/system-settings.yaml"))
 }
 
 fn save_to_disk(s: &SystemSettingsResource) -> std::io::Result<()> {
@@ -37,51 +20,13 @@ fn save_to_disk(s: &SystemSettingsResource) -> std::io::Result<()> {
     if let Some(dir) = path.parent() {
         std::fs::create_dir_all(dir)?;
     }
-    std::fs::write(path, serialize(s))
+    let yaml = rust_yaml::to_string(s).map_err(std::io::Error::other)?;
+    std::fs::write(path, yaml)
 }
 
 fn load_from_disk() -> Option<SystemSettingsResource> {
     let content = std::fs::read_to_string(settings_path()).ok()?;
-    let map = config_format::parse_kv(&content);
-    let defaults = SystemSettingsResource::new();
-
-    Some(SystemSettingsResource {
-        autosave_enabled: config_format::get_bool(
-            &map,
-            "autosave_enabled",
-            defaults.autosave_enabled,
-        ),
-        autosave_interval_sec: config_format::get_int(
-            &map,
-            "autosave_interval_sec",
-            defaults.autosave_interval_sec,
-        ),
-        theme_dark: config_format::get_bool(&map, "theme_dark", defaults.theme_dark),
-        ui_scale_percent: config_format::get_int(
-            &map,
-            "ui_scale_percent",
-            defaults.ui_scale_percent,
-        ),
-        worker_threads: config_format::get_int(&map, "worker_threads", defaults.worker_threads),
-        audio_max_block_size: config_format::get_int(
-            &map,
-            "audio_max_block_size",
-            defaults.audio_max_block_size,
-        ),
-        decode_backend: config_format::get_int(&map, "decode_backend", defaults.decode_backend),
-        default_snap: config_format::get_bool(&map, "default_snap", defaults.default_snap),
-        magnetic_snap_range: config_format::get_int(
-            &map,
-            "magnetic_snap_range",
-            defaults.magnetic_snap_range,
-        ),
-        export_container: config_format::get_int(
-            &map,
-            "export_container",
-            defaults.export_container,
-        ),
-        export_codec: config_format::get_int(&map, "export_codec", defaults.export_codec),
-    })
+    rust_yaml::from_str(&content).ok()
 }
 
 pub fn setup(window: &SystemSettingsWindow, world_holder: Arc<Mutex<EcsWorld>>) {
