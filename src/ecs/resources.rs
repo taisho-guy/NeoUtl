@@ -22,13 +22,18 @@ pub struct ProjectResource {
 }
 
 impl ProjectResource {
+    /// 新規プロジェクト・シーンの既定解像度。Camera::for_resolution()の
+    /// ブートストラップ値と共有し、値の重複を避ける。
+    pub const DEFAULT_WIDTH: u32 = 1920;
+    pub const DEFAULT_HEIGHT: u32 = 1080;
+
     pub fn new() -> Self {
         Self {
             name: String::new(),
             dir: None,
             fps: 30,
-            width: 1920,
-            height: 1080,
+            width: Self::DEFAULT_WIDTH,
+            height: Self::DEFAULT_HEIGHT,
             audio_sample_rate: 48000,
             audio_channels: 2,
         }
@@ -133,8 +138,8 @@ impl SceneMeta {
         Self {
             id,
             name: name.into(),
-            width: 1920,
-            height: 1080,
+            width: ProjectResource::DEFAULT_WIDTH,
+            height: ProjectResource::DEFAULT_HEIGHT,
             fps: 30,
             total_frames: default_total_frames(),
             layer_states: default_layer_states(),

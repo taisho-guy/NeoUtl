@@ -91,6 +91,13 @@ pub struct ObjectVTable {
     pub render: unsafe extern "C" fn(ctx: *const RenderContext),
 }
 
+/// 全ObjectVTable実装が頂点を記述する際のローカル座標契約。
+/// 原点中心・辺/半径0.5相当（=直径1.0）の正規化スケールで記述すること
+/// （例: shape.wgslの単位円）。ホストはこの直径をUNIT_SIZE_PXピクセルとして
+/// world空間（ピクセル座標系）へ解釈する。Transform.scale_x/y=1.0のとき
+/// オブジェクトの実寸はUNIT_SIZE_PXピクセルになる。
+pub const UNIT_SIZE_PX: f32 = 200.0;
+
 pub const ENTRY_SYMBOL: &[u8] = b"neoutl_object_entry\0";
 pub type EntryFn = unsafe extern "C" fn() -> *const ObjectVTable;
 
