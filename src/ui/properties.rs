@@ -209,6 +209,10 @@ fn refresh(props: &PropertiesWindow, world: &EcsWorld) {
     }
     let oid = id as usize;
 
+    let project = world.get_project();
+    props.set_stage_width(project.width as f32);
+    props.set_stage_height(project.height as f32);
+
     if let Some(t) = world.get_transform(oid) {
         props.set_has_transform(true);
         props.set_tx(t.x);

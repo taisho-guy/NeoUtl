@@ -3,7 +3,9 @@ use super::EcsWorld;
 use crate::ecs::components::{AudioParams, KindId, SceneId, ShapeParams, TextContent, TimeRange};
 use crate::ecs::effects::{EffectStack, compute_effect_params_at};
 use crate::ecs::resources::{ProjectResource, SceneResource, TimelineResource};
-use crate::ecs::transform::{Camera, GlobalMatrix, Projection, Transform, compute_mvp};
+use crate::ecs::transform::{
+    Camera, DEFAULT_FOV_DEG, GlobalMatrix, Projection, Transform, compute_mvp,
+};
 use crate::ecs::types::Value;
 use crate::objects;
 use neoutl_object_api::Dimensionality;
@@ -25,9 +27,9 @@ pub struct ActiveObject {
 /// プラグイン未登録（kind_id不明）時は2D既定のOrthoにフォールバックする。
 fn projection_for(kind_id: u32) -> Projection {
     match objects::by_kind_id(kind_id).map(|p| unsafe { &*((p.vtable.meta)()) }.dimensionality) {
-        Some(Dimensionality::ThreeD) | Some(Dimensionality::Both) => {
-            Projection::Perspective { fov_deg: 45.0 }
-        }
+        Some(Dimensionality::ThreeD) | Some(Dimensionality::Both) => Projection::Perspective {
+            fov_deg: DEFAULT_FOV_DEG,
+        },
         _ => Projection::Ortho,
     }
 }
@@ -55,7 +57,8 @@ pub fn get_active_objects_system(world: &EcsWorld) -> Vec<ActiveObject> {
         )| {
             let current = timeline.current_frame;
             let active_scene = scenes.active_scene;
-            let aspect = project.width.max(1) as f32 / project.height.max(1) as f32;
+            let project_width = project.width.max(1) as f32;
+            let project_height = project.height.max(1) as f32;
             let mut active = Vec::new();
 
             for (id, (range, kind, scene)) in (&time_ranges, &kind_ids, &scene_ids).iter().with_id()
@@ -69,7 +72,13 @@ pub fn get_active_objects_system(world: &EcsWorld) -> Vec<ActiveObject> {
                 let text_content = text_contents.get(id).ok().cloned();
                 let shape = shape_params.get(id).ok().copied();
                 let matrix = global_matrices.get(id).copied().unwrap_or_default();
-                let mvp = compute_mvp(&matrix, &camera, aspect, projection_for(kind.0));
+                let mvp = compute_mvp(
+                    &matrix,
+                    &camera,
+                    project_width,
+                    project_height,
+                    projection_for(kind.0),
+                );
                 let opacity = transforms.get(id).map(|t| t.opacity).unwrap_or(1.0);
                 let audio = audio_params.get(id).copied().unwrap_or_default();
                 let effects = effect_stacks

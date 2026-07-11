@@ -130,6 +130,8 @@ export component PropertiesWindow inherits Window {
     background: #0e0e12;
 
     in-out property <int> object-id: -1;
+    in-out property <float> stage-width: 1920;
+    in-out property <float> stage-height: 1080;
 
     in-out property <bool> has-transform: false;
     in-out property <float> tx: 0;
@@ -204,9 +206,9 @@ export component PropertiesWindow inherits Window {
             if has-transform: VerticalLayout {
                 spacing: 4px;
                 SectionHeader { text: "トランスフォーム"; }
-                PropertyRow { label: "X"; value: root.tx; min: -1000; max: 1000; changed(v) => { root.tx = v; root.emit-transform(); } }
-                PropertyRow { label: "Y"; value: root.ty; min: -1000; max: 1000; changed(v) => { root.ty = v; root.emit-transform(); } }
-                PropertyRow { label: "Z"; value: root.tz; min: -1000; max: 1000; changed(v) => { root.tz = v; root.emit-transform(); } }
+                PropertyRow { label: "X"; value: root.tx; min: -root.stage-width / 2; max: root.stage-width / 2; changed(v) => { root.tx = v; root.emit-transform(); } }
+                PropertyRow { label: "Y"; value: root.ty; min: -root.stage-height / 2; max: root.stage-height / 2; changed(v) => { root.ty = v; root.emit-transform(); } }
+                PropertyRow { label: "Z"; value: root.tz; min: -root.stage-width; max: root.stage-width; changed(v) => { root.tz = v; root.emit-transform(); } }
                 PropertyRow { label: "拡大率X"; value: root.scale-x; min: 0; max: 10; changed(v) => { root.scale-x = v; root.emit-transform(); } }
                 PropertyRow { label: "拡大率Y"; value: root.scale-y; min: 0; max: 10; changed(v) => { root.scale-y = v; root.emit-transform(); } }
                 PropertyRow { label: "X軸回転"; value: root.rot-x; min: -360; max: 360; changed(v) => { root.rot-x = v; root.emit-transform(); } }
@@ -237,8 +239,8 @@ export component PropertiesWindow inherits Window {
                         accepted => { root.text-content = self.text; root.set-text(self.text, root.text-x, root.text-y, root.text-font-size); }
                     }
                 }
-                PropertyRow { label: "X"; value: root.text-x; min: -1000; max: 1000; changed(v) => { root.text-x = v; root.set-text(root.text-content, v, root.text-y, root.text-font-size); } }
-                PropertyRow { label: "Y"; value: root.text-y; min: -1000; max: 1000; changed(v) => { root.text-y = v; root.set-text(root.text-content, root.text-x, v, root.text-font-size); } }
+                PropertyRow { label: "X"; value: root.text-x; min: -root.stage-width / 2; max: root.stage-width / 2; changed(v) => { root.text-x = v; root.set-text(root.text-content, v, root.text-y, root.text-font-size); } }
+                PropertyRow { label: "Y"; value: root.text-y; min: -root.stage-height / 2; max: root.stage-height / 2; changed(v) => { root.text-y = v; root.set-text(root.text-content, root.text-x, v, root.text-font-size); } }
                 PropertyRow { label: "フォントサイズ"; value: root.text-font-size; min: 1; max: 500; changed(v) => { root.text-font-size = v; root.set-text(root.text-content, root.text-x, root.text-y, v); } }
             }
 

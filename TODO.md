@@ -1,5 +1,5 @@
 # 0.1.0
-- [ ] 設定ダイアログの標準描画を実装（ParamSchema駆動。現状はShape/Text等が個別ハードコード実装）
+- [ ] 設定ダイアログの標準描画を実装（ParamSchema駆動。現状はShape/Text等が個別ハードコード実装。Transform座標範囲は解像度連動化済、型別UI生成自体は未着手）
 - [x] オブジェクト読込機構の完全モジュール化を実装
 - [x] ビルド・配置パイプラインを実装（xtask: crates/objects/*動的検出・ビルド・target/{profile}/objects/配置）
 - [x] タイムライン右クリックメニューのレジストリ動的化（プラグイン追加時にコード変更不要）
@@ -9,7 +9,8 @@
 - [x] 本体ウィンドウの再生停止を実装、見た目の整理
 - [ ] DocumentModel（Undo可能な正本データ）とECS（焼き込み済み描画状態）を分離
 - [ ] 編集コマンド群を実装（追加・削除・移動・リサイズ・エフェクト適用・パラメータ変更）、Undo/Redoを実装
-- [ ] TransformからGlobalMatrixへの合成結果をRenderSystemへ配線
+- [x] TransformからGlobalMatrixへの合成結果をRenderSystemへ配線
+- [x] Ortho座標系をプロジェクト解像度ピクセル空間へ整合（NDC±aspect,±1固定によりTransform.x/yの微小操作が画面外へ即座に飛ぶ不具合を修正。properties.slintのX/Y範囲もstage-width/height基準へ変更）
 - [x] 動画・画像・音声・テキストのバックエンド・APIを実装
 - [ ] 動画・画像・音声・テキストオブジェクトを実装
 - [ ] EffectStackのGPU実行機構を実装（compute_effect相当）

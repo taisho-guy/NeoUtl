@@ -1,4 +1,5 @@
 // src/ecs/transform.rs
+use neoutl_object_api::UNIT_SIZE_PX;
 use shipyard::{Component, Unique};
 
 #[derive(Clone, Copy, Debug, Component)]
@@ -30,16 +31,17 @@ impl Default for Transform {
     }
 }
 
-pub const IDENTITY_MATRIX: [f32; 16] = [
-    1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0,
-];
-
 #[derive(Clone, Copy, Debug, Component)]
 pub struct GlobalMatrix(pub [f32; 16]);
 
 impl Default for GlobalMatrix {
+    /// Transform::default()から必ず導出する。IDENTITY_MATRIX等の別経路の初期値は
+    /// 持たない（Transformとの乖離を構造的に不可能にするため）。
+    /// エンティティ生成時に本Defaultで挿入されたGlobalMatrixは、
+    /// set_transform()を一度も呼ばれていない状態でも常にTransform::default()と
+    /// 整合した正しい値になる。
     fn default() -> Self {
-        Self(IDENTITY_MATRIX)
+        compute_global_matrix(&Transform::default())
     }
 }
 
@@ -58,6 +60,8 @@ pub fn mat4_mul(a: &[f32; 16], b: &[f32; 16]) -> [f32; 16] {
 }
 
 /// Transform を列優先 4x4 行列へ合成する。順序: 平行移動 * 回転Z * 回転Y * 回転X * 拡大縮小。
+/// スケール項にはneoutl_object_api::UNIT_SIZE_PX（プラグイン頂点契約の基準サイズ）を
+/// 掛け、ローカル単位円（直径1.0）をworld空間のピクセル寸法へ写像する。
 pub fn compute_global_matrix(t: &Transform) -> GlobalMatrix {
     let translation: [f32; 16] = [
         1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, t.x, t.y, t.z, 1.0,
@@ -75,7 +79,22 @@ pub fn compute_global_matrix(t: &Transform) -> GlobalMatrix {
         cz, sz, 0.0, 0.0, -sz, cz, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0,
     ];
     let scale: [f32; 16] = [
-        t.scale_x, 0.0, 0.0, 0.0, 0.0, t.scale_y, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0,
+        t.scale_x * UNIT_SIZE_PX,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        t.scale_y * UNIT_SIZE_PX,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        UNIT_SIZE_PX,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        1.0,
     ];
     let rotation = mat4_mul(&rot_z, &mat4_mul(&rot_y, &rot_x));
     GlobalMatrix(mat4_mul(&translation, &mat4_mul(&rotation, &scale)))
@@ -87,6 +106,11 @@ pub enum Projection {
     Ortho,
     Perspective { fov_deg: f32 },
 }
+
+/// 全Perspectiveプロジェクションが共有する既定画角。
+/// projection_for()（ecs/systems.rs）とCamera::for_resolution()の両方から参照する
+/// 唯一の定義元とし、値の重複・食い違いを防ぐ。
+pub const DEFAULT_FOV_DEG: f32 = 45.0;
 
 #[derive(Clone, Copy, Debug, Unique)]
 pub struct Camera {
@@ -100,18 +124,38 @@ pub struct Camera {
     pub far: f32,
 }
 
-impl Default for Camera {
-    fn default() -> Self {
+impl Camera {
+    /// プロジェクト解像度からカメラを導出する唯一の窓口。
+    /// DEFAULT_FOV_DEGのPerspectiveで、z=0平面のオブジェクトが
+    /// ちょうどproject_height一杯に収まる距離へpos_zを配置する。
+    /// シーン切替・解像度変更のたびにこれを呼び直せば、常に整合したカメラになる。
+    pub fn for_resolution(project_width: f32, project_height: f32) -> Self {
+        let half_fov = (DEFAULT_FOV_DEG * 0.5).to_radians();
+        let pos_z = (project_height.max(1.0) * 0.5) / half_fov.tan();
         Self {
             pos_x: 0.0,
             pos_y: 0.0,
-            pos_z: 5.0,
+            pos_z,
             target_x: 0.0,
             target_y: 0.0,
             target_z: 0.0,
-            near: 0.01,
-            far: 1000.0,
+            // near/farはpos_zに対して十分な余裕を持たせ、解像度が変わっても
+            // オブジェクトがクリップされないようpos_z基準で比例させる。
+            near: (pos_z * 0.01).max(0.1),
+            far: (pos_z * 100.0).max(project_width.max(project_height) * 10.0),
         }
+    }
+}
+
+impl Default for Camera {
+    fn default() -> Self {
+        // ブートストラップ時（EcsWorld::new）専用の暫定値。
+        // 実際のプロジェクト解像度が確定次第、apply_scene_resolution経由で
+        // Camera::for_resolution()により必ず上書きされる。
+        Self::for_resolution(
+            crate::ecs::resources::ProjectResource::DEFAULT_WIDTH as f32,
+            crate::ecs::resources::ProjectResource::DEFAULT_HEIGHT as f32,
+        )
     }
 }
 
@@ -159,9 +203,11 @@ pub fn compute_view_matrix(cam: &Camera) -> [f32; 16] {
     ]
 }
 
-/// 2Dシーン用の正射影。NDC範囲を維持しz奥行きは素通し（深度テストなし前提）。
-pub fn compute_ortho_matrix(aspect: f32) -> [f32; 16] {
-    let (l, r, b, t) = (-aspect, aspect, -1.0, 1.0);
+/// 2Dシーン用の正射影。world座標=プロジェクトのピクセル座標として扱う
+/// （原点中心、+Yを上向き）。深度テストなし前提でz奥行きは素通しする。
+pub fn compute_ortho_matrix(project_width: f32, project_height: f32) -> [f32; 16] {
+    let (l, r) = (-project_width * 0.5, project_width * 0.5);
+    let (b, t) = (-project_height * 0.5, project_height * 0.5);
     [
         2.0 / (r - l),
         0.0,
@@ -206,16 +252,20 @@ pub fn compute_perspective_matrix(fov_deg: f32, aspect: f32, near: f32, far: f32
 }
 
 /// dimensionalityとCameraからMVPを合成する唯一の窓口。
+/// project_width/project_height はピクセル単位のプロジェクト解像度で、
+/// Orthoではworld座標系そのものの基準として、Perspectiveではaspect算出のみに用いる。
 pub fn compute_mvp(
     global: &GlobalMatrix,
     cam: &Camera,
-    aspect: f32,
+    project_width: f32,
+    project_height: f32,
     projection: Projection,
 ) -> [f32; 16] {
     let view = compute_view_matrix(cam);
     let proj = match projection {
-        Projection::Ortho => compute_ortho_matrix(aspect),
+        Projection::Ortho => compute_ortho_matrix(project_width, project_height),
         Projection::Perspective { fov_deg } => {
+            let aspect = project_width.max(1.0) / project_height.max(1.0);
             compute_perspective_matrix(fov_deg, aspect, cam.near, cam.far)
         }
     };

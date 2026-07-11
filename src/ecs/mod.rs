@@ -212,11 +212,8 @@ impl EcsWorld {
     }
 
     pub fn set_resolution(&mut self, width: u32, height: u32) {
-        self.world
-            .run(|mut project: UniqueViewMut<ProjectResource>| {
-                project.width = width;
-                project.height = height;
-            });
+        let fps = self.get_project().fps;
+        self.apply_scene_resolution(width, height, fps);
     }
 
     pub fn get_project(&self) -> ProjectResource {
@@ -241,6 +238,9 @@ impl EcsWorld {
     }
 
     /// アクティブシーンの解像度・FPSをProjectResourceへ確定反映する唯一の窓口。
+    /// Cameraはproject_width/heightに依存するため、解像度確定のたびにここで
+    /// Camera::for_resolution()により必ず再導出する。個別呼び出し側で
+    /// Cameraを直接いじる必要はない。
     fn apply_scene_resolution(&mut self, width: u32, height: u32, fps: u32) {
         self.world
             .run(|mut project: UniqueViewMut<ProjectResource>| {
@@ -248,6 +248,7 @@ impl EcsWorld {
                 project.height = height;
                 project.fps = fps;
             });
+        self.set_camera(Camera::for_resolution(width as f32, height as f32));
     }
 
     pub fn restore_scenes(&mut self, active_scene: i32, scenes: Vec<SceneMeta>) {
