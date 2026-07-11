@@ -21,7 +21,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let launcher = LauncherWindow::new()?;
     ui::install(&launcher);
 
+    // メインウィンドウ（ランチャー）が閉じられたらプロセス全体を終了する。
+    // 他ウィンドウ（プレビュー/タイムライン/設定等）はshow/hideのみで
+    // イベントループを止めない。終了経路はここ一箇所に集約する。
+    launcher.window().on_close_requested(|| {
+        slint::quit_event_loop().ok();
+        slint::CloseRequestResponse::HideWindow
+    });
+
     launcher.show()?;
-    slint::run_event_loop()?;
+    slint::run_event_loop_until_quit()?;
     Ok(())
 }

@@ -27,10 +27,13 @@ export struct EffectRow {
 }
 
 // kind: 0=Float, 1=Bool, 2=Color
+// effect-index: -1=オブジェクト直下パラメータ, 0以上=エフェクトスタックのインデックス
+// group: セクション見出し（トランスフォーム/テキスト/図形/オーディオ/プラグイン名、エフェクトはエフェクト名）
 export struct ParamRow {
     effect-index: int,
     key: string,
     label: string,
+    group: string,
     value: float,
     kind: int,
     min: float,
