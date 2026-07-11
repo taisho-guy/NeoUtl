@@ -1,5 +1,6 @@
 // src/project.rs
-use crate::config_format;
+use crate::ecs::resources::SceneMeta;
+use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
 #[derive(Clone, Debug)]
@@ -13,6 +14,72 @@ pub struct ProjectMeta {
     pub audio_channels: u32,
 }
 
+#[derive(Serialize, Deserialize)]
+struct SceneRecord {
+    id: i32,
+    name: String,
+    width: u32,
+    height: u32,
+    fps: u32,
+    grid_mode: i32,
+    grid_bpm: f32,
+    grid_offset: f32,
+    grid_interval: i32,
+    grid_subdivision: i32,
+    enable_snap: bool,
+    magnetic_snap_range: i32,
+}
+
+impl From<&SceneMeta> for SceneRecord {
+    fn from(s: &SceneMeta) -> Self {
+        Self {
+            id: s.id,
+            name: s.name.clone(),
+            width: s.width,
+            height: s.height,
+            fps: s.fps,
+            grid_mode: s.grid_mode,
+            grid_bpm: s.grid_bpm,
+            grid_offset: s.grid_offset,
+            grid_interval: s.grid_interval,
+            grid_subdivision: s.grid_subdivision,
+            enable_snap: s.enable_snap,
+            magnetic_snap_range: s.magnetic_snap_range,
+        }
+    }
+}
+
+impl SceneRecord {
+    fn into_meta(self) -> SceneMeta {
+        SceneMeta::from_saved(
+            self.id,
+            self.name,
+            self.width,
+            self.height,
+            self.fps,
+            self.grid_mode,
+            self.grid_bpm,
+            self.grid_offset,
+            self.grid_interval,
+            self.grid_subdivision,
+            self.enable_snap,
+            self.magnetic_snap_range,
+        )
+    }
+}
+
+#[derive(Serialize, Deserialize)]
+struct ProjectFile {
+    name: String,
+    fps: u32,
+    width: u32,
+    height: u32,
+    audio_sample_rate: u32,
+    audio_channels: u32,
+    active_scene: i32,
+    scenes: Vec<SceneRecord>,
+}
+
 pub fn projects_dir() -> PathBuf {
     std::env::current_exe()
         .ok()
@@ -21,7 +88,7 @@ pub fn projects_dir() -> PathBuf {
 }
 
 fn meta_path(dir: &Path) -> PathBuf {
-    dir.join("project.toml")
+    dir.join("project.yaml")
 }
 
 fn sanitize_dir_name(name: &str) -> String {
@@ -43,34 +110,31 @@ fn sanitize_dir_name(name: &str) -> String {
     }
 }
 
-fn serialize(meta: &ProjectMeta) -> String {
-    config_format::format_kv(&[
-        ("name", config_format::quote(&meta.name)),
-        ("fps", meta.fps.to_string()),
-        ("width", meta.width.to_string()),
-        ("height", meta.height.to_string()),
-        ("audio_sample_rate", meta.audio_sample_rate.to_string()),
-        ("audio_channels", meta.audio_channels.to_string()),
-    ])
-}
-
 pub fn load_project(dir: &Path) -> Option<ProjectMeta> {
     let content = std::fs::read_to_string(meta_path(dir)).ok()?;
-    let map = config_format::parse_kv(&content);
-    let fallback_name = dir
-        .file_name()
-        .map(|n| n.to_string_lossy().to_string())
-        .unwrap_or_else(|| "project".to_string());
-
+    let file: ProjectFile = rust_yaml::from_str(&content).ok()?;
     Some(ProjectMeta {
-        name: config_format::get_string(&map, "name", &fallback_name),
+        name: file.name,
         dir: dir.to_path_buf(),
-        fps: config_format::get_u32(&map, "fps", 30),
-        width: config_format::get_u32(&map, "width", 1920),
-        height: config_format::get_u32(&map, "height", 1080),
-        audio_sample_rate: config_format::get_u32(&map, "audio_sample_rate", 48000),
-        audio_channels: config_format::get_u32(&map, "audio_channels", 2),
+        fps: file.fps,
+        width: file.width,
+        height: file.height,
+        audio_sample_rate: file.audio_sample_rate,
+        audio_channels: file.audio_channels,
     })
+}
+
+/// プロジェクトディレクトリからシーン一覧・アクティブIDを復元する。
+pub fn load_scenes(dir: &Path) -> Option<(i32, Vec<SceneMeta>)> {
+    let content = std::fs::read_to_string(meta_path(dir)).ok()?;
+    let file: ProjectFile = rust_yaml::from_str(&content).ok()?;
+    Some((
+        file.active_scene,
+        file.scenes
+            .into_iter()
+            .map(SceneRecord::into_meta)
+            .collect(),
+    ))
 }
 
 pub fn list_projects() -> Vec<ProjectMeta> {
@@ -119,6 +183,26 @@ pub fn create_project(
         audio_sample_rate,
         audio_channels,
     };
-    std::fs::write(meta_path(&meta.dir), serialize(&meta))?;
+    save_project(&meta, 0, &[SceneMeta::new(0, "Scene 1")])?;
     Ok(meta)
+}
+
+/// プロジェクトメタ・全シーン設定（解像度・FPS・グリッド）をディスクへ確定する。
+pub fn save_project(
+    meta: &ProjectMeta,
+    active_scene: i32,
+    scenes: &[SceneMeta],
+) -> std::io::Result<()> {
+    let file = ProjectFile {
+        name: meta.name.clone(),
+        fps: meta.fps,
+        width: meta.width,
+        height: meta.height,
+        audio_sample_rate: meta.audio_sample_rate,
+        audio_channels: meta.audio_channels,
+        active_scene,
+        scenes: scenes.iter().map(SceneRecord::from).collect(),
+    };
+    let yaml = rust_yaml::to_string(&file).map_err(std::io::Error::other)?;
+    std::fs::write(meta_path(&meta.dir), yaml)
 }

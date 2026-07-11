@@ -1,7 +1,7 @@
 // src/app_state.rs
 // 複数プロジェクト同時オープンを管理する。1セッション = 1プロジェクト = 1EcsWorld + 1RenderEngine枠。
 use crate::ecs::EcsWorld;
-use crate::project::ProjectMeta;
+use crate::project::{self, ProjectMeta};
 use crate::renderer::RenderEngine;
 use std::sync::{Arc, Mutex};
 
@@ -18,6 +18,14 @@ impl ProjectSession {
         world.set_fps(meta.fps);
         world.set_resolution(meta.width, meta.height);
         world.set_audio_format(meta.audio_sample_rate, meta.audio_channels);
+
+        // ディスク保存済みのシーン一覧（解像度・FPS・グリッド設定含む）を復元する。
+        // 復元成功時、restore_scenesがアクティブシーンの解像度・FPSをProjectResourceへ反映する。
+        // 復元失敗時（新規プロジェクト・旧形式ファイル等）は既定の単一シーンのまま継続する。
+        if let Some((active_scene, scenes)) = project::load_scenes(&meta.dir) {
+            world.restore_scenes(active_scene, scenes);
+        }
+
         Self {
             meta,
             world: Arc::new(Mutex::new(world)),

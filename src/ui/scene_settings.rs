@@ -1,6 +1,7 @@
 // src/ui/scene_settings.rs
 use crate::app_state::{self, SharedAppState};
 use crate::ecs::SceneSettings;
+use crate::project;
 use crate::{SceneSettingsWindow, TimelineWindow};
 use slint::{ComponentHandle, Weak};
 
@@ -42,6 +43,20 @@ pub fn setup(
                 w.get_target_scene_id()
             };
             world.update_scene_settings(scene_id, settings);
+
+            let project = world.get_project();
+            if let Some(dir) = project.dir.clone() {
+                let meta = crate::project::ProjectMeta {
+                    name: project.name.clone(),
+                    dir,
+                    fps: project.fps,
+                    width: project.width,
+                    height: project.height,
+                    audio_sample_rate: project.audio_sample_rate,
+                    audio_channels: project.audio_channels,
+                };
+                let _ = project::save_project(&meta, world.active_scene(), &world.scenes());
+            }
             drop(world);
 
             crate::ui::timeline::sync_active_session(&state, &timeline_weak);

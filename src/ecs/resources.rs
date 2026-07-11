@@ -1,4 +1,5 @@
 // src/ecs/resources.rs
+use serde::{Deserialize, Serialize};
 use shipyard::Unique;
 
 /// 動画プロジェクト全体の設定（FPS・解像度等）
@@ -95,14 +96,17 @@ pub const GRID_MODE_BPM: i32 = 1;
 pub const GRID_MODE_FRAME: i32 = 2;
 
 /// シーン単体の設定（AviQtl::UI::SceneData 相当。グリッド・スナップはシーン単位で保持する）
-#[derive(Clone, Debug)]
+/// `total_frames`・`layer_states`はランタイム状態のため永続化対象から除外する。
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct SceneMeta {
     pub id: i32,
     pub name: String,
     pub width: u32,
     pub height: u32,
     pub fps: u32,
+    #[serde(skip)]
     pub total_frames: i32,
+    #[serde(skip)]
     pub layer_states: Vec<(bool, bool)>,
 
     pub grid_mode: i32,
@@ -131,6 +135,40 @@ impl SceneMeta {
             grid_subdivision: 4,
             enable_snap: true,
             magnetic_snap_range: 10,
+        }
+    }
+
+    /// ディスクから復元した設定値からランタイム状態を補完して構築する。
+    #[allow(clippy::too_many_arguments)]
+    pub fn from_saved(
+        id: i32,
+        name: String,
+        width: u32,
+        height: u32,
+        fps: u32,
+        grid_mode: i32,
+        grid_bpm: f32,
+        grid_offset: f32,
+        grid_interval: i32,
+        grid_subdivision: i32,
+        enable_snap: bool,
+        magnetic_snap_range: i32,
+    ) -> Self {
+        Self {
+            id,
+            name,
+            width,
+            height,
+            fps,
+            total_frames: 300,
+            layer_states: vec![(true, false); DEFAULT_LAYER_COUNT],
+            grid_mode,
+            grid_bpm,
+            grid_offset,
+            grid_interval,
+            grid_subdivision,
+            enable_snap,
+            magnetic_snap_range,
         }
     }
 }
@@ -162,7 +200,7 @@ impl SceneResource {
 }
 
 /// システム全体の設定（AviQtl::Core::SettingsManager 相当）
-#[derive(Clone, Debug, Unique)]
+#[derive(Clone, Debug, Unique, Serialize, Deserialize)]
 pub struct SystemSettingsResource {
     pub autosave_enabled: bool,
     pub autosave_interval_sec: i32,

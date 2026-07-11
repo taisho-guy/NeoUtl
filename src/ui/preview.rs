@@ -136,10 +136,24 @@ pub fn setup(
                     }
                 }
                 if let Some(ref mut engine) = *engine_lock {
+                    // シーン切替・シーン設定変更でProjectResourceの解像度が変わった場合、
+                    // レンダーターゲットを確実に追従させる（既知の制約の解消）。
+                    if engine.render_width != proj.width || engine.render_height != proj.height {
+                        engine.resize_render_target(proj.width, proj.height);
+                    }
                     engine.render(&active, &proj);
                     let img = slint::Image::try_from(engine.texture.clone()).unwrap();
                     if let Some(p) = preview_weak.upgrade() {
                         p.set_video_frame(img);
+                        if p.get_res_width() != proj.width as i32 {
+                            p.set_res_width(proj.width as i32);
+                        }
+                        if p.get_res_height() != proj.height as i32 {
+                            p.set_res_height(proj.height as i32);
+                        }
+                        if p.get_fps() != proj.fps as i32 {
+                            p.set_fps(proj.fps as i32);
+                        }
                     }
                 }
             }
