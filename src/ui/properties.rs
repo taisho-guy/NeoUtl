@@ -37,7 +37,6 @@ pub fn setup(props: &PropertiesWindow, state: SharedAppState) {
             let world_holder = app_state::active_world(&state);
             let mut world = world_holder.lock().unwrap();
             apply_object_param(&mut world, id as usize, group.as_str(), key.as_str(), value);
-            refresh(&p, &world);
         });
     }
 
