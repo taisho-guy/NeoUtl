@@ -3,8 +3,8 @@ use crate::app_state::{self, SharedAppState};
 use crate::ecs::{EcsWorld, components::TextContent};
 use crate::objects::registry;
 use crate::{
-    LayerState, PreviewWindow, PropertiesWindow, SceneSettingsWindow, SceneTabItem, TimelineObject,
-    TimelineWindow,
+    LayerState, ObjectKindItem, PreviewWindow, PropertiesWindow, SceneSettingsWindow, SceneTabItem,
+    TimelineObject, TimelineWindow,
 };
 use slint::{ComponentHandle, Model, ModelRc, VecModel, Weak};
 
@@ -15,6 +15,16 @@ pub fn setup(
     scene_settings_weak: Weak<SceneSettingsWindow>,
     state: SharedAppState,
 ) {
+    let kinds: Vec<ObjectKindItem> = registry()
+        .iter()
+        .enumerate()
+        .map(|(kind_id, plugin)| ObjectKindItem {
+            kind: kind_id as i32,
+            name: plugin.name.clone().into(),
+        })
+        .collect();
+    timeline.set_available_kinds(ModelRc::new(VecModel::from(kinds)));
+
     {
         let (state, tw, pw) = (state.clone(), timeline.as_weak(), preview_weak.clone());
         timeline.on_seek_timeline(move |frame| {

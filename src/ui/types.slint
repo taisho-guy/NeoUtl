@@ -10,6 +10,11 @@ export struct TimelineObject {
     selected: bool,
 }
 
+export struct ObjectKindItem {
+    kind: int,
+    name: string,
+}
+
 export struct LayerState {
     visible: bool,
     locked: bool,
@@ -21,10 +26,15 @@ export struct EffectRow {
     enabled: bool,
 }
 
+// kind: 0=Float, 1=Bool, 2=Color
 export struct ParamRow {
     effect-index: int,
     key: string,
+    label: string,
     value: float,
+    kind: int,
+    min: float,
+    max: float,
 }
 
 export struct CatalogRow {

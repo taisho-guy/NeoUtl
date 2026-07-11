@@ -1,7 +1,7 @@
 // src/ui/timeline.slint
 import { IconSet } from "@lucide";
 import { IconButton } from "common.slint";
-import { TimelineObject, LayerState, SceneTabItem } from "types.slint";
+import { TimelineObject, LayerState, SceneTabItem, ObjectKindItem } from "types.slint";
 import { Ruler } from "timeline/ruler.slint";
 import { LayerHeader } from "timeline/layer-header.slint";
 import { TimelineView } from "timeline/timeline-view.slint";
@@ -21,6 +21,7 @@ export component TimelineWindow inherits Window {
     in-out property <[TimelineObject]> objects: [];
     in-out property <[LayerState]> layer-states: [];
     in-out property <[SceneTabItem]> scene-tabs: [];
+    in-out property <[ObjectKindItem]> available-kinds: [];
 
     callback seek-timeline(int);
     callback add-object-at(int /* frame */, int /* layer */, int /* kind */);
@@ -187,7 +188,7 @@ export component TimelineWindow inherits Window {
         x: root.menu-x;
         y: root.menu-y;
         width: 170px;
-        height: root.menu-is-delete ? 40px : 106px;
+        height: root.menu-is-delete ? 40px : (root.available-kinds.length * 31px + 8px);
         background: #252528;
         border-width: 1px;
         border-color: #48484e;
@@ -220,51 +221,19 @@ export component TimelineWindow inherits Window {
             padding: 4px;
             spacing: 1px;
 
-            Rectangle {
-                background: t-touch.has-hover ? #303038 : transparent;
+            for k[i] in root.available-kinds: Rectangle {
+                background: kind-touch.has-hover ? #303038 : transparent;
                 height: 30px;
                 border-radius: 3px;
                 Text {
-                    text: "  ＋  Add Tetrahedron";
-                    color: #8aabff;
+                    text: "  ＋  Add " + k.name;
+                    color: #8aabff.mix(#c0a0ff, mod(k.kind, 5) / 4.0);
                     font-size: 12px;
                     vertical-alignment: center;
                 }
 
-                t-touch := TouchArea {
-                    clicked() => { root.add-object-at(root.menu-frame, root.menu-layer, 0); root.show-context-menu = false; }
-                }
-            }
-
-            Rectangle {
-                background: c-touch.has-hover ? #303038 : transparent;
-                height: 30px;
-                border-radius: 3px;
-                Text {
-                    text: "  ＋  Add Cube";
-                    color: #6ad8a0;
-                    font-size: 12px;
-                    vertical-alignment: center;
-                }
-
-                c-touch := TouchArea {
-                    clicked() => { root.add-object-at(root.menu-frame, root.menu-layer, 1); root.show-context-menu = false; }
-                }
-            }
-
-            Rectangle {
-                background: tx-touch.has-hover ? #303038 : transparent;
-                height: 30px;
-                border-radius: 3px;
-                Text {
-                    text: "  ＋  Add Text";
-                    color: #c0a0ff;
-                    font-size: 12px;
-                    vertical-alignment: center;
-                }
-
-                tx-touch := TouchArea {
-                    clicked() => { root.add-object-at(root.menu-frame, root.menu-layer, 2); root.show-context-menu = false; }
+                kind-touch := TouchArea {
+                    clicked() => { root.add-object-at(root.menu-frame, root.menu-layer, k.kind); root.show-context-menu = false; }
                 }
             }
         }
