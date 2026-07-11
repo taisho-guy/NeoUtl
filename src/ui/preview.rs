@@ -1,11 +1,12 @@
 // src/ui/preview.rs
 use crate::app_state::{self, SharedAppState};
+use crate::ecs::resources::ProjectResource;
 use crate::ecs::systems::get_active_objects_system;
 use crate::renderer::RenderEngine;
 use crate::{
     PreviewWindow, ProjectTabItem, PropertiesWindow, SystemSettingsWindow, TimelineWindow,
 };
-use slint::{ComponentHandle, Model, ModelRc, VecModel, Weak};
+use slint::{ComponentHandle, ModelRc, VecModel, Weak};
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -28,6 +29,14 @@ pub fn install_rendering_notifier(preview: &PreviewWindow, gpu_slot: GpuSlot) {
             }
         })
         .expect("rendering notifier登録失敗");
+}
+
+/// プレビューウィンドウの解像度・FPS表示をProjectResourceへ確実に同期する唯一の窓口。
+/// 初期化・プロジェクト切替・毎フレーム描画のいずれもここを経由し、反映漏れ・重複を防ぐ。
+fn sync_resolution_fps(preview: &PreviewWindow, proj: &ProjectResource) {
+    preview.set_fps(proj.fps as i32);
+    preview.set_res_width(proj.width as i32);
+    preview.set_res_height(proj.height as i32);
 }
 
 fn apply_frame(
@@ -79,9 +88,7 @@ pub fn sync_active_session(
     drop(world);
 
     if let Some(p) = preview_weak.upgrade() {
-        p.set_fps(proj.fps as i32);
-        p.set_res_width(proj.width as i32);
-        p.set_res_height(proj.height as i32);
+        sync_resolution_fps(&p, &proj);
         p.set_total_frames(total);
         p.set_current_frame(0);
         p.set_is_playing(false);
@@ -107,9 +114,7 @@ pub fn setup(
         let world_holder = app_state::active_world(&state);
         let world = world_holder.lock().unwrap();
         let proj = world.get_project();
-        preview.set_fps(proj.fps as i32);
-        preview.set_res_width(proj.width as i32);
-        preview.set_res_height(proj.height as i32);
+        sync_resolution_fps(preview, &proj);
         preview.set_total_frames(world.total_frames());
     }
 
@@ -145,15 +150,7 @@ pub fn setup(
                     let img = slint::Image::try_from(engine.texture.clone()).unwrap();
                     if let Some(p) = preview_weak.upgrade() {
                         p.set_video_frame(img);
-                        if p.get_res_width() != proj.width as i32 {
-                            p.set_res_width(proj.width as i32);
-                        }
-                        if p.get_res_height() != proj.height as i32 {
-                            p.set_res_height(proj.height as i32);
-                        }
-                        if p.get_fps() != proj.fps as i32 {
-                            p.set_fps(proj.fps as i32);
-                        }
+                        sync_resolution_fps(&p, &proj);
                     }
                 }
             }
@@ -261,7 +258,14 @@ pub fn setup(
         }
     });
 
-    preview.on_save_project(|| {});
+    preview.on_save_project({
+        let state = state.clone();
+        move || {
+            let world_holder = app_state::active_world(&state);
+            let world = world_holder.lock().unwrap();
+            let _ = crate::project::save_from_world(&world);
+        }
+    });
     preview.on_save_project_as(|| {});
     preview.on_export_media(|| {});
     preview.on_undo(|| {});

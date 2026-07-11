@@ -1,4 +1,5 @@
 // src/project.rs
+use crate::ecs::EcsWorld;
 use crate::ecs::resources::SceneMeta;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
@@ -14,60 +15,9 @@ pub struct ProjectMeta {
     pub audio_channels: u32,
 }
 
-#[derive(Serialize, Deserialize)]
-struct SceneRecord {
-    id: i32,
-    name: String,
-    width: u32,
-    height: u32,
-    fps: u32,
-    grid_mode: i32,
-    grid_bpm: f32,
-    grid_offset: f32,
-    grid_interval: i32,
-    grid_subdivision: i32,
-    enable_snap: bool,
-    magnetic_snap_range: i32,
-}
-
-impl From<&SceneMeta> for SceneRecord {
-    fn from(s: &SceneMeta) -> Self {
-        Self {
-            id: s.id,
-            name: s.name.clone(),
-            width: s.width,
-            height: s.height,
-            fps: s.fps,
-            grid_mode: s.grid_mode,
-            grid_bpm: s.grid_bpm,
-            grid_offset: s.grid_offset,
-            grid_interval: s.grid_interval,
-            grid_subdivision: s.grid_subdivision,
-            enable_snap: s.enable_snap,
-            magnetic_snap_range: s.magnetic_snap_range,
-        }
-    }
-}
-
-impl SceneRecord {
-    fn into_meta(self) -> SceneMeta {
-        SceneMeta::from_saved(
-            self.id,
-            self.name,
-            self.width,
-            self.height,
-            self.fps,
-            self.grid_mode,
-            self.grid_bpm,
-            self.grid_offset,
-            self.grid_interval,
-            self.grid_subdivision,
-            self.enable_snap,
-            self.magnetic_snap_range,
-        )
-    }
-}
-
+/// ディスク上のプロジェクトファイル形式。`SceneMeta`をそのまま保持し、
+/// ランタイム専用フィールド（`total_frames`・`layer_states`）は
+/// `SceneMeta`側の`#[serde(skip)]`で除外される。
 #[derive(Serialize, Deserialize)]
 struct ProjectFile {
     name: String,
@@ -77,7 +27,7 @@ struct ProjectFile {
     audio_sample_rate: u32,
     audio_channels: u32,
     active_scene: i32,
-    scenes: Vec<SceneRecord>,
+    scenes: Vec<SceneMeta>,
 }
 
 pub fn projects_dir() -> PathBuf {
@@ -110,9 +60,13 @@ fn sanitize_dir_name(name: &str) -> String {
     }
 }
 
-pub fn load_project(dir: &Path) -> Option<ProjectMeta> {
+fn read_file(dir: &Path) -> Option<ProjectFile> {
     let content = std::fs::read_to_string(meta_path(dir)).ok()?;
-    let file: ProjectFile = rust_yaml::from_str(&content).ok()?;
+    rust_yaml::from_str(&content).ok()
+}
+
+pub fn load_project(dir: &Path) -> Option<ProjectMeta> {
+    let file = read_file(dir)?;
     Some(ProjectMeta {
         name: file.name,
         dir: dir.to_path_buf(),
@@ -126,15 +80,8 @@ pub fn load_project(dir: &Path) -> Option<ProjectMeta> {
 
 /// プロジェクトディレクトリからシーン一覧・アクティブIDを復元する。
 pub fn load_scenes(dir: &Path) -> Option<(i32, Vec<SceneMeta>)> {
-    let content = std::fs::read_to_string(meta_path(dir)).ok()?;
-    let file: ProjectFile = rust_yaml::from_str(&content).ok()?;
-    Some((
-        file.active_scene,
-        file.scenes
-            .into_iter()
-            .map(SceneRecord::into_meta)
-            .collect(),
-    ))
+    let file = read_file(dir)?;
+    Some((file.active_scene, file.scenes))
 }
 
 pub fn list_projects() -> Vec<ProjectMeta> {
@@ -201,8 +148,28 @@ pub fn save_project(
         audio_sample_rate: meta.audio_sample_rate,
         audio_channels: meta.audio_channels,
         active_scene,
-        scenes: scenes.iter().map(SceneRecord::from).collect(),
+        scenes: scenes.to_vec(),
     };
     let yaml = rust_yaml::to_string(&file).map_err(std::io::Error::other)?;
     std::fs::write(meta_path(&meta.dir), yaml)
+}
+
+/// EcsWorldの現在状態を唯一の保存窓口としてディスクへ確定する。
+/// プロジェクトディレクトリ未確定（新規未保存等）の場合は何もしない。
+/// シーン設定変更・オートセーブ等、保存が必要な全箇所からこの関数を呼ぶ。
+pub fn save_from_world(world: &EcsWorld) -> std::io::Result<()> {
+    let project = world.get_project();
+    let Some(dir) = project.dir.clone() else {
+        return Ok(());
+    };
+    let meta = ProjectMeta {
+        name: project.name,
+        dir,
+        fps: project.fps,
+        width: project.width,
+        height: project.height,
+        audio_sample_rate: project.audio_sample_rate,
+        audio_channels: project.audio_channels,
+    };
+    save_project(&meta, world.active_scene(), &world.scenes())
 }

@@ -37,6 +37,14 @@ impl ProjectResource {
 
 pub const DEFAULT_LAYER_COUNT: usize = 128;
 
+fn default_total_frames() -> i32 {
+    300
+}
+
+fn default_layer_states() -> Vec<(bool, bool)> {
+    vec![(true, false); DEFAULT_LAYER_COUNT]
+}
+
 /// タイムライン状態（再生ヘッド・フレーム総数・ズーム率など）
 #[derive(Unique)]
 pub struct TimelineResource {
@@ -95,8 +103,10 @@ pub const GRID_MODE_AUTO: i32 = 0;
 pub const GRID_MODE_BPM: i32 = 1;
 pub const GRID_MODE_FRAME: i32 = 2;
 
-/// シーン単体の設定（AviQtl::UI::SceneData 相当。グリッド・スナップはシーン単位で保持する）
-/// `total_frames`・`layer_states`はランタイム状態のため永続化対象から除外する。
+/// シーン単体の設定（AviQtl::UI::SceneData 相当。グリッド・スナップはシーン単位で保持する）。
+/// `Serialize`/`Deserialize`をプロジェクトファイルへの直接永続化に用いる。
+/// `total_frames`・`layer_states`はランタイム状態のため保存対象外とし、
+/// 復元時は既定値（`default_total_frames`・`default_layer_states`）で補完する。
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct SceneMeta {
     pub id: i32,
@@ -104,9 +114,9 @@ pub struct SceneMeta {
     pub width: u32,
     pub height: u32,
     pub fps: u32,
-    #[serde(skip)]
+    #[serde(skip, default = "default_total_frames")]
     pub total_frames: i32,
-    #[serde(skip)]
+    #[serde(skip, default = "default_layer_states")]
     pub layer_states: Vec<(bool, bool)>,
 
     pub grid_mode: i32,
@@ -126,8 +136,8 @@ impl SceneMeta {
             width: 1920,
             height: 1080,
             fps: 30,
-            total_frames: 300,
-            layer_states: vec![(true, false); DEFAULT_LAYER_COUNT],
+            total_frames: default_total_frames(),
+            layer_states: default_layer_states(),
             grid_mode: GRID_MODE_AUTO,
             grid_bpm: 120.0,
             grid_offset: 0.0,
@@ -135,40 +145,6 @@ impl SceneMeta {
             grid_subdivision: 4,
             enable_snap: true,
             magnetic_snap_range: 10,
-        }
-    }
-
-    /// ディスクから復元した設定値からランタイム状態を補完して構築する。
-    #[allow(clippy::too_many_arguments)]
-    pub fn from_saved(
-        id: i32,
-        name: String,
-        width: u32,
-        height: u32,
-        fps: u32,
-        grid_mode: i32,
-        grid_bpm: f32,
-        grid_offset: f32,
-        grid_interval: i32,
-        grid_subdivision: i32,
-        enable_snap: bool,
-        magnetic_snap_range: i32,
-    ) -> Self {
-        Self {
-            id,
-            name,
-            width,
-            height,
-            fps,
-            total_frames: 300,
-            layer_states: vec![(true, false); DEFAULT_LAYER_COUNT],
-            grid_mode,
-            grid_bpm,
-            grid_offset,
-            grid_interval,
-            grid_subdivision,
-            enable_snap,
-            magnetic_snap_range,
         }
     }
 }
