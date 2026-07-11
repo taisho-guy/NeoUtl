@@ -221,6 +221,18 @@ impl EcsWorld {
             });
     }
 
+    /// アクティブシーンの解像度・FPSをProjectResourceへ確定反映する唯一の窓口。
+    /// switch_scene・update_scene_settings・restore_scenesはすべてここを経由し、
+    /// 反映ロジックの重複・乖離を防ぐ。
+    fn apply_scene_resolution(&mut self, width: u32, height: u32, fps: u32) {
+        self.world
+            .run(|mut project: UniqueViewMut<ProjectResource>| {
+                project.width = width;
+                project.height = height;
+                project.fps = fps;
+            });
+    }
+
     /// ディスクから復元したシーン一覧・アクティブIDをそのまま反映する（プロジェクト読込直後専用）。
     pub fn restore_scenes(&mut self, active_scene: i32, scenes: Vec<SceneMeta>) {
         self.world.run(|mut res: UniqueViewMut<SceneResource>| {
@@ -229,20 +241,12 @@ impl EcsWorld {
             res.active_scene = active_scene;
             res.next_scene_id = next_scene_id;
         });
-        let (width, height, fps) = self.world.run(|scenes: UniqueView<SceneResource>| {
-            let s = scenes.find(active_scene);
-            (
-                s.map(|s| s.width).unwrap_or(1920),
-                s.map(|s| s.height).unwrap_or(1080),
-                s.map(|s| s.fps).unwrap_or(30),
-            )
-        });
-        self.world
-            .run(|mut project: UniqueViewMut<ProjectResource>| {
-                project.width = width;
-                project.height = height;
-                project.fps = fps;
-            });
+        let target = self
+            .world
+            .run(|scenes: UniqueView<SceneResource>| scenes.find(active_scene).cloned());
+        if let Some(scene) = target {
+            self.apply_scene_resolution(scene.width, scene.height, scene.fps);
+        }
         self.update_total_frames();
     }
 
@@ -585,12 +589,7 @@ impl EcsWorld {
                 .run(|mut timeline: UniqueViewMut<TimelineResource>| {
                     timeline.total_frames = total_frames;
                 });
-            self.world
-                .run(|mut project: UniqueViewMut<ProjectResource>| {
-                    project.width = width;
-                    project.height = height;
-                    project.fps = fps;
-                });
+            self.apply_scene_resolution(width, height, fps);
         }
         switched
     }
@@ -634,12 +633,7 @@ impl EcsWorld {
                 true
             });
         if updated && self.active_scene() == scene_id {
-            self.world
-                .run(|mut project: UniqueViewMut<ProjectResource>| {
-                    project.width = s.width;
-                    project.height = s.height;
-                    project.fps = s.fps;
-                });
+            self.apply_scene_resolution(s.width, s.height, s.fps);
         }
         updated
     }
