@@ -27,6 +27,40 @@ pub struct TimelineData {
     pub layer: i32,
 }
 
+/// シーン設定ウィンドウとの受け渡し用（AviQtl::UI::SceneData の設定サブセットに相当）
+#[derive(Clone, Debug)]
+pub struct SceneSettings {
+    pub name: String,
+    pub width: u32,
+    pub height: u32,
+    pub fps: u32,
+    pub grid_mode: i32,
+    pub grid_bpm: f32,
+    pub grid_offset: f32,
+    pub grid_interval: i32,
+    pub grid_subdivision: i32,
+    pub enable_snap: bool,
+    pub magnetic_snap_range: i32,
+}
+
+impl From<&SceneMeta> for SceneSettings {
+    fn from(s: &SceneMeta) -> Self {
+        Self {
+            name: s.name.clone(),
+            width: s.width,
+            height: s.height,
+            fps: s.fps,
+            grid_mode: s.grid_mode,
+            grid_bpm: s.grid_bpm,
+            grid_offset: s.grid_offset,
+            grid_interval: s.grid_interval,
+            grid_subdivision: s.grid_subdivision,
+            enable_snap: s.enable_snap,
+            magnetic_snap_range: s.magnetic_snap_range,
+        }
+    }
+}
+
 pub struct EcsWorld {
     pub world: World,
 }
@@ -452,11 +486,18 @@ impl EcsWorld {
 
     // --- Scene ---
 
+    /// 新規シーンを追加する。幅・高さ・FPSはプロジェクトの現在値を初期値として継承する
+    /// （AviQtl::UI::TimelineService::createSceneInternal相当。既定値はグローバル設定でなくプロジェクト値を採用）。
     pub fn add_scene(&mut self, name: impl Into<String>) -> i32 {
+        let project = self.get_project();
         self.world.run(|mut scenes: UniqueViewMut<SceneResource>| {
             let id = scenes.next_scene_id;
             scenes.next_scene_id += 1;
-            scenes.scenes.push(SceneMeta::new(id, name));
+            let mut meta = SceneMeta::new(id, name);
+            meta.width = project.width;
+            meta.height = project.height;
+            meta.fps = project.fps;
+            scenes.scenes.push(meta);
             id
         })
     }
@@ -523,6 +564,36 @@ impl EcsWorld {
         self.world
             .run(|scenes: UniqueView<SceneResource>| scenes.scenes.clone())
     }
+
+    pub fn get_scene(&self, scene_id: i32) -> Option<SceneSettings> {
+        self.world
+            .run(|scenes: UniqueView<SceneResource>| scenes.find(scene_id).map(SceneSettings::from))
+    }
+
+    /// シーン設定ウィンドウの確定内容を反映する。
+    /// 幅・高さ・FPSはシーン単位のメタデータとして保持するのみで、
+    /// プレビュー解像度・出力FPSへの反映は現状未対応（既知の制約）。
+    pub fn update_scene_settings(&mut self, scene_id: i32, s: SceneSettings) -> bool {
+        self.world
+            .run(|mut scenes: UniqueViewMut<SceneResource>| -> bool {
+                let Some(meta) = scenes.find_mut(scene_id) else {
+                    return false;
+                };
+                meta.name = s.name.clone();
+                meta.width = s.width;
+                meta.height = s.height;
+                meta.fps = s.fps;
+                meta.grid_mode = s.grid_mode;
+                meta.grid_bpm = s.grid_bpm;
+                meta.grid_offset = s.grid_offset;
+                meta.grid_interval = s.grid_interval;
+                meta.grid_subdivision = s.grid_subdivision;
+                meta.enable_snap = s.enable_snap;
+                meta.magnetic_snap_range = s.magnetic_snap_range;
+                true
+            })
+    }
+
     pub fn get_system_settings(&self) -> SystemSettingsResource {
         self.world
             .run(|s: UniqueView<SystemSettingsResource>| s.clone())

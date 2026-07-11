@@ -10,6 +10,7 @@ export component TimelineWindow inherits Window {
     title: "NeoUtl - 拡張編集";
     preferred-width: 1000px;
     preferred-height: 348px;
+    min-height: 200px;
     background: #0e0e12;
 
     in-out property <int> current-frame: 0;
@@ -31,7 +32,8 @@ export component TimelineWindow inherits Window {
     callback toggle-layer-visible(int);
     callback toggle-layer-locked(int);
     callback switch-scene-tab(int);
-    callback add-scene-tab();
+    callback open-scene-settings-create();
+    callback open-scene-settings-edit(int);
     callback close-scene-tab(int);
 
     property <int> header-width: 60;
@@ -97,6 +99,12 @@ export component TimelineWindow inherits Window {
                         }
 
                         IconButton {
+                            icon: IconSet.Settings;
+                            icon-size: 11px;
+                            clicked() => { root.open-scene-settings-edit(tab.id); }
+                        }
+
+                        IconButton {
                             icon: IconSet.X;
                             icon-size: 11px;
                             clicked() => { root.close-scene-tab(tab.id); }
@@ -110,7 +118,7 @@ export component TimelineWindow inherits Window {
 
                 IconButton {
                     icon: IconSet.Plus;
-                    clicked() => { root.add-scene-tab(); }
+                    clicked() => { root.open-scene-settings-create(); }
                 }
             }
         }
