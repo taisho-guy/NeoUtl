@@ -2,13 +2,15 @@
 pub mod launcher;
 mod preview;
 pub mod properties;
+mod scene_settings;
 pub mod system_settings;
 mod timeline;
 
 use crate::app_state::{self, AppState, ProjectSession, SharedAppState};
 use crate::project::ProjectMeta;
 use crate::{
-    LauncherWindow, PreviewWindow, PropertiesWindow, SystemSettingsWindow, TimelineWindow,
+    LauncherWindow, PreviewWindow, PropertiesWindow, SceneSettingsWindow, SystemSettingsWindow,
+    TimelineWindow,
 };
 use slint::ComponentHandle;
 use std::cell::RefCell;
@@ -21,6 +23,8 @@ struct AppHandles {
     props: PropertiesWindow,
     #[allow(dead_code)]
     settings: SystemSettingsWindow,
+    #[allow(dead_code)]
+    scene_settings: SceneSettingsWindow,
 }
 
 /// ランチャーのコールバックを配線する。
@@ -92,6 +96,7 @@ fn build_main_windows(
     let timeline = TimelineWindow::new()?;
     let props = PropertiesWindow::new()?;
     let settings = SystemSettingsWindow::new()?;
+    let scene_settings_win = SceneSettingsWindow::new()?;
 
     let gpu_slot: preview::GpuSlot = Rc::new(RefCell::new(None));
     preview::install_rendering_notifier(&preview, gpu_slot.clone());
@@ -105,8 +110,15 @@ fn build_main_windows(
         state.clone(),
         gpu_slot,
     );
-    timeline::setup(&timeline, preview.as_weak(), props.as_weak(), state.clone());
+    timeline::setup(
+        &timeline,
+        preview.as_weak(),
+        props.as_weak(),
+        scene_settings_win.as_weak(),
+        state.clone(),
+    );
     properties::setup(&props, state.clone());
+    scene_settings::setup(&scene_settings_win, state.clone(), timeline.as_weak());
 
     // 本体ウィンドウの「新規プロジェクト」「プロジェクトを開く」は
     // ランチャーを再表示してプロジェクトタブ追加の入口として使う。
@@ -132,5 +144,6 @@ fn build_main_windows(
         timeline,
         props,
         settings,
+        scene_settings: scene_settings_win,
     })
 }

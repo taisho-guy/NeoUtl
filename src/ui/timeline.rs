@@ -3,7 +3,8 @@ use crate::app_state::{self, SharedAppState};
 use crate::ecs::{EcsWorld, components::TextContent};
 use crate::objects::registry;
 use crate::{
-    LayerState, PreviewWindow, PropertiesWindow, SceneTabItem, TimelineObject, TimelineWindow,
+    LayerState, PreviewWindow, PropertiesWindow, SceneSettingsWindow, SceneTabItem, TimelineObject,
+    TimelineWindow,
 };
 use slint::{ComponentHandle, Model, ModelRc, VecModel, Weak};
 
@@ -11,6 +12,7 @@ pub fn setup(
     timeline: &TimelineWindow,
     preview_weak: Weak<PreviewWindow>,
     props_weak: Weak<PropertiesWindow>,
+    scene_settings_weak: Weak<SceneSettingsWindow>,
     state: SharedAppState,
 ) {
     {
@@ -162,16 +164,19 @@ pub fn setup(
     }
 
     {
-        let (state, tw) = (state.clone(), timeline.as_weak());
-        timeline.on_add_scene_tab(move || {
-            if let Some(t) = tw.upgrade() {
-                let world_holder = app_state::active_world(&state);
-                let mut world = world_holder.lock().unwrap();
-                let count = world.scenes().len();
-                let id = world.add_scene(format!("Scene {}", count + 1));
-                world.switch_scene(id);
-                sync(&t, &world);
-                sync_scene_tabs(&t, &world);
+        let (state, sw) = (state.clone(), scene_settings_weak.clone());
+        timeline.on_open_scene_settings_create(move || {
+            if let Some(w) = sw.upgrade() {
+                crate::ui::scene_settings::open_for_create(&w, &state);
+            }
+        });
+    }
+
+    {
+        let (state, sw) = (state.clone(), scene_settings_weak.clone());
+        timeline.on_open_scene_settings_edit(move |scene_id| {
+            if let Some(w) = sw.upgrade() {
+                crate::ui::scene_settings::open_for_edit(&w, &state, scene_id);
             }
         });
     }

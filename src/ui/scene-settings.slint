@@ -1,0 +1,241 @@
+// src/ui/scene-settings.slint
+import { IconSet } from "@lucide";
+import { Button } from "common.slint";
+import { ToggleField, IntField, ChoiceField } from "system-settings/fields.slint";
+
+component NameField inherits Rectangle {
+    in property <string> label;
+    in-out property <string> value;
+    callback changed(string);
+
+    height: 28px;
+
+    Text {
+        text: root.label;
+        color: #b0b0ba;
+        font-size: 11px;
+        vertical-alignment: center;
+        height: 100%;
+        width: 70px;
+    }
+
+    Rectangle {
+        x: 74px;
+        width: parent.width - 74px;
+        border-radius: 3px;
+        background: #16161b;
+        border-width: 1px;
+        border-color: #303038;
+
+        TextInput {
+            x: 6px;
+            width: parent.width - 12px;
+            height: 100%;
+            text: root.value;
+            color: #dde3ee;
+            font-size: 11px;
+            vertical-alignment: center;
+            edited => { root.changed(self.text); }
+        }
+    }
+}
+
+component FloatField inherits Rectangle {
+    in property <string> label;
+    in property <float> value;
+    callback changed(float);
+
+    height: 28px;
+
+    Text {
+        text: root.label;
+        color: #b0b0ba;
+        font-size: 11px;
+        vertical-alignment: center;
+        height: 100%;
+        width: parent.width - 80px;
+    }
+
+    Rectangle {
+        x: parent.width - 72px;
+        width: 72px;
+        border-radius: 3px;
+        background: #16161b;
+        border-width: 1px;
+        border-color: #303038;
+
+        TextInput {
+            x: 4px;
+            width: parent.width - 8px;
+            height: 100%;
+            text: root.value;
+            color: #dde3ee;
+            font-size: 11px;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+            accepted => { root.changed(self.text.to-float()); }
+        }
+    }
+}
+
+export component SceneSettingsWindow inherits Window {
+    title: root.is-creation-mode ? "新規シーン作成" : "シーン設定";
+    preferred-width: 380px;
+    preferred-height: 520px;
+    background: #0e0e12;
+
+    in-out property <bool> is-creation-mode: true;
+    in-out property <int> target-scene-id: -1;
+
+    in-out property <string> scene-name: "Scene";
+    in-out property <int> scene-width: 1920;
+    in-out property <int> scene-height: 1080;
+    in-out property <float> scene-fps: 30.0;
+
+    in-out property <bool> enable-snap: true;
+    in-out property <int> magnetic-snap-range: 10;
+    in-out property <int> grid-mode: 0;
+    in-out property <float> grid-bpm: 120.0;
+    in-out property <float> grid-offset: 0.0;
+    in-out property <int> grid-interval: 10;
+    in-out property <int> grid-subdivision: 4;
+
+    callback confirm();
+    callback cancel();
+
+    VerticalLayout {
+        padding: 14px;
+        spacing: 14px;
+
+        Rectangle {
+            background: #16161c;
+            border-radius: 4px;
+            VerticalLayout {
+                padding: 10px;
+                spacing: 8px;
+
+                Text { text: "基本設定"; color: #8aabff; font-size: 11px; }
+
+                NameField {
+                    label: "シーン名:";
+                    value: root.scene-name;
+                    changed(v) => { root.scene-name = v; }
+                }
+                IntField {
+                    label: "幅:";
+                    value: root.scene-width;
+                    min: 1;
+                    max: 8000;
+                    changed(v) => { root.scene-width = v; }
+                }
+                IntField {
+                    label: "高さ:";
+                    value: root.scene-height;
+                    min: 1;
+                    max: 8000;
+                    changed(v) => { root.scene-height = v; }
+                }
+                FloatField {
+                    label: "FPS:";
+                    value: root.scene-fps;
+                    changed(v) => { root.scene-fps = v; }
+                }
+            }
+        }
+
+        Rectangle {
+            background: #16161c;
+            border-radius: 4px;
+            VerticalLayout {
+                padding: 10px;
+                spacing: 8px;
+
+                Text { text: "編集とスナップ"; color: #8aabff; font-size: 11px; }
+
+                ToggleField {
+                    label: "スナップを有効にする";
+                    checked: root.enable-snap;
+                    toggled => { root.enable-snap = !root.enable-snap; }
+                }
+                IntField {
+                    label: "磁力スナップ範囲:";
+                    value: root.magnetic-snap-range;
+                    min: 1;
+                    max: 100;
+                    changed(v) => { root.magnetic-snap-range = v; }
+                }
+                ChoiceField {
+                    label: "グリッドモード:";
+                    options: ["自動 (秒/フレーム)", "BPM (音楽)", "フレーム数固定"];
+                    selected: root.grid-mode;
+                    changed(v) => { root.grid-mode = v; }
+                }
+            }
+        }
+
+        if (root.grid-mode == 1): Rectangle {
+            background: #16161c;
+            border-radius: 4px;
+            VerticalLayout {
+                padding: 10px;
+                spacing: 8px;
+
+                Text { text: "BPM設定"; color: #8aabff; font-size: 11px; }
+
+                FloatField {
+                    label: "BPM:";
+                    value: root.grid-bpm;
+                    changed(v) => { root.grid-bpm = v; }
+                }
+                IntField {
+                    label: "拍子 (分割数):";
+                    value: root.grid-subdivision;
+                    min: 1;
+                    max: 32;
+                    changed(v) => { root.grid-subdivision = v; }
+                }
+                FloatField {
+                    label: "オフセット (秒):";
+                    value: root.grid-offset;
+                    changed(v) => { root.grid-offset = v; }
+                }
+            }
+        }
+
+        if (root.grid-mode == 2): Rectangle {
+            background: #16161c;
+            border-radius: 4px;
+            VerticalLayout {
+                padding: 10px;
+                spacing: 8px;
+
+                Text { text: "フレーム設定"; color: #8aabff; font-size: 11px; }
+
+                IntField {
+                    label: "間隔 (Frames):";
+                    value: root.grid-interval;
+                    min: 1;
+                    max: 1000;
+                    changed(v) => { root.grid-interval = v; }
+                }
+            }
+        }
+
+        Rectangle { vertical-stretch: 1; }
+
+        HorizontalLayout {
+            alignment: end;
+            spacing: 10px;
+
+            Button {
+                label: "キャンセル";
+                clicked => { root.cancel(); }
+            }
+            Button {
+                label: "OK";
+                primary: true;
+                clicked => { root.confirm(); }
+            }
+        }
+    }
+}

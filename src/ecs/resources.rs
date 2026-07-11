@@ -88,7 +88,13 @@ impl LayerStates {
     }
 }
 
-/// シーン単体の設定（AviQtl::Core::SceneSettings 相当）
+/// グリッドモード（AviQtl::UI::SceneData::gridMode相当）。
+/// 0: Auto（秒/フレーム）, 1: BPM（音楽）, 2: Frame（フレーム数固定）
+pub const GRID_MODE_AUTO: i32 = 0;
+pub const GRID_MODE_BPM: i32 = 1;
+pub const GRID_MODE_FRAME: i32 = 2;
+
+/// シーン単体の設定（AviQtl::UI::SceneData 相当。グリッド・スナップはシーン単位で保持する）
 #[derive(Clone, Debug)]
 pub struct SceneMeta {
     pub id: i32,
@@ -98,6 +104,14 @@ pub struct SceneMeta {
     pub fps: u32,
     pub total_frames: i32,
     pub layer_states: Vec<(bool, bool)>,
+
+    pub grid_mode: i32,
+    pub grid_bpm: f32,
+    pub grid_offset: f32,
+    pub grid_interval: i32,
+    pub grid_subdivision: i32,
+    pub enable_snap: bool,
+    pub magnetic_snap_range: i32,
 }
 
 impl SceneMeta {
@@ -110,6 +124,13 @@ impl SceneMeta {
             fps: 30,
             total_frames: 300,
             layer_states: vec![(true, false); DEFAULT_LAYER_COUNT],
+            grid_mode: GRID_MODE_AUTO,
+            grid_bpm: 120.0,
+            grid_offset: 0.0,
+            grid_interval: 10,
+            grid_subdivision: 4,
+            enable_snap: true,
+            magnetic_snap_range: 10,
         }
     }
 }
