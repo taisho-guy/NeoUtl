@@ -145,14 +145,122 @@
                     <b>ExEdit 0.92</b
                     >の操作感を踏襲しつつ、<b>AviUtlを超える性能</b>を持つ動画編集ソフトを開発するプロジェクトです。
                 </p>
-                <h3>主な特徴と目標</h3>
-                <ul>
-                    <li>AviUtlに酷似した直感的なUI</li>
-                    <li>wgpuを用いたGPUによる<b>高速なプレビュー</b></li>
-                    <li>ECS（Shipyard）による<b>効率的で安全な処理</b></li>
-                    <li>MV制作に耐えうる<b>DAW機能</b>の搭載</li>
-                    <li><b>Linux</b>、<b>Windows</b>、<b>macOS</b>に対応</li>
-                </ul>
+                <h3>目的</h3>
+
+<details>
+    <summary>AviUtl 1.10/ExEdit 0.92のような操作感</summary>
+    <ul>
+        <li>
+            <b>NeoUtl</b>
+            <ul>
+                <li>
+                    AviUtl 1.10とExEdit 0.92（そして数々の拡張）に酷似することを目標としています。
+                </li>
+            </ul>
+        </li>
+        <li>
+            <b>AviUtl</b>
+            <ul>
+                <li>ExEdit2への移行に伴い、新たに独自の操作感を構築しています。</li>
+            </ul>
+        </li>
+    </ul>
+</details>
+
+<details>
+    <summary>自由ライセンスかつ無料</summary>
+    <ul>
+        <li>
+            <b>NeoUtl</b>
+            <ul>
+                <li>AGPLv3+でライセンスされた自由ソフトウェアで、無料で配布されています。</li>
+                <li>ソースコードも無料で入手できます。</li>
+            </ul>
+        </li>
+        <li>
+            <b>AviUtl</b>
+            <ul>
+                <li>自由ソフトウェアではなく、ソースコードも非公開です。</li>
+            </ul>
+        </li>
+    </ul>
+</details>
+
+<details>
+    <summary>Linux / macOS / Windowsに対応</summary>
+    <ul>
+        <li>
+            <b>NeoUtl</b>
+            <ul>
+                <li>Linuxを中心に複数OSをサポートしています。</li>
+            </ul>
+        </li>
+        <li>
+            <b>AviUtl</b>
+            <ul>
+                <li>Windowsでしかネイティブに動作しません。</li>
+            </ul>
+        </li>
+    </ul>
+</details>
+
+<details>
+    <summary>クラッシュ・フリーズ知らず</summary>
+    <ul>
+        <li>
+            <b>NeoUtl</b>
+            <ul>
+                <li>Rust言語での実装により、メモリ由来の不正を構造的に排除しています。</li>
+            </ul>
+        </li>
+        <li>
+            <b>AviUtl</b>
+            <ul>
+                <li>古典的なC++言語での実装により、メモリ由来の不正を完全には防ぎきれません。</li>
+            </ul>
+        </li>
+    </ul>
+</details>
+
+<details>
+    <summary>ハイパフォーマンスかつ超省資源</summary>
+    <ul>
+        <li>
+            <b>NeoUtl</b>
+            <ul>
+                <li>Shyphardを用いたデータ指向設計を実践。CPUのキャッシュ効率を最大化しています。これにより、大量のクリップの処理性能が大幅に向上します。</li>
+                <li>Vulkan、Metal、DirectX12等、各プラットフォームに最適なネイティブAPIを呼び出し、GPUのパフォーマンスを最大限に引き出します。</li>
+                <li>処理をなるべくGPU内で完結させるゼロコピー設計により、高解像度編集でのボトルネックを排除します。</li>
+            </ul>
+        </li>
+        <li>
+            <b>AviUtl</b>
+            <ul>
+                <li>古典的なオブジェクト指向設計に基づいており、CPUのキャッシュミスが頻発します。</li>
+                <li>DirectX11のみにしか対応しておりません。</li>
+                <li>エフェクト毎にテクスチャがCPUとGPU間を行き来することが多く、大きなボトルネックが発生します。</li>
+            </ul>
+        </li>
+    </ul>
+</details>
+
+<details>
+    <summary>柔軟で堅牢なアーキテクチャ</summary>
+    <ul>
+        <li>
+            <b>NeoUtl</b>
+            <ul>
+                <li>モジュール化を徹底し、「疎」で読みやすいソースコードを維持。拡張が容易です。</li>
+            </ul>
+        </li>
+        <li>
+            <b>AviUtl</b>
+            <ul>
+                <li>外部拡張はSDKに依存。内部のロジックが不透明で、プラグイン作者の「職人技」がエコシステムを左右します。</li>
+            </ul>
+        </li>
+    </ul>
+</details>
             </section>
 
             <section>
@@ -271,7 +379,7 @@
                     <pre><code>git clone "https://codeberg.org/taisho-guy/NeoUtl.git"
 cd NeoUtl
 git switch main
-cargo build --release</code></pre>
+cargo xtask build --release</code></pre>
                     <p>
                         実行可能ファイルは
                         <code>target/release</code> 以下に生成されます。

@@ -372,6 +372,16 @@ details > ol {
     padding-block: var(--sp-md);
 }
 
+/* ネストされた箇条書き（details 配下）を過度にインデントさせない */
+details ul ul {
+    padding-inline-start: 1.1em;
+    margin-block: 4px 0;
+}
+
+details ul ul li {
+    margin-block-end: 6px;
+}
+
 .download-grid {
     display: grid;
     grid-template-columns: repeat(4, 1fr);
