@@ -1,5 +1,4 @@
 // src/ui/properties.slint
-import { Slider } from "std-widgets.slint";
 import { EffectRow, ParamRow, CatalogRow } from "types.slint";
 
 component PropertyRow inherits Rectangle {
@@ -7,6 +6,7 @@ component PropertyRow inherits Rectangle {
     in property <float> value;
     in property <float> min: -1000;
     in property <float> max: 1000;
+    in property <float> drag-sensitivity: 1;
     callback changed(float);
 
     height: 22px;
@@ -15,15 +15,14 @@ component PropertyRow inherits Rectangle {
         return v < min ? min : v > max ? max : v;
     }
 
+    // ドラッグ中の直前座標。press開始フレームはmoved内で初期化する
+    // （pressed変化を検知するための1フレーム目フラグ方式）。
+    property <length> anchor-x: 0;
+    property <length> anchor-y: 0;
+    property <bool> was-pressed: false;
+
     HorizontalLayout {
         spacing: 4px;
-
-        Slider {
-            minimum: root.min;
-            maximum: root.max;
-            value: root.value;
-            changed(v) => { root.changed(root.clamp(v)); }
-        }
 
         Rectangle {
             width: 74px;
@@ -32,22 +31,48 @@ component PropertyRow inherits Rectangle {
         }
 
         Rectangle {
-            width: 64px;
             border-radius: 3px;
-            background: #16161b;
+            background: drag-area.pressed ? #22222a : #16161b;
             border-width: 1px;
             border-color: #303038;
-            TextInput {
+
+            input := TextInput {
                 x: 4px;
                 width: parent.width - 8px;
                 height: 100%;
-                text: value;
+                text: root.value;
                 color: #dde3ee;
                 font-size: 11px;
                 horizontal-alignment: center;
                 vertical-alignment: center;
                 input-type: InputType.decimal;
                 accepted => { root.changed(root.clamp(self.text.to-float())); }
+            }
+
+            // ドラッグ量=移動量そのもの。画面端到達でそれ以上は追従不能
+            // （Slintにポインタロックap/warp APIが無いための既知の制約）。
+            // カーソル非表示中も移動イベント自体は継続して届くため、
+            // 画面端に達するまでは実質無制限にドラッグできる。
+            drag-area := TouchArea {
+                mouse-cursor: self.pressed ? MouseCursor.none : MouseCursor.default;
+                clicked => { input.focus(); }
+                moved => {
+                    if (self.pressed) {
+                        if (!root.was-pressed) {
+                            root.was-pressed = true;
+                            root.anchor-x = self.mouse-x;
+                            root.anchor-y = self.mouse-y;
+                        } else {
+                            root.changed(root.clamp(root.value
+                                + (self.mouse-x - root.anchor-x) / 1px * root.drag-sensitivity
+                                - (self.mouse-y - root.anchor-y) / 1px * root.drag-sensitivity));
+                            root.anchor-x = self.mouse-x;
+                            root.anchor-y = self.mouse-y;
+                        }
+                    } else {
+                        root.was-pressed = false;
+                    }
+                }
             }
         }
     }
