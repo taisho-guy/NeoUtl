@@ -1,6 +1,7 @@
 // src/ecs/mod.rs
 pub mod components;
 pub mod effects;
+pub mod object_schema;
 pub mod resources;
 pub mod systems;
 pub mod transform;
@@ -8,13 +9,15 @@ pub mod types;
 
 use crate::ecs::types::EffectInstance;
 use components::{
-    AudioParams, KindId, Layer, ObjectId, SceneId, ShapeParams, TextContent, TimeRange,
+    AudioParams, KindId, Layer, ObjectId, PluginParams, SceneId, ShapeParams, TextContent,
+    TimeRange,
 };
 use effects::EffectStack;
 use resources::{
     LayerStates, ProjectResource, SceneMeta, SceneResource, SystemSettingsResource,
     TimelineResource,
 };
+use std::collections::HashMap;
 
 use shipyard::{Get, IntoIter, UniqueView, UniqueViewMut, View, ViewMut, World};
 use transform::{Camera, GlobalMatrix, Transform, compute_global_matrix};
@@ -575,6 +578,32 @@ impl EcsWorld {
         let entity = self.find_entity(object_id)?;
         self.world
             .run(|audio: View<AudioParams>| audio.get(entity).ok().copied())
+    }
+
+    // --- KindId / PluginParams ---
+
+    pub fn get_kind_id(&self, object_id: usize) -> Option<u32> {
+        let entity = self.find_entity(object_id)?;
+        self.world
+            .run(|kinds: View<KindId>| kinds.get(entity).ok().map(|k| k.0))
+    }
+
+    pub fn get_plugin_params(&self, object_id: usize) -> Option<HashMap<String, f32>> {
+        let entity = self.find_entity(object_id)?;
+        self.world
+            .run(|params: View<PluginParams>| params.get(entity).ok().map(|p| p.0.clone()))
+    }
+
+    pub fn set_plugin_param(&mut self, object_id: usize, key: &str, value: f32) {
+        let Some(entity) = self.find_entity(object_id) else {
+            return;
+        };
+        let mut params = self
+            .world
+            .run(|p: View<PluginParams>| p.get(entity).ok().map(|s| s.0.clone()))
+            .unwrap_or_default();
+        params.insert(key.to_string(), value);
+        self.world.add_component(entity, PluginParams(params));
     }
 
     // --- Scene ---

@@ -1,5 +1,6 @@
 // src/ecs/components.rs
 use shipyard::Component;
+use std::collections::HashMap;
 
 #[derive(Clone, Copy, Debug, Component)]
 pub struct TimeRange {
@@ -99,3 +100,6 @@ impl Default for ShapeParams {
         }
     }
 }
+
+#[derive(Clone, Debug, Default, Component)]
+pub struct PluginParams(pub HashMap<String, f32>);
