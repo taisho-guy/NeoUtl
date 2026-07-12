@@ -17,12 +17,8 @@ pub struct MediaCache {
 }
 
 fn open_video(path: &Path) -> Result<Box<dyn VideoSource>, String> {
-    match neoutl_media_gpuvideo_decoder::GpuVideoDecoder::open(path) {
-        Ok(decoder) => Ok(Box::new(decoder)),
-        Err(_) => neoutl_media_ffmpeg_decoder::FfmpegVideoDecoder::open(path)
-            .map(|decoder| Box::new(decoder) as Box<dyn VideoSource>)
-            .map_err(|e| e.to_string()),
-    }
+    neoutl_media_gstreamer_decoder::GstZeroCopyDecoder::open(path)
+        .map(|decoder| Box::new(decoder) as Box<dyn VideoSource>)
 }
 
 fn open_image(path: &Path) -> Result<Box<dyn ImageSource>, String> {

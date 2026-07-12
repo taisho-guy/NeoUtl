@@ -14,8 +14,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     objects::load_all(&objects::default_objects_dir());
 
+    let mut wgpu_settings = slint::wgpu_29::WGPUSettings::default();
+    #[cfg(any(target_os = "windows", target_os = "linux"))]
+    {
+        wgpu_settings.backends = slint::wgpu_29::wgpu::Backends::VULKAN;
+    }
+    #[cfg(target_os = "macos")]
+    {
+        wgpu_settings.backends = slint::wgpu_29::wgpu::Backends::METAL;
+    }
     slint::BackendSelector::new()
-        .require_wgpu_29(slint::wgpu_29::WGPUConfiguration::default())
+        .require_wgpu_29(slint::wgpu_29::WGPUConfiguration::Automatic(wgpu_settings))
         .select()?;
 
     let launcher = LauncherWindow::new()?;
