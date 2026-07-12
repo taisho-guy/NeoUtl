@@ -1,0 +1,34 @@
+[package]
+name = "neoutl-media-gstreamer-decoder"
+version = "0.0.0"
+edition = "2024"
+
+[dependencies]
+neoutl-media-api = { path = "../../neoutl-media-api" }
+gstreamer = "0.24"
+gstreamer-app = "0.24"
+gstreamer-video = "0.24"
+wgpu = "29"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+gstreamer-allocators = "0.24"
+ash = "0.38"
+
+[target.'cfg(target_os = "windows")'.dependencies]
+gstreamer-sys = "0.24"
+ash = "0.38"
+windows = { version = "0.61", features = [
+    "Win32_Graphics_Direct3D11",
+    "Win32_Graphics_Dxgi",
+    "Win32_Foundation",
+] }
+
+[build-dependencies]
+pkg-config = "0.3"
+
+[target.'cfg(target_os = "macos")'.dependencies]
+gstreamer-gl = "0.24"
+objc2-core-video = "0.3"
+objc2-io-surface = "0.3"
+metal = "0.31"
+objc2 = "0.6"

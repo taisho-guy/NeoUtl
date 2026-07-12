@@ -13,8 +13,7 @@ resolver = "2"
 neoutl-object-api = { path = "crates/neoutl-object-api" }
 neoutl-media-api = { path = "crates/neoutl-media-api" }
 
-neoutl-media-ffmpeg-decoder = { path = "crates/media/ffmpeg-decoder" }
-neoutl-media-gpuvideo-decoder = { path = "crates/media/gpuvideo-decoder" }
+neoutl-media-gstreamer-decoder = { path = "crates/media/gstreamer-decoder" }
 neoutl-media-symphonia-decoder = { path = "crates/media/symphonia-decoder" }
 neoutl-media-image-decoder = { path = "crates/media/image-decoder" }
 
@@ -26,8 +25,7 @@ edition = "2024"
 [dependencies]
 neoutl-object-api.workspace = true
 neoutl-media-api.workspace = true
-neoutl-media-ffmpeg-decoder.workspace = true
-neoutl-media-gpuvideo-decoder.workspace = true
+neoutl-media-gstreamer-decoder.workspace = true
 neoutl-media-symphonia-decoder.workspace = true
 neoutl-media-image-decoder.workspace = true
 libloading = "0.9"
