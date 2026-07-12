@@ -13,7 +13,7 @@ use crate::ecs::{
     },
 };
 use crate::{CatalogRow, EffectRow, ParamRow, PropertiesWindow};
-use slint::{ComponentHandle, ModelRc, SharedString, VecModel};
+use slint::{ComponentHandle, Model, ModelRc, SharedString, VecModel};
 
 pub fn setup(props: &PropertiesWindow, state: SharedAppState) {
     let catalog: Vec<CatalogRow> = EFFECT_REGISTRY
@@ -37,6 +37,8 @@ pub fn setup(props: &PropertiesWindow, state: SharedAppState) {
             let world_holder = app_state::active_world(&state);
             let mut world = world_holder.lock().unwrap();
             apply_object_param(&mut world, id as usize, group.as_str(), key.as_str(), value);
+            drop(world);
+            update_object_param_value(&p, group.as_str(), key.as_str(), value);
         });
     }
 
@@ -119,10 +121,11 @@ pub fn setup(props: &PropertiesWindow, state: SharedAppState) {
             if id < 0 {
                 return;
             }
-            app_state::active_world(&state)
-                .lock()
-                .unwrap()
-                .set_effect_param(id as usize, index as usize, key.as_str(), value);
+            let world_holder = app_state::active_world(&state);
+            let mut world = world_holder.lock().unwrap();
+            world.set_effect_param(id as usize, index as usize, key.as_str(), value);
+            drop(world);
+            update_effect_param_value(&p, index, key.as_str(), value);
         });
     }
 
@@ -319,6 +322,39 @@ fn push_plugin_rows(out: &mut Vec<ParamRow>, world: &EcsWorld, oid: usize) {
             min: s.min,
             max: s.max,
         });
+    }
+}
+
+/// object_paramsモデルの該当行(group/key一致)のみ値を書き換える。
+/// ModelRcの同一性を保つため、Slint側のコンポーネント再構築(=ドラッグ状態/
+/// テキスト選択状態の喪失)を発生させない。構造変化を伴わない値更新はこの経路を使う。
+fn update_object_param_value(props: &PropertiesWindow, group: &str, key: &str, value: f32) {
+    let model = props.get_object_params();
+    for i in 0..model.row_count() {
+        let Some(mut row) = model.row_data(i) else {
+            continue;
+        };
+        if row.group.as_str() == group && row.key.as_str() == key {
+            row.value = value;
+            model.set_row_data(i, row);
+            return;
+        }
+    }
+}
+
+/// paramsモデル(エフェクトパラメータ)の該当行(effect_index/key一致)のみ値を書き換える。
+/// update_object_param_valueと同一方針。
+fn update_effect_param_value(props: &PropertiesWindow, effect_index: i32, key: &str, value: f32) {
+    let model = props.get_params();
+    for i in 0..model.row_count() {
+        let Some(mut row) = model.row_data(i) else {
+            continue;
+        };
+        if row.effect_index == effect_index && row.key.as_str() == key {
+            row.value = value;
+            model.set_row_data(i, row);
+            return;
+        }
     }
 }
 
