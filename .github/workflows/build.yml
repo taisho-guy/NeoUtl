@@ -70,7 +70,7 @@ jobs:
         shell: bash
         env:
           PKG_CONFIG: pkg-config
-        run: cargo build --release --locked
+        run: cargo xtask build --release
 
       - name: Build (Windows / MSYS2 CLANG64)
         if: runner.os == 'Windows'
@@ -80,15 +80,17 @@ jobs:
           # クロスコンパイルとして判定されるのを防ぎ、ネイティブビルドとして認識させる
           export PKG_CONFIG_ALLOW_CROSS=1
           cargo clean
-          cargo build --release --locked --target x86_64-pc-windows-gnullvm
+          cargo xtask build --release --target x86_64-pc-windows-gnullvm
 
       - name: Collect artifact (Linux)
         if: runner.os == 'Linux'
         run: |
-          mkdir -p dist
-          zip -r dist/${{ matrix.artifact_name }}.zip \
-            target/release/${{ matrix.binary_name }} \
-            target/release/objects
+          mkdir -p dist/package
+          cp target/release/${{ matrix.binary_name }} dist/package/
+          [ -d target/release/objects ] && cp -r target/release/objects dist/package/
+          [ -d target/release/effects ] && cp -r target/release/effects dist/package/
+          cd dist/package
+          zip -r ../${{ matrix.artifact_name }}.zip .
 
       - name: Create & Package .app Bundle (macOS Homebrew)
         if: runner.os == 'macOS'
@@ -103,6 +105,9 @@ jobs:
 
           # 2. ビルドしたバイナリをApp構造内に配置
           cp target/release/${{ matrix.binary_name }} "$APP_DIR/Contents/MacOS/"
+          mkdir -p "$APP_DIR/Contents/Resources"
+          [ -d target/release/objects ] && cp -r target/release/objects "$APP_DIR/Contents/Resources/"
+          [ -d target/release/effects ] && cp -r target/release/effects "$APP_DIR/Contents/Resources/"
 
           # 3. Homebrew から GStreamer プラグインをバンドル内のPlugInsにコピー
           # ワイルドカード展開の失敗（該当ファイル無し時のNo such file or directory）を防ぐためfindを使用
@@ -110,14 +115,7 @@ jobs:
           find "$BREW_GST_PLUGINS" -name "*.so" -exec cp {} "$APP_DIR/Contents/PlugIns/gstreamer-1.0/" \;
           find "$BREW_GST_PLUGINS" -name "*.dylib" -exec cp {} "$APP_DIR/Contents/PlugIns/gstreamer-1.0/" \;
 
-          # 4. dylibbundlerでコアライブラリをFrameworksへ集約し、パスを@executable_path基準へ書き換え
-          # ※実行ファイルから見たFrameworksへの相対パスは @executable_path/../Frameworks/ になります
-          dylibbundler -x "$APP_DIR/Contents/MacOS/${{ matrix.binary_name }}" \
-                       -d "$APP_DIR/Contents/Frameworks/" \
-                       -p "@executable_path/../Frameworks/" \
-                       -s "$APP_DIR/Contents/PlugIns/gstreamer-1.0/"
-
-          # 5. Info.plist の生成
+          # 4. Info.plist の生成（コード署名時にAppバンドルとして正しく認識されるよう、署名処理より前に配置）
           cat > "$APP_DIR/Contents/Info.plist" <<EOF
           <?xml version="1.0" encoding="UTF-8"?>
           <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -141,7 +139,24 @@ jobs:
           </plist>
           EOF
 
-          # 6. 配布用に .app フォルダごとZIP圧縮
+          # 5. dylibbundlerでコアライブラリをFrameworksへ集約し、パスを@executable_path基準へ書き換え
+          # ※実行ファイルから見たFrameworksへの相対パスは @executable_path/../Frameworks/ になります
+          # -ns: dylibbundler内蔵のアドホック署名を無効化する（PlugIns/gstreamer-1.0が正規のbundle/frameworkでないため
+          #      --deepでの再帰署名走査が"bundle format unrecognized"で失敗するのを避ける）。署名は後段で個別に行う。
+          dylibbundler -ns -x "$APP_DIR/Contents/MacOS/${{ matrix.binary_name }}" \
+                       -d "$APP_DIR/Contents/Frameworks/" \
+                       -p "@executable_path/../Frameworks/" \
+                       -s "$APP_DIR/Contents/PlugIns/gstreamer-1.0/"
+
+          # 6. 個別ファイル単位でアドホック署名（--deepは使わない。--deepによる自動走査がPlugIns配下の
+          #    非bundle構造で失敗するため、依存ライブラリ→プラグイン→本体実行ファイルの順に個別署名する）
+          find "$APP_DIR/Contents/Frameworks" -type f -exec codesign --force --sign - {} \;
+          find "$APP_DIR/Contents/PlugIns/gstreamer-1.0" -type f -exec codesign --force --sign - {} \;
+          [ -d "$APP_DIR/Contents/Resources/objects" ] && find "$APP_DIR/Contents/Resources/objects" -type f -exec codesign --force --sign - {} \;
+          [ -d "$APP_DIR/Contents/Resources/effects" ] && find "$APP_DIR/Contents/Resources/effects" -type f -exec codesign --force --sign - {} \;
+          codesign --force --sign - "$APP_DIR/Contents/MacOS/${{ matrix.binary_name }}"
+
+          # 7. 配布用に .app フォルダごとZIP圧縮
           cd dist
           zip -r ${{ matrix.artifact_name }}.zip NeoUtl.app
 
@@ -155,6 +170,9 @@ jobs:
           cp target/x86_64-pc-windows-gnullvm/release/${{ matrix.binary_name }} dist/package/
           if [ -d "target/x86_64-pc-windows-gnullvm/release/objects" ]; then
             cp -r target/x86_64-pc-windows-gnullvm/release/objects dist/package/
+          fi
+          if [ -d "target/x86_64-pc-windows-gnullvm/release/effects" ]; then
+            cp -r target/x86_64-pc-windows-gnullvm/release/effects dist/package/
           fi
 
           CLANG_PATH="/clang64"

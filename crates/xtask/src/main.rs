@@ -77,16 +77,34 @@ fn dylib_filename(lib_name: &str) -> String {
     }
 }
 
-fn build_crates(workspace_root: &Path, profile: &str, label: &str, crates: &[DiscoveredCrate]) {
+/// --targetの有無でcargoの出力先が target/{profile} と target/{triple}/{profile} に分かれるため、
+/// ビルド・配置の両方で参照する実出力ディレクトリをここで一元的に解決する。
+fn target_dir(workspace_root: &Path, profile: &str, target: Option<&str>) -> PathBuf {
+    match target {
+        Some(triple) => workspace_root.join("target").join(triple).join(profile),
+        None => workspace_root.join("target").join(profile),
+    }
+}
+
+fn build_crates(
+    workspace_root: &Path,
+    profile: &str,
+    target: Option<&str>,
+    label: &str,
+    crates: &[DiscoveredCrate],
+) {
     if crates.is_empty() {
         eprintln!("[xtask] {label}クレート0件");
         return;
     }
 
     let mut cmd = Command::new("cargo");
-    cmd.current_dir(workspace_root).arg("build");
+    cmd.current_dir(workspace_root).arg("build").arg("--locked");
     if profile == "release" {
         cmd.arg("--release");
+    }
+    if let Some(triple) = target {
+        cmd.arg("--target").arg(triple);
     }
     for c in crates {
         cmd.arg("-p").arg(&c.package_name);
@@ -101,16 +119,17 @@ fn build_crates(workspace_root: &Path, profile: &str, label: &str, crates: &[Dis
 fn stage_crates(
     workspace_root: &Path,
     profile: &str,
+    target: Option<&str>,
     dest_subdir: &str,
     crates: &[DiscoveredCrate],
 ) {
-    let target_dir = workspace_root.join("target").join(profile);
-    let dest_dir = target_dir.join(dest_subdir);
+    let out_dir = target_dir(workspace_root, profile, target);
+    let dest_dir = out_dir.join(dest_subdir);
     fs::create_dir_all(&dest_dir).expect("配置先ディレクトリ作成失敗");
 
     for c in crates {
         let filename = dylib_filename(&c.lib_name);
-        let src = target_dir.join(&filename);
+        let src = out_dir.join(&filename);
         let dst = dest_dir.join(&filename);
         match fs::copy(&src, &dst) {
             Ok(_) => eprintln!("[xtask] 配置: {dest_subdir}/{filename}"),
@@ -132,34 +151,49 @@ fn main() {
     let args: Vec<String> = env::args().skip(1).collect();
     let mut release = false;
     let mut task = "run".to_string();
-    for a in &args {
-        match a.as_str() {
+    let mut target: Option<String> = None;
+
+    let mut i = 0;
+    while i < args.len() {
+        match args[i].as_str() {
             "--release" => release = true,
-            "build" | "run" => task = a.clone(),
+            "build" | "run" => task = args[i].clone(),
+            "--target" => {
+                i += 1;
+                target = args.get(i).cloned();
+            }
             _ => {}
         }
+        i += 1;
     }
     let profile = if release { "release" } else { "debug" };
+    let target = target.as_deref();
 
     let root = workspace_root();
 
     let objects = discover_crates(&root, "crates/objects");
-    build_crates(&root, profile, "objects", &objects);
-    stage_crates(&root, profile, "objects", &objects);
+    build_crates(&root, profile, target, "objects", &objects);
+    stage_crates(&root, profile, target, "objects", &objects);
 
     let effects = discover_crates(&root, "crates/effects");
-    build_crates(&root, profile, "effects", &effects);
-    stage_crates(&root, profile, "effects", &effects);
+    build_crates(&root, profile, target, "effects", &effects);
+    stage_crates(&root, profile, target, "effects", &effects);
 
-    if task == "run" {
-        let mut cmd = Command::new("cargo");
-        cmd.current_dir(&root).arg("run").arg("-p").arg("NeoUtl");
-        if release {
-            cmd.arg("--release");
-        }
-        let status = cmd.status().expect("cargo run 起動失敗");
-        if !status.success() {
-            std::process::exit(status.code().unwrap_or(1));
-        }
+    // 本体(NeoUtl)は build タスクではビルドのみ、run タスクでは実行まで行う。
+    let mut cmd = Command::new("cargo");
+    cmd.current_dir(&root)
+        .arg(if task == "run" { "run" } else { "build" })
+        .arg("--locked")
+        .arg("-p")
+        .arg("NeoUtl");
+    if release {
+        cmd.arg("--release");
+    }
+    if let Some(triple) = target {
+        cmd.arg("--target").arg(triple);
+    }
+    let status = cmd.status().expect("cargo build/run 起動失敗");
+    if !status.success() {
+        std::process::exit(status.code().unwrap_or(1));
     }
 }
