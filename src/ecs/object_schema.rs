@@ -64,6 +64,17 @@ const fn bool_field(group: &'static str, key: &'static str, label: &'static str)
     }
 }
 
+/// 文字列専用フィールド。数値min/max/stepは不使用（Range::Fixed(0.0, 0.0)はダミー値）。
+const fn text_field(group: &'static str, key: &'static str, label: &'static str) -> ParamSchema {
+    ParamSchema {
+        group,
+        key,
+        label,
+        kind: ParamKind::Text,
+        range: Range::Fixed(0.0, 0.0),
+    }
+}
+
 pub const TRANSFORM_GROUP: &str = "トランスフォーム";
 pub const TEXT_GROUP: &str = "テキスト";
 pub const SHAPE_GROUP: &str = "図形";
@@ -82,6 +93,7 @@ pub const TRANSFORM_SCHEMA: &[ParamSchema] = &[
 ];
 
 pub const TEXT_SCHEMA: &[ParamSchema] = &[
+    text_field(TEXT_GROUP, "text", "本文"),
     float_stage(TEXT_GROUP, "text_x", "X", Range::StageWidth),
     float_stage(TEXT_GROUP, "text_y", "Y", Range::StageHeight),
     float_fixed(TEXT_GROUP, "font_size", "フォントサイズ", 1.0, 500.0),

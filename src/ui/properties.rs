@@ -2,7 +2,7 @@
 use crate::app_state::{self, SharedAppState};
 use crate::ecs::{
     EcsWorld,
-    components::ShapeParams,
+    components::{ParamAccess, ShapeParams},
     effects::EFFECT_REGISTRY,
     effects::EffectMetadata,
     effects::ParamKind,
@@ -67,7 +67,7 @@ pub fn setup(props: &PropertiesWindow, state: SharedAppState) {
     {
         let state = state.clone();
         let pw = props.as_weak();
-        props.on_set_text_content(move |text| {
+        props.on_set_object_param_text(move |group, key, text| {
             let Some(p) = pw.upgrade() else { return };
             let id = p.get_object_id();
             if id < 0 {
@@ -75,8 +75,15 @@ pub fn setup(props: &PropertiesWindow, state: SharedAppState) {
             }
             let world_holder = app_state::active_world(&state);
             let mut world = world_holder.lock().unwrap();
-            let cur = world.get_text(id as usize).unwrap_or_default();
-            world.set_text(id as usize, text.to_string(), cur.x, cur.y, cur.font_size);
+            apply_object_param_text(
+                &mut world,
+                id as usize,
+                group.as_str(),
+                key.as_str(),
+                text.as_str(),
+            );
+            drop(world);
+            update_object_param_text(&p, group.as_str(), key.as_str(), text.as_str());
         });
     }
 
@@ -184,62 +191,33 @@ pub fn select_object(props: &PropertiesWindow, world: &EcsWorld, object_id: i32)
 }
 
 /// object-params一行分の書き込みを、スキーマのgroup/keyから該当コンポーネントへ振り分ける。
-/// UI生成はobject_schema.rsのテーブルのみに依存し、ここではキー名でのフィールド選択のみ行う。
+/// key単位のフィールド選択はParamAccess::set_param（各コンポーネント定義側）に委譲する。
+/// ここではgroup名から対象コンポーネントを選び、読み出し→trait経由の書き込み→保存のみを行う。
 fn apply_object_param(world: &mut EcsWorld, oid: usize, group: &str, key: &str, value: f32) {
     match group {
         TRANSFORM_GROUP => {
             let mut t = world.get_transform(oid).unwrap_or_default();
-            match key {
-                "x" => t.x = value,
-                "y" => t.y = value,
-                "z" => t.z = value,
-                "scale_x" => t.scale_x = value,
-                "scale_y" => t.scale_y = value,
-                "rot_x" => t.rot_x = value,
-                "rot_y" => t.rot_y = value,
-                "rot_z" => t.rot_z = value,
-                "opacity" => t.opacity = value,
-                _ => return,
+            if t.set_param(key, value) {
+                world.set_transform(oid, t);
             }
-            world.set_transform(oid, t);
         }
         TEXT_GROUP => {
-            let cur = world.get_text(oid).unwrap_or_default();
-            let (mut x, mut y, mut font_size) = (cur.x, cur.y, cur.font_size);
-            match key {
-                "text_x" => x = value,
-                "text_y" => y = value,
-                "font_size" => font_size = value,
-                _ => return,
+            let mut t = world.get_text(oid).unwrap_or_default();
+            if t.set_param(key, value) {
+                world.set_text(oid, t.text, t.x, t.y, t.font_size);
             }
-            world.set_text(oid, cur.text, x, y, font_size);
         }
         SHAPE_GROUP => {
             let mut s: ShapeParams = world.get_shape(oid).unwrap_or_default();
-            match key {
-                "sides" => s.sides = value.max(3.0) as u32,
-                "extrude_depth" => s.extrude_depth = value.max(0.0),
-                "stroke_width" => s.stroke_width = value.max(0.0),
-                "fill_r" => s.fill_color[0] = value,
-                "fill_g" => s.fill_color[1] = value,
-                "fill_b" => s.fill_color[2] = value,
-                "fill_a" => s.fill_color[3] = value,
-                _ => return,
+            if s.set_param(key, value) {
+                world.set_shape(oid, s);
             }
-            world.set_shape(oid, s);
         }
         AUDIO_GROUP => {
-            let cur = world.get_audio_params(oid);
-            let (mut volume, mut pan, mut mute) = cur
-                .map(|a| (a.volume, a.pan, a.mute))
-                .unwrap_or((1.0, 0.0, false));
-            match key {
-                "volume" => volume = value,
-                "pan" => pan = value,
-                "mute" => mute = value > 0.5,
-                _ => return,
+            let mut a = world.get_audio_params(oid).unwrap_or_default();
+            if a.set_param(key, value) {
+                world.set_audio_params(oid, a.volume, a.pan, a.mute);
             }
-            world.set_audio_params(oid, volume, pan, mute);
         }
         // トランスフォーム/テキスト/図形/オーディオのいずれでもないgroupは、
         // プラグインObjectMeta.property_schema由来のキーとみなし汎用格納へ書き込む。
@@ -251,14 +229,24 @@ fn apply_object_param(world: &mut EcsWorld, oid: usize, group: &str, key: &str, 
     }
 }
 
+/// ParamKind::Text専用の書き込み経路。現状ホスト内蔵ではTEXT_GROUPの"text"キーのみが対象。
+fn apply_object_param_text(world: &mut EcsWorld, oid: usize, group: &str, key: &str, text: &str) {
+    if group == TEXT_GROUP && key == "text" {
+        let cur = world.get_text(oid).unwrap_or_default();
+        world.set_text(oid, text.to_owned(), cur.x, cur.y, cur.font_size);
+    }
+}
+
 /// スキーマ配列を現在値で解決し、ParamRow列へ展開する。
 /// stage-relativeレンジ（X/Y/Z）はここでピクセル値へ確定する。
+/// get_text: kind==Textの行にのみ使用。対象外keyにはNoneを返せばよい。
 fn push_schema_rows(
     out: &mut Vec<ParamRow>,
     schema: &'static [crate::ecs::object_schema::ParamSchema],
     stage_w: f32,
     stage_h: f32,
     get: impl Fn(&str) -> f32,
+    get_text: impl Fn(&str) -> Option<String>,
 ) {
     for s in schema {
         let (min, max) = resolve_range(s.range, stage_w, stage_h);
@@ -267,14 +255,20 @@ fn push_schema_rows(
             key: SharedString::from(s.key),
             label: SharedString::from(s.label),
             group: SharedString::from(s.group),
-            value: get(s.key),
+            value: if s.kind == ParamKind::Text {
+                0.0
+            } else {
+                get(s.key)
+            },
             kind: match s.kind {
                 ParamKind::Float => 0,
                 ParamKind::Bool => 1,
                 ParamKind::Color => 2,
+                ParamKind::Text => 3,
             },
             min,
             max,
+            text: SharedString::from(get_text(s.key).unwrap_or_default()),
         });
     }
 }
@@ -321,6 +315,7 @@ fn push_plugin_rows(out: &mut Vec<ParamRow>, world: &EcsWorld, oid: usize) {
             },
             min: s.min,
             max: s.max,
+            text: SharedString::default(),
         });
     }
 }
@@ -336,6 +331,22 @@ fn update_object_param_value(props: &PropertiesWindow, group: &str, key: &str, v
         };
         if row.group.as_str() == group && row.key.as_str() == key {
             row.value = value;
+            model.set_row_data(i, row);
+            return;
+        }
+    }
+}
+
+/// object_paramsモデルの該当行(group/key一致)のtextフィールドのみ書き換える。
+/// kind==3(Text)行専用。update_object_param_valueと同一方針。
+fn update_object_param_text(props: &PropertiesWindow, group: &str, key: &str, text: &str) {
+    let model = props.get_object_params();
+    for i in 0..model.row_count() {
+        let Some(mut row) = model.row_data(i) else {
+            continue;
+        };
+        if row.group.as_str() == group && row.key.as_str() == key {
+            row.text = SharedString::from(text);
             model.set_row_data(i, row);
             return;
         }
@@ -380,18 +391,8 @@ fn refresh(props: &PropertiesWindow, world: &EcsWorld) {
             TRANSFORM_SCHEMA,
             stage_w,
             stage_h,
-            |k| match k {
-                "x" => t.x,
-                "y" => t.y,
-                "z" => t.z,
-                "scale_x" => t.scale_x,
-                "scale_y" => t.scale_y,
-                "rot_x" => t.rot_x,
-                "rot_y" => t.rot_y,
-                "rot_z" => t.rot_z,
-                "opacity" => t.opacity,
-                _ => 0.0,
-            },
+            |k| t.get_param(k).unwrap_or(0.0),
+            |_| None,
         );
     } else {
         props.set_has_transform(false);
@@ -399,18 +400,14 @@ fn refresh(props: &PropertiesWindow, world: &EcsWorld) {
 
     if let Some(text) = world.get_text(oid) {
         props.set_has_text(true);
-        props.set_text_content(text.text.clone().into());
+        let body = text.text.clone();
         push_schema_rows(
             &mut object_params,
             TEXT_SCHEMA,
             stage_w,
             stage_h,
-            |k| match k {
-                "text_x" => text.x,
-                "text_y" => text.y,
-                "font_size" => text.font_size,
-                _ => 0.0,
-            },
+            |k| text.get_param(k).unwrap_or(0.0),
+            |k| (k == "text").then(|| body.clone()),
         );
     } else {
         props.set_has_text(false);
@@ -423,16 +420,8 @@ fn refresh(props: &PropertiesWindow, world: &EcsWorld) {
             SHAPE_SCHEMA,
             stage_w,
             stage_h,
-            |k| match k {
-                "sides" => shape.sides as f32,
-                "extrude_depth" => shape.extrude_depth,
-                "stroke_width" => shape.stroke_width,
-                "fill_r" => shape.fill_color[0],
-                "fill_g" => shape.fill_color[1],
-                "fill_b" => shape.fill_color[2],
-                "fill_a" => shape.fill_color[3],
-                _ => 0.0,
-            },
+            |k| shape.get_param(k).unwrap_or(0.0),
+            |_| None,
         );
     } else {
         props.set_has_shape(false);
@@ -445,18 +434,8 @@ fn refresh(props: &PropertiesWindow, world: &EcsWorld) {
             AUDIO_SCHEMA,
             stage_w,
             stage_h,
-            |k| match k {
-                "volume" => audio.volume,
-                "pan" => audio.pan,
-                "mute" => {
-                    if audio.mute {
-                        1.0
-                    } else {
-                        0.0
-                    }
-                }
-                _ => 0.0,
-            },
+            |k| audio.get_param(k).unwrap_or(0.0),
+            |_| None,
         );
     } else {
         props.set_has_audio(false);
@@ -514,9 +493,11 @@ fn refresh(props: &PropertiesWindow, world: &EcsWorld) {
                     ParamKind::Float => 0,
                     ParamKind::Bool => 1,
                     ParamKind::Color => 2,
+                    ParamKind::Text => 3,
                 },
                 min: schema.min,
                 max: schema.max,
+                text: SharedString::default(),
             });
         }
     }
