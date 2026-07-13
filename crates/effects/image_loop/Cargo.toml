@@ -1,0 +1,11 @@
+[package]
+name    = "neoutl-effect-image-loop"
+version = "0.0.0"
+edition = "2024"
+
+[lib]
+name       = "neoutl_effect_image_loop"
+crate-type = ["cdylib"]
+
+[dependencies]
+neoutl-effect-api = { path = "../../neoutl-effect-api" }

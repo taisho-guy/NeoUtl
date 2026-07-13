@@ -1,0 +1,7 @@
+[package]
+name    = "neoutl-shared-abi"
+version = "0.0.0"
+edition = "2024"
+
+[lib]
+name = "neoutl_shared_abi"

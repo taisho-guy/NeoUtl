@@ -1,8 +1,11 @@
 [workspace]
 members = [
     ".",
+    "crates/neoutl-shared-abi",
     "crates/neoutl-object-api",
+    "crates/neoutl-effect-api",
     "crates/objects/*",
+    "crates/effects/*",
     "crates/neoutl-media-api",
     "crates/media/*",
     "crates/xtask",
@@ -10,7 +13,9 @@ members = [
 resolver = "2"
 
 [workspace.dependencies]
+neoutl-shared-abi = { path = "crates/neoutl-shared-abi" }
 neoutl-object-api = { path = "crates/neoutl-object-api" }
+neoutl-effect-api = { path = "crates/neoutl-effect-api" }
 neoutl-media-api = { path = "crates/neoutl-media-api" }
 
 neoutl-media-gstreamer-decoder = { path = "crates/media/gstreamer-decoder" }
@@ -23,7 +28,9 @@ version = "0.0.0"
 edition = "2024"
 
 [dependencies]
+neoutl-shared-abi.workspace = true
 neoutl-object-api.workspace = true
+neoutl-effect-api.workspace = true
 neoutl-media-api.workspace = true
 neoutl-media-gstreamer-decoder.workspace = true
 neoutl-media-symphonia-decoder.workspace = true

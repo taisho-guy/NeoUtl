@@ -1,9 +1,9 @@
 # 0.1.0
 - [ ] 設定ダイアログの標準描画を実装（ParamSchema駆動。現状はShape/Text等が個別ハードコード実装。Transform座標範囲は解像度連動化済、型別UI生成自体は未着手）
 - [x] オブジェクト読込機構の完全モジュール化を実装
-- [x] ビルド・配置パイプラインを実装（xtask: crates/objects/*動的検出・ビルド・target/{profile}/objects/配置）
+- [x] ビルド・配置パイプラインを実装（xtask: crates/objects/*・crates/effects/*両方を動的検出・ビルド・target/{profile}/{objects,effects}/配置）
 - [x] タイムライン右クリックメニューのレジストリ動的化（プラグイン追加時にコード変更不要）
-- [ ] エフェクトレジストリのモジュール化読込機構を実装（現状EFFECT_REGISTRYは静的配列）
+- [x] エフェクトレジストリのモジュール化読込機構を実装（neoutl-effect-api経由のcdylibプラグインへ移行。EFFECT_REGISTRY静的配列は廃止、src/effects/loader.rsがobjects/loader.rsと同型機構でロード。ParamKind/ParamSchema等はneoutl-shared-abiへ一本化しオブジェクト側と共有）
 - [x] 本体ウィンドウのメニューバー実装
 - [ ] システム設定・プロジェクト設定・シーン設定を実装（システム設定・シーン設定は実装済、プロジェクト設定ダイアログ未実装）
 - [x] 本体ウィンドウの再生停止を実装、見た目の整理
@@ -13,7 +13,7 @@
 - [x] Ortho座標系をプロジェクト解像度ピクセル空間へ整合（NDC±aspect,±1固定によりTransform.x/yの微小操作が画面外へ即座に飛ぶ不具合を修正。properties.slintのX/Y範囲もstage-width/height基準へ変更）
 - [x] 動画・画像・音声・テキストのバックエンド・APIを実装
 - [ ] 動画・画像・音声・テキストオブジェクトを実装
-- [ ] EffectStackのGPU実行機構を実装（compute_effect相当）
+- [x] EffectStackのGPU実行機構を実装（compute_effect相当。renderer/pipeline.rsにポストプロセスパス接続。ActiveObject.effectsを連結したチェーンをeffect_ping/pong間で順次適用し、各エフェクトのWGSLフラグメント処理・Uniformパッキングをneoutl-effect-api経由で実行）
 - [ ] 設定ダイアログの拡張
 - [ ] レンダリングパイプラインのエラー処理を実装（GPUデバイスロスト・シェーダコンパイル失敗時のフォールバック）
 - [ ] 単体・結合テスト基盤を整備（ECS system・RenderEngine・project.rsシリアライズ）
