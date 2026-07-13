@@ -1,4 +1,5 @@
 // src/ecs/components.rs
+use serde::{Deserialize, Serialize};
 use shipyard::Component;
 use std::collections::HashMap;
 
@@ -30,7 +31,7 @@ pub struct Layer(pub i32);
 #[derive(Clone, Copy, Debug, Component)]
 pub struct SceneId(pub i32);
 
-#[derive(Clone, Copy, Debug, Component)]
+#[derive(Clone, Copy, Debug, Component, Serialize, Deserialize)]
 pub struct AudioParams {
     pub volume: f32,
     pub pan: f32,
@@ -73,14 +74,14 @@ impl ParamAccess for AudioParams {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum TextAlign {
     Left,
     Center,
     Right,
 }
 
-#[derive(Clone, Debug, Component)]
+#[derive(Clone, Debug, Component, Serialize, Deserialize)]
 pub struct TextContent {
     pub text: String,
     pub x: f32,
@@ -137,7 +138,7 @@ impl ParamAccess for TextContent {
 }
 
 /// 図形種別。sides==4はRect、sides>=8はEllipse近似として扱う（現行UI上のプリセット分岐）。
-#[derive(Clone, Copy, Debug, Component)]
+#[derive(Clone, Copy, Debug, Component, Serialize, Deserialize)]
 pub struct ShapeParams {
     pub sides: u32,
     pub fill_color: [f32; 4],
@@ -186,5 +187,5 @@ impl ParamAccess for ShapeParams {
     }
 }
 
-#[derive(Clone, Debug, Default, Component)]
+#[derive(Clone, Debug, Default, Component, Serialize, Deserialize)]
 pub struct PluginParams(pub HashMap<String, f32>);

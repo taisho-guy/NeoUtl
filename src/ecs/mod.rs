@@ -7,6 +7,7 @@ pub mod systems;
 pub mod transform;
 pub mod types;
 
+use crate::document::{DocumentModel, ObjectDoc, ObjectPayload};
 use crate::ecs::types::EffectInstance;
 use components::{
     AudioParams, KindId, Layer, ObjectId, PluginParams, SceneId, ShapeParams, TextContent,
@@ -19,8 +20,29 @@ use resources::{
 };
 use std::collections::HashMap;
 
-use shipyard::{Get, IntoIter, UniqueView, UniqueViewMut, View, ViewMut, World};
+use shipyard::{
+    Borrow, BorrowInfo, Get, IntoIter, UniqueView, UniqueViewMut, View, ViewMut, World,
+};
 use transform::{Camera, GlobalMatrix, Transform, compute_global_matrix};
+
+/// to_document()の元Viewを束ねる集約ビュー。
+/// shipyard 0.11のSystem<(), B>実装はクロージャ引数個数に上限があり、
+/// 11個の個別Viewパラメータはこの上限を超過してコンパイルエラーとなる。
+/// 個別Viewを1個の派生Borrow構造体へ集約し、クロージャの引数を1個に圧縮する。
+#[derive(Borrow, BorrowInfo)]
+struct ObjectQueryViews<'v> {
+    object_ids: View<'v, ObjectId>,
+    time_ranges: View<'v, TimeRange>,
+    kind_ids: View<'v, KindId>,
+    layers: View<'v, Layer>,
+    scene_ids: View<'v, SceneId>,
+    transforms: View<'v, Transform>,
+    audio: View<'v, AudioParams>,
+    stacks: View<'v, EffectStack>,
+    texts: View<'v, TextContent>,
+    shapes: View<'v, ShapeParams>,
+    plugins: View<'v, PluginParams>,
+}
 
 /// タイムラインUIに渡すオブジェクト情報（Slint型に非依存）
 #[derive(Clone, Debug)]
@@ -254,22 +276,6 @@ impl EcsWorld {
         self.set_camera(Camera::for_resolution(width as f32, height as f32));
     }
 
-    pub fn restore_scenes(&mut self, active_scene: i32, scenes: Vec<SceneMeta>) {
-        self.world.run(|mut res: UniqueViewMut<SceneResource>| {
-            let next_scene_id = scenes.iter().map(|s| s.id).max().unwrap_or(0) + 1;
-            res.scenes = scenes;
-            res.active_scene = active_scene;
-            res.next_scene_id = next_scene_id;
-        });
-        let target = self
-            .world
-            .run(|scenes: UniqueView<SceneResource>| scenes.find(active_scene).cloned());
-        if let Some(scene) = target {
-            self.apply_scene_resolution(scene.width, scene.height, scene.fps);
-        }
-        self.update_total_frames();
-    }
-
     pub fn get_timeline_objects(&self) -> Vec<TimelineData> {
         self.world.run(
             |scenes: UniqueView<SceneResource>,
@@ -450,11 +456,12 @@ impl EcsWorld {
             return;
         };
         self.world.run(|mut stacks: ViewMut<EffectStack>| {
-            if let Ok(mut stack) = (&mut stacks).get(entity) {
-                if from < stack.0.len() && to < stack.0.len() {
-                    let item = stack.0.remove(from);
-                    stack.0.insert(to, item);
-                }
+            if let Ok(mut stack) = (&mut stacks).get(entity)
+                && from < stack.0.len()
+                && to < stack.0.len()
+            {
+                let item = stack.0.remove(from);
+                stack.0.insert(to, item);
             }
         });
     }
@@ -731,5 +738,124 @@ impl EcsWorld {
     pub fn set_system_settings(&mut self, s: SystemSettingsResource) {
         self.world
             .run(|mut slot: UniqueViewMut<SystemSettingsResource>| *slot = s);
+    }
+
+    // --- DocumentModel（正本データ）変換 ---
+    // ECSは常にDocumentModelから焼き込まれた描画専用ランタイム状態として扱う。
+    // Undo/Redo・ファイル保存はto_document/load_documentのみを窓口とする。
+
+    pub fn to_document(&self) -> DocumentModel {
+        let project = self.get_project();
+        let active_scene = self.active_scene();
+        let scenes = self.scenes();
+        let next_object_id = self.world.run(|t: UniqueView<TimelineResource>| t.next_id);
+
+        let objects = self.world.run(|views: ObjectQueryViews| {
+            let mut objs = Vec::new();
+            for (entity, (id, range, kind, layer, scene)) in (
+                &views.object_ids,
+                &views.time_ranges,
+                &views.kind_ids,
+                &views.layers,
+                &views.scene_ids,
+            )
+                .iter()
+                .with_id()
+            {
+                objs.push(ObjectDoc {
+                    id: id.0,
+                    scene_id: scene.0,
+                    kind_id: kind.0,
+                    layer: layer.0,
+                    start_frame: range.start_frame,
+                    end_frame: range.end_frame,
+                    transform: views.transforms.get(entity).copied().unwrap_or_default(),
+                    audio: views.audio.get(entity).copied().unwrap_or_default(),
+                    effects: views
+                        .stacks
+                        .get(entity)
+                        .map(|s| s.0.clone())
+                        .unwrap_or_default(),
+                    payload: ObjectPayload {
+                        text: views.texts.get(entity).ok().cloned(),
+                        shape: views.shapes.get(entity).ok().copied(),
+                        plugin_params: views.plugins.get(entity).ok().map(|p| p.0.clone()),
+                    },
+                });
+            }
+            objs
+        });
+
+        DocumentModel {
+            project_name: project.name,
+            audio_sample_rate: project.audio_sample_rate,
+            audio_channels: project.audio_channels,
+            active_scene,
+            next_object_id,
+            scenes,
+            objects,
+        }
+    }
+
+    /// DocumentModelから全エンティティを再構築する唯一の窓口。
+    /// 既存エンティティは全削除の上、doc.objectsから再生成する
+    /// （差分検出をせず毎回全再構築。オブジェクト数が数千規模になるまでは
+    /// 個別差分焼き込みより実装単純性を優先する）。
+    pub fn load_document(&mut self, doc: &DocumentModel) {
+        let all: Vec<shipyard::EntityId> = self
+            .world
+            .run(|ids: View<ObjectId>| ids.iter().with_id().map(|(e, _)| e).collect());
+        for e in all {
+            self.world.delete_entity(e);
+        }
+
+        self.world
+            .run(|mut project: UniqueViewMut<ProjectResource>| {
+                project.name = doc.project_name.clone();
+                project.audio_sample_rate = doc.audio_sample_rate;
+                project.audio_channels = doc.audio_channels;
+            });
+        self.world.run(|mut scenes: UniqueViewMut<SceneResource>| {
+            let next_scene_id = doc.scenes.iter().map(|s| s.id).max().unwrap_or(0) + 1;
+            scenes.scenes = doc.scenes.clone();
+            scenes.active_scene = doc.active_scene;
+            scenes.next_scene_id = next_scene_id;
+        });
+        self.world
+            .run(|mut timeline: UniqueViewMut<TimelineResource>| {
+                timeline.next_id = doc.next_object_id;
+            });
+
+        for o in &doc.objects {
+            let entity = self.world.add_entity((
+                ObjectId(o.id),
+                TimeRange {
+                    start_frame: o.start_frame,
+                    end_frame: o.end_frame,
+                },
+                KindId(o.kind_id),
+                Layer(o.layer),
+                SceneId(o.scene_id),
+                o.transform,
+                GlobalMatrix::default(),
+                o.audio,
+                EffectStack(o.effects.clone()),
+            ));
+            if let Some(t) = &o.payload.text {
+                self.world.add_component(entity, t.clone());
+            }
+            if let Some(s) = &o.payload.shape {
+                self.world.add_component(entity, *s);
+            }
+            if let Some(p) = &o.payload.plugin_params {
+                self.world.add_component(entity, PluginParams(p.clone()));
+            }
+        }
+
+        self.recompute_global_matrices();
+        if let Some(scene) = doc.scenes.iter().find(|s| s.id == doc.active_scene) {
+            self.apply_scene_resolution(scene.width, scene.height, scene.fps);
+        }
+        self.update_total_frames();
     }
 }

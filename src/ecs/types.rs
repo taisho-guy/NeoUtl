@@ -1,6 +1,7 @@
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub enum Value {
     Number(f32),
     Bool(bool),
@@ -16,7 +17,7 @@ impl Value {
     }
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub enum Interpolation {
     Linear,
     Bezier {
@@ -30,7 +31,7 @@ pub enum Interpolation {
     },
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Keyframe {
     pub frame: i32,
     pub value: Value,
@@ -75,7 +76,7 @@ pub fn evaluate_keyframes_number(keyframes: &[Keyframe], frame: i32) -> Option<V
     Some(keyframes.last()?.value.clone())
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct EffectParam {
     pub static_value: Value,
     pub keyframes: Vec<Keyframe>,
@@ -98,7 +99,7 @@ impl EffectParam {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct EffectInstance {
     pub effect_id: String,
     pub enabled: bool,

@@ -94,6 +94,7 @@ pub fn setup(props: &PropertiesWindow, state: SharedAppState) {
             if id < 0 {
                 return;
             }
+            app_state::snapshot_before_edit(&state);
             let world_holder = app_state::active_world(&state);
             let mut world = world_holder.lock().unwrap();
             world.set_effect_enabled(id as usize, index as usize, enabled);
@@ -110,6 +111,7 @@ pub fn setup(props: &PropertiesWindow, state: SharedAppState) {
             if id < 0 {
                 return;
             }
+            app_state::snapshot_before_edit(&state);
             let world_holder = app_state::active_world(&state);
             let mut world = world_holder.lock().unwrap();
             world.remove_effect(id as usize, index as usize);
@@ -159,6 +161,7 @@ pub fn setup(props: &PropertiesWindow, state: SharedAppState) {
             if id < 0 {
                 return;
             }
+            app_state::snapshot_before_edit(&state);
             let world_holder = app_state::active_world(&state);
             let mut world = world_holder.lock().unwrap();
             world.add_effect(id as usize, effect_id.as_str());
@@ -175,6 +178,7 @@ pub fn setup(props: &PropertiesWindow, state: SharedAppState) {
             if id < 0 || from < 0 || to < 0 {
                 return;
             }
+            app_state::snapshot_before_edit(&state);
             let world_holder = app_state::active_world(&state);
             let mut world = world_holder.lock().unwrap();
             world.reorder_effect(id as usize, from as usize, to as usize);
@@ -487,13 +491,8 @@ fn refresh(props: &PropertiesWindow, world: &EcsWorld) {
                 .get(key)
                 .map(|p| match &p.static_value {
                     crate::ecs::types::Value::Number(n) => *n,
-                    crate::ecs::types::Value::Bool(b) => {
-                        if *b {
-                            1.0
-                        } else {
-                            0.0
-                        }
-                    }
+                    crate::ecs::types::Value::Bool(b) if *b => 1.0,
+                    crate::ecs::types::Value::Bool(_) => 0.0,
                     _ => 0.0,
                 })
                 .unwrap_or_else(|| {

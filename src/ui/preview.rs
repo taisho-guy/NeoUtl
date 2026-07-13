@@ -136,11 +136,10 @@ pub fn setup(
                 drop(world);
 
                 let mut engine_lock = engine_holder.lock().unwrap();
-                if engine_lock.is_none() {
-                    if let Some((device, queue)) = gpu_slot.borrow().clone() {
-                        *engine_lock =
-                            Some(RenderEngine::new(device, queue, proj.width, proj.height));
-                    }
+                if engine_lock.is_none()
+                    && let Some((device, queue)) = gpu_slot.borrow().clone()
+                {
+                    *engine_lock = Some(RenderEngine::new(device, queue, proj.width, proj.height));
                 }
                 if let Some(ref mut engine) = *engine_lock {
                     // シーン切替・シーン設定変更でProjectResourceの解像度が変わった場合、
@@ -157,17 +156,17 @@ pub fn setup(
                 }
             }
 
-            if let Some(p) = preview_weak.upgrade() {
-                if p.get_is_playing() {
-                    let total = p.get_total_frames();
-                    let step = (p.get_speed_percent().max(10) + 50) / 100;
-                    let next = p.get_current_frame() + step.max(1);
-                    if next >= total {
-                        p.set_is_playing(false);
-                        apply_frame(total, &state, &preview_weak, &timeline_weak);
-                    } else {
-                        apply_frame(next, &state, &preview_weak, &timeline_weak);
-                    }
+            if let Some(p) = preview_weak.upgrade()
+                && p.get_is_playing()
+            {
+                let total = p.get_total_frames();
+                let step = (p.get_speed_percent().max(10) + 50) / 100;
+                let next = p.get_current_frame() + step.max(1);
+                if next >= total {
+                    p.set_is_playing(false);
+                    apply_frame(total, &state, &preview_weak, &timeline_weak);
+                } else {
+                    apply_frame(next, &state, &preview_weak, &timeline_weak);
                 }
             }
         }
@@ -270,8 +269,28 @@ pub fn setup(
     });
     preview.on_save_project_as(|| {});
     preview.on_export_media(|| {});
-    preview.on_undo(|| {});
-    preview.on_redo(|| {});
+    preview.on_undo({
+        let state = state.clone();
+        let preview_weak = preview_weak.clone();
+        let timeline_weak = timeline_weak.clone();
+        let props_weak = props_weak.clone();
+        move || {
+            if app_state::undo_active(&state) {
+                sync_active_session(&state, &preview_weak, &timeline_weak, &props_weak);
+            }
+        }
+    });
+    preview.on_redo({
+        let state = state.clone();
+        let preview_weak = preview_weak.clone();
+        let timeline_weak = timeline_weak.clone();
+        let props_weak = props_weak.clone();
+        move || {
+            if app_state::redo_active(&state) {
+                sync_active_session(&state, &preview_weak, &timeline_weak, &props_weak);
+            }
+        }
+    });
 
     preview.on_show_timeline({
         let timeline_weak = timeline_weak.clone();

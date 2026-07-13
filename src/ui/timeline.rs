@@ -46,6 +46,7 @@ pub fn setup(
         let (state, tw) = (state.clone(), timeline.as_weak());
         timeline.on_add_object_at(move |frame, layer, kind_idx| {
             if let Some(t) = tw.upgrade() {
+                app_state::snapshot_before_edit(&state);
                 let world_holder = app_state::active_world(&state);
                 let mut world = world_holder.lock().unwrap();
                 let text = registry()
@@ -65,6 +66,7 @@ pub fn setup(
                 return;
             }
             if let Some(t) = tw.upgrade() {
+                app_state::snapshot_before_edit(&state);
                 let world_holder = app_state::active_world(&state);
                 let mut world = world_holder.lock().unwrap();
                 world.delete_object(id as usize);
@@ -99,6 +101,7 @@ pub fn setup(
         let (state, tw) = (state.clone(), timeline.as_weak());
         timeline.on_move_object(move |id, start, layer| {
             if let Some(t) = tw.upgrade() {
+                app_state::snapshot_before_edit(&state);
                 let world_holder = app_state::active_world(&state);
                 let mut world = world_holder.lock().unwrap();
                 world.move_object(id as usize, start, layer);
@@ -111,6 +114,7 @@ pub fn setup(
         let (state, tw) = (state.clone(), timeline.as_weak());
         timeline.on_resize_object(move |id, start, end| {
             if let Some(t) = tw.upgrade() {
+                app_state::snapshot_before_edit(&state);
                 let world_holder = app_state::active_world(&state);
                 let mut world = world_holder.lock().unwrap();
                 world.resize_object(id as usize, start, end);
@@ -195,6 +199,7 @@ pub fn setup(
         let (state, tw) = (state.clone(), timeline.as_weak());
         timeline.on_close_scene_tab(move |id| {
             if let Some(t) = tw.upgrade() {
+                app_state::snapshot_before_edit(&state);
                 let world_holder = app_state::active_world(&state);
                 let mut world = world_holder.lock().unwrap();
                 if world.scenes().len() > 1 {

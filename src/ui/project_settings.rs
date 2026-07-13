@@ -22,6 +22,7 @@ pub fn setup(
             let channels = w.get_audio_channels().clamp(1, 8) as u32;
 
             let world_holder = app_state::active_world(&state);
+            app_state::snapshot_before_edit(&state);
             let mut world = world_holder.lock().unwrap();
             let dir = world
                 .get_project()

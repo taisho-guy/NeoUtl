@@ -12,27 +12,25 @@ use symphonia::core::meta::MetadataOptions;
 fn append_f32(buf: GenericAudioBufferRef<'_>, channels: usize, out: &mut Vec<f32>) {
     match buf {
         GenericAudioBufferRef::U8(b) => {
-            interleave(&b, channels, out, |s| (s as f32 - 128.0) / 128.0)
+            interleave(b, channels, out, |s| (s as f32 - 128.0) / 128.0)
         }
         GenericAudioBufferRef::U16(b) => {
-            interleave(&b, channels, out, |s| (s as f32 - 32768.0) / 32768.0)
+            interleave(b, channels, out, |s| (s as f32 - 32768.0) / 32768.0)
         }
-        GenericAudioBufferRef::U24(b) => interleave(&b, channels, out, |s| {
+        GenericAudioBufferRef::U24(b) => interleave(b, channels, out, |s| {
             (s.0 as f32 - 8_388_608.0) / 8_388_608.0
         }),
-        GenericAudioBufferRef::U32(b) => interleave(&b, channels, out, |s| {
+        GenericAudioBufferRef::U32(b) => interleave(b, channels, out, |s| {
             (s as f64 / u32::MAX as f64) as f32 * 2.0 - 1.0
         }),
-        GenericAudioBufferRef::S8(b) => interleave(&b, channels, out, |s| s as f32 / 128.0),
-        GenericAudioBufferRef::S16(b) => interleave(&b, channels, out, |s| s as f32 / 32768.0),
-        GenericAudioBufferRef::S24(b) => {
-            interleave(&b, channels, out, |s| s.0 as f32 / 8_388_608.0)
-        }
+        GenericAudioBufferRef::S8(b) => interleave(b, channels, out, |s| s as f32 / 128.0),
+        GenericAudioBufferRef::S16(b) => interleave(b, channels, out, |s| s as f32 / 32768.0),
+        GenericAudioBufferRef::S24(b) => interleave(b, channels, out, |s| s.0 as f32 / 8_388_608.0),
         GenericAudioBufferRef::S32(b) => {
-            interleave(&b, channels, out, |s| s as f32 / i32::MAX as f32)
+            interleave(b, channels, out, |s| s as f32 / i32::MAX as f32)
         }
-        GenericAudioBufferRef::F32(b) => interleave(&b, channels, out, |s| s),
-        GenericAudioBufferRef::F64(b) => interleave(&b, channels, out, |s| s as f32),
+        GenericAudioBufferRef::F32(b) => interleave(b, channels, out, |s| s),
+        GenericAudioBufferRef::F64(b) => interleave(b, channels, out, |s| s as f32),
     }
 }
 
@@ -85,11 +83,7 @@ pub fn decode_full(path: &Path) -> Result<AudioBuffer, String> {
         .map_err(|e| e.to_string())?;
 
     let mut samples = Vec::new();
-    loop {
-        let packet = match format.next_packet().map_err(|e| e.to_string())? {
-            Some(p) => p,
-            None => break,
-        };
+    while let Some(packet) = format.next_packet().map_err(|e| e.to_string())? {
         if packet.track_id != track_id {
             continue;
         }

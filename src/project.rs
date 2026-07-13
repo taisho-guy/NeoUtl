@@ -1,4 +1,5 @@
 // src/project.rs
+use crate::document::{DocumentModel, ObjectDoc};
 use crate::ecs::EcsWorld;
 use crate::ecs::resources::SceneMeta;
 use serde::{Deserialize, Serialize};
@@ -15,8 +16,9 @@ pub struct ProjectMeta {
     pub audio_channels: u32,
 }
 
-/// ディスク上のプロジェクトファイル形式。`SceneMeta`をそのまま保持し、
-/// ランタイム専用フィールド（`total_frames`・`layer_states`）は
+/// ディスク上のプロジェクトファイル形式。DocumentModel（正本データ）をそのまま保持する。
+/// `objects`は`#[serde(default)]`により旧形式ファイル（オブジェクト未保存）読込時は空Vecで補完する。
+/// `SceneMeta`のランタイム専用フィールド（`total_frames`・`layer_states`）は
 /// `SceneMeta`側の`#[serde(skip)]`で除外される。
 #[derive(Serialize, Deserialize)]
 struct ProjectFile {
@@ -27,7 +29,10 @@ struct ProjectFile {
     audio_sample_rate: u32,
     audio_channels: u32,
     active_scene: i32,
+    next_object_id: usize,
     scenes: Vec<SceneMeta>,
+    #[serde(default)]
+    objects: Vec<ObjectDoc>,
 }
 
 pub fn projects_dir() -> PathBuf {
@@ -78,10 +83,19 @@ pub fn load_project(dir: &Path) -> Option<ProjectMeta> {
     })
 }
 
-/// プロジェクトディレクトリからシーン一覧・アクティブIDを復元する。
-pub fn load_scenes(dir: &Path) -> Option<(i32, Vec<SceneMeta>)> {
+/// プロジェクトディレクトリからDocumentModel（正本データ）全体を復元する。
+/// EcsWorld::load_documentへそのまま渡す。
+pub fn load_document(dir: &Path) -> Option<DocumentModel> {
     let file = read_file(dir)?;
-    Some((file.active_scene, file.scenes))
+    Some(DocumentModel {
+        project_name: file.name,
+        audio_sample_rate: file.audio_sample_rate,
+        audio_channels: file.audio_channels,
+        active_scene: file.active_scene,
+        next_object_id: file.next_object_id,
+        scenes: file.scenes,
+        objects: file.objects,
+    })
 }
 
 pub fn list_projects() -> Vec<ProjectMeta> {
@@ -130,46 +144,51 @@ pub fn create_project(
         audio_sample_rate,
         audio_channels,
     };
-    save_project(&meta, 0, &[SceneMeta::new(0, "Scene 1")])?;
+    let doc = DocumentModel {
+        project_name: meta.name.clone(),
+        audio_sample_rate,
+        audio_channels,
+        active_scene: 0,
+        next_object_id: 1,
+        scenes: vec![{
+            let mut s = SceneMeta::new(0, "Scene 1");
+            s.width = width;
+            s.height = height;
+            s.fps = fps;
+            s
+        }],
+        objects: Vec::new(),
+    };
+    save_document(&meta.dir, &doc)?;
     Ok(meta)
 }
 
-/// プロジェクトメタ・全シーン設定（解像度・FPS・グリッド）をディスクへ確定する。
-pub fn save_project(
-    meta: &ProjectMeta,
-    active_scene: i32,
-    scenes: &[SceneMeta],
-) -> std::io::Result<()> {
+/// DocumentModel（正本データ）をディスクへ確定する唯一の窓口。
+/// 編集コマンド確定・オートセーブ・Undo/Redo後の再保存等、保存が必要な全箇所からこの関数を呼ぶ。
+pub fn save_document(dir: &Path, doc: &DocumentModel) -> std::io::Result<()> {
+    let active_scene_meta = doc.scenes.iter().find(|s| s.id == doc.active_scene);
     let file = ProjectFile {
-        name: meta.name.clone(),
-        fps: meta.fps,
-        width: meta.width,
-        height: meta.height,
-        audio_sample_rate: meta.audio_sample_rate,
-        audio_channels: meta.audio_channels,
-        active_scene,
-        scenes: scenes.to_vec(),
+        name: doc.project_name.clone(),
+        fps: active_scene_meta.map(|s| s.fps).unwrap_or(30),
+        width: active_scene_meta.map(|s| s.width).unwrap_or(1920),
+        height: active_scene_meta.map(|s| s.height).unwrap_or(1080),
+        audio_sample_rate: doc.audio_sample_rate,
+        audio_channels: doc.audio_channels,
+        active_scene: doc.active_scene,
+        next_object_id: doc.next_object_id,
+        scenes: doc.scenes.clone(),
+        objects: doc.objects.clone(),
     };
     let yaml = rust_yaml::to_string(&file).map_err(std::io::Error::other)?;
-    std::fs::write(meta_path(&meta.dir), yaml)
+    std::fs::write(meta_path(dir), yaml)
 }
 
-/// EcsWorldの現在状態を唯一の保存窓口としてディスクへ確定する。
+/// EcsWorldの現在状態（DocumentModelへ変換した上で）をディスクへ確定する。
 /// プロジェクトディレクトリ未確定（新規未保存等）の場合は何もしない。
-/// シーン設定変更・オートセーブ等、保存が必要な全箇所からこの関数を呼ぶ。
 pub fn save_from_world(world: &EcsWorld) -> std::io::Result<()> {
     let project = world.get_project();
-    let Some(dir) = project.dir.clone() else {
+    let Some(dir) = project.dir else {
         return Ok(());
     };
-    let meta = ProjectMeta {
-        name: project.name,
-        dir,
-        fps: project.fps,
-        width: project.width,
-        height: project.height,
-        audio_sample_rate: project.audio_sample_rate,
-        audio_channels: project.audio_channels,
-    };
-    save_project(&meta, world.active_scene(), &world.scenes())
+    save_document(&dir, &world.to_document())
 }
