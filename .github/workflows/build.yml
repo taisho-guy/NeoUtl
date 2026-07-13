@@ -45,6 +45,7 @@ jobs:
         uses: msys2/setup-msys2@v2
         with:
           msystem: CLANG64
+          path-type: inherit
           update: true
           install: >-
             mingw-w64-clang-x86_64-toolchain
@@ -201,3 +202,4 @@ jobs:
             dist/neoutl-linux-x86_64/neoutl-linux-x86_64.zip
             dist/neoutl-macos-aarch64/neoutl-macos-aarch64.zip
             dist/neoutl-windows-x86_64/neoutl-windows-x86_64.zip
+

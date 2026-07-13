@@ -1,52 +1,32 @@
+// src/macos.rs
+// 対応するlib.rs側の変更（必須）:
+//   #[cfg(target_os = "macos")]
+//   const ZEROCOPY_CAPS: &str = "video/x-raw,format=NV12"; // (旧) "video/x-raw(memory:GLMemory),format=NV12"
 use gst::prelude::*;
 use gstreamer as gst;
-use gstreamer_gl as gst_gl;
-use objc2_core_video::CVPixelBuffer;
-use objc2_io_surface::IOSurfaceRef;
-use wgpu::hal::metal::Api as Metal;
 
-fn extract_iosurface(buffer: &gst::BufferRef) -> Result<*mut IOSurfaceRef, String> {
-    let memory = buffer.peek_memory(0);
-    let gl_memory = memory
-        .downcast_memory_ref::<gst_gl::GLMemory>()
-        .ok_or("GLメモリではない")?;
-    let pixel_buffer: *mut CVPixelBuffer = gl_memory.texture_target_cv_pixel_buffer();
-    if pixel_buffer.is_null() {
-        return Err("CVPixelBuffer未取得".to_owned());
-    }
-    let surface = unsafe { objc2_core_video::CVPixelBufferGetIOSurface(pixel_buffer) };
-    if surface.is_null() {
-        return Err("IOSurface未取得".to_owned());
-    }
-    Ok(surface)
-}
-
+/// macOS向け映像フレーム取り込み。
+/// CVPixelBuffer/IOSurfaceをGstGLMemoryから取得する公開APIはgstreamer-gl・objc2-core-video
+/// いずれのcrateにも存在しないため（該当機能はGStreamerのapplemedia C実装内部限定）、
+/// NV12バッファをCPU経由でwgpuテクスチャへ転送する。
 pub unsafe fn import_frame(
     device: &wgpu::Device,
-    _queue: &wgpu::Queue,
+    queue: &wgpu::Queue,
     buffer: &gst::BufferRef,
     width: u32,
     height: u32,
 ) -> Result<wgpu::Texture, String> {
-    let io_surface = extract_iosurface(buffer)?;
+    let map = buffer.map_readable().map_err(|e| e.to_string())?;
+    let data = map.as_slice();
 
-    let hal_device = unsafe { device.as_hal::<Metal>() };
-    let raw_device = hal_device.raw_device();
+    let y_plane_size = (width * height) as usize;
+    let uv_plane_size = (width * height / 2) as usize;
+    if data.len() < y_plane_size + uv_plane_size {
+        return Err("NV12バッファサイズ不足".to_owned());
+    }
 
-    let descriptor = metal::TextureDescriptor::new();
-    descriptor.set_pixel_format(metal::MTLPixelFormat::YCBCR8_420_2P);
-    descriptor.set_width(width as u64);
-    descriptor.set_height(height as u64);
-    descriptor.set_storage_mode(metal::MTLStorageMode::Shared);
-    descriptor.set_usage(metal::MTLTextureUsage::ShaderRead);
-
-    let raw_texture =
-        raw_device
-            .lock()
-            .new_texture_with_iosurface(&descriptor, io_surface as *mut _, 0);
-
-    let texture_desc = wgpu::hal::TextureDescriptor {
-        label: Some("gst-iosurface-frame"),
+    let texture = device.create_texture(&wgpu::TextureDescriptor {
+        label: Some("gst-nv12-frame"),
         size: wgpu::Extent3d {
             width,
             height,
@@ -56,25 +36,49 @@ pub unsafe fn import_frame(
         sample_count: 1,
         dimension: wgpu::TextureDimension::D2,
         format: wgpu::TextureFormat::NV12,
-        usage: wgpu::TextureUses::RESOURCE,
-        memory_flags: wgpu::hal::MemoryFlags::empty(),
-        view_formats: vec![],
-    };
-    let hal_texture = unsafe { hal_device.texture_from_raw(raw_texture, &texture_desc, None) };
-
-    let wgpu_desc = wgpu::TextureDescriptor {
-        label: Some("gst-iosurface-frame"),
-        size: wgpu::Extent3d {
-            width,
-            height,
-            depth_or_array_layers: 1,
-        },
-        mip_level_count: 1,
-        sample_count: 1,
-        dimension: wgpu::TextureDimension::D2,
-        format: wgpu::TextureFormat::NV12,
-        usage: wgpu::TextureUsages::TEXTURE_BINDING,
+        usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
         view_formats: &[],
-    };
-    Ok(unsafe { device.create_texture_from_hal::<Metal>(hal_texture, &wgpu_desc) })
+    });
+
+    queue.write_texture(
+        wgpu::TexelCopyTextureInfo {
+            texture: &texture,
+            mip_level: 0,
+            origin: wgpu::Origin3d::ZERO,
+            aspect: wgpu::TextureAspect::Plane0,
+        },
+        &data[0..y_plane_size],
+        wgpu::TexelCopyBufferLayout {
+            offset: 0,
+            bytes_per_row: Some(width),
+            rows_per_image: Some(height),
+        },
+        wgpu::Extent3d {
+            width,
+            height,
+            depth_or_array_layers: 1,
+        },
+    );
+
+    queue.write_texture(
+        wgpu::TexelCopyTextureInfo {
+            texture: &texture,
+            mip_level: 0,
+            origin: wgpu::Origin3d::ZERO,
+            aspect: wgpu::TextureAspect::Plane1,
+        },
+        &data[y_plane_size..y_plane_size + uv_plane_size],
+        wgpu::TexelCopyBufferLayout {
+            offset: 0,
+            bytes_per_row: Some(width),
+            rows_per_image: Some(height / 2),
+        },
+        wgpu::Extent3d {
+            width: width / 2,
+            height: height / 2,
+            depth_or_array_layers: 1,
+        },
+    );
+
+    Ok(texture)
 }
