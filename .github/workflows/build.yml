@@ -20,12 +20,12 @@ jobs:
             os_name: Linux
             artifact_name: neoutl-linux-x86_64
             binary_name: NeoUtl
-            install_cmd: sudo apt-get update && sudo apt-get install -y --no-install-recommends pkg-config clang cmake ninja-build libxkbcommon-dev libwayland-dev libegl1-mesa-dev libudev-dev libasound2-dev libfontconfig1-dev libfreetype6-dev libexpat1-dev libavutil-dev libavcodec-dev libavformat-dev libavfilter-dev libavdevice-dev libswresample-dev libswscale-dev ffmpeg
+            install_cmd: sudo apt-get update && sudo apt-get install -y --no-install-recommends pkg-config clang cmake ninja-build libxkbcommon-dev libwayland-dev libegl1-mesa-dev libudev-dev libasound2-dev libfontconfig1-dev libfreetype6-dev libexpat1-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev gstreamer1.0-plugins-base gstreamer1.0-plugins-good gstreamer1.0-plugins-bad gstreamer1.0-plugins-ugly gstreamer1.0-libav
           - os: macos-latest
             os_name: macOS
             artifact_name: neoutl-macos-aarch64
             binary_name: NeoUtl
-            install_cmd: brew untap aws/tap || true && brew update && brew install ffmpeg
+            install_cmd: brew untap aws/tap || true && brew update && brew install gstreamer gst-plugins-base gst-plugins-good gst-plugins-bad gst-plugins-ugly gst-libav dylibbundler
           - os: windows-latest
             os_name: Windows
             artifact_name: neoutl-windows-x86_64
@@ -35,13 +35,33 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - name: Install native dependencies
+      - name: Install native dependencies (Unix)
         if: runner.os != 'Windows'
         shell: bash
         run: ${{ matrix.install_cmd }}
 
+      - name: Setup MSYS2 CLANG64 (Windows)
+        if: runner.os == 'Windows'
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: CLANG64
+          update: true
+          install: >-
+            mingw-w64-clang-x86_64-toolchain
+            mingw-w64-clang-x86_64-gstreamer
+            mingw-w64-clang-x86_64-gst-plugins-base
+            mingw-w64-clang-x86_64-gst-plugins-good
+            mingw-w64-clang-x86_64-gst-plugins-bad
+            mingw-w64-clang-x86_64-gst-plugins-ugly
+            mingw-w64-clang-x86_64-gst-libav
+            mingw-w64-clang-x86_64-pkgconf
+            mingw-w64-clang-x86_64-ntldd
+            zip
+
       - name: Setup Rust toolchain
         uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ runner.os == 'Windows' && 'x86_64-pc-windows-gnullvm' || '' }}
 
       - name: Build (Unix)
         if: runner.os != 'Windows'
@@ -50,24 +70,13 @@ jobs:
           PKG_CONFIG: pkg-config
         run: cargo build --release --locked
 
-      - name: Setup vcpkg (Windows)
+      - name: Build (Windows / MSYS2 CLANG64)
         if: runner.os == 'Windows'
+        shell: msys2 {0}
         run: |
-          git clone https://github.com/microsoft/vcpkg.git
-          .\vcpkg\bootstrap-vcpkg.bat
-          .\vcpkg\vcpkg.exe install ffmpeg:x64-windows
-          echo "VCPKG_ROOT=$PWD/vcpkg" >> $env:GITHUB_ENV
-
-      - name: Build (Windows / MSVC)
-        if: runner.os == 'Windows'
-        shell: bash
-        env:
-          FFMPEG_SYS_NEXT_USE_PKG_CONFIG: "1"
-          FFMPEG_SYS_NEXT_NO_VCPKG: "0"
-        run: |
-          set -euo pipefail
+          export PKG_CONFIG_PATH="/clang64/lib/pkgconfig"
           cargo clean
-          cargo build --release --locked --target x86_64-pc-windows-msvc
+          cargo build --release --locked --target x86_64-pc-windows-gnullvm
 
       - name: Collect artifact (Linux)
         if: runner.os == 'Linux'
@@ -77,19 +86,35 @@ jobs:
             target/release/${{ matrix.binary_name }} \
             target/release/objects
 
-      - name: Create .app bundle (macOS)
+      - name: Create & Package .app Bundle (macOS Homebrew)
         if: runner.os == 'macOS'
         run: |
           mkdir -p dist
-          mkdir -p NeoUtl.app/Contents/MacOS
-          mkdir -p NeoUtl.app/Contents/Resources
-          mkdir -p NeoUtl.app/Contents/Frameworks
-          cp target/release/${{ matrix.binary_name }} NeoUtl.app/Contents/MacOS/
-          cp /usr/local/opt/ffmpeg/lib/*.dylib NeoUtl.app/Contents/Frameworks/ || true
-          cat > NeoUtl.app/Contents/Info.plist <<EOF
+
+          # 1. Mac標準のAppバンドルディレクトリ構造を作成
+          APP_DIR="dist/NeoUtl.app"
+          mkdir -p "$APP_DIR/Contents/MacOS"
+          mkdir -p "$APP_DIR/Contents/Frameworks"
+          mkdir -p "$APP_DIR/Contents/PlugIns/gstreamer-1.0"
+
+          # 2. ビルドしたバイナリをApp構造内に配置
+          cp target/release/${{ matrix.binary_name }} "$APP_DIR/Contents/MacOS/"
+
+          # 3. Homebrew から GStreamer プラグインをバンドル内のPlugInsにコピー
+          BREW_GST_PLUGINS="/opt/homebrew/lib/gstreamer-1.0"
+          cp $BREW_GST_PLUGINS/*.so "$APP_DIR/Contents/PlugIns/gstreamer-1.0/"
+
+          # 4. dylibbundlerでコアライブラリをFrameworksへ集約し、パスを@executable_path基準へ書き換え
+          # ※実行ファイルから見たFrameworksへの相対パスは @executable_path/../Frameworks/ になります
+          dylibbundler -x "$APP_DIR/Contents/MacOS/${{ matrix.binary_name }}" \
+                       -d "$APP_DIR/Contents/Frameworks/" \
+                       -p "@executable_path/../Frameworks/" \
+                       -s "$APP_DIR/Contents/PlugIns/gstreamer-1.0/"
+
+          # 5. Info.plist の生成
+          cat > "$APP_DIR/Contents/Info.plist" <<EOF
           <?xml version="1.0" encoding="UTF-8"?>
-          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
-           "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
           <plist version="1.0">
           <dict>
             <key>CFBundleName</key>
@@ -100,21 +125,43 @@ jobs:
             <string>org.codeberg.taisho-guy.NeoUtl</string>
             <key>CFBundleVersion</key>
             <string>${{ github.ref_name }}</string>
+            <key>CFBundleShortVersionString</key>
+            <string>${{ github.ref_name }}</string>
             <key>CFBundlePackageType</key>
             <string>APPL</string>
+            <key>LSMinimumSystemVersion</key>
+            <string>11.0</string>
           </dict>
           </plist>
           EOF
-          zip -r dist/${{ matrix.artifact_name }}.zip NeoUtl.app
 
-      - name: Collect artifact (Windows)
+          # 6. 配布用に .app フォルダごとZIP圧縮
+          cd dist
+          zip -r ${{ matrix.artifact_name }}.zip NeoUtl.app
+
+      - name: Collect & Package GStreamer (Windows CLANG64)
         if: runner.os == 'Windows'
+        shell: msys2 {0}
         run: |
-          mkdir -p dist
-          powershell Compress-Archive -Path `
-            "target/x86_64-pc-windows-msvc/release/${{ matrix.binary_name }}", `
-            "target/x86_64-pc-windows-msvc/release/objects" `
-            -DestinationPath "dist/${{ matrix.artifact_name }}.zip"
+          mkdir -p dist/package/bin
+          mkdir -p dist/package/lib/gstreamer-1.0
+
+          cp target/x86_64-pc-windows-gnullvm/release/${{ matrix.binary_name }} dist/package/
+          if [ -d "target/x86_64-pc-windows-gnullvm/release/objects" ]; then
+            cp -r target/x86_64-pc-windows-gnullvm/release/objects dist/package/
+          fi
+
+          CLANG_PATH="/clang64"
+          cp $CLANG_PATH/lib/gstreamer-1.0/*.dll dist/package/lib/gstreamer-1.0/
+          cp $CLANG_PATH/bin/libgst*.dll dist/package/bin/
+          cp $CLANG_PATH/bin/libgstreamer*.dll dist/package/bin/
+
+          find dist/package/ -name "*.dll" -o -name "${{ matrix.binary_name }}" | xargs ntldd -R | \
+            grep -i "$CLANG_PATH/bin" | awk '{print $3}' | sort -u | \
+            xargs -I {} cp {} dist/package/bin/
+
+          cd dist/package
+          zip -r ../${{ matrix.artifact_name }}.zip .
 
       - name: Upload artifact
         uses: actions/upload-artifact@v6
