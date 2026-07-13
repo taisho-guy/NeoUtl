@@ -20,12 +20,12 @@ jobs:
             os_name: Linux
             artifact_name: neoutl-linux-x86_64
             binary_name: NeoUtl
-            install_cmd: sudo apt-get update && sudo apt-get install -y --no-install-recommends pkg-config clang cmake ninja-build libxkbcommon-dev libwayland-dev libegl1-mesa-dev libudev-dev libasound2-dev libfontconfig1-dev libfreetype6-dev libexpat1-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev gstreamer1.0-plugins-base gstreamer1.0-plugins-good gstreamer1.0-plugins-bad gstreamer1.0-plugins-ugly gstreamer1.0-libav
+            install_cmd: sudo apt-get update && sudo apt-get install -y --no-install-recommends pkg-config clang cmake ninja-build mold libxkbcommon-dev libwayland-dev libegl1-mesa-dev libudev-dev libasound2-dev libfontconfig1-dev libfreetype6-dev libexpat1-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev gstreamer1.0-plugins-base gstreamer1.0-plugins-good gstreamer1.0-plugins-bad gstreamer1.0-plugins-ugly gstreamer1.0-libav
           - os: macos-latest
             os_name: macOS
             artifact_name: neoutl-macos-aarch64
             binary_name: NeoUtl
-            install_cmd: brew untap aws/tap || true && brew update && brew install gstreamer gst-plugins-base gst-plugins-good gst-plugins-bad gst-plugins-ugly gst-libav dylibbundler
+            install_cmd: brew update && brew install gstreamer dylibbundler
           - os: windows-latest
             os_name: Windows
             artifact_name: neoutl-windows-x86_64
@@ -47,6 +47,7 @@ jobs:
           msystem: CLANG64
           path-type: inherit
           update: true
+          cache: false
           install: >-
             mingw-w64-clang-x86_64-toolchain
             mingw-w64-clang-x86_64-gstreamer
@@ -76,6 +77,8 @@ jobs:
         shell: msys2 {0}
         run: |
           export PKG_CONFIG_PATH="/clang64/lib/pkgconfig"
+          # クロスコンパイルとして判定されるのを防ぎ、ネイティブビルドとして認識させる
+          export PKG_CONFIG_ALLOW_CROSS=1
           cargo clean
           cargo build --release --locked --target x86_64-pc-windows-gnullvm
 
@@ -102,8 +105,10 @@ jobs:
           cp target/release/${{ matrix.binary_name }} "$APP_DIR/Contents/MacOS/"
 
           # 3. Homebrew から GStreamer プラグインをバンドル内のPlugInsにコピー
+          # ワイルドカード展開の失敗（該当ファイル無し時のNo such file or directory）を防ぐためfindを使用
           BREW_GST_PLUGINS="/opt/homebrew/lib/gstreamer-1.0"
-          cp $BREW_GST_PLUGINS/*.so "$APP_DIR/Contents/PlugIns/gstreamer-1.0/"
+          find "$BREW_GST_PLUGINS" -name "*.so" -exec cp {} "$APP_DIR/Contents/PlugIns/gstreamer-1.0/" \;
+          find "$BREW_GST_PLUGINS" -name "*.dylib" -exec cp {} "$APP_DIR/Contents/PlugIns/gstreamer-1.0/" \;
 
           # 4. dylibbundlerでコアライブラリをFrameworksへ集約し、パスを@executable_path基準へ書き換え
           # ※実行ファイルから見たFrameworksへの相対パスは @executable_path/../Frameworks/ になります
