@@ -1,0 +1,84 @@
+// src/ui/project-settings.slint
+import { Button } from "common.slint";
+import { NameField, ChoiceField } from "system-settings/fields.slint";
+
+export component ProjectSettingsWindow inherits Window {
+    title: "プロジェクト設定";
+    preferred-width: 380px;
+    preferred-height: 280px;
+    background: #0e0e12;
+
+    in-out property <string> project-name: "Project";
+    in-out property <int> audio-sample-rate: 48000;
+    in-out property <int> audio-channels: 2;
+
+    callback confirm();
+    callback cancel();
+
+    VerticalLayout {
+        padding: 14px;
+        spacing: 14px;
+
+        Rectangle {
+            background: #16161c;
+            border-radius: 4px;
+            VerticalLayout {
+                padding: 10px;
+                spacing: 8px;
+
+                Text { text: "基本設定"; color: #8aabff; font-size: 11px; }
+
+                NameField {
+                    label: "プロジェクト名:";
+                    value: root.project-name;
+                    changed(v) => { root.project-name = v; }
+                }
+            }
+        }
+
+        Rectangle {
+            background: #16161c;
+            border-radius: 4px;
+            VerticalLayout {
+                padding: 10px;
+                spacing: 8px;
+
+                Text { text: "音声フォーマット"; color: #8aabff; font-size: 11px; }
+
+                ChoiceField {
+                    label: "サンプルレート:";
+                    options: ["44100 Hz", "48000 Hz", "96000 Hz"];
+                    selected: root.audio-sample-rate == 44100 ? 0 : (root.audio-sample-rate == 96000 ? 2 : 1);
+                    changed(i) => {
+                        root.audio-sample-rate = i == 0 ? 44100 : (i == 2 ? 96000 : 48000);
+                    }
+                }
+                ChoiceField {
+                    label: "チャンネル数:";
+                    options: ["モノラル (1ch)", "ステレオ (2ch)"];
+                    selected: root.audio-channels == 1 ? 0 : 1;
+                    changed(i) => {
+                        root.audio-channels = i == 0 ? 1 : 2;
+                    }
+                }
+            }
+        }
+
+        Rectangle { vertical-stretch: 1; }
+
+        HorizontalLayout {
+            alignment: end;
+            spacing: 10px;
+
+            Button {
+                label: "キャンセル";
+                clicked => { root.cancel(); }
+            }
+            Button {
+                label: "OK";
+                primary: true;
+                clicked => { root.confirm(); }
+            }
+        }
+    }
+}

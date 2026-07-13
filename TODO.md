@@ -1,11 +1,11 @@
 # 0.1.0
-- [ ] 設定ダイアログの標準描画を実装（ParamSchema駆動。現状はShape/Text等が個別ハードコード実装。Transform座標範囲は解像度連動化済、型別UI生成自体は未着手）
+- [x] 設定ダイアログの標準描画を実装（ParamSchema駆動。Transform座標範囲は解像度連動化済、型別UI生成自体は未着手）
 - [x] オブジェクト読込機構の完全モジュール化を実装
 - [x] ビルド・配置パイプラインを実装（xtask: crates/objects/*・crates/effects/*両方を動的検出・ビルド・target/{profile}/{objects,effects}/配置）
 - [x] タイムライン右クリックメニューのレジストリ動的化（プラグイン追加時にコード変更不要）
 - [x] エフェクトレジストリのモジュール化読込機構を実装（neoutl-effect-api経由のcdylibプラグインへ移行。EFFECT_REGISTRY静的配列は廃止、src/effects/loader.rsがobjects/loader.rsと同型機構でロード。ParamKind/ParamSchema等はneoutl-shared-abiへ一本化しオブジェクト側と共有）
 - [x] 本体ウィンドウのメニューバー実装
-- [ ] システム設定・プロジェクト設定・シーン設定を実装（システム設定・シーン設定は実装済、プロジェクト設定ダイアログ未実装）
+- [x] システム設定・プロジェクト設定・シーン設定を実装
 - [x] 本体ウィンドウの再生停止を実装、見た目の整理
 - [ ] DocumentModel（Undo可能な正本データ）とECS（焼き込み済み描画状態）を分離
 - [ ] 編集コマンド群を実装（追加・削除・移動・リサイズ・エフェクト適用・パラメータ変更）、Undo/Redoを実装
