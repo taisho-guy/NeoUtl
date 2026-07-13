@@ -9,11 +9,13 @@ dependencies = [
  "bytemuck",
  "libloading 0.9.0",
  "lucide-slint",
+ "neoutl-effect-api",
  "neoutl-media-api",
  "neoutl-media-gstreamer-decoder",
  "neoutl-media-image-decoder",
  "neoutl-media-symphonia-decoder",
  "neoutl-object-api",
+ "neoutl-shared-abi",
  "rust-yaml",
  "serde",
  "shipyard",
@@ -3326,6 +3328,125 @@ dependencies = [
 ]
 
 [[package]]
+name = "neoutl-effect-api"
+version = "0.0.0"
+dependencies = [
+ "neoutl-shared-abi",
+]
+
+[[package]]
+name = "neoutl-effect-border-blur"
+version = "0.0.0"
+dependencies = [
+ "neoutl-effect-api",
+]
+
+[[package]]
+name = "neoutl-effect-chromatic-aberration"
+version = "0.0.0"
+dependencies = [
+ "neoutl-effect-api",
+]
+
+[[package]]
+name = "neoutl-effect-clipping"
+version = "0.0.0"
+dependencies = [
+ "neoutl-effect-api",
+]
+
+[[package]]
+name = "neoutl-effect-color-correction"
+version = "0.0.0"
+dependencies = [
+ "neoutl-effect-api",
+]
+
+[[package]]
+name = "neoutl-effect-diagonal-clipping"
+version = "0.0.0"
+dependencies = [
+ "neoutl-effect-api",
+]
+
+[[package]]
+name = "neoutl-effect-diffuse-light"
+version = "0.0.0"
+dependencies = [
+ "neoutl-effect-api",
+]
+
+[[package]]
+name = "neoutl-effect-directional-blur"
+version = "0.0.0"
+dependencies = [
+ "neoutl-effect-api",
+]
+
+[[package]]
+name = "neoutl-effect-drop-shadow"
+version = "0.0.0"
+dependencies = [
+ "neoutl-effect-api",
+]
+
+[[package]]
+name = "neoutl-effect-image-loop"
+version = "0.0.0"
+dependencies = [
+ "neoutl-effect-api",
+]
+
+[[package]]
+name = "neoutl-effect-lens-blur"
+version = "0.0.0"
+dependencies = [
+ "neoutl-effect-api",
+]
+
+[[package]]
+name = "neoutl-effect-mosaic"
+version = "0.0.0"
+dependencies = [
+ "neoutl-effect-api",
+]
+
+[[package]]
+name = "neoutl-effect-motion-blur"
+version = "0.0.0"
+dependencies = [
+ "neoutl-effect-api",
+]
+
+[[package]]
+name = "neoutl-effect-pixel-sorter"
+version = "0.0.0"
+dependencies = [
+ "neoutl-effect-api",
+]
+
+[[package]]
+name = "neoutl-effect-radial-blur"
+version = "0.0.0"
+dependencies = [
+ "neoutl-effect-api",
+]
+
+[[package]]
+name = "neoutl-effect-transform"
+version = "0.0.0"
+dependencies = [
+ "neoutl-effect-api",
+]
+
+[[package]]
+name = "neoutl-effect-vibration"
+version = "0.0.0"
+dependencies = [
+ "neoutl-effect-api",
+]
+
+[[package]]
 name = "neoutl-media-api"
 version = "0.0.0"
 dependencies = [
@@ -3392,6 +3513,9 @@ dependencies = [
 [[package]]
 name = "neoutl-object-api"
 version = "0.0.0"
+dependencies = [
+ "neoutl-shared-abi",
+]
 
 [[package]]
 name = "neoutl-object-shape"
@@ -3406,6 +3530,10 @@ version = "0.0.0"
 dependencies = [
  "neoutl-object-api",
 ]
+
+[[package]]
+name = "neoutl-shared-abi"
+version = "0.0.0"
 
 [[package]]
 name = "new_debug_unreachable"

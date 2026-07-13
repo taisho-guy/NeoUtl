@@ -1,5 +1,5 @@
 [package]
-name    = "neoutl-object-api"
+name    = "neoutl-effect-api"
 version = "0.0.0"
 edition = "2024"
 

@@ -1,0 +1,11 @@
+[package]
+name    = "neoutl-effect-radial-blur"
+version = "0.0.0"
+edition = "2024"
+
+[lib]
+name       = "neoutl_effect_radial_blur"
+crate-type = ["cdylib"]
+
+[dependencies]
+neoutl-effect-api = { path = "../../neoutl-effect-api" }

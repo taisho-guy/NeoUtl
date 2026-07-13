@@ -5,22 +5,23 @@ use std::{
     process::Command,
 };
 
-struct ObjectCrate {
+struct DiscoveredCrate {
     package_name: String,
     lib_name: String,
 }
 
-/// crates/objects/直下の各ディレクトリのCargo.tomlを走査し、
+/// workspace_root/subdir 直下の各ディレクトリのCargo.tomlを走査し、
 /// package.name と lib.name（未指定時はpackage.nameの'-'を'_'置換）を収集する。
 /// 新規追加クレートはディレクトリを置くだけで自動検出対象になる。
-fn discover_object_crates(workspace_root: &Path) -> Vec<ObjectCrate> {
-    let objects_dir = workspace_root.join("crates/objects");
+/// subdirには"crates/objects"・"crates/effects"のいずれも渡せる（両者は同一走査規則）。
+fn discover_crates(workspace_root: &Path, subdir: &str) -> Vec<DiscoveredCrate> {
+    let scan_dir = workspace_root.join(subdir);
     let mut result = Vec::new();
 
-    let entries = match fs::read_dir(&objects_dir) {
+    let entries = match fs::read_dir(&scan_dir) {
         Ok(e) => e,
         Err(err) => {
-            eprintln!("[xtask] {} 読取失敗: {err}", objects_dir.display());
+            eprintln!("[xtask] {} 読取失敗: {err}", scan_dir.display());
             return result;
         }
     };
@@ -56,7 +57,7 @@ fn discover_object_crates(workspace_root: &Path) -> Vec<ObjectCrate> {
             .map(str::to_owned)
             .unwrap_or_else(|| package_name.replace('-', "_"));
 
-        result.push(ObjectCrate {
+        result.push(DiscoveredCrate {
             package_name,
             lib_name,
         });
@@ -76,9 +77,9 @@ fn dylib_filename(lib_name: &str) -> String {
     }
 }
 
-fn build_objects(workspace_root: &Path, profile: &str, crates: &[ObjectCrate]) {
+fn build_crates(workspace_root: &Path, profile: &str, label: &str, crates: &[DiscoveredCrate]) {
     if crates.is_empty() {
-        eprintln!("[xtask] objectsクレート0件: crates/objects/* を確認");
+        eprintln!("[xtask] {label}クレート0件");
         return;
     }
 
@@ -93,21 +94,26 @@ fn build_objects(workspace_root: &Path, profile: &str, crates: &[ObjectCrate]) {
 
     let status = cmd.status().expect("cargo build 起動失敗");
     if !status.success() {
-        panic!("[xtask] objectsビルド失敗: exit={status}");
+        panic!("[xtask] {label}ビルド失敗: exit={status}");
     }
 }
 
-fn stage_objects(workspace_root: &Path, profile: &str, crates: &[ObjectCrate]) {
+fn stage_crates(
+    workspace_root: &Path,
+    profile: &str,
+    dest_subdir: &str,
+    crates: &[DiscoveredCrate],
+) {
     let target_dir = workspace_root.join("target").join(profile);
-    let objects_dir = target_dir.join("objects");
-    fs::create_dir_all(&objects_dir).expect("target/{profile}/objects 作成失敗");
+    let dest_dir = target_dir.join(dest_subdir);
+    fs::create_dir_all(&dest_dir).expect("配置先ディレクトリ作成失敗");
 
     for c in crates {
         let filename = dylib_filename(&c.lib_name);
         let src = target_dir.join(&filename);
-        let dst = objects_dir.join(&filename);
+        let dst = dest_dir.join(&filename);
         match fs::copy(&src, &dst) {
-            Ok(_) => eprintln!("[xtask] 配置: {filename}"),
+            Ok(_) => eprintln!("[xtask] 配置: {dest_subdir}/{filename}"),
             Err(err) => eprintln!("[xtask] 配置失敗 {filename}: {err} (src={})", src.display()),
         }
     }
@@ -136,9 +142,14 @@ fn main() {
     let profile = if release { "release" } else { "debug" };
 
     let root = workspace_root();
-    let crates = discover_object_crates(&root);
-    build_objects(&root, profile, &crates);
-    stage_objects(&root, profile, &crates);
+
+    let objects = discover_crates(&root, "crates/objects");
+    build_crates(&root, profile, "objects", &objects);
+    stage_crates(&root, profile, "objects", &objects);
+
+    let effects = discover_crates(&root, "crates/effects");
+    build_crates(&root, profile, "effects", &effects);
+    stage_crates(&root, profile, "effects", &effects);
 
     if task == "run" {
         let mut cmd = Command::new("cargo");

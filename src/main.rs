@@ -1,6 +1,7 @@
 // src/main.rs
 mod app_state;
 mod ecs;
+mod effects;
 mod media;
 mod objects;
 mod project;
@@ -13,6 +14,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     use slint::ComponentHandle;
 
     objects::load_all(&objects::default_objects_dir());
+    effects::load_all(&effects::default_effects_dir());
 
     let mut wgpu_settings = slint::wgpu_29::WGPUSettings::default();
     #[cfg(any(target_os = "windows", target_os = "linux"))]

@@ -3,213 +3,24 @@ use shipyard::Component;
 
 use crate::ecs::types::{EffectInstance, EffectParam, Value};
 
-/// 設定ダイアログUI生成用のパラメータ種別（ホスト内蔵エフェクト用。cdylib跨ぎはしない）。
-/// Textはproperties.rs側でParamRow.textを介した文字列専用経路として扱う
-/// （数値min/max/stepは不使用）。エフェクトスタック(EFFECT_REGISTRY)は現状Text未使用。
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub enum ParamKind {
-    Float,
-    Bool,
-    Color,
-    Text,
+/// エフェクトメタデータ・パラメータスキーマはneoutl-effect-api経由のcdylibプラグインが
+/// 保持する（EFFECT_REGISTRY静的配列は廃止）。ホストはcrate::effects::loaderへ委譲する。
+pub use neoutl_effect_api::{EffectMeta, ParamKind};
+pub type ParamSchema = neoutl_effect_api::EffectParamSchema;
+
+pub fn find_effect(id: &str) -> Option<&'static EffectMeta> {
+    crate::effects::loader::by_id(id).map(|p| unsafe { &*((p.vtable.meta)()) })
 }
 
-#[derive(Clone, Copy, Debug)]
-pub struct ParamSchema {
-    pub key: &'static str,
-    pub label: &'static str,
-    pub kind: ParamKind,
-    pub min: f32,
-    pub max: f32,
-    pub step: f32,
-    pub default: f32,
-}
-
-const fn float_param(
-    key: &'static str,
-    label: &'static str,
-    min: f32,
-    max: f32,
-    default: f32,
-) -> ParamSchema {
-    ParamSchema {
-        key,
-        label,
-        kind: ParamKind::Float,
-        min,
-        max,
-        step: (max - min) / 100.0,
-        default,
+/// EffectMeta.param_schema_ptr/lenから'staticなParamSchemaスライスを得る。
+/// # Safety
+/// meta.param_schema_ptrはparam_schema_len個の有効なParamSchemaを指し続けること
+/// （cdylibプラグインのstatic配列を指すため、プロセス生存中は常に有効）。
+pub fn param_schema(meta: &EffectMeta) -> &'static [ParamSchema] {
+    if meta.param_schema_ptr.is_null() || meta.param_schema_len == 0 {
+        return &[];
     }
-}
-const fn bool_param(key: &'static str, label: &'static str, default: bool) -> ParamSchema {
-    ParamSchema {
-        key,
-        label,
-        kind: ParamKind::Bool,
-        min: 0.0,
-        max: 1.0,
-        step: 1.0,
-        default: if default { 1.0 } else { 0.0 },
-    }
-}
-
-#[derive(Clone, Copy, Debug)]
-pub struct EffectMetadata {
-    pub id: &'static str,
-    pub name: &'static str,
-    pub category: &'static str,
-    pub params: &'static [ParamSchema],
-}
-
-pub const EFFECT_REGISTRY: &[EffectMetadata] = &[
-    EffectMetadata {
-        id: "border_blur",
-        name: "BorderBlur",
-        category: "Blur",
-        params: &[
-            float_param("radius", "半径", 0.0, 100.0, 8.0),
-            float_param("border_width", "境界幅", 0.0, 200.0, 20.0),
-        ],
-    },
-    EffectMetadata {
-        id: "chromatic_aberration",
-        name: "ChromaticAberration",
-        category: "Color",
-        params: &[float_param("shift", "ずれ量", 0.0, 50.0, 4.0)],
-    },
-    EffectMetadata {
-        id: "clipping",
-        name: "Clipping",
-        category: "Mask",
-        params: &[
-            float_param("left", "左", 0.0, 1.0, 0.0),
-            float_param("top", "上", 0.0, 1.0, 0.0),
-            float_param("right", "右", 0.0, 1.0, 1.0),
-            float_param("bottom", "下", 0.0, 1.0, 1.0),
-            bool_param("invert", "反転", false),
-        ],
-    },
-    EffectMetadata {
-        id: "color_correction",
-        name: "ColorCorrection",
-        category: "Color",
-        params: &[
-            float_param("brightness", "明度", -1.0, 1.0, 0.0),
-            float_param("contrast", "コントラスト", -1.0, 1.0, 0.0),
-            float_param("saturation", "彩度", -1.0, 1.0, 0.0),
-            float_param("hue", "色相", -180.0, 180.0, 0.0),
-        ],
-    },
-    EffectMetadata {
-        id: "diagonal_clipping",
-        name: "DiagonalClipping",
-        category: "Mask",
-        params: &[
-            float_param("angle", "角度", -180.0, 180.0, 45.0),
-            float_param("offset", "オフセット", -1.0, 1.0, 0.0),
-        ],
-    },
-    EffectMetadata {
-        id: "diffuse_light",
-        name: "DiffuseLight",
-        category: "Light",
-        params: &[
-            float_param("intensity", "強度", 0.0, 5.0, 1.0),
-            float_param("angle", "角度", -180.0, 180.0, 45.0),
-        ],
-    },
-    EffectMetadata {
-        id: "directional_blur",
-        name: "DirectionalBlur",
-        category: "Blur",
-        params: &[
-            float_param("angle", "角度", -180.0, 180.0, 0.0),
-            float_param("distance", "距離", 0.0, 200.0, 20.0),
-        ],
-    },
-    EffectMetadata {
-        id: "drop_shadow",
-        name: "DropShadow",
-        category: "Shadow",
-        params: &[
-            float_param("offset_x", "X方向", -100.0, 100.0, 8.0),
-            float_param("offset_y", "Y方向", -100.0, 100.0, 8.0),
-            float_param("blur", "ぼかし", 0.0, 100.0, 6.0),
-            float_param("opacity", "不透明度", 0.0, 1.0, 0.6),
-        ],
-    },
-    EffectMetadata {
-        id: "image_loop",
-        name: "ImageLoop",
-        category: "Utility",
-        params: &[bool_param("enabled", "有効", true)],
-    },
-    EffectMetadata {
-        id: "lens_blur",
-        name: "LensBlur",
-        category: "Blur",
-        params: &[float_param("radius", "半径", 0.0, 100.0, 10.0)],
-    },
-    EffectMetadata {
-        id: "mosaic",
-        name: "Mosaic",
-        category: "Blur",
-        params: &[float_param("cell_size", "セルサイズ", 1.0, 200.0, 16.0)],
-    },
-    EffectMetadata {
-        id: "motion_blur",
-        name: "MotionBlur",
-        category: "Blur",
-        params: &[float_param(
-            "shutter_angle",
-            "シャッター角",
-            0.0,
-            360.0,
-            180.0,
-        )],
-    },
-    EffectMetadata {
-        id: "pixel_sorter",
-        name: "PixelSorter",
-        category: "Glitch",
-        params: &[
-            float_param("threshold", "閾値", 0.0, 1.0, 0.5),
-            float_param("angle", "角度", -180.0, 180.0, 0.0),
-        ],
-    },
-    EffectMetadata {
-        id: "radial_blur",
-        name: "RadialBlur",
-        category: "Blur",
-        params: &[
-            float_param("center_x", "中心X", 0.0, 1.0, 0.5),
-            float_param("center_y", "中心Y", 0.0, 1.0, 0.5),
-            float_param("strength", "強さ", 0.0, 100.0, 10.0),
-        ],
-    },
-    EffectMetadata {
-        id: "transform",
-        name: "Transform",
-        category: "Geometry",
-        params: &[
-            float_param("scale", "拡大率", 0.0, 10.0, 1.0),
-            float_param("rotation", "回転", -360.0, 360.0, 0.0),
-        ],
-    },
-    EffectMetadata {
-        id: "vibration",
-        name: "Vibration",
-        category: "Distort",
-        params: &[
-            float_param("amplitude", "振幅", 0.0, 100.0, 4.0),
-            float_param("frequency", "周波数", 0.0, 60.0, 10.0),
-        ],
-    },
-];
-
-pub fn find_effect(id: &str) -> Option<&'static EffectMetadata> {
-    EFFECT_REGISTRY.iter().find(|e| e.id == id)
+    unsafe { std::slice::from_raw_parts(meta.param_schema_ptr, meta.param_schema_len) }
 }
 
 /// Clipに付随するエフェクトの順序付きスタック。
@@ -223,10 +34,13 @@ impl EffectStack {
         let effect_id = effect_id.into();
         let mut instance = EffectInstance::new(effect_id.clone());
         if let Some(meta) = find_effect(&effect_id) {
-            for p in meta.params {
-                instance
-                    .params
-                    .insert(p.key.to_owned(), EffectParam::new(Value::Number(p.default)));
+            for p in param_schema(meta) {
+                let key = unsafe { p.key.as_str() }.to_owned();
+                let value = match p.kind {
+                    ParamKind::Bool => Value::Bool(p.default_float != 0.0),
+                    _ => Value::Number(p.default_float),
+                };
+                instance.params.insert(key, EffectParam::new(value));
             }
         }
         self.0.push(instance);

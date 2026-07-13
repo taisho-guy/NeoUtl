@@ -1,0 +1,11 @@
+[package]
+name    = "neoutl-effect-drop-shadow"
+version = "0.0.0"
+edition = "2024"
+
+[lib]
+name       = "neoutl_effect_drop_shadow"
+crate-type = ["cdylib"]
+
+[dependencies]
+neoutl-effect-api = { path = "../../neoutl-effect-api" }

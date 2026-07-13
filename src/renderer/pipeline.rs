@@ -1,6 +1,8 @@
 // src/renderer/pipeline.rs
 use crate::ecs::resources::ProjectResource;
 use crate::ecs::systems::ActiveObject;
+use crate::ecs::types::Value;
+use crate::effects;
 use crate::objects::{by_kind_id, registry};
 use slint::wgpu_29::wgpu;
 use std::collections::HashMap;
@@ -15,6 +17,9 @@ const STANDARD_UNIFORM_SIZE: u64 = 96;
 const UNIFORM_STRIDE: u64 = 256;
 const MAX_OBJECTS: u64 = 512;
 const DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
+/// エフェクトUniformsバッファの確保上限（array<vec4<f32>, 8> = 128byte相当まで対応）。
+/// 現行16エフェクトの最大パラメータ数(clipping=5件→uniform_size_std=32byte)を十分に上回る。
+const MAX_EFFECT_UNIFORM_SIZE: u64 = 128;
 
 pub struct RenderEngine {
     pub device: Arc<wgpu::Device>,
@@ -28,6 +33,12 @@ pub struct RenderEngine {
     pub render_width: u32,
     pub render_height: u32,
     pipelines: HashMap<u32, (wgpu::RenderPipeline, u32)>,
+    effect_pipelines: HashMap<String, wgpu::RenderPipeline>,
+    effect_bind_group_layout: wgpu::BindGroupLayout,
+    effect_sampler: wgpu::Sampler,
+    effect_uniform_buffer: wgpu::Buffer,
+    effect_ping: wgpu::Texture,
+    effect_pong: wgpu::Texture,
 }
 
 fn load_font() -> Option<Vec<u8>> {
@@ -163,6 +174,125 @@ fn build_pipelines_from_registry(
         .collect()
 }
 
+fn create_effect_texture(device: &wgpu::Device, width: u32, height: u32) -> wgpu::Texture {
+    device.create_texture(&wgpu::TextureDescriptor {
+        label: Some("Effect Ping-Pong Target"),
+        size: wgpu::Extent3d {
+            width,
+            height,
+            depth_or_array_layers: 1,
+        },
+        mip_level_count: 1,
+        sample_count: 1,
+        dimension: wgpu::TextureDimension::D2,
+        format: wgpu::TextureFormat::Rgba8Unorm,
+        usage: wgpu::TextureUsages::RENDER_ATTACHMENT
+            | wgpu::TextureUsages::TEXTURE_BINDING
+            | wgpu::TextureUsages::COPY_DST
+            | wgpu::TextureUsages::COPY_SRC,
+        view_formats: &[],
+    })
+}
+
+fn build_effect_pipeline(
+    device: &wgpu::Device,
+    layout: &wgpu::PipelineLayout,
+    wgsl: &str,
+    label: &str,
+) -> wgpu::RenderPipeline {
+    let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+        label: Some(label),
+        source: wgpu::ShaderSource::Wgsl(wgsl.into()),
+    });
+    device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+        label: Some(label),
+        layout: Some(layout),
+        vertex: wgpu::VertexState {
+            module: &shader,
+            entry_point: Some("vs_main"),
+            buffers: &[],
+            compilation_options: Default::default(),
+        },
+        fragment: Some(wgpu::FragmentState {
+            module: &shader,
+            entry_point: Some("fs_main"),
+            targets: &[Some(wgpu::ColorTargetState {
+                format: wgpu::TextureFormat::Rgba8Unorm,
+                blend: None,
+                write_mask: wgpu::ColorWrites::ALL,
+            })],
+            compilation_options: Default::default(),
+        }),
+        primitive: wgpu::PrimitiveState {
+            topology: wgpu::PrimitiveTopology::TriangleList,
+            cull_mode: None,
+            ..Default::default()
+        },
+        depth_stencil: None,
+        multisample: wgpu::MultisampleState::default(),
+        multiview_mask: None,
+        cache: None,
+    })
+}
+
+/// effects::loader::registry()の全プラグインからポストプロセスパイプラインを構築する。
+/// エフェクトIDをキーとし、ActiveObject.effectsの並び順に都度引いて適用する。
+fn build_effect_pipelines_from_registry(
+    device: &wgpu::Device,
+    layout: &wgpu::PipelineLayout,
+) -> HashMap<String, wgpu::RenderPipeline> {
+    effects::registry()
+        .iter()
+        .filter_map(|plugin| {
+            let src = unsafe { ((*plugin.vtable).wgsl)() };
+            if src.ptr.is_null() {
+                return None;
+            }
+            let wgsl = unsafe {
+                std::str::from_utf8_unchecked(std::slice::from_raw_parts(src.ptr, src.len))
+            };
+            Some((
+                plugin.id.clone(),
+                build_effect_pipeline(device, layout, wgsl, &plugin.name),
+            ))
+        })
+        .collect()
+}
+
+fn create_effect_bind_group_layout(device: &wgpu::Device) -> wgpu::BindGroupLayout {
+    device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+        label: Some("Effect Postprocess BGL"),
+        entries: &[
+            wgpu::BindGroupLayoutEntry {
+                binding: 0,
+                visibility: wgpu::ShaderStages::FRAGMENT,
+                ty: wgpu::BindingType::Texture {
+                    sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                    view_dimension: wgpu::TextureViewDimension::D2,
+                    multisampled: false,
+                },
+                count: None,
+            },
+            wgpu::BindGroupLayoutEntry {
+                binding: 1,
+                visibility: wgpu::ShaderStages::FRAGMENT,
+                ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                count: None,
+            },
+            wgpu::BindGroupLayoutEntry {
+                binding: 2,
+                visibility: wgpu::ShaderStages::FRAGMENT,
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Uniform,
+                    has_dynamic_offset: false,
+                    min_binding_size: None,
+                },
+                count: None,
+            },
+        ],
+    })
+}
+
 impl RenderEngine {
     pub fn new(device: wgpu::Device, queue: wgpu::Queue, width: u32, height: u32) -> Self {
         let device = Arc::new(device);
@@ -211,6 +341,33 @@ impl RenderEngine {
         let pipelines = build_pipelines_from_registry(&device, &pipeline_layout);
         let texture = create_texture(&device, width, height);
         let depth_texture = create_depth_texture(&device, width, height);
+
+        let effect_bind_group_layout = create_effect_bind_group_layout(&device);
+        let effect_pipeline_layout =
+            device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                label: Some("Effect Pipeline Layout"),
+                bind_group_layouts: &[Some(&effect_bind_group_layout)],
+                immediate_size: 0,
+            });
+        let effect_pipelines =
+            build_effect_pipelines_from_registry(&device, &effect_pipeline_layout);
+        let effect_sampler = device.create_sampler(&wgpu::SamplerDescriptor {
+            label: Some("Effect Sampler"),
+            address_mode_u: wgpu::AddressMode::ClampToEdge,
+            address_mode_v: wgpu::AddressMode::ClampToEdge,
+            mag_filter: wgpu::FilterMode::Linear,
+            min_filter: wgpu::FilterMode::Linear,
+            ..Default::default()
+        });
+        let effect_uniform_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("Effect Uniform Buffer"),
+            size: MAX_EFFECT_UNIFORM_SIZE,
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+        let effect_ping = create_effect_texture(&device, width, height);
+        let effect_pong = create_effect_texture(&device, width, height);
+
         let text_brush = load_font().and_then(|f| {
             FontArc::try_from_vec(f).ok().map(|fa| {
                 BrushBuilder::using_font(fa).build(
@@ -234,6 +391,12 @@ impl RenderEngine {
             render_width: width,
             render_height: height,
             pipelines,
+            effect_pipelines,
+            effect_bind_group_layout,
+            effect_sampler,
+            effect_uniform_buffer,
+            effect_ping,
+            effect_pong,
         }
     }
 
@@ -242,6 +405,8 @@ impl RenderEngine {
         self.render_height = height;
         self.texture = create_texture(&self.device, width, height);
         self.depth_texture = create_depth_texture(&self.device, width, height);
+        self.effect_ping = create_effect_texture(&self.device, width, height);
+        self.effect_pong = create_effect_texture(&self.device, width, height);
         if let Some(ref mut b) = self.text_brush {
             b.resize_view(width as f32, height as f32, &self.queue);
         }
@@ -267,6 +432,151 @@ impl RenderEngine {
         let offset = index * UNIFORM_STRIDE;
         self.queue.write_buffer(&self.uniform_buffer, offset, &data);
         offset as u32
+    }
+
+    /// ActiveObject.effectsを連結した順序付きエフェクトチェーンを、
+    /// self.textureへポストプロセス適用する（Phase2/8: WGSL実処理接続）。
+    /// 各パスはeffect_ping/effect_pongへ交互出力し、最終結果をself.textureへ書き戻す。
+    fn apply_effect_chain(&self, chain: &[(String, HashMap<String, Value>)]) {
+        if chain.is_empty() {
+            return;
+        }
+        let extent = wgpu::Extent3d {
+            width: self.render_width,
+            height: self.render_height,
+            depth_or_array_layers: 1,
+        };
+
+        let mut encoder = self
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("Effect Copy Encoder"),
+            });
+        encoder.copy_texture_to_texture(
+            self.texture.as_image_copy(),
+            self.effect_ping.as_image_copy(),
+            extent,
+        );
+        self.queue.submit([encoder.finish()]);
+
+        let mut src_is_ping = true;
+        for (effect_id, params) in chain {
+            let Some(plugin) = effects::loader::by_id(effect_id) else {
+                continue;
+            };
+            let Some(pipeline) = self.effect_pipelines.get(effect_id) else {
+                continue;
+            };
+            let Some(meta) = crate::ecs::effects::find_effect(effect_id) else {
+                continue;
+            };
+            let schema = crate::ecs::effects::param_schema(meta);
+            let values: Vec<f32> = schema
+                .iter()
+                .map(|s| {
+                    let key = unsafe { s.key.as_str() };
+                    params
+                        .get(key)
+                        .map(|v| match v {
+                            Value::Number(n) => *n,
+                            Value::Bool(b) => {
+                                if *b {
+                                    1.0
+                                } else {
+                                    0.0
+                                }
+                            }
+                            Value::Text(_) => s.default_float,
+                        })
+                        .unwrap_or(s.default_float)
+                })
+                .collect();
+
+            let uniform_size = (unsafe { (plugin.vtable.uniform_size)() } as usize).max(16);
+            let mut bytes = vec![0u8; uniform_size];
+            unsafe {
+                (plugin.vtable.pack_uniform)(
+                    values.as_ptr(),
+                    values.len() as u32,
+                    bytes.as_mut_ptr(),
+                )
+            };
+            self.queue
+                .write_buffer(&self.effect_uniform_buffer, 0, &bytes);
+
+            let (src_tex, dst_tex) = if src_is_ping {
+                (&self.effect_ping, &self.effect_pong)
+            } else {
+                (&self.effect_pong, &self.effect_ping)
+            };
+            let src_view = src_tex.create_view(&wgpu::TextureViewDescriptor::default());
+            let dst_view = dst_tex.create_view(&wgpu::TextureViewDescriptor::default());
+
+            let bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("Effect Pass BG"),
+                layout: &self.effect_bind_group_layout,
+                entries: &[
+                    wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: wgpu::BindingResource::TextureView(&src_view),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 1,
+                        resource: wgpu::BindingResource::Sampler(&self.effect_sampler),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 2,
+                        resource: self.effect_uniform_buffer.as_entire_binding(),
+                    },
+                ],
+            });
+
+            let mut encoder = self
+                .device
+                .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                    label: Some("Effect Pass Encoder"),
+                });
+            {
+                let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                    label: Some("Effect Pass"),
+                    color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                        view: &dst_view,
+                        resolve_target: None,
+                        ops: wgpu::Operations {
+                            load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
+                            store: wgpu::StoreOp::Store,
+                        },
+                        depth_slice: None,
+                    })],
+                    depth_stencil_attachment: None,
+                    timestamp_writes: None,
+                    occlusion_query_set: None,
+                    multiview_mask: None,
+                });
+                rpass.set_pipeline(pipeline);
+                rpass.set_bind_group(0, &bind_group, &[]);
+                rpass.draw(0..3, 0..1);
+            }
+            self.queue.submit([encoder.finish()]);
+            src_is_ping = !src_is_ping;
+        }
+
+        let final_src = if src_is_ping {
+            &self.effect_ping
+        } else {
+            &self.effect_pong
+        };
+        let mut encoder = self
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("Effect Finalize Encoder"),
+            });
+        encoder.copy_texture_to_texture(
+            final_src.as_image_copy(),
+            self.texture.as_image_copy(),
+            extent,
+        );
+        self.queue.submit([encoder.finish()]);
     }
 
     pub fn render(&mut self, active_objects: &[ActiveObject], _project: &ProjectResource) {
@@ -364,5 +674,11 @@ impl RenderEngine {
         }
 
         self.queue.submit([encoder.finish()]);
+
+        let chain: Vec<(String, HashMap<String, Value>)> = active_objects
+            .iter()
+            .flat_map(|obj| obj.effects.iter().cloned())
+            .collect();
+        self.apply_effect_chain(&chain);
     }
 }

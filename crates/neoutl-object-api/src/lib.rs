@@ -1,55 +1,8 @@
 #![allow(non_camel_case_types)]
 
-/// オブジェクトの対応次元。ホストはこの値でカメラ行列（Ortho / Perspective）を切替える。
-#[repr(u8)]
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Dimensionality {
-    TwoD = 0,
-    ThreeD = 1,
-    Both = 2,
-}
-
-/// 設定ダイアログUI生成用のパラメータ種別。
-#[repr(u8)]
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum ParamKind {
-    Float = 0,
-    Bool = 1,
-    Color = 2,
-    Enum = 3,
-}
-
-/// C ABI越しに渡す固定長文字列参照。
-#[repr(C)]
-#[derive(Clone, Copy)]
-pub struct StrRef {
-    pub ptr: *const u8,
-    pub len: usize,
-}
-
-impl StrRef {
-    pub const fn from_str(s: &'static str) -> Self {
-        Self {
-            ptr: s.as_ptr(),
-            len: s.len(),
-        }
-    }
-}
-unsafe impl Send for StrRef {}
-unsafe impl Sync for StrRef {}
-
-/// float既定値のみ格納。Bool/Enumはdefault_floatを0/1として解釈する。
-#[repr(C)]
-#[derive(Clone, Copy)]
-pub struct ParamSchema {
-    pub key: StrRef,
-    pub label: StrRef,
-    pub kind: ParamKind,
-    pub min: f32,
-    pub max: f32,
-    pub step: f32,
-    pub default_float: f32,
-}
+// ParamKind/ParamSchema/StrRef/WgslSourceはneoutl-effect-apiと共有するため
+// neoutl-shared-abiに一本化されている。オブジェクトAPI固有の型のみここに残す。
+pub use neoutl_shared_abi::{Dimensionality, ParamKind, ParamSchema, StrRef, WgslSource};
 
 #[repr(C)]
 pub struct ObjectMeta {
@@ -74,14 +27,6 @@ pub struct RenderContext {
     pub opacity: f32,
     pub depth_enabled: bool,
 }
-
-#[repr(C)]
-pub struct WgslSource {
-    pub ptr: *const u8,
-    pub len: usize,
-}
-unsafe impl Send for WgslSource {}
-unsafe impl Sync for WgslSource {}
 
 #[repr(C)]
 pub struct ObjectVTable {

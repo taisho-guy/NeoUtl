@@ -3,24 +3,22 @@ use crate::app_state::{self, SharedAppState};
 use crate::ecs::{
     EcsWorld,
     components::{ParamAccess, ShapeParams},
-    effects::EFFECT_REGISTRY,
-    effects::EffectMetadata,
-    effects::ParamKind,
-    effects::find_effect,
+    effects::{find_effect, param_schema},
     object_schema::{
         AUDIO_GROUP, AUDIO_SCHEMA, SHAPE_GROUP, SHAPE_SCHEMA, TEXT_GROUP, TEXT_SCHEMA,
         TRANSFORM_GROUP, TRANSFORM_SCHEMA, resolve_range,
     },
 };
 use crate::{CatalogRow, EffectRow, ParamRow, PropertiesWindow};
+use neoutl_shared_abi::ParamKind;
 use slint::{ComponentHandle, Model, ModelRc, SharedString, VecModel};
 
 pub fn setup(props: &PropertiesWindow, state: SharedAppState) {
-    let catalog: Vec<CatalogRow> = EFFECT_REGISTRY
+    let catalog: Vec<CatalogRow> = crate::effects::loader::registry()
         .iter()
-        .map(|m| CatalogRow {
-            id: m.id.into(),
-            name: m.name.into(),
+        .map(|p| CatalogRow {
+            id: p.id.clone().into(),
+            name: p.name.clone().into(),
         })
         .collect();
     props.set_effect_catalog(ModelRc::new(VecModel::from(catalog)));
@@ -265,6 +263,7 @@ fn push_schema_rows(
                 ParamKind::Bool => 1,
                 ParamKind::Color => 2,
                 ParamKind::Text => 3,
+                ParamKind::Enum => 0,
             },
             min,
             max,
@@ -273,10 +272,43 @@ fn push_schema_rows(
     }
 }
 
+/// C ABI越しのParamSchema配列（オブジェクトプラグイン・エフェクトプラグイン共通形式）を
+/// 現在値で解決しParamRow列へ展開する。両プラグイン種別はneoutl-shared-abi::ParamSchemaを
+/// 共有するため、この一関数で処理できる（Phase6: push_plugin_rowsとエフェクトパラメータ
+/// 生成ループの重複を解消）。
+fn push_c_abi_param_rows(
+    out: &mut Vec<ParamRow>,
+    schema: &[neoutl_shared_abi::ParamSchema],
+    group: &str,
+    effect_index: i32,
+    current: impl Fn(&str) -> f32,
+) {
+    for s in schema {
+        let key = unsafe { s.key.as_str() };
+        let label = unsafe { s.label.as_str() };
+        let value = current(key);
+        out.push(ParamRow {
+            effect_index,
+            key: SharedString::from(key),
+            label: SharedString::from(label),
+            group: SharedString::from(group),
+            value,
+            kind: match s.kind {
+                ParamKind::Float => 0,
+                ParamKind::Bool => 1,
+                ParamKind::Color => 2,
+                ParamKind::Enum => 0,
+                ParamKind::Text => 3,
+            },
+            min: s.min,
+            max: s.max,
+            text: SharedString::default(),
+        });
+    }
+}
+
 /// プラグイン提供オブジェクトのObjectMeta.property_schemaをParamRow列へ展開する。
 /// 現在値はPluginParams（未設定ならスキーマのdefault_float）から取得する。
-/// neoutl_object_api::ParamKind::Enumはスライダー種別の専用UIを持たないため、
-/// 暫定的にFloat（kind=0, step=1相当の整数入力）として表示する。
 fn push_plugin_rows(out: &mut Vec<ParamRow>, world: &EcsWorld, oid: usize) {
     let Some(kind_id) = world.get_kind_id(oid) else {
         return;
@@ -291,33 +323,15 @@ fn push_plugin_rows(out: &mut Vec<ParamRow>, world: &EcsWorld, oid: usize) {
     let schema =
         unsafe { std::slice::from_raw_parts(meta.property_schema_ptr, meta.property_schema_len) };
     let current = world.get_plugin_params(oid).unwrap_or_default();
-    let group = plugin.name.clone();
-
-    for s in schema {
-        let key = unsafe {
-            std::str::from_utf8_unchecked(std::slice::from_raw_parts(s.key.ptr, s.key.len))
-        };
-        let label = unsafe {
-            std::str::from_utf8_unchecked(std::slice::from_raw_parts(s.label.ptr, s.label.len))
-        };
-        let value = current.get(key).copied().unwrap_or(s.default_float);
-        out.push(ParamRow {
-            effect_index: -1,
-            key: SharedString::from(key),
-            label: SharedString::from(label),
-            group: SharedString::from(group.as_str()),
-            value,
-            kind: match s.kind {
-                neoutl_object_api::ParamKind::Float => 0,
-                neoutl_object_api::ParamKind::Bool => 1,
-                neoutl_object_api::ParamKind::Color => 2,
-                neoutl_object_api::ParamKind::Enum => 0,
-            },
-            min: s.min,
-            max: s.max,
-            text: SharedString::default(),
-        });
-    }
+    push_c_abi_param_rows(out, schema, &plugin.name, -1, |key| {
+        current.get(key).copied().unwrap_or_else(|| {
+            schema
+                .iter()
+                .find(|s| unsafe { s.key.as_str() } == key)
+                .map(|s| s.default_float)
+                .unwrap_or(0.0)
+        })
+    });
 }
 
 /// object_paramsモデルの該当行(group/key一致)のみ値を書き換える。
@@ -452,7 +466,7 @@ fn refresh(props: &PropertiesWindow, world: &EcsWorld) {
         .map(|(i, e)| EffectRow {
             index: i as i32,
             name: find_effect(&e.effect_id)
-                .map(|m: &EffectMetadata| m.name)
+                .map(|m| m.name)
                 .unwrap_or(e.effect_id.as_str())
                 .into(),
             enabled: e.enabled,
@@ -460,17 +474,17 @@ fn refresh(props: &PropertiesWindow, world: &EcsWorld) {
         .collect();
     props.set_effects(ModelRc::new(VecModel::from(rows)));
 
-    // パラメータ行はEFFECT_REGISTRYのParamSchema（label/kind/min/max）から生成する。
-    // ハードコード撤廃: キー名の見た目・レンジは全てエフェクト定義側で決まる。
+    // パラメータ行はエフェクトプラグインのEffectMeta.param_schema（label/kind/min/max）から
+    // 生成する。ハードコード撤廃: キー名の見た目・レンジは全てエフェクト定義側で決まる。
     let mut params = Vec::new();
     for (i, e) in instances.iter().enumerate() {
         let Some(meta) = find_effect(&e.effect_id) else {
             continue;
         };
-        for schema in meta.params {
-            let value = e
-                .params
-                .get(schema.key)
+        let schema = param_schema(meta);
+        push_c_abi_param_rows(&mut params, schema, meta.name, i as i32, |key| {
+            e.params
+                .get(key)
                 .map(|p| match &p.static_value {
                     crate::ecs::types::Value::Number(n) => *n,
                     crate::ecs::types::Value::Bool(b) => {
@@ -482,24 +496,14 @@ fn refresh(props: &PropertiesWindow, world: &EcsWorld) {
                     }
                     _ => 0.0,
                 })
-                .unwrap_or(schema.default);
-            params.push(ParamRow {
-                effect_index: i as i32,
-                key: schema.key.into(),
-                label: schema.label.into(),
-                group: meta.name.into(),
-                value,
-                kind: match schema.kind {
-                    ParamKind::Float => 0,
-                    ParamKind::Bool => 1,
-                    ParamKind::Color => 2,
-                    ParamKind::Text => 3,
-                },
-                min: schema.min,
-                max: schema.max,
-                text: SharedString::default(),
-            });
-        }
+                .unwrap_or_else(|| {
+                    schema
+                        .iter()
+                        .find(|s| unsafe { s.key.as_str() } == key)
+                        .map(|s| s.default_float)
+                        .unwrap_or(0.0)
+                })
+        });
     }
     props.set_params(ModelRc::new(VecModel::from(params)));
 }
