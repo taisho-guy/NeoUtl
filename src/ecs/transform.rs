@@ -1,4 +1,5 @@
 // src/ecs/transform.rs
+use crate::ecs::components::ParamAccess;
 use neoutl_object_api::UNIT_SIZE_PX;
 use shipyard::{Component, Unique};
 
@@ -28,6 +29,38 @@ impl Default for Transform {
             rot_z: 0.0,
             opacity: 1.0,
         }
+    }
+}
+
+impl ParamAccess for Transform {
+    fn get_param(&self, key: &str) -> Option<f32> {
+        Some(match key {
+            "x" => self.x,
+            "y" => self.y,
+            "z" => self.z,
+            "scale_x" => self.scale_x,
+            "scale_y" => self.scale_y,
+            "rot_x" => self.rot_x,
+            "rot_y" => self.rot_y,
+            "rot_z" => self.rot_z,
+            "opacity" => self.opacity,
+            _ => return None,
+        })
+    }
+    fn set_param(&mut self, key: &str, value: f32) -> bool {
+        match key {
+            "x" => self.x = value,
+            "y" => self.y = value,
+            "z" => self.z = value,
+            "scale_x" => self.scale_x = value,
+            "scale_y" => self.scale_y = value,
+            "rot_x" => self.rot_x = value,
+            "rot_y" => self.rot_y = value,
+            "rot_z" => self.rot_z = value,
+            "opacity" => self.opacity = value,
+            _ => return false,
+        }
+        true
     }
 }
 

@@ -4,11 +4,14 @@ use shipyard::Component;
 use crate::ecs::types::{EffectInstance, EffectParam, Value};
 
 /// 設定ダイアログUI生成用のパラメータ種別（ホスト内蔵エフェクト用。cdylib跨ぎはしない）。
+/// Textはproperties.rs側でParamRow.textを介した文字列専用経路として扱う
+/// （数値min/max/stepは不使用）。エフェクトスタック(EFFECT_REGISTRY)は現状Text未使用。
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum ParamKind {
     Float,
     Bool,
     Color,
+    Text,
 }
 
 #[derive(Clone, Copy, Debug)]

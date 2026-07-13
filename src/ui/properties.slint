@@ -128,6 +128,60 @@ component SectionHeader inherits Text {
     font-weight: 700;
 }
 
+// ParamRow.kindに応じた描画を一本化する標準コンポーネント。
+// object-params/エフェクトパラメータの両呼び出し元がこれのみを使う。
+// kind: 0=Float(スライダー+数値ボックス), 1=Bool(トグル), 2=Color(0..1スライダー)。
+// 新規kindの追加時はここに分岐を1件足すだけで全呼び出し元に反映される。
+component ParamField inherits Rectangle {
+    in property <ParamRow> data;
+    callback changed-float(float);
+    callback changed-bool(bool);
+    callback changed-text(string);
+
+    height: data.kind == 3 ? 44px : 22px;
+
+    if data.kind == 0: PropertyRow {
+        label: data.label;
+        value: data.value;
+        min: data.min;
+        max: data.max;
+        changed(v) => { root.changed-float(v); }
+    }
+
+    if data.kind == 1: ToggleField {
+        label: data.label;
+        checked: data.value > 0.5;
+        toggled => { root.changed-bool(data.value <= 0.5); }
+    }
+
+    if data.kind == 2: PropertyRow {
+        label: data.label;
+        value: data.value;
+        min: 0;
+        max: 1;
+        changed(v) => { root.changed-float(v); }
+    }
+
+    if data.kind == 3: Rectangle {
+        height: 44px;
+        border-radius: 3px;
+        background: #1e1e24;
+        border-width: 1px;
+        border-color: #303038;
+
+        TextInput {
+            x: 6px; y: 4px;
+            width: parent.width - 12px;
+            height: parent.height - 8px;
+            text: data.text;
+            color: #dde3ee;
+            font-size: 11px;
+            wrap: word-wrap;
+            accepted => { root.changed-text(self.text); }
+        }
+    }
+}
+
 export component PropertiesWindow inherits Window {
     title: "NeoUtl - オブジェクト設定";
     preferred-width: 620px;
@@ -143,11 +197,9 @@ export component PropertiesWindow inherits Window {
     in-out property <bool> has-shape: false;
     in-out property <bool> has-audio: false;
 
-    in-out property <string> text-content: "";
-
-    // Transform/Text/Shape/Audioの数値・真偽値項目はすべてこの一本のリストに統一する。
-    // 並び順・ラベル・レンジはRust側object_schema.rsのみが決定し、ここでは
-    // kind別（0=Float,1=Bool）の描画分岐のみを行う（型別ハードコード撤廃）。
+    // Transform/Text/Shape/Audioの数値・真偽値・文字列項目はすべてこの一本のリストに統一する。
+    // 並び順・ラベル・レンジ・種別はRust側object_schema.rsのみが決定し、ここでは
+    // kind別（0=Float,1=Bool,2=Color,3=Text）の描画分岐のみを行う（型別ハードコード撤廃）。
     in-out property <[ParamRow]> object-params: [];
 
     in-out property <[EffectRow]> effects: [];
@@ -157,7 +209,7 @@ export component PropertiesWindow inherits Window {
 
     callback set-object-param(string, string, float);
     callback set-object-param-bool(string, string, bool);
-    callback set-text-content(string);
+    callback set-object-param-text(string, string, string);
     callback set-effect-enabled(int, bool);
     callback remove-effect(int);
     callback set-param(int, string, float);
@@ -180,50 +232,33 @@ export component PropertiesWindow inherits Window {
             padding: 10px;
             spacing: 8px;
 
-            if has-text: VerticalLayout {
-                spacing: 4px;
-                SectionHeader { text: "テキスト"; }
-                Rectangle {
-                    height: 44px;
-                    border-radius: 3px;
-                    background: #1e1e24;
-                    border-width: 1px;
-                    border-color: #303038;
-
-                    TextInput {
-                        x: 6px; y: 4px;
-                        width: parent.width - 12px;
-                        height: parent.height - 8px;
-                        text: root.text-content;
-                        color: #dde3ee;
-                        font-size: 11px;
-                        wrap: word-wrap;
-                        accepted => { root.text-content = self.text; root.set-text-content(self.text); }
-                    }
-                }
-            }
-
             for p[j] in root.object-params: VerticalLayout {
                 spacing: 4px;
 
-                if (j == 0 || p.group != root.object-params[j - 1].group) && p.group != "テキスト": VerticalLayout {
+                if j == 0 || p.group != root.object-params[j - 1].group: VerticalLayout {
                     spacing: 4px;
                     Rectangle { height: 1px; background: #24242c; }
                     SectionHeader { text: p.group; }
                 }
 
-                if p.kind == 0: PropertyRow {
-                    label: p.label;
-                    value: p.value;
-                    min: p.min;
-                    max: p.max;
-                    changed(v) => { root.set-object-param(p.group, p.key, v); }
+                if p.kind == 0: ParamField {
+                    data: p;
+                    changed-float(v) => { root.set-object-param(p.group, p.key, v); }
                 }
 
-                if p.kind == 1: ToggleField {
-                    label: p.label;
-                    checked: p.value > 0.5;
-                    toggled => { root.set-object-param-bool(p.group, p.key, p.value <= 0.5); }
+                if p.kind == 1: ParamField {
+                    data: p;
+                    changed-bool(v) => { root.set-object-param-bool(p.group, p.key, v); }
+                }
+
+                if p.kind == 2: ParamField {
+                    data: p;
+                    changed-float(v) => { root.set-object-param(p.group, p.key, v); }
+                }
+
+                if p.kind == 3: ParamField {
+                    data: p;
+                    changed-text(v) => { root.set-object-param-text(p.group, p.key, v); }
                 }
             }
 
@@ -307,34 +342,19 @@ export component PropertiesWindow inherits Window {
                     }
                 }
 
-                // paramsはParamSchema.kindに応じて Float=PropertyRow / Bool=ToggleField / Color=非スライダー簡易表示 に分岐する。
+                // paramsはParamRow.kindに応じ、ParamFieldが標準描画へ振り分ける。
                 for p[j] in root.params: Rectangle {
                     height: p.effect-index == eff.index ? 22px : 0px;
                     clip: true;
 
-                    if p.effect-index == eff.index && p.kind == 0: PropertyRow {
-                        label: p.label;
-                        value: p.value;
-                        min: p.min;
-                        max: p.max;
-                        changed(v) => { root.set-param(eff.index, p.key, v); }
-                    }
-
-                    if p.effect-index == eff.index && p.kind == 1: ToggleField {
-                        label: p.label;
-                        checked: p.value > 0.5;
-                        toggled => { root.set-param-bool(eff.index, p.key, p.value <= 0.5); }
-                    }
-
-                    if p.effect-index == eff.index && p.kind == 2: PropertyRow {
-                        label: p.label;
-                        value: p.value;
-                        min: 0;
-                        max: 1;
-                        changed(v) => { root.set-param(eff.index, p.key, v); }
+                    if p.effect-index == eff.index: ParamField {
+                        data: p;
+                        changed-float(v) => { root.set-param(eff.index, p.key, v); }
+                        changed-bool(v) => { root.set-param-bool(eff.index, p.key, v); }
                     }
                 }
             }
         }
     }
 }
+

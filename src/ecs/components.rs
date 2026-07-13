@@ -2,6 +2,16 @@
 use shipyard::Component;
 use std::collections::HashMap;
 
+/// キー文字列によるf32フィールドの汎用read/write窓口。
+/// UI層(properties.rs)はgroup名で対象コンポーネントを選ぶだけとなり、
+/// key単位の分岐は各コンポーネント定義の直下(このtraitのimpl)に一本化される。
+/// object_schema.rsのkeyと1:1で対応する。
+pub trait ParamAccess {
+    fn get_param(&self, key: &str) -> Option<f32>;
+    /// keyが未知の場合false（呼び出し側はplugin_param等へのフォールバックに使う）。
+    fn set_param(&mut self, key: &str, value: f32) -> bool;
+}
+
 #[derive(Clone, Copy, Debug, Component)]
 pub struct TimeRange {
     pub start_frame: i32,
@@ -34,6 +44,32 @@ impl Default for AudioParams {
             pan: 0.0,
             mute: false,
         }
+    }
+}
+
+impl ParamAccess for AudioParams {
+    fn get_param(&self, key: &str) -> Option<f32> {
+        Some(match key {
+            "volume" => self.volume,
+            "pan" => self.pan,
+            "mute" => {
+                if self.mute {
+                    1.0
+                } else {
+                    0.0
+                }
+            }
+            _ => return None,
+        })
+    }
+    fn set_param(&mut self, key: &str, value: f32) -> bool {
+        match key {
+            "volume" => self.volume = value,
+            "pan" => self.pan = value,
+            "mute" => self.mute = value > 0.5,
+            _ => return false,
+        }
+        true
     }
 }
 
@@ -79,6 +115,27 @@ impl Default for TextContent {
     }
 }
 
+/// スキーマキー(text_x/text_y/font_size)とフィールド名(x/y/font_size)の対応はここのみが持つ。
+impl ParamAccess for TextContent {
+    fn get_param(&self, key: &str) -> Option<f32> {
+        Some(match key {
+            "text_x" => self.x,
+            "text_y" => self.y,
+            "font_size" => self.font_size,
+            _ => return None,
+        })
+    }
+    fn set_param(&mut self, key: &str, value: f32) -> bool {
+        match key {
+            "text_x" => self.x = value,
+            "text_y" => self.y = value,
+            "font_size" => self.font_size = value,
+            _ => return false,
+        }
+        true
+    }
+}
+
 /// 図形種別。sides==4はRect、sides>=8はEllipse近似として扱う（現行UI上のプリセット分岐）。
 #[derive(Clone, Copy, Debug, Component)]
 pub struct ShapeParams {
@@ -98,6 +155,34 @@ impl Default for ShapeParams {
             stroke_width: 0.0,
             extrude_depth: 0.0,
         }
+    }
+}
+
+impl ParamAccess for ShapeParams {
+    fn get_param(&self, key: &str) -> Option<f32> {
+        Some(match key {
+            "sides" => self.sides as f32,
+            "extrude_depth" => self.extrude_depth,
+            "stroke_width" => self.stroke_width,
+            "fill_r" => self.fill_color[0],
+            "fill_g" => self.fill_color[1],
+            "fill_b" => self.fill_color[2],
+            "fill_a" => self.fill_color[3],
+            _ => return None,
+        })
+    }
+    fn set_param(&mut self, key: &str, value: f32) -> bool {
+        match key {
+            "sides" => self.sides = value.max(3.0) as u32,
+            "extrude_depth" => self.extrude_depth = value.max(0.0),
+            "stroke_width" => self.stroke_width = value.max(0.0),
+            "fill_r" => self.fill_color[0] = value,
+            "fill_g" => self.fill_color[1] = value,
+            "fill_b" => self.fill_color[2] = value,
+            "fill_a" => self.fill_color[3] = value,
+            _ => return false,
+        }
+        true
     }
 }
 

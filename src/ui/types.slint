@@ -26,9 +26,10 @@ export struct EffectRow {
     enabled: bool,
 }
 
-// kind: 0=Float, 1=Bool, 2=Color
+// kind: 0=Float, 1=Bool, 2=Color, 3=Text
 // effect-index: -1=オブジェクト直下パラメータ, 0以上=エフェクトスタックのインデックス
 // group: セクション見出し（トランスフォーム/テキスト/図形/オーディオ/プラグイン名、エフェクトはエフェクト名）
+// text: kind==3のときのみ使用する文字列値。それ以外のkindでは空文字。
 export struct ParamRow {
     effect-index: int,
     key: string,
@@ -38,6 +39,7 @@ export struct ParamRow {
     kind: int,
     min: float,
     max: float,
+    text: string,
 }
 
 export struct CatalogRow {
@@ -64,3 +66,4 @@ export struct SceneTabItem {
     name: string,
     active: bool,
 }
+
