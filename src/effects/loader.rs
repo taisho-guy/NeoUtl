@@ -59,10 +59,22 @@ pub fn by_id(id: &str) -> Option<&'static EffectPlugin> {
 }
 
 pub fn default_effects_dir() -> PathBuf {
-    std::env::current_exe()
+    let Some(exe_dir) = std::env::current_exe()
         .ok()
-        .and_then(|p| p.parent().map(|d| d.join("effects")))
-        .unwrap_or_else(|| PathBuf::from("effects"))
+        .and_then(|p| p.parent().map(Path::to_path_buf))
+    else {
+        return PathBuf::from("effects");
+    };
+
+    #[cfg(target_os = "macos")]
+    {
+        let resources_dir = exe_dir.join("../Resources/effects");
+        if resources_dir.is_dir() {
+            return resources_dir;
+        }
+    }
+
+    exe_dir.join("effects")
 }
 
 fn load_one(path: &Path) -> Result<EffectPlugin, Box<dyn std::error::Error>> {

@@ -23,7 +23,36 @@ use windows::import_frame;
 static GST_INIT: Once = Once::new();
 
 fn ensure_gst_init() {
-    GST_INIT.call_once(|| gst::init().expect("gstreamer初期化失敗"));
+    GST_INIT.call_once(|| {
+        gst::init().expect("gstreamer初期化失敗");
+        register_bundled_plugin_dir();
+    });
+}
+
+/// アプリに同梱されたGStreamerプラグインの実行ファイル相対パスを、
+/// システムのプラグインパスに加えてRegistryへ追加登録する。
+/// Linuxは配布物にGStreamerプラグインを同梱していない（システムのapt版に依存）ため何もしない。
+#[cfg(target_os = "linux")]
+fn register_bundled_plugin_dir() {}
+
+#[cfg(not(target_os = "linux"))]
+fn register_bundled_plugin_dir() {
+    let Ok(exe) = std::env::current_exe() else {
+        return;
+    };
+    let Some(exe_dir) = exe.parent() else {
+        return;
+    };
+
+    #[cfg(target_os = "macos")]
+    let plugin_dir = exe_dir.join("../Resources/gstreamer-1.0");
+    #[cfg(target_os = "windows")]
+    let plugin_dir = exe_dir.join("lib/gstreamer-1.0");
+
+    if !plugin_dir.is_dir() {
+        return;
+    }
+    gst::Registry::get().scan_path(&plugin_dir);
 }
 
 #[cfg(target_os = "linux")]

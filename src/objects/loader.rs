@@ -67,10 +67,22 @@ pub fn by_stable_id(stable_id: &str) -> Option<&'static ObjectPlugin> {
 }
 
 pub fn default_objects_dir() -> PathBuf {
-    std::env::current_exe()
+    let Some(exe_dir) = std::env::current_exe()
         .ok()
-        .and_then(|p| p.parent().map(|d| d.join("objects")))
-        .unwrap_or_else(|| PathBuf::from("objects"))
+        .and_then(|p| p.parent().map(Path::to_path_buf))
+    else {
+        return PathBuf::from("objects");
+    };
+
+    #[cfg(target_os = "macos")]
+    {
+        let resources_dir = exe_dir.join("../Resources/objects");
+        if resources_dir.is_dir() {
+            return resources_dir;
+        }
+    }
+
+    exe_dir.join("objects")
 }
 
 fn load_one(path: &Path) -> Result<ObjectPlugin, Box<dyn std::error::Error>> {
