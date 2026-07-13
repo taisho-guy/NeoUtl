@@ -7,8 +7,8 @@
 - [x] 本体ウィンドウのメニューバー実装
 - [x] システム設定・プロジェクト設定・シーン設定を実装
 - [x] 本体ウィンドウの再生停止を実装、見た目の整理
-- [ ] DocumentModel（Undo可能な正本データ）とECS（焼き込み済み描画状態）を分離
-- [ ] 編集コマンド群を実装（追加・削除・移動・リサイズ・エフェクト適用・パラメータ変更）、Undo/Redoを実装
+- [x] DocumentModel（Undo可能な正本データ）とECS（焼き込み済み描画状態）を分離（src/document.rs。EcsWorld::to_document/load_documentが唯一の相互変換窓口）
+- [x] 編集コマンド群を実装（追加・削除・移動・リサイズ・エフェクト適用）、Undo/Redoを実装（コマンドクラス方式ではなくDocumentModelスナップショット方式。app_state::snapshot_before_edit/undo_active/redo_active。連続ドラッグ中のパラメータ変更は未対応、0.2.0へ持ち越し）
 - [x] TransformからGlobalMatrixへの合成結果をRenderSystemへ配線
 - [x] Ortho座標系をプロジェクト解像度ピクセル空間へ整合（NDC±aspect,±1固定によりTransform.x/yの微小操作が画面外へ即座に飛ぶ不具合を修正。properties.slintのX/Y範囲もstage-width/height基準へ変更）
 - [x] 動画・画像・音声・テキストのバックエンド・APIを実装
@@ -19,7 +19,8 @@
 - [ ] 単体・結合テスト基盤を整備（ECS system・RenderEngine・project.rsシリアライズ）
 
 # 0.2.0
-- [ ] 設定・プロジェクトの保存機能を実装（DocumentModel構造のシリアライズ。現状ProjectMeta/SceneMetaの素朴なYAML保存のみ）
+- [x] 設定・プロジェクトの保存機能を実装（DocumentModel構造のシリアライズ。project.yamlにobjects一覧を含め全オブジェクト永続化。旧形式ファイルはobjects省略時空Vec補完で後方互換）
+- [ ] パラメータ変更（ドラッグ・スライダー連続操作）のUndo対応（ドラッグ確定時点のみスナップショットするコミット単位化。properties.slint側のpress開始/終了検知が必要）
 - [ ] 中間点の概念を実装
 - [ ] 設定ダイアログの構成要素を型別に定義・拡充（数値・色・ファイルパス・列挙・トラック）
 - [ ] 設定項目の動的な増減に対応

@@ -33,6 +33,7 @@ pub fn setup(
             };
 
             let world_holder = app_state::active_world(&state);
+            app_state::snapshot_before_edit(&state);
             let mut world = world_holder.lock().unwrap();
 
             let scene_id = if w.get_is_creation_mode() {

@@ -1,5 +1,6 @@
 // src/main.rs
 mod app_state;
+mod document;
 mod ecs;
 mod effects;
 mod media;

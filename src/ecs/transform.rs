@@ -1,9 +1,10 @@
 // src/ecs/transform.rs
 use crate::ecs::components::ParamAccess;
 use neoutl_object_api::UNIT_SIZE_PX;
+use serde::{Deserialize, Serialize};
 use shipyard::{Component, Unique};
 
-#[derive(Clone, Copy, Debug, Component)]
+#[derive(Clone, Copy, Debug, Component, Serialize, Deserialize)]
 pub struct Transform {
     pub x: f32,
     pub y: f32,

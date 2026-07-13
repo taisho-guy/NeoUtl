@@ -152,11 +152,11 @@ fn build_pipelines_from_registry(
     registry()
         .iter()
         .filter_map(|plugin| {
-            let vertex_count = unsafe { ((*plugin.vtable).vertex_count)() };
+            let vertex_count = unsafe { (plugin.vtable.vertex_count)() };
             if vertex_count == 0 {
                 return None;
             }
-            let src = unsafe { ((*plugin.vtable).wgsl)() };
+            let src = unsafe { (plugin.vtable.wgsl)() };
             if src.ptr.is_null() {
                 return None;
             }
@@ -244,7 +244,7 @@ fn build_effect_pipelines_from_registry(
     effects::registry()
         .iter()
         .filter_map(|plugin| {
-            let src = unsafe { ((*plugin.vtable).wgsl)() };
+            let src = unsafe { (plugin.vtable.wgsl)() };
             if src.ptr.is_null() {
                 return None;
             }
@@ -610,11 +610,11 @@ impl RenderEngine {
             })
             .collect();
 
-        if let Some(ref mut brush) = self.text_brush {
-            if !text_sections.is_empty() {
-                let refs: Vec<&_> = text_sections.iter().collect();
-                let _ = brush.queue(self.device.as_ref(), self.queue.as_ref(), refs);
-            }
+        if let Some(ref mut brush) = self.text_brush
+            && !text_sections.is_empty()
+        {
+            let refs: Vec<&_> = text_sections.iter().collect();
+            let _ = brush.queue(self.device.as_ref(), self.queue.as_ref(), refs);
         }
 
         let mut encoder = self

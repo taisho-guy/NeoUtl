@@ -34,27 +34,33 @@ fn projection_for(kind_id: u32) -> Projection {
     }
 }
 
+/// get_active_objects_systemの引数タプル型定義。
+/// clippy::type_complexityの指摘に基づき、関数シグネチャ直書きから分離する。
+type UniqueGroupViews<'v> = (
+    UniqueView<'v, TimelineResource>,
+    UniqueView<'v, SceneResource>,
+    UniqueView<'v, ProjectResource>,
+    UniqueView<'v, Camera>,
+);
+type SelectorGroupViews<'v> = (
+    View<'v, TimeRange>,
+    View<'v, KindId>,
+    View<'v, SceneId>,
+    View<'v, TextContent>,
+    View<'v, ShapeParams>,
+);
+type PayloadGroupViews<'v> = (
+    View<'v, Transform>,
+    View<'v, GlobalMatrix>,
+    View<'v, AudioParams>,
+    View<'v, EffectStack>,
+);
+
 pub fn get_active_objects_system(world: &EcsWorld) -> Vec<ActiveObject> {
     world.world.run(
-        |(timeline, scenes, project, camera): (
-            UniqueView<TimelineResource>,
-            UniqueView<SceneResource>,
-            UniqueView<ProjectResource>,
-            UniqueView<Camera>,
-        ),
-         (time_ranges, kind_ids, scene_ids, text_contents, shape_params): (
-            View<TimeRange>,
-            View<KindId>,
-            View<SceneId>,
-            View<TextContent>,
-            View<ShapeParams>,
-        ),
-         (transforms, global_matrices, audio_params, effect_stacks): (
-            View<Transform>,
-            View<GlobalMatrix>,
-            View<AudioParams>,
-            View<EffectStack>,
-        )| {
+        |(timeline, scenes, project, camera): UniqueGroupViews,
+         (time_ranges, kind_ids, scene_ids, text_contents, shape_params): SelectorGroupViews,
+         (transforms, global_matrices, audio_params, effect_stacks): PayloadGroupViews| {
             let current = timeline.current_frame;
             let active_scene = scenes.active_scene;
             let project_width = project.width.max(1) as f32;
