@@ -4,7 +4,8 @@ use crate::ecs::resources::ProjectResource;
 use crate::ecs::systems::get_active_objects_system;
 use crate::renderer::RenderEngine;
 use crate::{
-    PreviewWindow, ProjectTabItem, PropertiesWindow, SystemSettingsWindow, TimelineWindow,
+    PreviewWindow, ProjectSettingsWindow, ProjectTabItem, PropertiesWindow, SystemSettingsWindow,
+    TimelineWindow,
 };
 use slint::{ComponentHandle, ModelRc, VecModel, Weak};
 use std::cell::RefCell;
@@ -58,7 +59,7 @@ fn apply_frame(
     }
 }
 
-fn sync_project_tabs(state: &SharedAppState, preview: &PreviewWindow) {
+pub(crate) fn sync_project_tabs(state: &SharedAppState, preview: &PreviewWindow) {
     let s = state.lock().unwrap();
     let tabs: Vec<ProjectTabItem> = s
         .sessions
@@ -105,6 +106,7 @@ pub fn setup(
     timeline_weak: Weak<TimelineWindow>,
     props_weak: Weak<PropertiesWindow>,
     settings_weak: Weak<SystemSettingsWindow>,
+    project_settings_weak: Weak<ProjectSettingsWindow>,
     state: SharedAppState,
     gpu_slot: GpuSlot,
 ) {
@@ -294,6 +296,16 @@ pub fn setup(
         move || {
             if let Some(w) = settings_weak.upgrade() {
                 let _ = w.show();
+            }
+        }
+    });
+
+    preview.on_show_project_settings({
+        let project_settings_weak = project_settings_weak.clone();
+        let state = state.clone();
+        move || {
+            if let Some(w) = project_settings_weak.upgrade() {
+                crate::ui::project_settings::open(&w, &state);
             }
         }
     });

@@ -36,6 +36,7 @@ export component PreviewWindow inherits Window {
     callback show-timeline();
     callback show-properties();
     callback show-system-settings();
+    callback show-project-settings();
     callback switch-project-tab(int);
     callback close-project-tab(int);
 
@@ -62,6 +63,7 @@ export component PreviewWindow inherits Window {
             MenuItem { title: "元に戻す"; activated() => { root.undo(); } }
             MenuItem { title: "やり直す"; activated() => { root.redo(); } }
             MenuItem { title: "システム設定"; activated() => { root.show-system-settings(); } }
+            MenuItem { title: "プロジェクト設定"; activated() => { root.show-project-settings(); } }
         }
         Menu {
             title: "表示";

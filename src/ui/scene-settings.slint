@@ -1,44 +1,7 @@
 // src/ui/scene-settings.slint
 import { IconSet } from "@lucide";
 import { Button } from "common.slint";
-import { ToggleField, IntField, ChoiceField } from "system-settings/fields.slint";
-
-component NameField inherits Rectangle {
-    in property <string> label;
-    in-out property <string> value;
-    callback changed(string);
-
-    height: 28px;
-
-    Text {
-        text: root.label;
-        color: #b0b0ba;
-        font-size: 11px;
-        vertical-alignment: center;
-        height: 100%;
-        width: 70px;
-    }
-
-    Rectangle {
-        x: 74px;
-        width: parent.width - 74px;
-        border-radius: 3px;
-        background: #16161b;
-        border-width: 1px;
-        border-color: #303038;
-
-        TextInput {
-            x: 6px;
-            width: parent.width - 12px;
-            height: 100%;
-            text: root.value;
-            color: #dde3ee;
-            font-size: 11px;
-            vertical-alignment: center;
-            edited => { root.changed(self.text); }
-        }
-    }
-}
+import { NameField, ToggleField, IntField, ChoiceField } from "system-settings/fields.slint";
 
 component FloatField inherits Rectangle {
     in property <string> label;

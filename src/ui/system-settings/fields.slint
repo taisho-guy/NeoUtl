@@ -1,5 +1,42 @@
 // src/ui/system-settings/fields.slint
 
+export component NameField inherits Rectangle {
+    in property <string> label;
+    in-out property <string> value;
+    callback changed(string);
+
+    height: 28px;
+
+    Text {
+        text: root.label;
+        color: #b0b0ba;
+        font-size: 11px;
+        vertical-alignment: center;
+        height: 100%;
+        width: 70px;
+    }
+
+    Rectangle {
+        x: 74px;
+        width: parent.width - 74px;
+        border-radius: 3px;
+        background: #16161b;
+        border-width: 1px;
+        border-color: #303038;
+
+        TextInput {
+            x: 6px;
+            width: parent.width - 12px;
+            height: 100%;
+            text: root.value;
+            color: #dde3ee;
+            font-size: 11px;
+            vertical-alignment: center;
+            edited => { root.changed(self.text); }
+        }
+    }
+}
+
 export component ToggleField inherits Rectangle {
     in property <string> label;
     in property <bool> checked;
