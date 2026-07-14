@@ -136,7 +136,7 @@ NeoUtlはRust言語で実装されています。
 |プレビュー|[wgpu](https://wgpu.rs/)|
 |ECS|[Shipyard](https://github.com/leudz/shipyard)|
 |非同期処理|[tokio](https://tokio.rs/)|
-|動画デコード・エンコード|[ffmpeg-next](https://github.com/zmwangx/rust-ffmpeg)|
+|動画デコード・エンコード|[gstreamer](https://gstreamer.freedesktop.org/)|
 
 ## 派生
 
