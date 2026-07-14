@@ -77,7 +77,6 @@ jobs:
         shell: msys2 {0}
         run: |
           export PKG_CONFIG_PATH="/clang64/lib/pkgconfig"
-          # クロスコンパイルとして判定されるのを防ぎ、ネイティブビルドとして認識させる
           export PKG_CONFIG_ALLOW_CROSS=1
           cargo clean
           cargo xtask build --release --target x86_64-pc-windows-gnullvm
@@ -96,39 +95,33 @@ jobs:
         if: runner.os == 'macOS'
         run: |
           mkdir -p dist
-
-          # 1. Mac標準のAppバンドルディレクトリ構造を作成
           APP_DIR="dist/NeoUtl.app"
           mkdir -p "$APP_DIR/Contents/MacOS"
           mkdir -p "$APP_DIR/Contents/Frameworks"
           mkdir -p "$APP_DIR/Contents/Resources/gstreamer-1.0"
 
-          # 2. ビルドしたバイナリをApp構造内に配置
           cp target/release/${{ matrix.binary_name }} "$APP_DIR/Contents/MacOS/"
-          mkdir -p "$APP_DIR/Contents/Resources"
           [ -d target/release/objects ] && cp -r target/release/objects "$APP_DIR/Contents/Resources/"
           [ -d target/release/effects ] && cp -r target/release/effects "$APP_DIR/Contents/Resources/"
 
-          # 3. Homebrew から GStreamer プラグインをバンドル内のPlugInsにコピー
-          # ワイルドカード展開の失敗（該当ファイル無し時のNo such file or directory）を防ぐためfindを使用
-          # Homebrewのgstreamer formulaはgst-plugins-base/good/bad/ugly/libav等を統合済みのため
-          # install_cmdはbrew install gstreamerのみで全プラグインが導入される（別formula指定は不要）
-          # ただしプラグインの実体パスはbrewバージョン・keg-only状態により固定パス直書きでは
-          # 空振りする場合があるため、brew --prefixで実際のインストール先を動的取得する
-          BREW_GST_PREFIX=$(brew --prefix gstreamer)
-          BREW_GST_PLUGINS="$BREW_GST_PREFIX/lib/gstreamer-1.0"
-          echo "GStreamerプラグイン検索パス: $BREW_GST_PLUGINS"
+          dylibbundler -ns -x "$APP_DIR/Contents/MacOS/${{ matrix.binary_name }}" \
+                       -d "$APP_DIR/Contents/Frameworks/" \
+                       -p "@executable_path/../Frameworks/"
+          FRAMEWORK_COUNT=$(find "$APP_DIR/Contents/Frameworks" -type f | wc -l | tr -d ' ')
+          if [ "$FRAMEWORK_COUNT" -eq 0 ]; then
+            echo "エラー: Frameworksが0件です" >&2
+            exit 1
+          fi
+
+          BREW_GST_PLUGINS="$(brew --prefix gstreamer)/lib/gstreamer-1.0"
           PLUGIN_COUNT=$(find "$BREW_GST_PLUGINS" -type f \( -name "*.so" -o -name "*.dylib" \) 2>/dev/null | wc -l | tr -d ' ')
-          echo "GStreamerプラグイン検出数: $PLUGIN_COUNT"
           if [ "$PLUGIN_COUNT" -eq 0 ]; then
-            echo "エラー: GStreamerプラグインが0件です。install_cmdの内容を確認してください。" >&2
+            echo "エラー: GStreamerプラグインが0件です" >&2
             exit 1
           fi
           find "$BREW_GST_PLUGINS" -name "*.so" -exec cp {} "$APP_DIR/Contents/Resources/gstreamer-1.0/" \;
           find "$BREW_GST_PLUGINS" -name "*.dylib" -exec cp {} "$APP_DIR/Contents/Resources/gstreamer-1.0/" \;
 
-          # 4. Info.plist の生成（コード署名時にAppバンドルとして正しく認識されるよう、署名処理より前に配置）
-          # LSEnvironmentでGST_PLUGIN_PATHを明示し、実行時にバンドル内プラグインを参照させる
           cat > "$APP_DIR/Contents/Info.plist" <<EOF
           <?xml version="1.0" encoding="UTF-8"?>
           <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -148,33 +141,16 @@ jobs:
             <string>APPL</string>
             <key>LSMinimumSystemVersion</key>
             <string>11.0</string>
-            <key>LSEnvironment</key>
-            <dict>
-              <key>GST_PLUGIN_PATH</key>
-              <string>${APP_DIR}/Contents/Resources/gstreamer-1.0</string>
-            </dict>
           </dict>
           </plist>
           EOF
 
-          # 5. dylibbundlerでコアライブラリをFrameworksへ集約し、パスを@executable_path基準へ書き換え
-          # ※実行ファイルから見たFrameworksへの相対パスは @executable_path/../Frameworks/ になります
-          # -ns: dylibbundler内蔵のアドホック署名を無効化する（PlugIns/gstreamer-1.0が正規のbundle/frameworkでないため
-          #      --deepでの再帰署名走査が"bundle format unrecognized"で失敗するのを避ける）。署名は後段で個別に行う。
-          dylibbundler -ns -x "$APP_DIR/Contents/MacOS/${{ matrix.binary_name }}" \
-                       -d "$APP_DIR/Contents/Frameworks/" \
-                       -p "@executable_path/../Frameworks/" \
-                       -s "$APP_DIR/Contents/Resources/gstreamer-1.0/"
-
-          # 6. 個別ファイル単位でアドホック署名（--deepは使わない。--deepによる自動走査がPlugIns配下の
-          #    非bundle構造で失敗するため、依存ライブラリ→プラグイン→本体実行ファイルの順に個別署名する）
           find "$APP_DIR/Contents/Frameworks" -type f -exec codesign --force --sign - {} \;
           find "$APP_DIR/Contents/Resources/gstreamer-1.0" -type f -exec codesign --force --sign - {} \;
           [ -d "$APP_DIR/Contents/Resources/objects" ] && find "$APP_DIR/Contents/Resources/objects" -type f -exec codesign --force --sign - {} \;
           [ -d "$APP_DIR/Contents/Resources/effects" ] && find "$APP_DIR/Contents/Resources/effects" -type f -exec codesign --force --sign - {} \;
           codesign --force --sign - "$APP_DIR/Contents/MacOS/${{ matrix.binary_name }}"
 
-          # 7. 配布用に .app フォルダごとZIP圧縮
           cd dist
           zip -r ${{ matrix.artifact_name }}.zip NeoUtl.app
 
@@ -195,15 +171,6 @@ jobs:
           find "$CLANG_PATH/bin" -name "libgst*.dll" -exec cp {} dist/package/bin/ \;
           find "$CLANG_PATH/bin" -name "libgstreamer*.dll" -exec cp {} dist/package/bin/ \;
 
-          # ntldd で依存 DLL を再帰的に抽出し、clang64 由来のものを bin/ に集約する。
-          # msyos2 shell は errexit + pipefail 相当なので、
-          #   - grep の「一致なし(exit 1)」
-          #   - xargs への空入力
-          #   - ntldd -R が一部 DLL 解析失敗で非ゼロ終了
-          # のいずれかでステップ全体が失敗するのを防ぐため、サブシェル + || true で
-          # 依存収集部分の失敗を許容し、結果を一時ファイル経由で安全に処理する。
-          # また ntldd は Windows パス形式(バックスラッシュ区切り)で出力することがあるため、
-          # grep は "clang64/bin" と "clang64\bin" の両方にマッチさせる。
           ( find dist/package/ \( -name "*.dll" -o -name "${{ matrix.binary_name }}" \) -print0 \
               | xargs -0 -r ntldd -R 2>/dev/null \
               | grep -iE 'clang64[/\\]bin' \
