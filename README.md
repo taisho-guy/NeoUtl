@@ -71,17 +71,15 @@
   - 外部拡張はSDKに依存。内部のロジックが不透明で、プラグイン作者の「職人技」がエコシステムを左右します。
 </details>
 
-詳細なロードマップは[TODO.md](https://codeberg.org/taisho-guy/NeoUtl/src/branch/main/TODO.md)でご確認下さい。
-
 これらの達成により、AviUtlを「仕方なく」使う方々の最適解になることを目指すプロジェクトです。
 
 ## 開発状況
 
 まだ開発初期段階ですが、順調です。安定版の一般公開は2027年度以降になりそうです。
 
-## ビルド方法
+ロードマップは[TODO.md](https://codeberg.org/taisho-guy/NeoUtl/src/branch/main/TODO.md)でご確認下さい。
 
-現在のNeoUtlはビルドを公開しておりません。NeoUtlを試すには適切に環境構築を行い、ビルドする必要があります。
+## ビルド方法
 
 ### 共通作業
 

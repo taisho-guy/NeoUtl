@@ -25,7 +25,7 @@ jobs:
             os_name: macOS
             artifact_name: neoutl-macos-aarch64
             binary_name: NeoUtl
-            install_cmd: brew update && brew install gstreamer dylibbundler
+            install_cmd: brew update && brew install gstreamer
           - os: windows-latest
             os_name: Windows
             artifact_name: neoutl-windows-x86_64
@@ -94,24 +94,17 @@ jobs:
       - name: Create & Package .app Bundle (macOS Homebrew)
         if: runner.os == 'macOS'
         run: |
+          set -euo pipefail
           mkdir -p dist
           APP_DIR="dist/NeoUtl.app"
+          FRAMEWORKS_DIR="$APP_DIR/Contents/Frameworks"
           mkdir -p "$APP_DIR/Contents/MacOS"
-          mkdir -p "$APP_DIR/Contents/Frameworks"
+          mkdir -p "$FRAMEWORKS_DIR"
           mkdir -p "$APP_DIR/Contents/Resources/gstreamer-1.0"
 
           cp target/release/${{ matrix.binary_name }} "$APP_DIR/Contents/MacOS/"
           [ -d target/release/objects ] && cp -r target/release/objects "$APP_DIR/Contents/Resources/"
           [ -d target/release/effects ] && cp -r target/release/effects "$APP_DIR/Contents/Resources/"
-
-          dylibbundler -b -ns -od -x "$APP_DIR/Contents/MacOS/${{ matrix.binary_name }}" \
-                       -d "$APP_DIR/Contents/Frameworks/" \
-                       -p "@executable_path/../Frameworks/"
-          FRAMEWORK_COUNT=$(find "$APP_DIR/Contents/Frameworks" -type f | wc -l | tr -d ' ')
-          if [ "$FRAMEWORK_COUNT" -eq 0 ]; then
-            echo "エラー: Frameworksが0件です" >&2
-            exit 1
-          fi
 
           BREW_GST_PLUGINS="$(brew --prefix gstreamer)/lib/gstreamer-1.0"
           PLUGIN_COUNT=$(find "$BREW_GST_PLUGINS" -type f \( -name "*.so" -o -name "*.dylib" \) 2>/dev/null | wc -l | tr -d ' ')
@@ -122,12 +115,38 @@ jobs:
           find "$BREW_GST_PLUGINS" -name "*.so" -exec cp {} "$APP_DIR/Contents/Resources/gstreamer-1.0/" \;
           find "$BREW_GST_PLUGINS" -name "*.dylib" -exec cp {} "$APP_DIR/Contents/Resources/gstreamer-1.0/" \;
 
+          relink() {
+            local target="$1"
+            chmod +w "$target"
+            otool -L "$target" | tail -n +2 | awk '{print $1}' | while read -r dep; do
+              case "$dep" in
+                /opt/homebrew/*|/usr/local/*)
+                  local base
+                  base="$(basename "$dep")"
+                  local dest="$FRAMEWORKS_DIR/$base"
+                  if [ ! -f "$dest" ]; then
+                    cp -L "$dep" "$dest"
+                    chmod +w "$dest"
+                    install_name_tool -id "@rpath/$base" "$dest"
+                    relink "$dest"
+                  fi
+                  install_name_tool -change "$dep" "@rpath/$base" "$target"
+                  ;;
+              esac
+            done
+          }
+
+          relink "$APP_DIR/Contents/MacOS/${{ matrix.binary_name }}"
           find "$APP_DIR/Contents/Resources/gstreamer-1.0" -type f -name "*.dylib" -print0 \
-            | while IFS= read -r -d '' plugin; do
-                dylibbundler -b -ns -of -x "$plugin" \
-                             -d "$APP_DIR/Contents/Frameworks/" \
-                             -p "@executable_path/../Frameworks/"
-              done
+            | while IFS= read -r -d '' plugin; do relink "$plugin"; done
+
+          install_name_tool -add_rpath "@executable_path/../Frameworks" "$APP_DIR/Contents/MacOS/${{ matrix.binary_name }}"
+
+          FRAMEWORK_COUNT=$(find "$FRAMEWORKS_DIR" -type f | wc -l | tr -d ' ')
+          if [ "$FRAMEWORK_COUNT" -eq 0 ]; then
+            echo "エラー: Frameworksが0件です" >&2
+            exit 1
+          fi
 
           cat > "$APP_DIR/Contents/Info.plist" <<EOF
           <?xml version="1.0" encoding="UTF-8"?>
