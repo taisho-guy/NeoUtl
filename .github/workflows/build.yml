@@ -164,25 +164,39 @@ jobs:
         if: runner.os == 'Windows'
         shell: msys2 {0}
         run: |
+          set -uo pipefail
           mkdir -p dist/package/bin
           mkdir -p dist/package/lib/gstreamer-1.0
 
           cp target/x86_64-pc-windows-gnullvm/release/${{ matrix.binary_name }} dist/package/
-          if [ -d "target/x86_64-pc-windows-gnullvm/release/objects" ]; then
-            cp -r target/x86_64-pc-windows-gnullvm/release/objects dist/package/
-          fi
-          if [ -d "target/x86_64-pc-windows-gnullvm/release/effects" ]; then
-            cp -r target/x86_64-pc-windows-gnullvm/release/effects dist/package/
-          fi
+          [ -d "target/x86_64-pc-windows-gnullvm/release/objects" ] && cp -r target/x86_64-pc-windows-gnullvm/release/objects dist/package/
+          [ -d "target/x86_64-pc-windows-gnullvm/release/effects" ] && cp -r target/x86_64-pc-windows-gnullvm/release/effects dist/package/
 
           CLANG_PATH="/clang64"
           find "$CLANG_PATH/lib/gstreamer-1.0" -name "*.dll" -exec cp {} dist/package/lib/gstreamer-1.0/ \;
           find "$CLANG_PATH/bin" -name "libgst*.dll" -exec cp {} dist/package/bin/ \;
           find "$CLANG_PATH/bin" -name "libgstreamer*.dll" -exec cp {} dist/package/bin/ \;
 
-          find dist/package/ -name "*.dll" -o -name "${{ matrix.binary_name }}" | xargs ntldd -R | \
-            grep -i "$CLANG_PATH/bin" | awk '{print $3}' | sort -u | \
-            xargs -I {} cp {} dist/package/bin/
+          # ntldd で依存 DLL を再帰的に抽出し、clang64 由来のものを bin/ に集約する。
+          # msyos2 shell は errexit + pipefail 相当なので、
+          #   - grep の「一致なし(exit 1)」
+          #   - xargs への空入力
+          #   - ntldd -R が一部 DLL 解析失敗で非ゼロ終了
+          # のいずれかでステップ全体が失敗するのを防ぐため、サブシェル + || true で
+          # 依存収集部分の失敗を許容し、結果を一時ファイル経由で安全に処理する。
+          # また ntldd は Windows パス形式(バックスラッシュ区切り)で出力することがあるため、
+          # grep は "clang64/bin" と "clang64\bin" の両方にマッチさせる。
+          ( find dist/package/ \( -name "*.dll" -o -name "${{ matrix.binary_name }}" \) -print0 \
+              | xargs -0 -r ntldd -R 2>/dev/null \
+              | grep -iE 'clang64[/\\]bin' \
+              | awk '{print $3}' \
+              | sort -u ) > /tmp/neoutl_deps.txt || true
+
+          if [ -s /tmp/neoutl_deps.txt ]; then
+            while IFS= read -r dep; do
+              [ -f "$dep" ] && cp "$dep" dist/package/bin/
+            done < /tmp/neoutl_deps.txt
+          fi
 
           cd dist/package
           zip -r ../${{ matrix.artifact_name }}.zip .
