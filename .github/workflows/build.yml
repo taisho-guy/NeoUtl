@@ -104,7 +104,7 @@ jobs:
           [ -d target/release/objects ] && cp -r target/release/objects "$APP_DIR/Contents/Resources/"
           [ -d target/release/effects ] && cp -r target/release/effects "$APP_DIR/Contents/Resources/"
 
-          dylibbundler -b -nc -od -x "$APP_DIR/Contents/MacOS/${{ matrix.binary_name }}" \
+          dylibbundler -b -ns -od -x "$APP_DIR/Contents/MacOS/${{ matrix.binary_name }}" \
                        -d "$APP_DIR/Contents/Frameworks/" \
                        -p "@executable_path/../Frameworks/"
           FRAMEWORK_COUNT=$(find "$APP_DIR/Contents/Frameworks" -type f | wc -l | tr -d ' ')
