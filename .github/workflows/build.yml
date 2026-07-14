@@ -111,11 +111,24 @@ jobs:
 
           # 3. Homebrew から GStreamer プラグインをバンドル内のPlugInsにコピー
           # ワイルドカード展開の失敗（該当ファイル無し時のNo such file or directory）を防ぐためfindを使用
-          BREW_GST_PLUGINS="/opt/homebrew/lib/gstreamer-1.0"
+          # Homebrewのgstreamer formulaはgst-plugins-base/good/bad/ugly/libav等を統合済みのため
+          # install_cmdはbrew install gstreamerのみで全プラグインが導入される（別formula指定は不要）
+          # ただしプラグインの実体パスはbrewバージョン・keg-only状態により固定パス直書きでは
+          # 空振りする場合があるため、brew --prefixで実際のインストール先を動的取得する
+          BREW_GST_PREFIX=$(brew --prefix gstreamer)
+          BREW_GST_PLUGINS="$BREW_GST_PREFIX/lib/gstreamer-1.0"
+          echo "GStreamerプラグイン検索パス: $BREW_GST_PLUGINS"
+          PLUGIN_COUNT=$(find "$BREW_GST_PLUGINS" -type f \( -name "*.so" -o -name "*.dylib" \) 2>/dev/null | wc -l | tr -d ' ')
+          echo "GStreamerプラグイン検出数: $PLUGIN_COUNT"
+          if [ "$PLUGIN_COUNT" -eq 0 ]; then
+            echo "エラー: GStreamerプラグインが0件です。install_cmdの内容を確認してください。" >&2
+            exit 1
+          fi
           find "$BREW_GST_PLUGINS" -name "*.so" -exec cp {} "$APP_DIR/Contents/Resources/gstreamer-1.0/" \;
           find "$BREW_GST_PLUGINS" -name "*.dylib" -exec cp {} "$APP_DIR/Contents/Resources/gstreamer-1.0/" \;
 
           # 4. Info.plist の生成（コード署名時にAppバンドルとして正しく認識されるよう、署名処理より前に配置）
+          # LSEnvironmentでGST_PLUGIN_PATHを明示し、実行時にバンドル内プラグインを参照させる
           cat > "$APP_DIR/Contents/Info.plist" <<EOF
           <?xml version="1.0" encoding="UTF-8"?>
           <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -135,6 +148,11 @@ jobs:
             <string>APPL</string>
             <key>LSMinimumSystemVersion</key>
             <string>11.0</string>
+            <key>LSEnvironment</key>
+            <dict>
+              <key>GST_PLUGIN_PATH</key>
+              <string>${APP_DIR}/Contents/Resources/gstreamer-1.0</string>
+            </dict>
           </dict>
           </plist>
           EOF
@@ -239,4 +257,3 @@ jobs:
             dist/neoutl-linux-x86_64/neoutl-linux-x86_64.zip
             dist/neoutl-macos-aarch64/neoutl-macos-aarch64.zip
             dist/neoutl-windows-x86_64/neoutl-windows-x86_64.zip
-
