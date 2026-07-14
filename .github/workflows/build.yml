@@ -122,6 +122,13 @@ jobs:
           find "$BREW_GST_PLUGINS" -name "*.so" -exec cp {} "$APP_DIR/Contents/Resources/gstreamer-1.0/" \;
           find "$BREW_GST_PLUGINS" -name "*.dylib" -exec cp {} "$APP_DIR/Contents/Resources/gstreamer-1.0/" \;
 
+          find "$APP_DIR/Contents/Resources/gstreamer-1.0" -type f -name "*.dylib" -print0 \
+            | while IFS= read -r -d '' plugin; do
+                dylibbundler -b -ns -of -x "$plugin" \
+                             -d "$APP_DIR/Contents/Frameworks/" \
+                             -p "@executable_path/../Frameworks/"
+              done
+
           cat > "$APP_DIR/Contents/Info.plist" <<EOF
           <?xml version="1.0" encoding="UTF-8"?>
           <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
