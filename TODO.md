@@ -12,7 +12,7 @@
 - [x] TransformからGlobalMatrixへの合成結果をRenderSystemへ配線
 - [x] Ortho座標系をプロジェクト解像度ピクセル空間へ整合（NDC±aspect,±1固定によりTransform.x/yの微小操作が画面外へ即座に飛ぶ不具合を修正。properties.slintのX/Y範囲もstage-width/height基準へ変更）
 - [x] 動画・画像・音声・テキストのバックエンド・APIを実装
-- [ ] 動画・画像・音声・テキストオブジェクトを実装
+- [x] 動画・画像・音声・テキストオブジェクトを実装（VIDEO/IMAGE/AUDIO_STABLE_IDをneoutl-object-apiへ予約、host専有描画をTEXT_STABLE_IDと同一契約で拡張。MediaSourceコンポーネント・media_pipeline(media.wgsl)によりデコードはMediaCache経由でフレームテクスチャ化。音声はAudioParamsのみ保持しミキサー・波形表示は0.2.0/0.3.0へ持ち越し）
 - [x] EffectStackのGPU実行機構を実装（compute_effect相当。renderer/pipeline.rsにポストプロセスパス接続。ActiveObject.effectsを連結したチェーンをeffect_ping/pong間で順次適用し、各エフェクトのWGSLフラグメント処理・Uniformパッキングをneoutl-effect-api経由で実行）
 - [ ] 設定ダイアログの拡張
 - [ ] レンダリングパイプラインのエラー処理を実装（GPUデバイスロスト・シェーダコンパイル失敗時のフォールバック）

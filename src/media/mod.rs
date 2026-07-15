@@ -2,7 +2,9 @@
 pub mod cache;
 pub mod text;
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+use serde::{Deserialize, Serialize};
+
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 pub enum MediaKind {
     Video,
     Image,
