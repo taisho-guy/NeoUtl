@@ -28,7 +28,7 @@
   - AGPLv3+でライセンスされた自由ソフトウェアで、無料で配布されています。
   - ソースコードも無料で入手できます。
 - AviUtl
-  - 自由ソフトウェアではなく、ソースコードも非公開です。
+  - プロプライエタリで、ソースコードも非公開です。
 </details>
 
 <details>
@@ -46,7 +46,7 @@
 - NeoUtl
   - Rust言語での実装により、メモリ由来の不正を構造的に排除しています。
 - AviUtl
-  - 古典的なC++言語での実装により、メモリ由来の不正を完全には防ぎきれません。
+  - 古典的なC++言語での実装により、メモリ由来の不正を防ぎきれません。
 </details>
 
 <details>
@@ -71,15 +71,23 @@
   - 外部拡張はSDKに依存。内部のロジックが不透明で、プラグイン作者の「職人技」がエコシステムを左右します。
 </details>
 
-これらの達成により、AviUtlを「仕方なく」使う方々の最適解になることを目指すプロジェクトです。
+これらの達成により、AviUtlを「仕方なく」使う方々の最適解になることを目指しています。
 
 ## 開発状況
 
-まだ開発初期段階ですが、順調です。安定版の一般公開は2027年度以降になりそうです。
+まだ開発初期段階ですが、順調です。
+
+安定版（1.x）の公開は2027年度以降になりそうです。
 
 ロードマップは[TODO.md](https://codeberg.org/taisho-guy/NeoUtl/src/branch/main/TODO.md)でご確認下さい。
 
+## ダウンロード方法
+
+[NeoUtlのお部屋](https://neoutl.taisho-guy.org)をご確認下さい。
+
 ## ビルド方法
+
+x86_64又はARM64のCPUで動作するLinux/macOS/Windows上でビルド可能です。
 
 ### 共通作業
 
@@ -93,7 +101,7 @@ cd NeoUtl
 <details>
 <summary>NeoUtlの場合</summary>
   
-予めRust、Clang、Mold、FFmpegをインストールしてください。
+予めRust、Clang、Mold（Linuxの場合）、gstreamerをインストールしてください。
 
 ```fish
 git switch main
@@ -140,16 +148,14 @@ NeoUtlはRust言語で実装されています。
 
 | プロジェクト | 開発者 | 場所 | エンジン | 状況 |
 | --- | --- | --- | --- | --- |
-| NeoUtl | [taisho-guy](https://codeberg.org/taisho-guy) | [`main`ブランチ](https://codeberg.org/taisho-guy/NeoUtl/src/branch/dev) | wgpu | ✅️ 実装中 |
+| NeoUtl | [taisho-guy](https://codeberg.org/taisho-guy) | [`main`ブランチ](https://codeberg.org/taisho-guy/NeoUtl/src/branch/main) | wgpu | ✅️ 実装中 |
 | AviQtl | [taisho-guy](https://codeberg.org/taisho-guy) / [GT-610](https://codeberg.org/GT610) | [`aviqtl`ブランチ](https://codeberg.org/taisho-guy/NeoUtl/src/branch/aviqtl) | Qt Quick | ❌️ 開発終了 |
 | AviQtl Plus | [GT-610](https://github.com/GT-610) | [GitHub](https://github.com/GT-610/AviQtl-Plus) | Qt Quick | ✅️ AviQtlのフォーク |
 
 ## ライセンス
 
-画像ファイルは [CC0](https://creativecommons.org/publicdomain/zero/1.0/legalcode.txt) に基づいて提供されます。
+This program is free software: you can redistribute it and/or modify it under the terms of the GNU Affero General Public License as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.
 
-ソースコード及びSDKは [GNU Affero General Public License Version 3](https://www.gnu.org/licenses/agpl-3.0.txt) or later に基づいて提供されます。
+This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU Affero General Public License for more details.
 
-[Remix Icon](https://remixicon.com/) は [Remix Icon License](https://raw.githubusercontent.com/Remix-Design/RemixIcon/refs/heads/master/License) に基づいて提供されます。これは**自由ライセンスではありません**。
-
-その他のライブラリのライセンスは上記のライセンスと異なる場合がございます。
+You should have received a copy of the GNU Affero General Public License along with this program. If not, see <https://www.gnu.org/licenses/agpl.html>.
