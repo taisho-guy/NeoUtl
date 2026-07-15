@@ -7,11 +7,11 @@ pub mod systems;
 pub mod transform;
 pub mod types;
 
-use crate::document::{DocumentModel, ObjectDoc, ObjectPayload};
+use crate::document::{DocumentModel, MediaSourceDoc, ObjectDoc, ObjectPayload};
 use crate::ecs::types::EffectInstance;
 use components::{
-    AudioParams, KindId, Layer, ObjectId, PluginParams, SceneId, ShapeParams, TextContent,
-    TimeRange,
+    AudioParams, KindId, Layer, MediaSource, ObjectId, PluginParams, SceneId, ShapeParams,
+    TextContent, TimeRange,
 };
 use effects::EffectStack;
 use resources::{
@@ -42,6 +42,7 @@ struct ObjectQueryViews<'v> {
     texts: View<'v, TextContent>,
     shapes: View<'v, ShapeParams>,
     plugins: View<'v, PluginParams>,
+    media: View<'v, MediaSource>,
 }
 
 /// タイムラインUIに渡すオブジェクト情報（Slint型に非依存）
@@ -155,6 +156,22 @@ impl EcsWorld {
         let id = self.add_object(start, duration, kind_id, layer, None);
         if let Some(entity) = self.find_entity(id) {
             self.world.add_component(entity, shape);
+        }
+        id
+    }
+
+    /// 動画・画像・音声オブジェクトを追加する。MediaSourceコンポーネントを併せて付与する。
+    pub fn add_media_object(
+        &mut self,
+        start: i32,
+        duration: i32,
+        kind_id: u32,
+        layer: i32,
+        media: MediaSource,
+    ) -> usize {
+        let id = self.add_object(start, duration, kind_id, layer, None);
+        if let Some(entity) = self.find_entity(id) {
+            self.world.add_component(entity, media);
         }
         id
     }
@@ -566,6 +583,25 @@ impl EcsWorld {
         });
     }
 
+    // --- MediaSource ---
+
+    pub fn get_media(&self, object_id: usize) -> Option<MediaSource> {
+        let entity = self.find_entity(object_id)?;
+        self.world
+            .run(|media: View<MediaSource>| media.get(entity).ok().cloned())
+    }
+
+    pub fn set_media_trim(&mut self, object_id: usize, trim_in_frame: i64) {
+        let Some(entity) = self.find_entity(object_id) else {
+            return;
+        };
+        self.world.run(|mut media: ViewMut<MediaSource>| {
+            if let Ok(mut slot) = (&mut media).get(entity) {
+                slot.trim_in_frame = trim_in_frame;
+            }
+        });
+    }
+
     // --- AudioParams ---
 
     pub fn set_audio_params(&mut self, object_id: usize, volume: f32, pan: f32, mute: bool) {
@@ -780,6 +816,7 @@ impl EcsWorld {
                         text: views.texts.get(entity).ok().cloned(),
                         shape: views.shapes.get(entity).ok().copied(),
                         plugin_params: views.plugins.get(entity).ok().map(|p| p.0.clone()),
+                        media: views.media.get(entity).ok().map(MediaSourceDoc::from),
                     },
                 });
             }
@@ -849,6 +886,9 @@ impl EcsWorld {
             }
             if let Some(p) = &o.payload.plugin_params {
                 self.world.add_component(entity, PluginParams(p.clone()));
+            }
+            if let Some(m) = &o.payload.media {
+                self.world.add_component(entity, MediaSource::from(m));
             }
         }
 

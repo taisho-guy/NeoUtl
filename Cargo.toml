@@ -51,6 +51,7 @@ shipyard = "0.11"
 lucide-slint = "1.24"
 rust-yaml = { version = "1.1", features = ["serde"] }
 serde = { version = "1.0", features = ["derive"] }
+rfd = "0.17"
 
 [build-dependencies]
 lucide-slint = "1.24"

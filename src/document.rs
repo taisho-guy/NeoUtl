@@ -1,10 +1,40 @@
 // src/document.rs
-use crate::ecs::components::{AudioParams, ShapeParams, TextContent};
+use crate::ecs::components::{AudioParams, MediaSource, ShapeParams, TextContent};
 use crate::ecs::resources::SceneMeta;
 use crate::ecs::transform::Transform;
 use crate::ecs::types::EffectInstance;
+use crate::media::MediaKind;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::path::PathBuf;
+
+/// MediaSourceの永続化形。フィールド構成はMediaSourceと1:1対応する。
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct MediaSourceDoc {
+    pub path: PathBuf,
+    pub kind: MediaKind,
+    pub trim_in_frame: i64,
+}
+
+impl From<&MediaSource> for MediaSourceDoc {
+    fn from(m: &MediaSource) -> Self {
+        Self {
+            path: m.path.clone(),
+            kind: m.kind,
+            trim_in_frame: m.trim_in_frame,
+        }
+    }
+}
+
+impl From<&MediaSourceDoc> for MediaSource {
+    fn from(m: &MediaSourceDoc) -> Self {
+        Self {
+            path: m.path.clone(),
+            kind: m.kind,
+            trim_in_frame: m.trim_in_frame,
+        }
+    }
+}
 
 /// kind_id固有の追加パラメータ。ECS側の任意コンポーネント付与に対応する。
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
@@ -12,6 +42,7 @@ pub struct ObjectPayload {
     pub text: Option<TextContent>,
     pub shape: Option<ShapeParams>,
     pub plugin_params: Option<HashMap<String, f32>>,
+    pub media: Option<MediaSourceDoc>,
 }
 
 /// 1オブジェクトの正本データ（AviQtl::Core::Clip相当）。

@@ -1,6 +1,8 @@
 // src/ecs/systems.rs
 use super::EcsWorld;
-use crate::ecs::components::{AudioParams, KindId, SceneId, ShapeParams, TextContent, TimeRange};
+use crate::ecs::components::{
+    AudioParams, KindId, MediaSource, SceneId, ShapeParams, TextContent, TimeRange,
+};
 use crate::ecs::effects::{EffectStack, compute_effect_params_at};
 use crate::ecs::resources::{ProjectResource, SceneResource, TimelineResource};
 use crate::ecs::transform::{
@@ -14,8 +16,11 @@ use std::collections::HashMap;
 
 pub struct ActiveObject {
     pub kind_id: u32,
+    pub start_frame: i32,
+    pub source_frame: i64,
     pub text_content: Option<TextContent>,
     pub shape_params: Option<ShapeParams>,
+    pub media_source: Option<MediaSource>,
     pub global_matrix: [f32; 16],
     pub mvp: [f32; 16],
     pub opacity: f32,
@@ -48,6 +53,7 @@ type SelectorGroupViews<'v> = (
     View<'v, SceneId>,
     View<'v, TextContent>,
     View<'v, ShapeParams>,
+    View<'v, MediaSource>,
 );
 type PayloadGroupViews<'v> = (
     View<'v, Transform>,
@@ -59,7 +65,7 @@ type PayloadGroupViews<'v> = (
 pub fn get_active_objects_system(world: &EcsWorld) -> Vec<ActiveObject> {
     world.world.run(
         |(timeline, scenes, project, camera): UniqueGroupViews,
-         (time_ranges, kind_ids, scene_ids, text_contents, shape_params): SelectorGroupViews,
+         (time_ranges, kind_ids, scene_ids, text_contents, shape_params, media_sources): SelectorGroupViews,
          (transforms, global_matrices, audio_params, effect_stacks): PayloadGroupViews| {
             let current = timeline.current_frame;
             let active_scene = scenes.active_scene;
@@ -77,6 +83,11 @@ pub fn get_active_objects_system(world: &EcsWorld) -> Vec<ActiveObject> {
                 }
                 let text_content = text_contents.get(id).ok().cloned();
                 let shape = shape_params.get(id).ok().copied();
+                let media_source = media_sources.get(id).ok().cloned();
+                let source_frame = media_source
+                    .as_ref()
+                    .map(|m| m.trim_in_frame + (current - range.start_frame) as i64)
+                    .unwrap_or(0);
                 let matrix = global_matrices.get(id).copied().unwrap_or_default();
                 let mvp = compute_mvp(
                     &matrix,
@@ -94,8 +105,11 @@ pub fn get_active_objects_system(world: &EcsWorld) -> Vec<ActiveObject> {
 
                 active.push(ActiveObject {
                     kind_id: kind.0,
+                    start_frame: range.start_frame,
+                    source_frame,
                     text_content,
                     shape_params: shape,
+                    media_source,
                     global_matrix: matrix.0,
                     mvp,
                     opacity,

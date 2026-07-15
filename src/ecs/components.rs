@@ -189,3 +189,13 @@ impl ParamAccess for ShapeParams {
 
 #[derive(Clone, Debug, Default, Component, Serialize, Deserialize)]
 pub struct PluginParams(pub HashMap<String, f32>);
+
+/// 動画・画像・音声オブジェクトが参照する外部メディアファイル。
+/// デコード自体はMediaCache（src/media/cache.rs）が担い、このコンポーネントは
+/// パス・種別・素材内トリム開始位置のみを保持する。
+#[derive(Clone, Debug, Component, Serialize, Deserialize)]
+pub struct MediaSource {
+    pub path: std::path::PathBuf,
+    pub kind: crate::media::MediaKind,
+    pub trim_in_frame: i64,
+}

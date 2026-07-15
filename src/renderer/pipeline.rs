@@ -4,6 +4,7 @@ use crate::ecs::systems::ActiveObject;
 use crate::ecs::types::Value;
 use crate::effects;
 use crate::objects::{by_kind_id, registry};
+use neoutl_object_api::{IMAGE_STABLE_ID, VIDEO_STABLE_ID};
 use slint::wgpu_29::wgpu;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -20,6 +21,9 @@ const DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
 /// エフェクトUniformsバッファの確保上限（array<vec4<f32>, 8> = 128byte相当まで対応）。
 /// 現行16エフェクトの最大パラメータ数(clipping=5件→uniform_size_std=32byte)を十分に上回る。
 const MAX_EFFECT_UNIFORM_SIZE: u64 = 128;
+/// mat4x4<f32>(64) + opacity(4)、mat4x4アライメント16の倍数へ切り上げ。
+const MEDIA_UNIFORM_SIZE: u64 = 80;
+static MEDIA_WGSL: &str = include_str!("media.wgsl");
 
 pub struct RenderEngine {
     pub device: Arc<wgpu::Device>,
@@ -39,6 +43,10 @@ pub struct RenderEngine {
     effect_uniform_buffer: wgpu::Buffer,
     effect_ping: wgpu::Texture,
     effect_pong: wgpu::Texture,
+    media_pipeline: wgpu::RenderPipeline,
+    media_bind_group_layout: wgpu::BindGroupLayout,
+    media_uniform_buffer: wgpu::Buffer,
+    media_sampler: wgpu::Sampler,
 }
 
 fn load_font() -> Option<Vec<u8>> {
@@ -293,6 +301,91 @@ fn create_effect_bind_group_layout(device: &wgpu::Device) -> wgpu::BindGroupLayo
     })
 }
 
+/// kind_idに対応するプラグインのstable_idを引く。プラグイン未登録時はNone。
+fn stable_id_of(kind_id: u32) -> Option<&'static str> {
+    by_kind_id(kind_id).map(|p| unsafe { &*((p.vtable.meta)()) }.stable_id)
+}
+
+fn create_media_bind_group_layout(device: &wgpu::Device) -> wgpu::BindGroupLayout {
+    device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+        label: Some("Media Object BGL"),
+        entries: &[
+            wgpu::BindGroupLayoutEntry {
+                binding: 0,
+                visibility: wgpu::ShaderStages::VERTEX | wgpu::ShaderStages::FRAGMENT,
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Uniform,
+                    has_dynamic_offset: true,
+                    min_binding_size: wgpu::BufferSize::new(MEDIA_UNIFORM_SIZE),
+                },
+                count: None,
+            },
+            wgpu::BindGroupLayoutEntry {
+                binding: 1,
+                visibility: wgpu::ShaderStages::FRAGMENT,
+                ty: wgpu::BindingType::Texture {
+                    sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                    view_dimension: wgpu::TextureViewDimension::D2,
+                    multisampled: false,
+                },
+                count: None,
+            },
+            wgpu::BindGroupLayoutEntry {
+                binding: 2,
+                visibility: wgpu::ShaderStages::FRAGMENT,
+                ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                count: None,
+            },
+        ],
+    })
+}
+
+fn build_media_pipeline(
+    device: &wgpu::Device,
+    layout: &wgpu::PipelineLayout,
+    wgsl: &str,
+) -> wgpu::RenderPipeline {
+    let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+        label: Some("Media Object"),
+        source: wgpu::ShaderSource::Wgsl(wgsl.into()),
+    });
+    device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+        label: Some("Media Object"),
+        layout: Some(layout),
+        vertex: wgpu::VertexState {
+            module: &shader,
+            entry_point: Some("vs_main"),
+            buffers: &[],
+            compilation_options: Default::default(),
+        },
+        fragment: Some(wgpu::FragmentState {
+            module: &shader,
+            entry_point: Some("fs_main"),
+            targets: &[Some(wgpu::ColorTargetState {
+                format: wgpu::TextureFormat::Rgba8Unorm,
+                blend: Some(wgpu::BlendState::ALPHA_BLENDING),
+                write_mask: wgpu::ColorWrites::ALL,
+            })],
+            compilation_options: Default::default(),
+        }),
+        primitive: wgpu::PrimitiveState {
+            topology: wgpu::PrimitiveTopology::TriangleList,
+            cull_mode: None,
+            ..Default::default()
+        },
+        depth_stencil: Some(wgpu::DepthStencilState {
+            format: DEPTH_FORMAT,
+            depth_write_enabled: Some(true),
+            depth_compare: Some(wgpu::CompareFunction::LessEqual),
+            stencil: wgpu::StencilState::default(),
+            bias: wgpu::DepthBiasState::default(),
+        }),
+        multisample: wgpu::MultisampleState::default(),
+        multiview_mask: None,
+        cache: None,
+    })
+}
+
 impl RenderEngine {
     pub fn new(device: wgpu::Device, queue: wgpu::Queue, width: u32, height: u32) -> Self {
         let device = Arc::new(device);
@@ -368,6 +461,29 @@ impl RenderEngine {
         let effect_ping = create_effect_texture(&device, width, height);
         let effect_pong = create_effect_texture(&device, width, height);
 
+        let media_bind_group_layout = create_media_bind_group_layout(&device);
+        let media_pipeline_layout =
+            device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                label: Some("Media Pipeline Layout"),
+                bind_group_layouts: &[Some(&media_bind_group_layout)],
+                immediate_size: 0,
+            });
+        let media_pipeline = build_media_pipeline(&device, &media_pipeline_layout, MEDIA_WGSL);
+        let media_uniform_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("Media Uniform Buffer"),
+            size: UNIFORM_STRIDE * MAX_OBJECTS,
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+        let media_sampler = device.create_sampler(&wgpu::SamplerDescriptor {
+            label: Some("Media Sampler"),
+            address_mode_u: wgpu::AddressMode::ClampToEdge,
+            address_mode_v: wgpu::AddressMode::ClampToEdge,
+            mag_filter: wgpu::FilterMode::Linear,
+            min_filter: wgpu::FilterMode::Linear,
+            ..Default::default()
+        });
+
         let text_brush = load_font().and_then(|f| {
             FontArc::try_from_vec(f).ok().map(|fa| {
                 BrushBuilder::using_font(fa).build(
@@ -397,6 +513,10 @@ impl RenderEngine {
             effect_uniform_buffer,
             effect_ping,
             effect_pong,
+            media_pipeline,
+            media_bind_group_layout,
+            media_uniform_buffer,
+            media_sampler,
         }
     }
 
@@ -431,6 +551,18 @@ impl RenderEngine {
 
         let offset = index * UNIFORM_STRIDE;
         self.queue.write_buffer(&self.uniform_buffer, offset, &data);
+        offset as u32
+    }
+
+    /// ActiveObjectのMVP・不透明度をメディア用Uniformバッファへ書き込み、
+    /// バインド時に使う動的オフセットを返す（write_standard_uniformと同一のストライド運用）。
+    fn write_media_uniform(&self, index: u64, obj: &ActiveObject) -> u32 {
+        let mut data = [0u8; MEDIA_UNIFORM_SIZE as usize];
+        data[0..64].copy_from_slice(bytemuck::cast_slice(&obj.mvp));
+        data[64..68].copy_from_slice(&obj.opacity.to_le_bytes());
+        let offset = index * UNIFORM_STRIDE;
+        self.queue
+            .write_buffer(&self.media_uniform_buffer, offset, &data);
         offset as u32
     }
 
@@ -580,6 +712,39 @@ impl RenderEngine {
     }
 
     pub fn render(&mut self, active_objects: &[ActiveObject], _project: &ProjectResource) {
+        let mut media_frames: Vec<Option<wgpu::Texture>> = Vec::with_capacity(active_objects.len());
+        {
+            let mut cache = crate::media::cache::global().lock().unwrap();
+            for obj in active_objects {
+                let is_visual = matches!(
+                    stable_id_of(obj.kind_id),
+                    Some(VIDEO_STABLE_ID) | Some(IMAGE_STABLE_ID)
+                );
+                let tex = if is_visual {
+                    obj.media_source.as_ref().and_then(|src| {
+                        cache
+                            .frame_at(&src.path, obj.source_frame, &self.device, &self.queue)
+                            .ok()
+                    })
+                } else {
+                    None
+                };
+                media_frames.push(tex);
+            }
+        }
+
+        let mut media_offsets: Vec<Option<u32>> = Vec::with_capacity(active_objects.len());
+        let mut media_next_index = 0u64;
+        for (obj, tex) in active_objects.iter().zip(media_frames.iter()) {
+            if tex.is_some() && media_next_index < MAX_OBJECTS {
+                let offset = self.write_media_uniform(media_next_index, obj);
+                media_offsets.push(Some(offset));
+                media_next_index += 1;
+            } else {
+                media_offsets.push(None);
+            }
+        }
+
         // 描画対象のみ標準Uniformバッファへ事前書き込みする（テキストはbuffer不要のためスキップ）。
         let mut offsets: Vec<Option<u32>> = Vec::with_capacity(active_objects.len());
         let mut next_index = 0u64;
@@ -666,6 +831,38 @@ impl RenderEngine {
                     rpass.set_bind_group(0, &self.bind_group, &[*offset]);
                     rpass.draw(0..*vertex_count, 0..1);
                 }
+            }
+
+            for (texture, offset) in media_frames.iter().zip(media_offsets.iter()) {
+                let (Some(texture), Some(offset)) = (texture, offset) else {
+                    continue;
+                };
+                let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
+                let bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+                    label: Some("Media Object BG"),
+                    layout: &self.media_bind_group_layout,
+                    entries: &[
+                        wgpu::BindGroupEntry {
+                            binding: 0,
+                            resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
+                                buffer: &self.media_uniform_buffer,
+                                offset: 0,
+                                size: wgpu::BufferSize::new(MEDIA_UNIFORM_SIZE),
+                            }),
+                        },
+                        wgpu::BindGroupEntry {
+                            binding: 1,
+                            resource: wgpu::BindingResource::TextureView(&view),
+                        },
+                        wgpu::BindGroupEntry {
+                            binding: 2,
+                            resource: wgpu::BindingResource::Sampler(&self.media_sampler),
+                        },
+                    ],
+                });
+                rpass.set_pipeline(&self.media_pipeline);
+                rpass.set_bind_group(0, &bind_group, &[*offset]);
+                rpass.draw(0..6, 0..1);
             }
 
             if let Some(ref mut brush) = self.text_brush {

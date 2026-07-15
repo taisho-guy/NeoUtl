@@ -1,6 +1,9 @@
 // src/ui/timeline.rs
 use crate::app_state::{self, SharedAppState};
-use crate::ecs::{EcsWorld, components::TextContent};
+use crate::ecs::{
+    EcsWorld,
+    components::{MediaSource, TextContent},
+};
 use crate::objects::registry;
 use crate::{
     LayerState, ObjectKindItem, PreviewWindow, PropertiesWindow, SceneSettingsWindow, SceneTabItem,
@@ -45,16 +48,47 @@ pub fn setup(
     {
         let (state, tw) = (state.clone(), timeline.as_weak());
         timeline.on_add_object_at(move |frame, layer, kind_idx| {
-            if let Some(t) = tw.upgrade() {
-                app_state::snapshot_before_edit(&state);
-                let world_holder = app_state::active_world(&state);
-                let mut world = world_holder.lock().unwrap();
-                let text = registry()
-                    .get(kind_idx as usize)
-                    .filter(|p| p.name == "Text")
-                    .map(|_| TextContent::default());
-                world.add_object(frame.max(0), 90, kind_idx as u32, layer.max(0), text);
-                sync(&t, &world);
+            let Some(t) = tw.upgrade() else { return };
+            let Some(plugin) = registry().get(kind_idx as usize) else {
+                return;
+            };
+            let start = frame.max(0);
+            let layer = layer.max(0);
+            let kind_id = kind_idx as u32;
+
+            match plugin.name.as_str() {
+                "Video" | "Image" | "Audio" => {
+                    let Some(path) = rfd::FileDialog::new().pick_file() else {
+                        return;
+                    };
+                    let Some(kind) = crate::media::detect_kind(&path) else {
+                        return;
+                    };
+                    app_state::snapshot_before_edit(&state);
+                    let world_holder = app_state::active_world(&state);
+                    let mut world = world_holder.lock().unwrap();
+                    let media = MediaSource {
+                        path,
+                        kind,
+                        trim_in_frame: 0,
+                    };
+                    world.add_media_object(start, 90, kind_id, layer, media);
+                    sync(&t, &world);
+                }
+                "Text" => {
+                    app_state::snapshot_before_edit(&state);
+                    let world_holder = app_state::active_world(&state);
+                    let mut world = world_holder.lock().unwrap();
+                    world.add_object(start, 90, kind_id, layer, Some(TextContent::default()));
+                    sync(&t, &world);
+                }
+                _ => {
+                    app_state::snapshot_before_edit(&state);
+                    let world_holder = app_state::active_world(&state);
+                    let mut world = world_holder.lock().unwrap();
+                    world.add_object(start, 90, kind_id, layer, None);
+                    sync(&t, &world);
+                }
             }
         });
     }

@@ -50,3 +50,15 @@ pub type EntryFn = unsafe extern "C" fn() -> *const ObjectVTable;
 /// フォント・IME・レイアウトはホスト専有APIに依存するため、
 /// このIDのオブジェクトはObjectVTable.renderを呼ばずホストが直接描画する。
 pub const TEXT_STABLE_ID: &str = "neoutl.object.text";
+
+/// 動画オブジェクトの予約stable_id。
+/// デコードはホスト専有のMediaCacheが担うため、TEXT_STABLE_ID同様にrenderを呼ばず
+/// ホストがMediaSourceコンポーネントを直接読み取ってテクスチャ描画する。
+pub const VIDEO_STABLE_ID: &str = "neoutl.object.video";
+
+/// 画像オブジェクトの予約stable_id。動画と同一のホスト直接描画契約に従う。
+pub const IMAGE_STABLE_ID: &str = "neoutl.object.image";
+
+/// 音声オブジェクトの予約stable_id。視覚描画を持たずAudioParams経由の
+/// 音量・パン制御のみをタイムライン上で保持する。
+pub const AUDIO_STABLE_ID: &str = "neoutl.object.audio";
