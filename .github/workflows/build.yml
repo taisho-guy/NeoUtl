@@ -17,19 +17,41 @@ jobs:
       matrix:
         include:
           - os: ubuntu-latest
-            os_name: Linux
+            os_name: Linux (x86_64)
             artifact_name: neoutl-linux-x86_64
             binary_name: NeoUtl
             install_cmd: sudo apt-get update && sudo apt-get install -y --no-install-recommends pkg-config clang cmake ninja-build mold libxkbcommon-dev libwayland-dev libegl1-mesa-dev libudev-dev libasound2-dev libfontconfig1-dev libfreetype6-dev libexpat1-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev gstreamer1.0-plugins-base gstreamer1.0-plugins-good gstreamer1.0-plugins-bad gstreamer1.0-plugins-ugly gstreamer1.0-libav
+          - os: ubuntu-24.04-arm
+            os_name: Linux (ARM64)
+            artifact_name: neoutl-linux-arm64
+            binary_name: NeoUtl
+            install_cmd: sudo apt-get update && sudo apt-get install -y --no-install-recommends pkg-config clang cmake ninja-build mold libxkbcommon-dev libwayland-dev libegl1-mesa-dev libudev-dev libasound2-dev libfontconfig1-dev libfreetype6-dev libexpat1-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev gstreamer1.0-plugins-base gstreamer1.0-plugins-good gstreamer1.0-plugins-bad gstreamer1.0-plugins-ugly gstreamer1.0-libav
           - os: macos-latest
-            os_name: macOS
+            os_name: macOS (Apple Silicon)
             artifact_name: neoutl-macos-aarch64
             binary_name: NeoUtl
             install_cmd: brew update && brew install gstreamer
+          - os: macos-13
+            os_name: macOS (Intel)
+            artifact_name: neoutl-macos-x86_64
+            binary_name: NeoUtl
+            install_cmd: brew update && brew install gstreamer
           - os: windows-latest
-            os_name: Windows
+            os_name: Windows (x86_64)
             artifact_name: neoutl-windows-x86_64
             binary_name: NeoUtl.exe
+            msystem: CLANG64
+            mingw_pkg_prefix: mingw-w64-clang-x86_64
+            clang_dir: /clang64
+            rust_target: x86_64-pc-windows-gnullvm
+          - os: windows-11-arm
+            os_name: Windows (ARM64)
+            artifact_name: neoutl-windows-arm64
+            binary_name: NeoUtl.exe
+            msystem: CLANGARM64
+            mingw_pkg_prefix: mingw-w64-clang-aarch64
+            clang_dir: /clangarm64
+            rust_target: aarch64-pc-windows-gnullvm
     runs-on: ${{ matrix.os }}
 
     steps:
@@ -40,30 +62,20 @@ jobs:
         shell: bash
         run: ${{ matrix.install_cmd }}
 
-      - name: Setup MSYS2 CLANG64 (Windows)
+      - name: Setup MSYS2 (Windows)
         if: runner.os == 'Windows'
         uses: msys2/setup-msys2@v2
         with:
-          msystem: CLANG64
+          msystem: ${{ matrix.msystem }}
           path-type: inherit
           update: true
           cache: false
-          install: >-
-            mingw-w64-clang-x86_64-toolchain
-            mingw-w64-clang-x86_64-gstreamer
-            mingw-w64-clang-x86_64-gst-plugins-base
-            mingw-w64-clang-x86_64-gst-plugins-good
-            mingw-w64-clang-x86_64-gst-plugins-bad
-            mingw-w64-clang-x86_64-gst-plugins-ugly
-            mingw-w64-clang-x86_64-gst-libav
-            mingw-w64-clang-x86_64-pkgconf
-            mingw-w64-clang-x86_64-ntldd
-            zip
+          install: ${{ format('{0}-toolchain {0}-gstreamer {0}-gst-plugins-base {0}-gst-plugins-good {0}-gst-plugins-bad {0}-gst-plugins-ugly {0}-gst-libav {0}-pkgconf {0}-ntldd zip', matrix.mingw_pkg_prefix) }}
 
       - name: Setup Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
-          targets: ${{ runner.os == 'Windows' && 'x86_64-pc-windows-gnullvm' || '' }}
+          targets: ${{ runner.os == 'Windows' && matrix.rust_target || '' }}
 
       - name: Build (Unix)
         if: runner.os != 'Windows'
@@ -72,14 +84,14 @@ jobs:
           PKG_CONFIG: pkg-config
         run: cargo xtask build --release
 
-      - name: Build (Windows / MSYS2 CLANG64)
+      - name: Build (Windows / MSYS2)
         if: runner.os == 'Windows'
         shell: msys2 {0}
         run: |
-          export PKG_CONFIG_PATH="/clang64/lib/pkgconfig"
+          export PKG_CONFIG_PATH="${{ matrix.clang_dir }}/lib/pkgconfig"
           export PKG_CONFIG_ALLOW_CROSS=1
           cargo clean
-          cargo xtask build --release --target x86_64-pc-windows-gnullvm
+          cargo xtask build --release --target ${{ matrix.rust_target }}
 
       - name: Collect artifact (Linux)
         if: runner.os == 'Linux'
@@ -114,6 +126,11 @@ jobs:
           fi
           find "$BREW_GST_PLUGINS" -name "*.so" -exec cp {} "$APP_DIR/Contents/Resources/gstreamer-1.0/" \;
           find "$BREW_GST_PLUGINS" -name "*.dylib" -exec cp {} "$APP_DIR/Contents/Resources/gstreamer-1.0/" \;
+
+          EXCLUDE_PLUGINS="libgstpython.dylib libgstgtk.dylib libgstgtk4.dylib libgstges.dylib libgstvalidategtk.dylib libgstvalidategapplication.dylib libgstvalidatessim.dylib libgstvalidatefaultinjection.dylib libgstvalidatetracer.dylib libgstdecklink.dylib libgstndi.dylib libgstjack.dylib libgstwhisper.dylib libgstdeepgram.dylib libgstelevenlabs.dylib libgstspeechmatics.dylib libgstdemucs.dylib libgsttensordecoders.dylib libgstspotify.dylib libgstrtmp.dylib libgstrtmp2.dylib libgstrtsp.dylib libgstrtspclientsink.dylib libgstsrt.dylib libgstsctp.dylib libgstdtls.dylib libgstsrtp.dylib libgstrist.dylib libgstwebrtc.dylib libgstwebrtchttp.dylib libgstshm.dylib libgstaws.dylib libgsticecast.dylib libgsthls.dylib libgsthlssink3.dylib libgsthlsmultivariantsink.dylib libgstdash.dylib libgstmse.dylib libgstreqwest.dylib libgstquinn.dylib libgstraptorq.dylib libgstunixfd.dylib libgstipcpipeline.dylib libgstthreadshare.dylib libgstnetsim.dylib libgstcurl.dylib libgstsoup.dylib libgstrfbsrc.dylib libgstvmnc.dylib"
+          for name in $EXCLUDE_PLUGINS; do
+            rm -f "$APP_DIR/Contents/Resources/gstreamer-1.0/$name"
+          done
 
           relink() {
             local target="$1"
@@ -180,7 +197,7 @@ jobs:
           cd dist
           zip -r ${{ matrix.artifact_name }}.zip NeoUtl.app
 
-      - name: Collect & Package GStreamer (Windows CLANG64)
+      - name: Collect & Package GStreamer (Windows)
         if: runner.os == 'Windows'
         shell: msys2 {0}
         run: |
@@ -188,18 +205,23 @@ jobs:
           mkdir -p dist/package/bin
           mkdir -p dist/package/lib/gstreamer-1.0
 
-          cp target/x86_64-pc-windows-gnullvm/release/${{ matrix.binary_name }} dist/package/
-          [ -d "target/x86_64-pc-windows-gnullvm/release/objects" ] && cp -r target/x86_64-pc-windows-gnullvm/release/objects dist/package/
-          [ -d "target/x86_64-pc-windows-gnullvm/release/effects" ] && cp -r target/x86_64-pc-windows-gnullvm/release/effects dist/package/
+          cp target/${{ matrix.rust_target }}/release/${{ matrix.binary_name }} dist/package/
+          [ -d "target/${{ matrix.rust_target }}/release/objects" ] && cp -r target/${{ matrix.rust_target }}/release/objects dist/package/
+          [ -d "target/${{ matrix.rust_target }}/release/effects" ] && cp -r target/${{ matrix.rust_target }}/release/effects dist/package/
 
-          CLANG_PATH="/clang64"
+          CLANG_PATH="${{ matrix.clang_dir }}"
           find "$CLANG_PATH/lib/gstreamer-1.0" -name "*.dll" -exec cp {} dist/package/lib/gstreamer-1.0/ \;
           find "$CLANG_PATH/bin" -name "libgst*.dll" -exec cp {} dist/package/bin/ \;
           find "$CLANG_PATH/bin" -name "libgstreamer*.dll" -exec cp {} dist/package/bin/ \;
 
+          EXCLUDE_PLUGINS="libgstdecklink.dll libgstrtmp.dll libgstrtmp2.dll libgstrtsp.dll libgstsrt.dll libgstsctp.dll libgstdtls.dll libgstsrtp.dll libgstrist.dll libgstwebrtc.dll libgstwebrtcdsp.dll libgsthls.dll libgstsoup.dll libgstrfbsrc.dll libgstvmnc.dll libgstshout2.dll"
+          for name in $EXCLUDE_PLUGINS; do
+            rm -f "dist/package/lib/gstreamer-1.0/$name"
+          done
+
           ( find dist/package/ \( -name "*.dll" -o -name "${{ matrix.binary_name }}" \) -print0 \
               | xargs -0 -r ntldd -R 2>/dev/null \
-              | grep -iE 'clang64[/\\]bin' \
+              | grep -iE 'clang(64|arm64)[/\\]bin' \
               | awk '{print $3}' \
               | sort -u ) > /tmp/neoutl_deps.txt || true
 
@@ -248,5 +270,8 @@ jobs:
           body: ""
           files: |
             dist/neoutl-linux-x86_64/neoutl-linux-x86_64.zip
+            dist/neoutl-linux-arm64/neoutl-linux-arm64.zip
             dist/neoutl-macos-aarch64/neoutl-macos-aarch64.zip
+            dist/neoutl-macos-x86_64/neoutl-macos-x86_64.zip
             dist/neoutl-windows-x86_64/neoutl-windows-x86_64.zip
+            dist/neoutl-windows-arm64/neoutl-windows-arm64.zip
