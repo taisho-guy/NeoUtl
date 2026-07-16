@@ -26,7 +26,80 @@ fn ensure_gst_init() {
     GST_INIT.call_once(|| {
         gst::init().expect("gstreamer初期化失敗");
         register_bundled_plugin_dir();
+        log_hardware_decoder_availability();
     });
+}
+
+/// H.264/HEVC等をDMABuf/D3D11出力できるハードウェアデコーダ要素の有無を起動時に一度だけ検査する。
+/// ゼロコピーパイプラインは該当要素が存在しない環境では原理的に成立しない
+/// （ソフトウェアデコーダはシステムメモリしか出力できないため）。
+fn log_hardware_decoder_availability() {
+    let registry = gst::Registry::get();
+    let candidates = [
+        "vah264dec",
+        "vah265dec",
+        "vaapih264dec",
+        "vaapih265dec",
+        "v4l2h264dec",
+        "v4l2h265dec",
+        "nvh264dec",
+        "nvh265dec",
+        "d3d11h264dec",
+        "d3d11h265dec",
+    ];
+    let found: Vec<&str> = candidates
+        .iter()
+        .copied()
+        .filter(|name| {
+            registry
+                .find_feature(name, gst::ElementFactory::static_type())
+                .is_some()
+        })
+        .collect();
+    if found.is_empty() {
+        eprintln!(
+            "[gstreamer-decoder] ハードウェアH.264/HEVCデコーダ要素が未登録です。\
+             DMABuf/D3D11ゼロコピー出力は不可能なため動画プレビューは失敗します。\
+             VAAPI/V4L2/NVCODECいずれかのGStreamerプラグインパッケージを導入し、\
+             `gst-inspect-1.0 --gst-disable-registry-fork` 等でレジストリ再構築を確認して下さい。"
+        );
+    } else {
+        eprintln!("[gstreamer-decoder] ハードウェアデコーダ検出: {found:?}");
+    }
+}
+
+/// state()の失敗時、バスからERRORメッセージを取り出し具体的な失敗要素・理由を返す。
+/// map_err(|e| e.to_string())単体では"Element failed to change its state"としか出ず、
+/// どの要素が何故失敗したか特定できないため、ここで詳細化する。
+fn wait_state(pipeline: &gst::Pipeline, timeout: gst::ClockTime) -> Result<(), String> {
+    let (result, _, _) = pipeline.state(timeout);
+    if result.is_ok() {
+        return Ok(());
+    }
+    let Some(bus) = pipeline.bus() else {
+        return Err("状態遷移失敗（バス未取得のため詳細不明）".to_owned());
+    };
+    if let Some(msg) = bus.timed_pop_filtered(
+        gst::ClockTime::from_mseconds(500),
+        &[gst::MessageType::Error],
+    ) {
+        if let gst::MessageView::Error(err) = msg.view() {
+            let src = err
+                .src()
+                .map(|s| s.path_string().to_string())
+                .unwrap_or_else(|| "不明".to_owned());
+            return Err(format!(
+                "状態遷移失敗: 要素={src} 理由={} 詳細={:?}",
+                err.error(),
+                err.debug()
+            ));
+        }
+    }
+    Err(
+        "状態遷移失敗（バスにERRORメッセージなし。DMABuf/D3D11出力に対応するデコーダ要素が\
+         選択されていない可能性が高い）"
+            .to_owned(),
+    )
 }
 
 /// アプリに同梱されたGStreamerプラグインの実行ファイル相対パスを、
@@ -62,6 +135,16 @@ const ZEROCOPY_CAPS: &str = "video/x-raw(memory:D3D11Memory),format=NV12";
 #[cfg(target_os = "macos")]
 const ZEROCOPY_CAPS: &str = "video/x-raw(memory:GLMemory),format=NV12";
 
+/// デコーダ要素は種別固有のメモリ（VAMemory/D3D11Memory等）で出力するため、
+/// appsinkが要求する最終メモリ種別へ明示変換する要素が必要。
+/// decodebinの自動プラグイン機構はメモリ種別変換要素までは自動挿入しないため、
+/// パイプライン記述に固定で挟み込む（末尾に" ! "を含む／不要環境では空文字）。
+/// vapostproc: gst-plugin-va（VAMemory → DMABufMemory）
+#[cfg(target_os = "linux")]
+const POSTPROC_CHAIN: &str = "vapostproc ! ";
+#[cfg(not(target_os = "linux"))]
+const POSTPROC_CHAIN: &str = "";
+
 pub struct GstZeroCopyDecoder {
     pipeline: gst::Pipeline,
     appsink: AppSink,
@@ -81,8 +164,14 @@ impl GstZeroCopyDecoder {
         ensure_gst_init();
 
         let uri = gst::glib::filename_to_uri(path, None).map_err(|e| e.to_string())?;
+        // uridecodebinは音声・動画等ソース内の全ストリームを動的ペインとしてexposeする。
+        // 動画ペインのみを"src. ! ..."へ静的リンクすると、音声等の残りペインが未接続のまま
+        // 残り、qtdemux内部ループがNOT_LINKEDでストリームエラーを起こし全体が失敗する。
+        // "src."を複数回参照し、残りペインはfakesinkで消費して未リンク状態を解消する。
         let pipeline_desc = format!(
-            "uridecodebin uri={uri} name=src ! appsink name=sink sync=false max-buffers=1 drop=true"
+            "uridecodebin uri={uri} name=src \
+             src. ! {POSTPROC_CHAIN}appsink name=sink sync=false max-buffers=1 drop=true \
+             src. ! fakesink name=drain sync=false async=false"
         );
         let pipeline = gst::parse::launch(&pipeline_desc)
             .map_err(|e| e.to_string())?
@@ -98,17 +187,35 @@ impl GstZeroCopyDecoder {
             &gst::Caps::from_str(ZEROCOPY_CAPS).map_err(|e| e.to_string())?,
         ));
 
-        pipeline
-            .set_state(gst::State::Paused)
-            .map_err(|e| e.to_string())?;
-        pipeline
-            .state(gst::ClockTime::from_seconds(10))
-            .0
-            .map_err(|e| e.to_string())?;
+        // 以降の早期returnはすべてこのマクロ経由とし、Pipelineを必ずNULLへ戻してから
+        // Errを返す。素のpipeline変数がNULLに戻らず関数を抜けるとGStreamerが
+        // "disposing element in READY state" CRITICALを出し、内部スレッド/fdがリークする。
+        macro_rules! fail {
+            ($err:expr) => {{
+                let _ = pipeline.set_state(gst::State::Null);
+                return Err($err);
+            }};
+        }
 
-        let preroll = appsink.pull_preroll().map_err(|e| e.to_string())?;
-        let caps = preroll.caps().ok_or("caps未取得")?;
-        let video_info = gst_video::VideoInfo::from_caps(caps).map_err(|e| e.to_string())?;
+        if let Err(e) = pipeline.set_state(gst::State::Paused) {
+            fail!(e.to_string());
+        }
+        if let Err(e) = wait_state(&pipeline, gst::ClockTime::from_seconds(10)) {
+            fail!(e);
+        }
+
+        let preroll = match appsink.pull_preroll() {
+            Ok(p) => p,
+            Err(e) => fail!(e.to_string()),
+        };
+        let caps = match preroll.caps() {
+            Some(c) => c,
+            None => fail!("caps未取得".to_owned()),
+        };
+        let video_info = match gst_video::VideoInfo::from_caps(caps) {
+            Ok(v) => v,
+            Err(e) => fail!(e.to_string()),
+        };
         let width = video_info.width();
         let height = video_info.height();
         let fps_frac = video_info.fps();
@@ -144,10 +251,7 @@ impl GstZeroCopyDecoder {
                 gst::ClockTime::from_nseconds(target_ns),
             )
             .map_err(|e| e.to_string())?;
-        self.pipeline
-            .state(gst::ClockTime::from_seconds(10))
-            .0
-            .map_err(|e| e.to_string())?;
+        wait_state(&self.pipeline, gst::ClockTime::from_seconds(10))?;
         self.appsink
             .pull_preroll()
             .or_else(|_| self.appsink.pull_sample())
