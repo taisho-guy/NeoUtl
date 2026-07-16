@@ -24,6 +24,7 @@ const MAX_EFFECT_UNIFORM_SIZE: u64 = 128;
 /// mat4x4<f32>(64) + opacity(4)、mat4x4アライメント16の倍数へ切り上げ。
 const MEDIA_UNIFORM_SIZE: u64 = 80;
 static MEDIA_WGSL: &str = include_str!("media.wgsl");
+static VIDEO_WGSL: &str = include_str!("media_video.wgsl");
 
 pub struct RenderEngine {
     pub device: Arc<wgpu::Device>,
@@ -47,6 +48,8 @@ pub struct RenderEngine {
     media_bind_group_layout: wgpu::BindGroupLayout,
     media_uniform_buffer: wgpu::Buffer,
     media_sampler: wgpu::Sampler,
+    video_pipeline: wgpu::RenderPipeline,
+    video_bind_group_layout: wgpu::BindGroupLayout,
 }
 
 fn load_font() -> Option<Vec<u8>> {
@@ -340,6 +343,44 @@ fn create_media_bind_group_layout(device: &wgpu::Device) -> wgpu::BindGroupLayou
     })
 }
 
+/// NV12動画フレーム用BGL。輝度(binding1)・色差(binding2)を別プレーンとしてバインドする。
+/// media_bind_group_layoutと違いテクスチャバインディングが2枚（RGBA単一プレーン非対応）。
+fn create_video_bind_group_layout(device: &wgpu::Device) -> wgpu::BindGroupLayout {
+    let plane_entry = |binding: u32| wgpu::BindGroupLayoutEntry {
+        binding,
+        visibility: wgpu::ShaderStages::FRAGMENT,
+        ty: wgpu::BindingType::Texture {
+            sample_type: wgpu::TextureSampleType::Float { filterable: true },
+            view_dimension: wgpu::TextureViewDimension::D2,
+            multisampled: false,
+        },
+        count: None,
+    };
+    device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+        label: Some("Video Object BGL"),
+        entries: &[
+            wgpu::BindGroupLayoutEntry {
+                binding: 0,
+                visibility: wgpu::ShaderStages::VERTEX | wgpu::ShaderStages::FRAGMENT,
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Uniform,
+                    has_dynamic_offset: true,
+                    min_binding_size: wgpu::BufferSize::new(MEDIA_UNIFORM_SIZE),
+                },
+                count: None,
+            },
+            plane_entry(1),
+            plane_entry(2),
+            wgpu::BindGroupLayoutEntry {
+                binding: 3,
+                visibility: wgpu::ShaderStages::FRAGMENT,
+                ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                count: None,
+            },
+        ],
+    })
+}
+
 fn build_media_pipeline(
     device: &wgpu::Device,
     layout: &wgpu::PipelineLayout,
@@ -484,14 +525,29 @@ impl RenderEngine {
             ..Default::default()
         });
 
+        let video_bind_group_layout = create_video_bind_group_layout(&device);
+        let video_pipeline_layout =
+            device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                label: Some("Video Pipeline Layout"),
+                bind_group_layouts: &[Some(&video_bind_group_layout)],
+                immediate_size: 0,
+            });
+        let video_pipeline = build_media_pipeline(&device, &video_pipeline_layout, VIDEO_WGSL);
+
+        // Render Passはdepth_stencil_attachmentへDEPTH_FORMATを常時添付するため、
+        // text_brush内部パイプラインも同一フォーマットのdepth_stencilを持たせて整合させる。
+        // テキストは深度書込み不要のためdepth_write_enabled=false、常に通過させるためCompareFunction::Always。
         let text_brush = load_font().and_then(|f| {
             FontArc::try_from_vec(f).ok().map(|fa| {
-                BrushBuilder::using_font(fa).build(
-                    &device,
-                    width,
-                    height,
-                    wgpu::TextureFormat::Rgba8Unorm,
-                )
+                BrushBuilder::using_font(fa)
+                    .with_depth_stencil(Some(wgpu::DepthStencilState {
+                        format: DEPTH_FORMAT,
+                        depth_write_enabled: Some(false),
+                        depth_compare: Some(wgpu::CompareFunction::Always),
+                        stencil: wgpu::StencilState::default(),
+                        bias: wgpu::DepthBiasState::default(),
+                    }))
+                    .build(&device, width, height, wgpu::TextureFormat::Rgba8Unorm)
             })
         });
 
@@ -517,6 +573,8 @@ impl RenderEngine {
             media_bind_group_layout,
             media_uniform_buffer,
             media_sampler,
+            video_pipeline,
+            video_bind_group_layout,
         }
     }
 
@@ -721,11 +779,32 @@ impl RenderEngine {
                     Some(VIDEO_STABLE_ID) | Some(IMAGE_STABLE_ID)
                 );
                 let tex = if is_visual {
-                    obj.media_source.as_ref().and_then(|src| {
-                        cache
-                            .frame_at(&src.path, obj.source_frame, &self.device, &self.queue)
-                            .ok()
-                    })
+                    match &obj.media_source {
+                        Some(src) => match cache.frame_at(
+                            &src.path,
+                            obj.source_frame,
+                            &self.device,
+                            &self.queue,
+                        ) {
+                            Ok(texture) => Some(texture),
+                            Err(err) => {
+                                eprintln!(
+                                    "[NeoUtl] フレーム取得失敗 kind_id={} path={} frame={}: {err}",
+                                    obj.kind_id,
+                                    src.path.display(),
+                                    obj.source_frame
+                                );
+                                None
+                            }
+                        },
+                        None => {
+                            eprintln!(
+                                "[NeoUtl] MediaSource未設定 kind_id={}: 映像/画像オブジェクトにパスが割当てられていません",
+                                obj.kind_id
+                            );
+                            None
+                        }
+                    }
                 } else {
                     None
                 };
@@ -833,36 +912,83 @@ impl RenderEngine {
                 }
             }
 
-            for (texture, offset) in media_frames.iter().zip(media_offsets.iter()) {
+            for (obj, (texture, offset)) in active_objects
+                .iter()
+                .zip(media_frames.iter().zip(media_offsets.iter()))
+            {
                 let (Some(texture), Some(offset)) = (texture, offset) else {
                     continue;
                 };
-                let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
-                let bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
-                    label: Some("Media Object BG"),
-                    layout: &self.media_bind_group_layout,
-                    entries: &[
-                        wgpu::BindGroupEntry {
-                            binding: 0,
-                            resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
-                                buffer: &self.media_uniform_buffer,
-                                offset: 0,
-                                size: wgpu::BufferSize::new(MEDIA_UNIFORM_SIZE),
-                            }),
-                        },
-                        wgpu::BindGroupEntry {
-                            binding: 1,
-                            resource: wgpu::BindingResource::TextureView(&view),
-                        },
-                        wgpu::BindGroupEntry {
-                            binding: 2,
-                            resource: wgpu::BindingResource::Sampler(&self.media_sampler),
-                        },
-                    ],
-                });
-                rpass.set_pipeline(&self.media_pipeline);
-                rpass.set_bind_group(0, &bind_group, &[*offset]);
-                rpass.draw(0..6, 0..1);
+                // 動画フレームはNV12（Y/UV 2プレーン）で確保されるため、
+                // RGBA単一プレーン前提のmedia_pipelineへは直接バインド不可（バリデーション不合格）。
+                // VIDEO_STABLE_IDはvideo_pipeline（プレーン分離+YUV変換シェーダ）へ振り分ける。
+                let is_video = matches!(stable_id_of(obj.kind_id), Some(VIDEO_STABLE_ID));
+                if is_video {
+                    let plane_y = texture.create_view(&wgpu::TextureViewDescriptor {
+                        aspect: wgpu::TextureAspect::Plane0,
+                        ..Default::default()
+                    });
+                    let plane_uv = texture.create_view(&wgpu::TextureViewDescriptor {
+                        aspect: wgpu::TextureAspect::Plane1,
+                        ..Default::default()
+                    });
+                    let bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+                        label: Some("Video Object BG"),
+                        layout: &self.video_bind_group_layout,
+                        entries: &[
+                            wgpu::BindGroupEntry {
+                                binding: 0,
+                                resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
+                                    buffer: &self.media_uniform_buffer,
+                                    offset: 0,
+                                    size: wgpu::BufferSize::new(MEDIA_UNIFORM_SIZE),
+                                }),
+                            },
+                            wgpu::BindGroupEntry {
+                                binding: 1,
+                                resource: wgpu::BindingResource::TextureView(&plane_y),
+                            },
+                            wgpu::BindGroupEntry {
+                                binding: 2,
+                                resource: wgpu::BindingResource::TextureView(&plane_uv),
+                            },
+                            wgpu::BindGroupEntry {
+                                binding: 3,
+                                resource: wgpu::BindingResource::Sampler(&self.media_sampler),
+                            },
+                        ],
+                    });
+                    rpass.set_pipeline(&self.video_pipeline);
+                    rpass.set_bind_group(0, &bind_group, &[*offset]);
+                    rpass.draw(0..6, 0..1);
+                } else {
+                    let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
+                    let bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+                        label: Some("Media Object BG"),
+                        layout: &self.media_bind_group_layout,
+                        entries: &[
+                            wgpu::BindGroupEntry {
+                                binding: 0,
+                                resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
+                                    buffer: &self.media_uniform_buffer,
+                                    offset: 0,
+                                    size: wgpu::BufferSize::new(MEDIA_UNIFORM_SIZE),
+                                }),
+                            },
+                            wgpu::BindGroupEntry {
+                                binding: 1,
+                                resource: wgpu::BindingResource::TextureView(&view),
+                            },
+                            wgpu::BindGroupEntry {
+                                binding: 2,
+                                resource: wgpu::BindingResource::Sampler(&self.media_sampler),
+                            },
+                        ],
+                    });
+                    rpass.set_pipeline(&self.media_pipeline);
+                    rpass.set_bind_group(0, &bind_group, &[*offset]);
+                    rpass.draw(0..6, 0..1);
+                }
             }
 
             if let Some(ref mut brush) = self.text_brush {

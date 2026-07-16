@@ -10,6 +10,9 @@ pub enum MediaHandle {
     Video(Box<dyn VideoSource>),
     Image(Box<dyn ImageSource>),
     Audio(Arc<AudioBuffer>),
+    /// open失敗を記憶し、毎フレームの再オープン試行（Pipeline生成の連打・
+    /// GStreamer CRITICALログのスパム）を防ぐ。evict()で解除可能。
+    Failed(String),
 }
 
 pub struct MediaCache {
@@ -35,18 +38,35 @@ impl MediaCache {
 
     fn load(&mut self, path: &Path) -> Result<&mut MediaHandle, String> {
         if !self.entries.contains_key(path) {
-            let kind =
-                detect_kind(path).ok_or_else(|| format!("未対応の拡張子: {}", path.display()))?;
-            let handle = match kind {
-                MediaKind::Video => MediaHandle::Video(open_video(path)?),
-                MediaKind::Image => MediaHandle::Image(open_image(path)?),
-                MediaKind::Audio => {
-                    MediaHandle::Audio(Arc::new(neoutl_media_symphonia_decoder::decode_full(path)?))
+            let kind = match detect_kind(path) {
+                Some(k) => k,
+                None => {
+                    let err = format!("未対応の拡張子: {}", path.display());
+                    self.entries
+                        .insert(path.to_path_buf(), MediaHandle::Failed(err.clone()));
+                    return Err(err);
+                }
+            };
+            let result = match kind {
+                MediaKind::Video => open_video(path).map(MediaHandle::Video),
+                MediaKind::Image => open_image(path).map(MediaHandle::Image),
+                MediaKind::Audio => neoutl_media_symphonia_decoder::decode_full(path)
+                    .map(|buf| MediaHandle::Audio(Arc::new(buf))),
+            };
+            let handle = match result {
+                Ok(handle) => handle,
+                Err(err) => {
+                    self.entries
+                        .insert(path.to_path_buf(), MediaHandle::Failed(err.clone()));
+                    return Err(err);
                 }
             };
             self.entries.insert(path.to_path_buf(), handle);
         }
-        Ok(self.entries.get_mut(path).unwrap())
+        match self.entries.get_mut(path).unwrap() {
+            MediaHandle::Failed(err) => Err(err.clone()),
+            handle => Ok(handle),
+        }
     }
 
     pub fn frame_at(
@@ -63,12 +83,14 @@ impl MediaCache {
                 "音声ファイルに映像フレームは存在しません: {}",
                 path.display()
             )),
+            MediaHandle::Failed(err) => Err(err.clone()),
         }
     }
 
     pub fn audio(&mut self, path: &Path) -> Result<Arc<AudioBuffer>, String> {
         match self.load(path)? {
             MediaHandle::Audio(buffer) => Ok(buffer.clone()),
+            MediaHandle::Failed(err) => Err(err.clone()),
             _ => Err(format!("音声トラックが見つかりません: {}", path.display())),
         }
     }
