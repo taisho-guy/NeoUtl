@@ -67,6 +67,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     effects::load_all(&effects::default_effects_dir());
 
     let mut wgpu_settings = slint::wgpu_29::WGPUSettings::default();
+    // gstreamer-decoderがNV12テクスチャを直接生成するため、Device生成時点で
+    // 本機能を必須要求する。非対応環境ではselect()がここでErrを返す。
+    wgpu_settings.device_required_features |= slint::wgpu_29::wgpu::Features::TEXTURE_FORMAT_NV12;
     #[cfg(any(target_os = "windows", target_os = "linux"))]
     {
         wgpu_settings.backends = slint::wgpu_29::wgpu::Backends::VULKAN;

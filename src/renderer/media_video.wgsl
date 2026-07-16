@@ -43,3 +43,4 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     let b = y_full + 1.8556 * u;
     return vec4<f32>(clamp(vec3<f32>(r, g, b), vec3<f32>(0.0), vec3<f32>(1.0)), uniforms.opacity);
 }
+
