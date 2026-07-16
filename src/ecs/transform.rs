@@ -288,6 +288,11 @@ pub fn compute_perspective_matrix(fov_deg: f32, aspect: f32, near: f32, far: f32
 /// dimensionalityとCameraからMVPを合成する唯一の窓口。
 /// project_width/project_height はピクセル単位のプロジェクト解像度で、
 /// Orthoではworld座標系そのものの基準として、Perspectiveではaspect算出のみに用いる。
+///
+/// Orthoは3DカメラのView行列を適用しない。Camera::for_resolutionが導出するpos_zは
+/// Perspective専用の値であり、これをOrtho側のz軸へ適用するとclip_zが[0,1]から
+/// 大幅に逸脱し、頂点シェーダの時点で全ジオメトリがクリップされ何も描画されなくなる
+/// （2Dオブジェクトはz奥行きをそのまま素通しする設計のため、Viewは不要かつ有害）。
 pub fn compute_mvp(
     global: &GlobalMatrix,
     cam: &Camera,
@@ -295,13 +300,16 @@ pub fn compute_mvp(
     project_height: f32,
     projection: Projection,
 ) -> [f32; 16] {
-    let view = compute_view_matrix(cam);
-    let proj = match projection {
-        Projection::Ortho => compute_ortho_matrix(project_width, project_height),
-        Projection::Perspective { fov_deg } => {
-            let aspect = project_width.max(1.0) / project_height.max(1.0);
-            compute_perspective_matrix(fov_deg, aspect, cam.near, cam.far)
+    match projection {
+        Projection::Ortho => {
+            let proj = compute_ortho_matrix(project_width, project_height);
+            mat4_mul(&proj, &global.0)
         }
-    };
-    mat4_mul(&proj, &mat4_mul(&view, &global.0))
+        Projection::Perspective { fov_deg } => {
+            let view = compute_view_matrix(cam);
+            let aspect = project_width.max(1.0) / project_height.max(1.0);
+            let proj = compute_perspective_matrix(fov_deg, aspect, cam.near, cam.far);
+            mat4_mul(&proj, &mat4_mul(&view, &global.0))
+        }
+    }
 }

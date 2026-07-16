@@ -20,8 +20,14 @@ pub struct MediaCache {
 }
 
 fn open_video(path: &Path) -> Result<Box<dyn VideoSource>, String> {
-    neoutl_media_gstreamer_decoder::GstZeroCopyDecoder::open(path)
-        .map(|decoder| Box::new(decoder) as Box<dyn VideoSource>)
+    eprintln!("[media-cache] open_video開始: {}", path.display());
+    let result = neoutl_media_gstreamer_decoder::GstDecoder::open(path)
+        .map(|decoder| Box::new(decoder) as Box<dyn VideoSource>);
+    match &result {
+        Ok(_) => eprintln!("[media-cache] open_video成功: {}", path.display()),
+        Err(e) => eprintln!("[media-cache] open_video失敗: {} 理由={e}", path.display()),
+    }
+    result
 }
 
 fn open_image(path: &Path) -> Result<Box<dyn ImageSource>, String> {
@@ -38,10 +44,12 @@ impl MediaCache {
 
     fn load(&mut self, path: &Path) -> Result<&mut MediaHandle, String> {
         if !self.entries.contains_key(path) {
+            eprintln!("[media-cache] 新規load: {}", path.display());
             let kind = match detect_kind(path) {
                 Some(k) => k,
                 None => {
                     let err = format!("未対応の拡張子: {}", path.display());
+                    eprintln!("[media-cache] {err}");
                     self.entries
                         .insert(path.to_path_buf(), MediaHandle::Failed(err.clone()));
                     return Err(err);
@@ -56,6 +64,7 @@ impl MediaCache {
             let handle = match result {
                 Ok(handle) => handle,
                 Err(err) => {
+                    eprintln!("[media-cache] load失敗: {} 理由={err}", path.display());
                     self.entries
                         .insert(path.to_path_buf(), MediaHandle::Failed(err.clone()));
                     return Err(err);
@@ -76,7 +85,11 @@ impl MediaCache {
         device: &wgpu::Device,
         queue: &wgpu::Queue,
     ) -> Result<wgpu::Texture, String> {
-        match self.load(path)? {
+        eprintln!(
+            "[media-cache] frame_at呼び出し: {} frame_index={frame_index}",
+            path.display()
+        );
+        let result = match self.load(path)? {
             MediaHandle::Video(decoder) => decoder.frame_texture(device, queue, frame_index),
             MediaHandle::Image(decoder) => Ok(decoder.texture(device, queue)),
             MediaHandle::Audio(_) => Err(format!(
@@ -84,7 +97,18 @@ impl MediaCache {
                 path.display()
             )),
             MediaHandle::Failed(err) => Err(err.clone()),
+        };
+        match &result {
+            Ok(_) => eprintln!(
+                "[media-cache] frame_at成功: {} frame_index={frame_index}",
+                path.display()
+            ),
+            Err(e) => eprintln!(
+                "[media-cache] frame_at失敗: {} frame_index={frame_index} 理由={e}",
+                path.display()
+            ),
         }
+        result
     }
 
     pub fn audio(&mut self, path: &Path) -> Result<Arc<AudioBuffer>, String> {

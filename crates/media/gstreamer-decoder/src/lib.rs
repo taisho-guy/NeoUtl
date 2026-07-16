@@ -2,23 +2,13 @@ use gst::prelude::*;
 use gst_app::AppSink;
 use gstreamer as gst;
 use gstreamer_app as gst_app;
+use gstreamer_video as gst_video;
 use neoutl_media_api::VideoSource;
-use std::path::Path;
+use std::path::{Path, PathBuf};
+use std::str::FromStr;
 use std::sync::Once;
-
-#[cfg(target_os = "linux")]
-mod linux;
-#[cfg(target_os = "macos")]
-mod macos;
-#[cfg(target_os = "windows")]
-mod windows;
-
-#[cfg(target_os = "linux")]
-use linux::import_frame;
-#[cfg(target_os = "macos")]
-use macos::import_frame;
-#[cfg(target_os = "windows")]
-use windows::import_frame;
+use std::sync::mpsc;
+use std::thread::JoinHandle;
 
 static GST_INIT: Once = Once::new();
 
@@ -30,9 +20,6 @@ fn ensure_gst_init() {
     });
 }
 
-/// H.264/HEVC等をDMABuf/D3D11出力できるハードウェアデコーダ要素の有無を起動時に一度だけ検査する。
-/// ゼロコピーパイプラインは該当要素が存在しない環境では原理的に成立しない
-/// （ソフトウェアデコーダはシステムメモリしか出力できないため）。
 fn log_hardware_decoder_availability() {
     let registry = gst::Registry::get();
     let candidates = [
@@ -59,52 +46,13 @@ fn log_hardware_decoder_availability() {
     if found.is_empty() {
         eprintln!(
             "[gstreamer-decoder] ハードウェアH.264/HEVCデコーダ要素が未登録です。\
-             DMABuf/D3D11ゼロコピー出力は不可能なため動画プレビューは失敗します。\
-             VAAPI/V4L2/NVCODECいずれかのGStreamerプラグインパッケージを導入し、\
-             `gst-inspect-1.0 --gst-disable-registry-fork` 等でレジストリ再構築を確認して下さい。"
+             VAAPI/V4L2/NVCODECいずれかのGStreamerプラグインパッケージを導入して下さい。"
         );
     } else {
         eprintln!("[gstreamer-decoder] ハードウェアデコーダ検出: {found:?}");
     }
 }
 
-/// state()の失敗時、バスからERRORメッセージを取り出し具体的な失敗要素・理由を返す。
-/// map_err(|e| e.to_string())単体では"Element failed to change its state"としか出ず、
-/// どの要素が何故失敗したか特定できないため、ここで詳細化する。
-fn wait_state(pipeline: &gst::Pipeline, timeout: gst::ClockTime) -> Result<(), String> {
-    let (result, _, _) = pipeline.state(timeout);
-    if result.is_ok() {
-        return Ok(());
-    }
-    let Some(bus) = pipeline.bus() else {
-        return Err("状態遷移失敗（バス未取得のため詳細不明）".to_owned());
-    };
-    if let Some(msg) = bus.timed_pop_filtered(
-        gst::ClockTime::from_mseconds(500),
-        &[gst::MessageType::Error],
-    ) {
-        if let gst::MessageView::Error(err) = msg.view() {
-            let src = err
-                .src()
-                .map(|s| s.path_string().to_string())
-                .unwrap_or_else(|| "不明".to_owned());
-            return Err(format!(
-                "状態遷移失敗: 要素={src} 理由={} 詳細={:?}",
-                err.error(),
-                err.debug()
-            ));
-        }
-    }
-    Err(
-        "状態遷移失敗（バスにERRORメッセージなし。DMABuf/D3D11出力に対応するデコーダ要素が\
-         選択されていない可能性が高い）"
-            .to_owned(),
-    )
-}
-
-/// アプリに同梱されたGStreamerプラグインの実行ファイル相対パスを、
-/// システムのプラグインパスに加えてRegistryへ追加登録する。
-/// Linuxは配布物にGStreamerプラグインを同梱していない（システムのapt版に依存）ため何もしない。
 #[cfg(target_os = "linux")]
 fn register_bundled_plugin_dir() {}
 
@@ -129,23 +77,139 @@ fn register_bundled_plugin_dir() {
 }
 
 #[cfg(target_os = "linux")]
-const ZEROCOPY_CAPS: &str = "video/x-raw(memory:DMABufMemory),format=NV12";
+const DOWNLOAD_CHAIN: &str = "vapostproc ! ";
 #[cfg(target_os = "windows")]
-const ZEROCOPY_CAPS: &str = "video/x-raw(memory:D3D11Memory),format=NV12";
+const DOWNLOAD_CHAIN: &str = "d3d11download ! ";
 #[cfg(target_os = "macos")]
-const ZEROCOPY_CAPS: &str = "video/x-raw(memory:GLMemory),format=NV12";
+const DOWNLOAD_CHAIN: &str = "";
 
-/// デコーダ要素は種別固有のメモリ（VAMemory/D3D11Memory等）で出力するため、
-/// appsinkが要求する最終メモリ種別へ明示変換する要素が必要。
-/// decodebinの自動プラグイン機構はメモリ種別変換要素までは自動挿入しないため、
-/// パイプライン記述に固定で挟み込む（末尾に" ! "を含む／不要環境では空文字）。
-/// vapostproc: gst-plugin-va（VAMemory → DMABufMemory）
-#[cfg(target_os = "linux")]
-const POSTPROC_CHAIN: &str = "vapostproc ! ";
-#[cfg(not(target_os = "linux"))]
-const POSTPROC_CHAIN: &str = "";
+const SYSMEM_CAPS: &str = "video/x-raw,format=NV12";
 
-pub struct GstZeroCopyDecoder {
+fn duration_to_frames(duration_ns: u64, frame_duration_ns: u64) -> i64 {
+    (duration_ns / frame_duration_ns.max(1)) as i64
+}
+
+fn wait_state(pipeline: &gst::Pipeline, timeout: gst::ClockTime) -> Result<(), String> {
+    let (result, _, _) = pipeline.state(timeout);
+    if result.is_ok() {
+        return Ok(());
+    }
+    let Some(bus) = pipeline.bus() else {
+        return Err("状態遷移失敗（バス未取得のため詳細不明）".to_owned());
+    };
+    if let Some(msg) = bus.timed_pop_filtered(
+        gst::ClockTime::from_mseconds(500),
+        &[gst::MessageType::Error],
+    ) {
+        if let gst::MessageView::Error(err) = msg.view() {
+            let src = err
+                .src()
+                .map(|s| s.path_string().to_string())
+                .unwrap_or_else(|| "不明".to_owned());
+            return Err(format!(
+                "状態遷移失敗: 要素={src} 理由={} 詳細={:?}",
+                err.error(),
+                err.debug()
+            ));
+        }
+    }
+    Err("状態遷移失敗（バスにERRORメッセージなし）".to_owned())
+}
+
+/// NV12バッファをY/UVプレーン分割でCPU転送しWGPUテクスチャへアップロードする。
+fn import_frame(
+    device: &wgpu::Device,
+    queue: &wgpu::Queue,
+    buffer: &gst::BufferRef,
+    width: u32,
+    height: u32,
+) -> Result<wgpu::Texture, String> {
+    let map = buffer.map_readable().map_err(|e| e.to_string())?;
+    let data = map.as_slice();
+
+    let y_plane_size = (width * height) as usize;
+    let uv_plane_size = (width * height / 2) as usize;
+    eprintln!(
+        "[gstreamer-decoder] import_frame: width={width} height={height} \
+         data_len={} 必要バイト数={}",
+        data.len(),
+        y_plane_size + uv_plane_size
+    );
+    if data.len() < y_plane_size + uv_plane_size {
+        let msg = format!(
+            "NV12バッファサイズ不足: data_len={} 必要={}",
+            data.len(),
+            y_plane_size + uv_plane_size
+        );
+        eprintln!("[gstreamer-decoder] {msg}");
+        return Err(msg);
+    }
+
+    let texture = device.create_texture(&wgpu::TextureDescriptor {
+        label: Some("gst-nv12-frame"),
+        size: wgpu::Extent3d {
+            width,
+            height,
+            depth_or_array_layers: 1,
+        },
+        mip_level_count: 1,
+        sample_count: 1,
+        dimension: wgpu::TextureDimension::D2,
+        format: wgpu::TextureFormat::NV12,
+        usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+        view_formats: &[],
+    });
+
+    queue.write_texture(
+        wgpu::TexelCopyTextureInfo {
+            texture: &texture,
+            mip_level: 0,
+            origin: wgpu::Origin3d::ZERO,
+            aspect: wgpu::TextureAspect::Plane0,
+        },
+        &data[0..y_plane_size],
+        wgpu::TexelCopyBufferLayout {
+            offset: 0,
+            bytes_per_row: Some(width),
+            rows_per_image: Some(height),
+        },
+        wgpu::Extent3d {
+            width,
+            height,
+            depth_or_array_layers: 1,
+        },
+    );
+
+    queue.write_texture(
+        wgpu::TexelCopyTextureInfo {
+            texture: &texture,
+            mip_level: 0,
+            origin: wgpu::Origin3d::ZERO,
+            aspect: wgpu::TextureAspect::Plane1,
+        },
+        &data[y_plane_size..y_plane_size + uv_plane_size],
+        wgpu::TexelCopyBufferLayout {
+            offset: 0,
+            bytes_per_row: Some(width),
+            rows_per_image: Some(height / 2),
+        },
+        wgpu::Extent3d {
+            width: width / 2,
+            height: height / 2,
+            depth_or_array_layers: 1,
+        },
+    );
+
+    eprintln!(
+        "[gstreamer-decoder] import_frame完了: texture生成成功 width={width} height={height}"
+    );
+    Ok(texture)
+}
+
+/// GStreamer実体。command_thread専有。MainLoop駆動スレッドとは別スレッドで
+/// sample_at（ブロッキング呼び出し）を実行するため、バスメッセージの
+/// ディスパッチはmainloop_threadが並行して継続する。
+struct GstDecoderInner {
     pipeline: gst::Pipeline,
     appsink: AppSink,
     width: u32,
@@ -155,22 +219,14 @@ pub struct GstZeroCopyDecoder {
     total_frames: i64,
 }
 
-fn duration_to_frames(duration_ns: u64, frame_duration_ns: u64) -> i64 {
-    (duration_ns / frame_duration_ns.max(1)) as i64
-}
-
-impl GstZeroCopyDecoder {
-    pub fn open(path: &Path) -> Result<Self, String> {
-        ensure_gst_init();
-
+impl GstDecoderInner {
+    /// main_context: バスウォッチ登録先。登録自体はmain_context.invoke経由で
+    /// mainloop_thread上で実行されるため、この関数はどのスレッドから呼んでもよい。
+    fn open(path: &Path, main_context: &gst::glib::MainContext) -> Result<Self, String> {
         let uri = gst::glib::filename_to_uri(path, None).map_err(|e| e.to_string())?;
-        // uridecodebinは音声・動画等ソース内の全ストリームを動的ペインとしてexposeする。
-        // 動画ペインのみを"src. ! ..."へ静的リンクすると、音声等の残りペインが未接続のまま
-        // 残り、qtdemux内部ループがNOT_LINKEDでストリームエラーを起こし全体が失敗する。
-        // "src."を複数回参照し、残りペインはfakesinkで消費して未リンク状態を解消する。
         let pipeline_desc = format!(
             "uridecodebin uri={uri} name=src \
-             src. ! {POSTPROC_CHAIN}appsink name=sink sync=false max-buffers=1 drop=true \
+             src. ! {DOWNLOAD_CHAIN}videoconvert ! appsink name=sink sync=false max-buffers=1 drop=true \
              src. ! fakesink name=drain sync=false async=false"
         );
         let pipeline = gst::parse::launch(&pipeline_desc)
@@ -184,18 +240,29 @@ impl GstZeroCopyDecoder {
             .downcast::<AppSink>()
             .map_err(|_| "appsinkキャスト失敗".to_owned())?;
         appsink.set_caps(Some(
-            &gst::Caps::from_str(ZEROCOPY_CAPS).map_err(|e| e.to_string())?,
+            &gst::Caps::from_str(SYSMEM_CAPS).map_err(|e| e.to_string())?,
         ));
 
-        // 以降の早期returnはすべてこのマクロ経由とし、Pipelineを必ずNULLへ戻してから
-        // Errを返す。素のpipeline変数がNULLに戻らず関数を抜けるとGStreamerが
-        // "disposing element in READY state" CRITICALを出し、内部スレッド/fdがリークする。
         macro_rules! fail {
             ($err:expr) => {{
                 let _ = pipeline.set_state(gst::State::Null);
                 return Err($err);
             }};
         }
+
+        // バスウォッチはpipeline状態遷移開始前にmainloop_thread上へ登録する。
+        // add_watchはSendクロージャを要求する代わりに呼び出し元スレッドを問わないため、
+        // main_context.invokeでmainloop_thread側へ登録処理自体を委譲できる。
+        let bus = match pipeline.bus() {
+            Some(b) => b,
+            None => fail!("バス未取得".to_owned()),
+        };
+        main_context.invoke(move || {
+            let _ = bus.add_watch(|_, msg| {
+                let _ = msg;
+                gst::glib::ControlFlow::Continue
+            });
+        });
 
         if let Err(e) = pipeline.set_state(gst::State::Paused) {
             fail!(e.to_string());
@@ -232,6 +299,11 @@ impl GstZeroCopyDecoder {
             .unwrap_or(0);
         let total_frames = duration_to_frames(duration_ns, frame_duration_ns).max(1);
 
+        eprintln!(
+            "[gstreamer-decoder] open完了: caps={caps} width={width} height={height} \
+             fps={fps} total_frames={total_frames} duration_ns={duration_ns}"
+        );
+
         Ok(Self {
             pipeline,
             appsink,
@@ -244,22 +316,175 @@ impl GstZeroCopyDecoder {
     }
 
     fn sample_at(&mut self, frame_index: i64) -> Result<gst::Sample, String> {
-        let target_ns = frame_index.max(0) as u64 * self.frame_duration_ns;
+        let target = frame_index.clamp(0, self.total_frames - 1);
+        let target_ns = target as u64 * self.frame_duration_ns;
+        eprintln!(
+            "[gstreamer-decoder] sample_at開始: frame_index={frame_index} target={target} target_ns={target_ns}"
+        );
         self.pipeline
             .seek_simple(
                 gst::SeekFlags::FLUSH | gst::SeekFlags::ACCURATE,
                 gst::ClockTime::from_nseconds(target_ns),
             )
-            .map_err(|e| e.to_string())?;
-        wait_state(&self.pipeline, gst::ClockTime::from_seconds(10))?;
-        self.appsink
+            .map_err(|e| {
+                let msg = e.to_string();
+                eprintln!("[gstreamer-decoder] seek失敗: {msg}");
+                msg
+            })?;
+        wait_state(&self.pipeline, gst::ClockTime::from_seconds(10)).map_err(|e| {
+            eprintln!("[gstreamer-decoder] seek後の状態遷移失敗: {e}");
+            e
+        })?;
+        let result = self
+            .appsink
             .pull_preroll()
             .or_else(|_| self.appsink.pull_sample())
-            .map_err(|e| e.to_string())
+            .map_err(|e| e.to_string());
+        match &result {
+            Ok(sample) => {
+                let buffer_size = sample.buffer().map(|b| b.size()).unwrap_or(0);
+                let caps_str = sample
+                    .caps()
+                    .map(|c| c.to_string())
+                    .unwrap_or_else(|| "なし".to_owned());
+                eprintln!(
+                    "[gstreamer-decoder] sample取得成功: frame_index={frame_index} \
+                     buffer_size={buffer_size} caps={caps_str}"
+                );
+            }
+            Err(e) => {
+                eprintln!("[gstreamer-decoder] sample取得失敗: frame_index={frame_index} 理由={e}");
+            }
+        }
+        result
     }
 }
 
-impl VideoSource for GstZeroCopyDecoder {
+enum Command {
+    FrameTexture {
+        frame_index: i64,
+        device: wgpu::Device,
+        queue: wgpu::Queue,
+        reply: mpsc::Sender<Result<wgpu::Texture, String>>,
+    },
+    Shutdown,
+}
+
+/// UIスレッドが保持するハンドル。GStreamer実体は一切保持せず、
+/// 全操作をコマンドチャネル経由でcommand_threadへ委譲する。
+pub struct GstDecoder {
+    width: u32,
+    height: u32,
+    fps: f64,
+    total_frames: i64,
+    tx: mpsc::Sender<Command>,
+    mainloop_thread: Option<JoinHandle<()>>,
+    command_thread: Option<JoinHandle<()>>,
+}
+
+impl GstDecoder {
+    pub fn open(path: &Path) -> Result<Self, String> {
+        ensure_gst_init();
+        let path: PathBuf = path.to_owned();
+
+        let main_context = gst::glib::MainContext::new();
+        let main_loop = gst::glib::MainLoop::new(Some(&main_context), false);
+
+        // mainloop_thread: MainContextの所有スレッド。ここでのみ
+        // with_thread_defaultを呼び、run()を占有的に駆動し続ける。
+        // このスレッドはGstDecoderInnerを一切保持しない（完全分離）。
+        let mainloop_thread = {
+            let main_context = main_context.clone();
+            let main_loop = main_loop.clone();
+            std::thread::Builder::new()
+                .name("gst-decoder-mainloop".to_owned())
+                .spawn(move || {
+                    main_context
+                        .with_thread_default(|| {
+                            main_loop.run();
+                        })
+                        .expect("MainContext設定失敗");
+                })
+                .map_err(|e| e.to_string())?
+        };
+
+        // open()自体はこの呼び出しスレッド（GstDecoder::open呼び出し元、
+        // 通常はcommand_thread生成前の一時スレッド文脈）で実行する。
+        // バスウォッチ登録はmain_context.invoke経由でmainloop_threadへ委譲済みのため、
+        // wait_state内のブロッキング待機中もmainloop_threadがメッセージを処理できる。
+        let inner = match GstDecoderInner::open(&path, &main_context) {
+            Ok(inner) => inner,
+            Err(e) => {
+                main_loop.quit();
+                let _ = mainloop_thread.join();
+                return Err(e);
+            }
+        };
+
+        let width = inner.width;
+        let height = inner.height;
+        let fps = inner.fps;
+        let total_frames = inner.total_frames;
+
+        let (tx, rx) = mpsc::channel::<Command>();
+
+        // command_thread: GstDecoderInnerの所有スレッド。sample_at等の
+        // ブロッキング呼び出しはここでのみ発生し、mainloop_threadには一切影響しない。
+        let command_thread = {
+            let main_loop = main_loop.clone();
+            std::thread::Builder::new()
+                .name("gst-decoder-command".to_owned())
+                .spawn(move || {
+                    let mut inner = inner;
+                    eprintln!("[gstreamer-decoder] command_thread起動完了");
+                    while let Ok(command) = rx.recv() {
+                        match command {
+                            Command::FrameTexture {
+                                frame_index,
+                                device,
+                                queue,
+                                reply,
+                            } => {
+                                eprintln!(
+                                    "[gstreamer-decoder] command_thread: FrameTexture受信 frame_index={frame_index}"
+                                );
+                                let result = inner.sample_at(frame_index).and_then(|sample| {
+                                    let buffer = sample.buffer().ok_or("buffer未取得".to_owned())?;
+                                    import_frame(&device, &queue, buffer, inner.width, inner.height)
+                                });
+                                if let Err(e) = &result {
+                                    eprintln!(
+                                        "[gstreamer-decoder] command_thread: フレーム処理失敗 frame_index={frame_index} 理由={e}"
+                                    );
+                                }
+                                let _ = reply.send(result);
+                            }
+                            Command::Shutdown => {
+                                eprintln!("[gstreamer-decoder] command_thread: Shutdown受信");
+                                break;
+                            }
+                        }
+                    }
+                    let _ = inner.pipeline.set_state(gst::State::Null);
+                    main_loop.quit();
+                    eprintln!("[gstreamer-decoder] command_thread終了");
+                })
+                .map_err(|e| e.to_string())?
+        };
+
+        Ok(Self {
+            width,
+            height,
+            fps,
+            total_frames,
+            tx,
+            mainloop_thread: Some(mainloop_thread),
+            command_thread: Some(command_thread),
+        })
+    }
+}
+
+impl VideoSource for GstDecoder {
     fn width(&self) -> u32 {
         self.width
     }
@@ -279,18 +504,44 @@ impl VideoSource for GstZeroCopyDecoder {
         queue: &wgpu::Queue,
         frame_index: i64,
     ) -> Result<wgpu::Texture, String> {
-        let target = frame_index.clamp(0, self.total_frames - 1);
-        let sample = self.sample_at(target)?;
-        let buffer = sample.buffer().ok_or("buffer未取得")?;
-        unsafe { import_frame(device, queue, buffer, self.width, self.height) }
+        eprintln!("[gstreamer-decoder] frame_texture呼び出し: frame_index={frame_index}");
+        let (reply_tx, reply_rx) = mpsc::channel();
+        self.tx
+            .send(Command::FrameTexture {
+                frame_index,
+                device: device.clone(),
+                queue: queue.clone(),
+                reply: reply_tx,
+            })
+            .map_err(|e| {
+                let msg = "command_thread終了済み".to_owned();
+                eprintln!("[gstreamer-decoder] コマンド送信失敗: {e} ({msg})");
+                msg
+            })?;
+        let result = reply_rx
+            .recv()
+            .map_err(|e| e.to_string())
+            .and_then(|inner| inner);
+        match &result {
+            Ok(_) => {
+                eprintln!("[gstreamer-decoder] frame_texture応答成功: frame_index={frame_index}")
+            }
+            Err(e) => eprintln!(
+                "[gstreamer-decoder] frame_texture応答失敗: frame_index={frame_index} 理由={e}"
+            ),
+        }
+        result
     }
 }
 
-impl Drop for GstZeroCopyDecoder {
+impl Drop for GstDecoder {
     fn drop(&mut self) {
-        let _ = self.pipeline.set_state(gst::State::Null);
+        let _ = self.tx.send(Command::Shutdown);
+        if let Some(command_thread) = self.command_thread.take() {
+            let _ = command_thread.join();
+        }
+        if let Some(mainloop_thread) = self.mainloop_thread.take() {
+            let _ = mainloop_thread.join();
+        }
     }
 }
-
-use gstreamer_video as gst_video;
-use std::str::FromStr;
