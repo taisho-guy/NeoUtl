@@ -17,6 +17,9 @@ pub enum MediaHandle {
 
 pub struct MediaCache {
     entries: HashMap<PathBuf, MediaHandle>,
+    /// 直近デコード結果のパス単位キャッシュ。同一frame_index（画像は常時同一キー）の
+    /// 再要求はGPUデコード・アップロードを完全省略しテクスチャを再利用する。
+    frame_cache: HashMap<PathBuf, (i64, wgpu::Texture)>,
 }
 
 fn open_video(path: &Path) -> Result<Box<dyn VideoSource>, String> {
@@ -39,6 +42,7 @@ impl MediaCache {
     fn new() -> Self {
         Self {
             entries: HashMap::new(),
+            frame_cache: HashMap::new(),
         }
     }
 
@@ -89,6 +93,18 @@ impl MediaCache {
             "[media-cache] frame_at呼び出し: {} frame_index={frame_index}",
             path.display()
         );
+        // 画像は単一フレーム固定のためframe_indexに依らず同一キーで扱う。
+        let cache_key = match self.load(path)? {
+            MediaHandle::Image(_) => i64::MIN,
+            _ => frame_index,
+        };
+        if let Some((cached_key, tex)) = self.frame_cache.get(path)
+            && *cached_key == cache_key
+        {
+            eprintln!("[media-cache] frame_atキャッシュヒット: {}", path.display());
+            return Ok(tex.clone());
+        }
+
         let result = match self.load(path)? {
             MediaHandle::Video(decoder) => decoder.frame_texture(device, queue, frame_index),
             MediaHandle::Image(decoder) => Ok(decoder.texture(device, queue)),
@@ -99,16 +115,47 @@ impl MediaCache {
             MediaHandle::Failed(err) => Err(err.clone()),
         };
         match &result {
-            Ok(_) => eprintln!(
-                "[media-cache] frame_at成功: {} frame_index={frame_index}",
-                path.display()
-            ),
+            Ok(tex) => {
+                eprintln!(
+                    "[media-cache] frame_at成功: {} frame_index={frame_index}",
+                    path.display()
+                );
+                self.frame_cache
+                    .insert(path.to_path_buf(), (cache_key, tex.clone()));
+            }
             Err(e) => eprintln!(
                 "[media-cache] frame_at失敗: {} frame_index={frame_index} 理由={e}",
                 path.display()
             ),
         }
         result
+    }
+
+    /// ソース映像/画像のピクセル寸法を返す。open済みでなければload()を経由して開く。
+    /// device/queue不要（開設時点でVideoSource/ImageSourceのwidth/height確定済みのため）。
+    pub fn dimensions(&mut self, path: &Path) -> Result<(u32, u32), String> {
+        match self.load(path)? {
+            MediaHandle::Video(decoder) => Ok((decoder.width(), decoder.height())),
+            MediaHandle::Image(decoder) => Ok((decoder.width(), decoder.height())),
+            MediaHandle::Audio(_) => Err(format!(
+                "音声ファイルに映像寸法は存在しません: {}",
+                path.display()
+            )),
+            MediaHandle::Failed(err) => Err(err.clone()),
+        }
+    }
+
+    /// ソース動画のフレームレート。プロジェクトFPSとの比率換算に用いる（画像/音声は不使用）。
+    pub fn source_fps(&mut self, path: &Path) -> Result<f64, String> {
+        match self.load(path)? {
+            MediaHandle::Video(decoder) => Ok(decoder.fps()),
+            MediaHandle::Image(_) => Ok(0.0),
+            MediaHandle::Audio(_) => Err(format!(
+                "音声ファイルにFPSは存在しません: {}",
+                path.display()
+            )),
+            MediaHandle::Failed(err) => Err(err.clone()),
+        }
     }
 
     pub fn audio(&mut self, path: &Path) -> Result<Arc<AudioBuffer>, String> {
@@ -121,6 +168,7 @@ impl MediaCache {
 
     pub fn evict(&mut self, path: &Path) {
         self.entries.remove(path);
+        self.frame_cache.remove(path);
     }
 }
 

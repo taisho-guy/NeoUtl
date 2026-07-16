@@ -6,9 +6,10 @@ use crate::ecs::components::{
 use crate::ecs::effects::{EffectStack, compute_effect_params_at};
 use crate::ecs::resources::{ProjectResource, SceneResource, TimelineResource};
 use crate::ecs::transform::{
-    Camera, DEFAULT_FOV_DEG, GlobalMatrix, Projection, Transform, compute_mvp,
+    Camera, DEFAULT_FOV_DEG, GlobalMatrix, Projection, Transform, compute_mvp, rescale_for_source,
 };
 use crate::ecs::types::Value;
+use crate::media::MediaKind;
 use crate::objects;
 use neoutl_object_api::Dimensionality;
 use shipyard::{Get, IntoIter, UniqueView, View};
@@ -86,9 +87,31 @@ pub fn get_active_objects_system(world: &EcsWorld) -> Vec<ActiveObject> {
                 let media_source = media_sources.get(id).ok().cloned();
                 let source_frame = media_source
                     .as_ref()
-                    .map(|m| m.trim_in_frame + (current - range.start_frame) as i64)
+                    .map(|m| {
+                        let base = (current - range.start_frame) as f64;
+                        let ratio = if matches!(m.kind, MediaKind::Video) {
+                            crate::media::cache::global()
+                                .lock()
+                                .unwrap()
+                                .source_fps(&m.path)
+                                .map(|src_fps| src_fps / project.fps.max(1) as f64)
+                                .unwrap_or(1.0)
+                        } else {
+                            1.0
+                        };
+                        m.trim_in_frame + (base * ratio).round() as i64
+                    })
                     .unwrap_or(0);
                 let matrix = global_matrices.get(id).copied().unwrap_or_default();
+                let matrix = match &media_source {
+                    Some(src) if matches!(src.kind, MediaKind::Video | MediaKind::Image) => {
+                        match crate::media::cache::global().lock().unwrap().dimensions(&src.path) {
+                            Ok((w, h)) => rescale_for_source(&matrix, w as f32, h as f32),
+                            Err(_) => matrix,
+                        }
+                    }
+                    _ => matrix,
+                };
                 let mvp = compute_mvp(
                     &matrix,
                     &camera,

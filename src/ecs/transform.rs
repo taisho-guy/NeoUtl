@@ -134,6 +134,20 @@ pub fn compute_global_matrix(t: &Transform) -> GlobalMatrix {
     GlobalMatrix(mat4_mul(&translation, &mat4_mul(&rotation, &scale)))
 }
 
+/// GlobalMatrixのUNIT_SIZE_PX基準スケール列を、メディアソースの実寸法へ置換する。
+/// T*R*Sの合成順序上、col0=scale_x*UNIT_SIZE_PX*R_col0、col1=scale_y*UNIT_SIZE_PX*R_col1
+/// であるため、列単位の比率乗算のみで回転・平行移動を保ったまま実寸化できる。
+pub fn rescale_for_source(global: &GlobalMatrix, source_w: f32, source_h: f32) -> GlobalMatrix {
+    let mut m = global.0;
+    let ratio_w = source_w / UNIT_SIZE_PX;
+    let ratio_h = source_h / UNIT_SIZE_PX;
+    for i in 0..4 {
+        m[i] *= ratio_w;
+        m[4 + i] *= ratio_h;
+    }
+    GlobalMatrix(m)
+}
+
 /// 投影方式。2Dシーン既定はOrtho、3Dオブジェクトが1つでも存在すればPerspective選択も可能。
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Projection {
