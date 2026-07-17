@@ -91,8 +91,6 @@ pub fn get_active_objects_system(world: &EcsWorld) -> Vec<ActiveObject> {
                         let base = (current - range.start_frame) as f64;
                         let ratio = if matches!(m.kind, MediaKind::Video) {
                             crate::media::cache::global()
-                                .lock()
-                                .unwrap()
                                 .source_fps(&m.path)
                                 .map(|src_fps| src_fps / project.fps.max(1) as f64)
                                 .unwrap_or(1.0)
@@ -105,7 +103,7 @@ pub fn get_active_objects_system(world: &EcsWorld) -> Vec<ActiveObject> {
                 let matrix = global_matrices.get(id).copied().unwrap_or_default();
                 let matrix = match &media_source {
                     Some(src) if matches!(src.kind, MediaKind::Video | MediaKind::Image) => {
-                        match crate::media::cache::global().lock().unwrap().dimensions(&src.path) {
+                        match crate::media::cache::global().dimensions(&src.path) {
                             Ok((w, h)) => rescale_for_source(&matrix, w as f32, h as f32),
                             Err(_) => matrix,
                         }

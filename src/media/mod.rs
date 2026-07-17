@@ -1,6 +1,7 @@
 // src/media/mod.rs
 pub mod cache;
 pub mod text;
+pub mod worker;
 
 use serde::{Deserialize, Serialize};
 

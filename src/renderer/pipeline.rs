@@ -772,7 +772,7 @@ impl RenderEngine {
     pub fn render(&mut self, active_objects: &[ActiveObject], _project: &ProjectResource) {
         let mut media_frames: Vec<Option<wgpu::Texture>> = Vec::with_capacity(active_objects.len());
         {
-            let mut cache = crate::media::cache::global().lock().unwrap();
+            let cache = crate::media::cache::global();
             for obj in active_objects {
                 let is_visual = matches!(
                     stable_id_of(obj.kind_id),

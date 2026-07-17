@@ -1,4 +1,5 @@
 // src/media/cache.rs
+use super::worker::DecodeWorker;
 use super::{MediaKind, detect_kind};
 use neoutl_media_api::{AudioBuffer, ImageSource, VideoSource};
 use slint::wgpu_29::wgpu;
@@ -6,20 +7,35 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, OnceLock};
 
-pub enum MediaHandle {
-    Video(Box<dyn VideoSource>),
-    Image(Box<dyn ImageSource>),
+struct VideoEntry {
+    width: u32,
+    height: u32,
+    fps: f64,
+    total_frames: i64,
+    /// spawn前の未使用デコーダ。frame_at初回呼び出し時にworkerへ移譲する。
+    pending_decoder: Option<Box<dyn VideoSource>>,
+    worker: Option<DecodeWorker>,
+}
+
+struct ImageEntry {
+    decoder: Box<dyn ImageSource>,
+    /// 画像は単一フレーム固定のため初回アップロード結果を恒久的に再利用する。
+    texture: Option<wgpu::Texture>,
+}
+
+enum PathEntry {
+    Video(VideoEntry),
+    Image(ImageEntry),
     Audio(Arc<AudioBuffer>),
-    /// open失敗を記憶し、毎フレームの再オープン試行（Pipeline生成の連打・
-    /// GStreamer CRITICALログのスパム）を防ぐ。evict()で解除可能。
+    /// open失敗を記憶し、毎フレームの再オープン試行を防ぐ。evict()で解除可能。
     Failed(String),
 }
 
 pub struct MediaCache {
-    entries: HashMap<PathBuf, MediaHandle>,
-    /// 直近デコード結果のパス単位キャッシュ。同一frame_index（画像は常時同一キー）の
-    /// 再要求はGPUデコード・アップロードを完全省略しテクスチャを再利用する。
-    frame_cache: HashMap<PathBuf, (i64, wgpu::Texture)>,
+    /// マップ操作（挿入・参照）のみを保護する短命ロック。デコード本体は
+    /// 各パスのDecodeWorkerが専有スレッドで行うため、ここでは待機しない。
+    entries: Mutex<HashMap<PathBuf, Arc<Mutex<PathEntry>>>>,
+    redraw: Mutex<Option<Arc<dyn Fn() + Send + Sync>>>,
 }
 
 fn open_video(path: &Path) -> Result<Box<dyn VideoSource>, String> {
@@ -41,139 +57,187 @@ fn open_image(path: &Path) -> Result<Box<dyn ImageSource>, String> {
 impl MediaCache {
     fn new() -> Self {
         Self {
-            entries: HashMap::new(),
-            frame_cache: HashMap::new(),
+            entries: Mutex::new(HashMap::new()),
+            redraw: Mutex::new(None),
         }
     }
 
-    fn load(&mut self, path: &Path) -> Result<&mut MediaHandle, String> {
-        if !self.entries.contains_key(path) {
-            eprintln!("[media-cache] 新規load: {}", path.display());
-            let kind = match detect_kind(path) {
-                Some(k) => k,
-                None => {
-                    let err = format!("未対応の拡張子: {}", path.display());
-                    eprintln!("[media-cache] {err}");
-                    self.entries
-                        .insert(path.to_path_buf(), MediaHandle::Failed(err.clone()));
-                    return Err(err);
-                }
-            };
-            let result = match kind {
-                MediaKind::Video => open_video(path).map(MediaHandle::Video),
-                MediaKind::Image => open_image(path).map(MediaHandle::Image),
-                MediaKind::Audio => neoutl_media_symphonia_decoder::decode_full(path)
-                    .map(|buf| MediaHandle::Audio(Arc::new(buf))),
-            };
-            let handle = match result {
-                Ok(handle) => handle,
+    /// デコード完了時のUI再描画要求を登録する。preview.rsのセットアップ時に一度だけ呼ぶ。
+    pub fn set_redraw_callback(&self, callback: Arc<dyn Fn() + Send + Sync>) {
+        *self.redraw.lock().unwrap() = Some(callback);
+    }
+
+    fn redraw_handle(&self) -> Arc<dyn Fn() + Send + Sync> {
+        self.redraw
+            .lock()
+            .unwrap()
+            .clone()
+            .unwrap_or_else(|| Arc::new(|| {}))
+    }
+
+    fn entry(&self, path: &Path) -> Arc<Mutex<PathEntry>> {
+        {
+            let map = self.entries.lock().unwrap();
+            if let Some(existing) = map.get(path) {
+                return existing.clone();
+            }
+        }
+        eprintln!("[media-cache] 新規load: {}", path.display());
+        let built = match detect_kind(path) {
+            None => {
+                let err = format!("未対応の拡張子: {}", path.display());
+                eprintln!("[media-cache] {err}");
+                PathEntry::Failed(err)
+            }
+            Some(MediaKind::Video) => match open_video(path) {
+                Ok(decoder) => PathEntry::Video(VideoEntry {
+                    width: decoder.width(),
+                    height: decoder.height(),
+                    fps: decoder.fps(),
+                    total_frames: decoder.total_frames(),
+                    pending_decoder: Some(decoder),
+                    worker: None,
+                }),
                 Err(err) => {
                     eprintln!("[media-cache] load失敗: {} 理由={err}", path.display());
-                    self.entries
-                        .insert(path.to_path_buf(), MediaHandle::Failed(err.clone()));
-                    return Err(err);
+                    PathEntry::Failed(err)
                 }
-            };
-            self.entries.insert(path.to_path_buf(), handle);
-        }
-        match self.entries.get_mut(path).unwrap() {
-            MediaHandle::Failed(err) => Err(err.clone()),
-            handle => Ok(handle),
-        }
+            },
+            Some(MediaKind::Image) => match open_image(path) {
+                Ok(decoder) => PathEntry::Image(ImageEntry {
+                    decoder,
+                    texture: None,
+                }),
+                Err(err) => {
+                    eprintln!("[media-cache] load失敗: {} 理由={err}", path.display());
+                    PathEntry::Failed(err)
+                }
+            },
+            Some(MediaKind::Audio) => match neoutl_media_symphonia_decoder::decode_full(path) {
+                Ok(buf) => PathEntry::Audio(Arc::new(buf)),
+                Err(err) => {
+                    eprintln!("[media-cache] load失敗: {} 理由={err}", path.display());
+                    PathEntry::Failed(err)
+                }
+            },
+        };
+        let arc = Arc::new(Mutex::new(built));
+        self.entries
+            .lock()
+            .unwrap()
+            .entry(path.to_path_buf())
+            .or_insert(arc)
+            .clone()
     }
 
+    /// 完成テクスチャの即時返却のみを行う非ブロッキング呼び出し。
+    /// 目的フレーム未完成時は直前に完成した最新フレームを返す。
+    /// 一度も完成していない場合のみErrを返す（初回ロード直後の一瞬に限られる）。
     pub fn frame_at(
-        &mut self,
+        &self,
         path: &Path,
         frame_index: i64,
         device: &wgpu::Device,
         queue: &wgpu::Queue,
     ) -> Result<wgpu::Texture, String> {
-        eprintln!(
-            "[media-cache] frame_at呼び出し: {} frame_index={frame_index}",
-            path.display()
-        );
-        // 画像は単一フレーム固定のためframe_indexに依らず同一キーで扱う。
-        let cache_key = match self.load(path)? {
-            MediaHandle::Image(_) => i64::MIN,
-            _ => frame_index,
-        };
-        if let Some((cached_key, tex)) = self.frame_cache.get(path)
-            && *cached_key == cache_key
-        {
-            eprintln!("[media-cache] frame_atキャッシュヒット: {}", path.display());
-            return Ok(tex.clone());
-        }
-
-        let result = match self.load(path)? {
-            MediaHandle::Video(decoder) => decoder.frame_texture(device, queue, frame_index),
-            MediaHandle::Image(decoder) => Ok(decoder.texture(device, queue)),
-            MediaHandle::Audio(_) => Err(format!(
+        let entry = self.entry(path);
+        let mut guard = entry.lock().unwrap();
+        match &mut *guard {
+            PathEntry::Video(video) => {
+                if video.worker.is_none() {
+                    let decoder = video
+                        .pending_decoder
+                        .take()
+                        .expect("workerがNoneの間pending_decoderは常時Some");
+                    video.worker = Some(DecodeWorker::spawn(
+                        decoder,
+                        device.clone(),
+                        queue.clone(),
+                        self.redraw_handle(),
+                    ));
+                }
+                let worker = video.worker.as_ref().unwrap();
+                worker.request(frame_index);
+                worker
+                    .frame(frame_index)
+                    .or_else(|| worker.latest_available())
+                    .ok_or_else(|| "デコード中".to_string())
+            }
+            PathEntry::Image(image) => {
+                if image.texture.is_none() {
+                    image.texture = Some(image.decoder.texture(device, queue));
+                }
+                Ok(image.texture.clone().unwrap())
+            }
+            PathEntry::Audio(_) => Err(format!(
                 "音声ファイルに映像フレームは存在しません: {}",
                 path.display()
             )),
-            MediaHandle::Failed(err) => Err(err.clone()),
-        };
-        match &result {
-            Ok(tex) => {
-                eprintln!(
-                    "[media-cache] frame_at成功: {} frame_index={frame_index}",
-                    path.display()
-                );
-                self.frame_cache
-                    .insert(path.to_path_buf(), (cache_key, tex.clone()));
-            }
-            Err(e) => eprintln!(
-                "[media-cache] frame_at失敗: {} frame_index={frame_index} 理由={e}",
-                path.display()
-            ),
+            PathEntry::Failed(err) => Err(err.clone()),
         }
-        result
     }
 
-    /// ソース映像/画像のピクセル寸法を返す。open済みでなければload()を経由して開く。
-    /// device/queue不要（開設時点でVideoSource/ImageSourceのwidth/height確定済みのため）。
-    pub fn dimensions(&mut self, path: &Path) -> Result<(u32, u32), String> {
-        match self.load(path)? {
-            MediaHandle::Video(decoder) => Ok((decoder.width(), decoder.height())),
-            MediaHandle::Image(decoder) => Ok((decoder.width(), decoder.height())),
-            MediaHandle::Audio(_) => Err(format!(
+    /// ソース映像/画像のピクセル寸法を返す。open時点で確定済みの値のみ参照するため
+    /// デコードスレッドの完了状況に依存しない。
+    pub fn dimensions(&self, path: &Path) -> Result<(u32, u32), String> {
+        let entry = self.entry(path);
+        let guard = entry.lock().unwrap();
+        match &*guard {
+            PathEntry::Video(video) => Ok((video.width, video.height)),
+            PathEntry::Image(image) => Ok((image.decoder.width(), image.decoder.height())),
+            PathEntry::Audio(_) => Err(format!(
                 "音声ファイルに映像寸法は存在しません: {}",
                 path.display()
             )),
-            MediaHandle::Failed(err) => Err(err.clone()),
+            PathEntry::Failed(err) => Err(err.clone()),
         }
     }
 
     /// ソース動画のフレームレート。プロジェクトFPSとの比率換算に用いる（画像/音声は不使用）。
-    pub fn source_fps(&mut self, path: &Path) -> Result<f64, String> {
-        match self.load(path)? {
-            MediaHandle::Video(decoder) => Ok(decoder.fps()),
-            MediaHandle::Image(_) => Ok(0.0),
-            MediaHandle::Audio(_) => Err(format!(
+    pub fn source_fps(&self, path: &Path) -> Result<f64, String> {
+        let entry = self.entry(path);
+        let guard = entry.lock().unwrap();
+        match &*guard {
+            PathEntry::Video(video) => Ok(video.fps),
+            PathEntry::Image(_) => Ok(0.0),
+            PathEntry::Audio(_) => Err(format!(
                 "音声ファイルにFPSは存在しません: {}",
                 path.display()
             )),
-            MediaHandle::Failed(err) => Err(err.clone()),
+            PathEntry::Failed(err) => Err(err.clone()),
         }
     }
 
-    pub fn audio(&mut self, path: &Path) -> Result<Arc<AudioBuffer>, String> {
-        match self.load(path)? {
-            MediaHandle::Audio(buffer) => Ok(buffer.clone()),
-            MediaHandle::Failed(err) => Err(err.clone()),
+    #[allow(dead_code)]
+    pub fn total_frames(&self, path: &Path) -> Result<i64, String> {
+        let entry = self.entry(path);
+        let guard = entry.lock().unwrap();
+        match &*guard {
+            PathEntry::Video(video) => Ok(video.total_frames),
+            _ => Err(format!(
+                "映像フレーム総数が存在しません: {}",
+                path.display()
+            )),
+        }
+    }
+
+    pub fn audio(&self, path: &Path) -> Result<Arc<AudioBuffer>, String> {
+        let entry = self.entry(path);
+        let guard = entry.lock().unwrap();
+        match &*guard {
+            PathEntry::Audio(buffer) => Ok(buffer.clone()),
+            PathEntry::Failed(err) => Err(err.clone()),
             _ => Err(format!("音声トラックが見つかりません: {}", path.display())),
         }
     }
 
-    pub fn evict(&mut self, path: &Path) {
-        self.entries.remove(path);
-        self.frame_cache.remove(path);
+    pub fn evict(&self, path: &Path) {
+        self.entries.lock().unwrap().remove(path);
     }
 }
 
-static GLOBAL: OnceLock<Mutex<MediaCache>> = OnceLock::new();
+static GLOBAL: OnceLock<MediaCache> = OnceLock::new();
 
-pub fn global() -> &'static Mutex<MediaCache> {
-    GLOBAL.get_or_init(|| Mutex::new(MediaCache::new()))
+pub fn global() -> &'static MediaCache {
+    GLOBAL.get_or_init(MediaCache::new)
 }

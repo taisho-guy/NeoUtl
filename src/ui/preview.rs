@@ -111,6 +111,22 @@ pub fn setup(
     gpu_slot: GpuSlot,
 ) {
     let preview_weak = preview.as_weak();
+
+    // デコードスレッドがフレーム完成させるたびにここへ通知される。
+    // set_rendering_notifier配下ではなく専用スレッドから呼ばれるため、
+    // invoke_from_event_loop経由でUIスレッドへ再描画要求のみ委譲する。
+    crate::media::cache::global().set_redraw_callback({
+        let redraw_weak = preview_weak.clone();
+        std::sync::Arc::new(move || {
+            let redraw_weak = redraw_weak.clone();
+            let _ = slint::invoke_from_event_loop(move || {
+                if let Some(p) = redraw_weak.upgrade() {
+                    p.window().request_redraw();
+                }
+            });
+        })
+    });
+
     sync_project_tabs(&state, preview);
     {
         let world_holder = app_state::active_world(&state);
