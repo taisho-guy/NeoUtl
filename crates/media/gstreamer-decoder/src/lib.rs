@@ -217,6 +217,10 @@ struct GstDecoderInner {
     fps: f64,
     frame_duration_ns: u64,
     total_frames: i64,
+    /// 直近に配信したフレーム番号。次要求がlast_frame+1（連番再生・先読み）の場合、
+    /// ACCURATEシークを省略しPLAYING状態での継続デコードへ切替える。
+    /// 非連番（スクラブ・逆再生・シーク）検出時は-1へ戻さず、単に不一致として扱う。
+    last_frame: i64,
 }
 
 impl GstDecoderInner {
@@ -312,15 +316,50 @@ impl GstDecoderInner {
             fps,
             frame_duration_ns,
             total_frames,
+            last_frame: -1,
         })
     }
 
-    fn sample_at(&mut self, frame_index: i64) -> Result<gst::Sample, String> {
-        let target = frame_index.clamp(0, self.total_frames - 1);
+    /// 連番再生専用の高速経路。PLAYING状態のまま継続デコードさせ、
+    /// bounded timeoutでappsinkから直接次フレームを取得する。
+    /// シークを一切発行しないため、キーフレームからの再デコードが発生しない。
+    fn sample_at_sequential(&mut self, target: i64) -> Option<gst::Sample> {
+        if self.pipeline.current_state() != gst::State::Playing
+            && let Err(e) = self.pipeline.set_state(gst::State::Playing)
+        {
+            eprintln!("[gstreamer-decoder] 連番再生パス: PLAYING遷移失敗 {e}");
+            return None;
+        }
+        if wait_state(&self.pipeline, gst::ClockTime::from_seconds(2)).is_err() {
+            eprintln!("[gstreamer-decoder] 連番再生パス: 状態遷移待機失敗");
+            return None;
+        }
+        match self
+            .appsink
+            .try_pull_sample(gst::ClockTime::from_seconds(2))
+        {
+            Some(sample) => {
+                eprintln!("[gstreamer-decoder] 連番再生パス成功: target={target}");
+                self.last_frame = target;
+                Some(sample)
+            }
+            None => {
+                eprintln!("[gstreamer-decoder] 連番再生パス: サンプル取得タイムアウト");
+                None
+            }
+        }
+    }
+
+    /// 非連番アクセス（スクラブ・逆再生・初回シーク）専用の正確シーク経路。
+    /// PAUSED状態へ戻した上でACCURATEシークを行い、対象フレームを一意に確定する。
+    fn sample_at_seek(&mut self, frame_index: i64, target: i64) -> Result<gst::Sample, String> {
         let target_ns = target as u64 * self.frame_duration_ns;
         eprintln!(
-            "[gstreamer-decoder] sample_at開始: frame_index={frame_index} target={target} target_ns={target_ns}"
+            "[gstreamer-decoder] sample_at正確シーク: frame_index={frame_index} target={target} target_ns={target_ns}"
         );
+        if self.pipeline.current_state() != gst::State::Paused {
+            let _ = self.pipeline.set_state(gst::State::Paused);
+        }
         self.pipeline
             .seek_simple(
                 gst::SeekFlags::FLUSH | gst::SeekFlags::ACCURATE,
@@ -351,12 +390,23 @@ impl GstDecoderInner {
                     "[gstreamer-decoder] sample取得成功: frame_index={frame_index} \
                      buffer_size={buffer_size} caps={caps_str}"
                 );
+                self.last_frame = target;
             }
             Err(e) => {
                 eprintln!("[gstreamer-decoder] sample取得失敗: frame_index={frame_index} 理由={e}");
             }
         }
         result
+    }
+
+    fn sample_at(&mut self, frame_index: i64) -> Result<gst::Sample, String> {
+        let target = frame_index.clamp(0, self.total_frames - 1);
+        if target == self.last_frame + 1
+            && let Some(sample) = self.sample_at_sequential(target)
+        {
+            return Ok(sample);
+        }
+        self.sample_at_seek(frame_index, target)
     }
 }
 
@@ -545,3 +595,39 @@ impl Drop for GstDecoder {
         }
     }
 }
+
+// --- プラグインエントリ ---
+// objects/effectsと同一規約: entry関数のみがdylib境界（extern "C"）を越え、
+// VTable本体はホストと同一Cargo.lock・同一rustcで一括ビルドされる前提の素のRust型を保持する。
+use neoutl_media_api::{EntryFn, MediaKind, MediaMeta, MediaVTable};
+
+static EXTENSIONS: &[&str] = &["mp4", "mov", "mkv", "webm", "avi"];
+
+static META: MediaMeta = MediaMeta {
+    id: "neoutl.media.gstreamer",
+    name: "GStreamer Video Decoder",
+    kind: MediaKind::Video,
+    extensions_ptr: EXTENSIONS.as_ptr(),
+    extensions_len: EXTENSIONS.len(),
+};
+static VTABLE: std::sync::OnceLock<MediaVTable> = std::sync::OnceLock::new();
+
+fn meta() -> &'static MediaMeta {
+    &META
+}
+
+fn open_video(path: &std::path::Path) -> Result<Box<dyn neoutl_media_api::VideoSource>, String> {
+    GstDecoder::open(path).map(|d| Box::new(d) as Box<dyn neoutl_media_api::VideoSource>)
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn neoutl_media_entry() -> *const MediaVTable {
+    VTABLE.get_or_init(|| MediaVTable {
+        meta,
+        open_video: Some(open_video),
+        open_image: None,
+        decode_audio: None,
+    })
+}
+
+const _: EntryFn = neoutl_media_entry;

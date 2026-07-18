@@ -3,6 +3,10 @@ name = "neoutl-media-image-decoder"
 version = "0.0.0"
 edition = "2024"
 
+[lib]
+name       = "neoutl_media_image_decoder"
+crate-type = ["cdylib"]
+
 [dependencies]
 neoutl-media-api = { path = "../../neoutl-media-api" }
 image = "0.25"

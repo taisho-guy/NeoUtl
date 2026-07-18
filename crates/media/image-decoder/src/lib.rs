@@ -65,3 +65,37 @@ impl ImageSource for StaticImageDecoder {
         texture
     }
 }
+
+// --- プラグインエントリ ---
+use neoutl_media_api::{EntryFn, MediaKind, MediaMeta, MediaVTable};
+
+static EXTENSIONS: &[&str] = &["png", "jpg", "jpeg", "bmp", "webp", "gif", "tiff"];
+
+static META: MediaMeta = MediaMeta {
+    id: "neoutl.media.image",
+    name: "Static Image Decoder",
+    kind: MediaKind::Image,
+    extensions_ptr: EXTENSIONS.as_ptr(),
+    extensions_len: EXTENSIONS.len(),
+};
+static VTABLE: std::sync::OnceLock<MediaVTable> = std::sync::OnceLock::new();
+
+fn meta() -> &'static MediaMeta {
+    &META
+}
+
+fn open_image(path: &Path) -> Result<Box<dyn ImageSource>, String> {
+    StaticImageDecoder::open(path).map(|d| Box::new(d) as Box<dyn ImageSource>)
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn neoutl_media_entry() -> *const MediaVTable {
+    VTABLE.get_or_init(|| MediaVTable {
+        meta,
+        open_video: None,
+        open_image: Some(open_image),
+        decode_audio: None,
+    })
+}
+
+const _: EntryFn = neoutl_media_entry;

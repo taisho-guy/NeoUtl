@@ -1,4 +1,3 @@
-// src/main.rs
 mod app_state;
 mod document;
 mod ecs;
@@ -11,13 +10,6 @@ mod ui;
 
 slint::include_modules!();
 
-/// バンドル同梱GStreamerプラグインの実行時パスを解決する。
-/// objects::default_objects_dir / effects::default_effects_dirと同一の
-/// current_exe基準アルゴリズムに統一する。
-///
-/// - macOS: Contents/MacOS/NeoUtl から Contents/Resources/gstreamer-1.0 を参照
-/// - Windows: NeoUtl.exe と同階層の lib/gstreamer-1.0 を参照
-/// - Linux: 同梱せずシステム側gstreamer1.0-plugins-*に委ねるためNoneを返す
 fn default_gst_plugin_dir() -> Option<std::path::PathBuf> {
     let exe_dir = std::env::current_exe().ok()?.parent()?.to_path_buf();
 
@@ -39,11 +31,25 @@ fn default_gst_plugin_dir() -> Option<std::path::PathBuf> {
     }
 }
 
-/// GST_PLUGIN_PATHをバンドル同梱ディレクトリへ固定し、GST_PLUGIN_SYSTEM_PATH_1_0を
-/// 空文字化することでホスト側にインストール済みのGStreamerプラグインとのバージョン
-/// 不整合を排除する。gstreamer-decoderクレートの初回gst::init()呼び出しより前に
-/// 実行する必要があるため、main()冒頭で行う。
+fn gst_registry_cache_path() -> Option<std::path::PathBuf> {
+    let exe_dir = std::env::current_exe().ok()?.parent()?.to_path_buf();
+    let dir = exe_dir.join("gst-registry");
+    std::fs::create_dir_all(&dir).ok()?;
+    Some(dir.join("registry.bin"))
+}
+
 fn configure_gst_plugin_path() {
+    unsafe {
+        std::env::set_var("GST_PLUGIN_FEATURE_RANK", "lv2:NONE,ladspa:NONE");
+        std::env::set_var("GST_PLUGIN_SYSTEM_PATH_1_0", "");
+
+        if let Some(registry_path) = gst_registry_cache_path()
+            && let Some(path_str) = registry_path.to_str()
+        {
+            std::env::set_var("GST_REGISTRY_1_0", path_str);
+        }
+    }
+
     let Some(dir) = default_gst_plugin_dir() else {
         return;
     };
@@ -53,7 +59,6 @@ fn configure_gst_plugin_path() {
     };
     unsafe {
         std::env::set_var("GST_PLUGIN_PATH", dir_str);
-        std::env::set_var("GST_PLUGIN_SYSTEM_PATH_1_0", "");
     }
     eprintln!("[NeoUtl] GST_PLUGIN_PATH設定: {dir_str}");
 }
@@ -65,10 +70,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     objects::load_all(&objects::default_objects_dir());
     effects::load_all(&effects::default_effects_dir());
+    media::loader::load_all(&media::loader::default_decoders_dir());
 
     let mut wgpu_settings = slint::wgpu_29::WGPUSettings::default();
-    // gstreamer-decoderがNV12テクスチャを直接生成するため、Device生成時点で
-    // 本機能を必須要求する。非対応環境ではselect()がここでErrを返す。
     wgpu_settings.device_required_features |= slint::wgpu_29::wgpu::Features::TEXTURE_FORMAT_NV12;
     #[cfg(any(target_os = "windows", target_os = "linux"))]
     {
@@ -85,9 +89,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let launcher = LauncherWindow::new()?;
     ui::install(&launcher);
 
-    // メインウィンドウ（ランチャー）が閉じられたらプロセス全体を終了する。
-    // 他ウィンドウ（プレビュー/タイムライン/設定等）はshow/hideのみで
-    // イベントループを止めない。終了経路はここ一箇所に集約する。
     launcher.window().on_close_requested(|| {
         slint::quit_event_loop().ok();
         slint::CloseRequestResponse::HideWindow
