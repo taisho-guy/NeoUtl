@@ -324,7 +324,19 @@ impl EcsWorld {
         )
     }
 
+    /// アクティブシーンのグリッド設定に基づき吸着させたフレーム番号を返す。
+    /// SceneMeta::enable_snap/magnetic_snap_range/grid_intervalを実際に消費する唯一の経路。
+    fn snap_to_active_scene(&self, frame: i32) -> i32 {
+        self.world.run(|scenes: UniqueView<SceneResource>| {
+            scenes
+                .find(scenes.active_scene)
+                .map(|s| s.snap_frame(frame))
+                .unwrap_or(frame)
+        })
+    }
+
     pub fn move_object(&mut self, object_id: usize, new_start: i32, new_layer: i32) {
+        let new_start = self.snap_to_active_scene(new_start);
         self.world.run(
             |object_ids: View<ObjectId>,
              mut time_ranges: ViewMut<TimeRange>,
@@ -348,6 +360,8 @@ impl EcsWorld {
     }
 
     pub fn resize_object(&mut self, object_id: usize, new_start: i32, new_end: i32) {
+        let new_start = self.snap_to_active_scene(new_start);
+        let new_end = self.snap_to_active_scene(new_end);
         self.world.run(
             |object_ids: View<ObjectId>, mut time_ranges: ViewMut<TimeRange>| {
                 for (entity, id) in object_ids.iter().with_id() {

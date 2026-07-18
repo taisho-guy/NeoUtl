@@ -63,6 +63,8 @@ pub fn setup(
 }
 
 /// 新規作成モードでダイアログを開く。幅・高さ・FPSはプロジェクトの現在値を初期値にする。
+/// グリッド・スナップ既定値はSceneMeta::new_with_defaults（=システム設定のdefault_snap/
+/// magnetic_snap_rangeを反映したSceneMeta既定値）のみを参照し、本関数側で数値を重複定義しない。
 pub fn open_for_create(window: &SceneSettingsWindow, state: &SharedAppState) {
     let world_holder = app_state::active_world(state);
     let world = world_holder.lock().unwrap();
@@ -70,19 +72,28 @@ pub fn open_for_create(window: &SceneSettingsWindow, state: &SharedAppState) {
     let count = world.scenes().len();
     drop(world);
 
+    let settings_holder = app_state::settings_world(state);
+    let system_settings = settings_holder.lock().unwrap().get_system_settings();
+    let defaults = crate::ecs::resources::SceneMeta::new_with_defaults(
+        -1,
+        "",
+        system_settings.default_snap,
+        system_settings.magnetic_snap_range,
+    );
+
     window.set_is_creation_mode(true);
     window.set_target_scene_id(-1);
     window.set_scene_name(format!("Scene {}", count + 1).into());
     window.set_scene_width(project.width as i32);
     window.set_scene_height(project.height as i32);
     window.set_scene_fps(project.fps as f32);
-    window.set_enable_snap(true);
-    window.set_magnetic_snap_range(10);
-    window.set_grid_mode(0);
-    window.set_grid_bpm(120.0);
-    window.set_grid_offset(0.0);
-    window.set_grid_interval(10);
-    window.set_grid_subdivision(4);
+    window.set_enable_snap(defaults.enable_snap);
+    window.set_magnetic_snap_range(defaults.magnetic_snap_range);
+    window.set_grid_mode(defaults.grid_mode);
+    window.set_grid_bpm(defaults.grid_bpm);
+    window.set_grid_offset(defaults.grid_offset);
+    window.set_grid_interval(defaults.grid_interval);
+    window.set_grid_subdivision(defaults.grid_subdivision);
     let _ = window.show();
 }
 

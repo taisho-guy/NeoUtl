@@ -1,15 +1,19 @@
 // src/media/worker.rs
-// 1動画ソース = 1専用デコードスレッド。UIスレッドはrequest()で要求を出すのみで
-// 待機しない。デコード結果はCPU側バイト列(FrameOutput)としてリングキャッシュへ書き込み、
+// 1動画ソース = 1デコードタスク。UIスレッドはrequest()で要求を出すのみで待機しない。
+// デコードタスクはmedia::runtime（SystemSettingsResource::worker_threadsでサイズが
+// 決まるtokioマルチスレッドランタイム）上でspawn_blockingされ、ホスト全体で
+// 並列デコード数の上限を共有する（1タスク=1専用OSスレッドの無制限生成を防ぐ）。
+// デコード結果はCPU側バイト列(FrameOutput)としてリングキャッシュへ書き込み、
 // on_readyでUI再描画を要求する。GPUリソース操作は一切行わない（UIスレッドが行う）。
+use crate::config::{DECODE_PREFETCH_RADIUS, DECODE_RING_CAPACITY};
 use neoutl_media_api::{FrameOutput, VideoSource};
 use std::collections::{HashMap, VecDeque};
 use std::sync::atomic::{AtomicI64, Ordering};
 use std::sync::{Arc, Condvar, Mutex};
-use std::thread::JoinHandle;
 
-const PREFETCH_RADIUS: i64 = 8;
-const RING_CAPACITY: usize = 32;
+const PREFETCH_RADIUS: i64 = DECODE_PREFETCH_RADIUS;
+/// UIスレッド側テクスチャLRU(media/cache.rs::TextureLru)も同容量を共有する。
+pub(crate) const RING_CAPACITY: usize = DECODE_RING_CAPACITY;
 const STOP_SENTINEL: i64 = i64::MIN + 1;
 const NONE_SENTINEL: i64 = i64::MIN;
 
@@ -53,13 +57,14 @@ pub struct DecodeWorker {
     requested: Arc<AtomicI64>,
     signal: Arc<(Mutex<bool>, Condvar)>,
     ring: Arc<Mutex<Ring>>,
-    thread: Option<JoinHandle<()>>,
+    task: Option<tokio::task::JoinHandle<()>>,
 }
 
 impl DecodeWorker {
     /// device/queue を取らない。workerはデコードのみを行い、テクスチャ生成・
     /// アップロードは呼び出し元(UIスレッド)が行う。デコードスレッドから
     /// wgpu::Queueを操作するとSurface::present()との競合でデッドロックするため。
+    /// 実行スレッドはcrate::media::runtime（worker_threads設定でサイズ確定）から借りる。
     pub fn spawn(mut decoder: Box<dyn VideoSource>, on_ready: Arc<dyn Fn() + Send + Sync>) -> Self {
         let requested = Arc::new(AtomicI64::new(NONE_SENTINEL));
         let signal = Arc::new((Mutex::new(false), Condvar::new()));
@@ -69,7 +74,7 @@ impl DecodeWorker {
         let signal_t = signal.clone();
         let ring_t = ring.clone();
 
-        let thread = std::thread::spawn(move || {
+        let task = super::runtime::handle().spawn_blocking(move || {
             let mut served = NONE_SENTINEL;
             loop {
                 let target = {
@@ -117,7 +122,7 @@ impl DecodeWorker {
             requested,
             signal,
             ring,
-            thread: Some(thread),
+            task: Some(task),
         }
     }
 
@@ -143,8 +148,8 @@ impl Drop for DecodeWorker {
         let (lock, cvar) = &*self.signal;
         *lock.lock().unwrap() = true;
         cvar.notify_one();
-        if let Some(handle) = self.thread.take() {
-            let _ = handle.join();
+        if let Some(task) = self.task.take() {
+            let _ = super::runtime::handle().block_on(task);
         }
     }
 }

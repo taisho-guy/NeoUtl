@@ -1,5 +1,6 @@
 // src/app_state.rs
 // 複数プロジェクト同時オープンを管理する。1セッション = 1プロジェクト = 1EcsWorld + 1RenderEngine枠。
+use crate::config;
 use crate::document::DocumentModel;
 use crate::ecs::EcsWorld;
 use crate::project::{self, ProjectMeta};
@@ -19,7 +20,7 @@ impl History {
         Self {
             undo_stack: Vec::new(),
             redo_stack: Vec::new(),
-            limit: 100,
+            limit: config::UNDO_HISTORY_LIMIT,
         }
     }
 

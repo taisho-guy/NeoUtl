@@ -105,7 +105,8 @@ fn build_main_windows(
     let gpu_slot: preview::GpuSlot = Rc::new(RefCell::new(None));
     preview::install_rendering_notifier(&preview, gpu_slot.clone());
 
-    system_settings::setup(&settings, app_state::active_world(state));
+    // システム設定は全プロジェクト共通のため、settings_world（先頭セッション固定）へ紐付ける。
+    system_settings::setup(&settings, app_state::settings_world(state));
     preview::setup(
         &preview,
         timeline.as_weak(),
