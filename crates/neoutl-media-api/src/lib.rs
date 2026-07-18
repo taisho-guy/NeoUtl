@@ -1,5 +1,9 @@
 #![allow(non_camel_case_types)]
 
+/// デコードフレームキャッシュの既定バイト予算。デコーダプラグイン（ffmpeg-decoder,
+/// gpuvideo-decoder等）間で個別定義せず、この値を唯一の定義元として参照する。
+pub const DEFAULT_DECODE_CACHE_BYTES: i64 = 512 * 1024 * 1024;
+
 /// デコーダが返す1フレーム分のデータ。
 /// GPU リソース(wgpu::Texture)の生成・書き込みは原則としてUIスレッドが行う。
 /// デコードスレッドがwgpu::Queueを操作するとSurface::present()とのSnatchLock

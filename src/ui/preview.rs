@@ -176,7 +176,11 @@ pub fn setup(
                 && p.get_is_playing()
             {
                 let total = p.get_total_frames();
-                let step = (p.get_speed_percent().max(10) + 50) / 100;
+                let step = (p
+                    .get_speed_percent()
+                    .max(crate::config::PLAYBACK_SPEED_MIN_PERCENT)
+                    + 50)
+                    / 100;
                 let next = p.get_current_frame() + step.max(1);
                 if next >= total {
                     p.set_is_playing(false);
@@ -223,7 +227,10 @@ pub fn setup(
         let preview_weak = preview_weak.clone();
         move |percent| {
             if let Some(p) = preview_weak.upgrade() {
-                p.set_speed_percent(percent.clamp(10, 400));
+                p.set_speed_percent(percent.clamp(
+                    crate::config::PLAYBACK_SPEED_MIN_PERCENT,
+                    crate::config::PLAYBACK_SPEED_MAX_PERCENT,
+                ));
             }
         }
     });

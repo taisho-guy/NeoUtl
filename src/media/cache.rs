@@ -45,9 +45,8 @@ impl TextureLru {
     }
 }
 
-/// UIスレッド側テクスチャLRUの容量。worker側リング(worker.rs::RING_CAPACITY)と
-/// 同じ32。デコードが先行して進む範囲をカバーし、毎フレームの再アップロードを抑制する。
-const WORKER_RING_CAPACITY: usize = 32;
+/// UIスレッド側テクスチャLRUの容量。worker側リング(worker::RING_CAPACITY)と共有し、
+/// config::DECODE_RING_CAPACITYを唯一の定義元とする。
 
 struct VideoEntry {
     width: u32,
@@ -308,7 +307,7 @@ impl MediaCache {
                     total_frames: decoder.total_frames(),
                     pending_decoder: Some(decoder),
                     worker: None,
-                    texture_cache: TextureLru::new(WORKER_RING_CAPACITY),
+                    texture_cache: TextureLru::new(super::worker::RING_CAPACITY),
                 }),
                 Err(err) => {
                     eprintln!("[media-cache] load失敗: {} 理由={err}", path.display());

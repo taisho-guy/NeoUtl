@@ -1,4 +1,5 @@
 // src/renderer/pipeline.rs
+use crate::config;
 use crate::ecs::resources::ProjectResource;
 use crate::ecs::systems::ActiveObject;
 use crate::ecs::types::Value;
@@ -13,15 +14,17 @@ use wgpu_text::{BrushBuilder, TextBrush};
 
 /// 全ObjectVTable実装が共有する標準Uniform契約（shape.wgsl等のUniforms構造体と一致させること）。
 /// mat4x4<f32>(64) + opacity(4) + sides(4) + extrude_depth(4) + _pad0(4) + fill_color(16) = 96 bytes
+/// GPU側WGSL構造体レイアウトに直結するABI契約値のため config.rs へは移さない。
 const STANDARD_UNIFORM_SIZE: u64 = 96;
 /// wgpuのmin_uniform_buffer_offset_alignment既定値。動的オフセットの単位ストライドとして採用する。
-const UNIFORM_STRIDE: u64 = 256;
-const MAX_OBJECTS: u64 = 512;
+const UNIFORM_STRIDE: u64 = config::UNIFORM_STRIDE_BYTES;
+const MAX_OBJECTS: u64 = config::MAX_SCENE_OBJECTS;
 const DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
 /// エフェクトUniformsバッファの確保上限（array<vec4<f32>, 8> = 128byte相当まで対応）。
 /// 現行16エフェクトの最大パラメータ数(clipping=5件→uniform_size_std=32byte)を十分に上回る。
-const MAX_EFFECT_UNIFORM_SIZE: u64 = 128;
+const MAX_EFFECT_UNIFORM_SIZE: u64 = config::MAX_EFFECT_UNIFORM_BYTES;
 /// mat4x4<f32>(64) + opacity(4)、mat4x4アライメント16の倍数へ切り上げ。
+/// GPU側WGSL構造体レイアウトに直結するABI契約値のため config.rs へは移さない。
 const MEDIA_UNIFORM_SIZE: u64 = 80;
 static MEDIA_WGSL: &str = include_str!("media.wgsl");
 static VIDEO_WGSL: &str = include_str!("media_video.wgsl");

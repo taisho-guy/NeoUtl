@@ -24,7 +24,7 @@ fn save_to_disk(s: &SystemSettingsResource) -> std::io::Result<()> {
     std::fs::write(path, yaml)
 }
 
-fn load_from_disk() -> Option<SystemSettingsResource> {
+pub(crate) fn load_from_disk() -> Option<SystemSettingsResource> {
     let content = std::fs::read_to_string(settings_path()).ok()?;
     rust_yaml::from_str(&content).ok()
 }
@@ -34,7 +34,10 @@ pub fn setup(window: &SystemSettingsWindow, world_holder: Arc<Mutex<EcsWorld>>) 
         world_holder.lock().unwrap().set_system_settings(loaded);
     }
 
-    sync_from_resource(window, &world_holder.lock().unwrap().get_system_settings());
+    let initial = world_holder.lock().unwrap().get_system_settings();
+    crate::media::runtime::set_worker_threads(initial.worker_threads);
+    crate::media::runtime::apply_decode_backend_env(initial.decode_backend);
+    sync_from_resource(window, &initial);
 
     {
         let wc = world_holder.clone();
@@ -66,6 +69,7 @@ pub fn setup(window: &SystemSettingsWindow, world_holder: Arc<Mutex<EcsWorld>>) 
             s.worker_threads = worker_threads;
             s.audio_max_block_size = audio_max_block_size;
             world.set_system_settings(s);
+            crate::media::runtime::set_worker_threads(worker_threads);
         });
     }
 
@@ -76,6 +80,7 @@ pub fn setup(window: &SystemSettingsWindow, world_holder: Arc<Mutex<EcsWorld>>) 
             let mut s = world.get_system_settings();
             s.decode_backend = decode_backend;
             world.set_system_settings(s);
+            crate::media::runtime::apply_decode_backend_env(decode_backend);
         });
     }
 
@@ -122,6 +127,8 @@ pub fn setup(window: &SystemSettingsWindow, world_holder: Arc<Mutex<EcsWorld>>) 
         window.on_reload_settings(move || {
             if let Some(loaded) = load_from_disk() {
                 wc.lock().unwrap().set_system_settings(loaded.clone());
+                crate::media::runtime::set_worker_threads(loaded.worker_threads);
+                crate::media::runtime::apply_decode_backend_env(loaded.decode_backend);
                 if let Some(win) = weak.upgrade() {
                     sync_from_resource(&win, &loaded);
                     win.set_save_status("再読込完了".into());

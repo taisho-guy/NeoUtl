@@ -1,7 +1,7 @@
 use ffmpeg_next as ffmpeg;
 use ffmpeg_next::software::scaling::{Context as ScalingContext, Flags as ScalingFlags};
 use ffmpeg_next::util::frame::Video as VideoFrame;
-use neoutl_media_api::{FrameBytes, FrameOutput, VideoSource};
+use neoutl_media_api::{DEFAULT_DECODE_CACHE_BYTES, FrameBytes, FrameOutput, VideoSource};
 use std::collections::{HashMap, VecDeque};
 use std::path::Path;
 
@@ -55,8 +55,6 @@ impl FrameCache {
         self.map.contains_key(&index)
     }
 }
-
-const DEFAULT_CACHE_BYTES: i64 = 512 * 1024 * 1024;
 
 pub struct FfmpegVideoDecoder {
     input: ffmpeg::format::context::Input,
@@ -112,7 +110,7 @@ impl FfmpegVideoDecoder {
             width,
             height,
             index,
-            cache: FrameCache::new(DEFAULT_CACHE_BYTES),
+            cache: FrameCache::new(DEFAULT_DECODE_CACHE_BYTES),
             last_display_index: -1,
         })
     }

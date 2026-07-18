@@ -3,7 +3,7 @@ use gpu_video::parameters::{
     WgpuConverterParameters,
 };
 use gpu_video::{EncodedInputChunk, VulkanInstance, WgpuNv12ToRgbaConverter, WgpuTexturesDecoder};
-use neoutl_media_api::{FrameOutput, VideoSource};
+use neoutl_media_api::{DEFAULT_DECODE_CACHE_BYTES, FrameOutput, VideoSource};
 use std::collections::{HashMap, VecDeque};
 use std::fs::File;
 use std::path::Path;
@@ -12,8 +12,6 @@ use symphonia::core::formats::probe::Hint;
 use symphonia::core::formats::{FormatOptions, FormatReader, SeekMode, SeekTo};
 use symphonia::core::io::MediaSourceStream;
 use symphonia::core::meta::MetadataOptions;
-
-const CACHE_BUDGET_BYTES: i64 = 512 * 1024 * 1024;
 
 struct TextureCache {
     used_bytes: i64,
@@ -44,7 +42,7 @@ impl TextureCache {
         self.map.insert(index, texture);
         self.order.push_back(index);
         self.used_bytes += cost;
-        while self.used_bytes > CACHE_BUDGET_BYTES {
+        while self.used_bytes > DEFAULT_DECODE_CACHE_BYTES {
             let Some(oldest) = self.order.pop_front() else {
                 break;
             };
