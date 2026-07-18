@@ -1,16 +1,43 @@
 #![allow(non_camel_case_types)]
 
+/// デコーダが返す1フレーム分のデータ。
+/// GPU リソース(wgpu::Texture)の生成・書き込みは原則としてUIスレッドが行う。
+/// デコードスレッドがwgpu::Queueを操作するとSurface::present()とのSnatchLock
+/// 競合でデッドロックするため、デコード結果はCPU側バイト列で返すのが基本。
+/// ただしゼロコピーを達成できるデコーダに限りGpuバリアントで生成済みテクスチャを
+/// 直接返す経路も許容する（この場合、submit等のQueue操作はUIスレッドで行う責務を持つ）。
+#[derive(Clone, Debug)]
+pub enum FrameOutput {
+    /// CPU側バイト列。呼び出し元(UIスレッド)が create_texture + write_texture でアップロードする。
+    Cpu(FrameBytes),
+    /// 既にGPU上に生成済みのテクスチャ（ゼロコピーパス）。
+    Gpu(wgpu::Texture),
+}
+
+/// CPU経由で受け渡すフレームのピクセルレイアウト。
+/// NV12はY平面(w*h)とインターリーブUV平面(w*h/2)の2プレーン構成。
+#[derive(Clone, Debug)]
+pub enum FrameBytes {
+    Nv12 {
+        bytes: Vec<u8>,
+        width: u32,
+        height: u32,
+    },
+    Rgba8 {
+        bytes: Vec<u8>,
+        width: u32,
+        height: u32,
+    },
+}
+
 pub trait VideoSource: Send {
     fn width(&self) -> u32;
     fn height(&self) -> u32;
     fn fps(&self) -> f64;
     fn total_frames(&self) -> i64;
-    fn frame_texture(
-        &mut self,
-        device: &wgpu::Device,
-        queue: &wgpu::Queue,
-        frame_index: i64,
-    ) -> Result<wgpu::Texture, String>;
+    /// デコード結果を返す。本メソッドはGPUリソースを一切操作せず、
+    /// 呼び出し元(UIスレッド)がテクスチャ生成・アップロードを行う前提。
+    fn frame(&mut self, frame_index: i64) -> Result<FrameOutput, String>;
 }
 
 pub trait ImageSource: Send {

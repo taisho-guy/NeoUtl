@@ -3,7 +3,7 @@ use gst_app::AppSink;
 use gstreamer as gst;
 use gstreamer_app as gst_app;
 use gstreamer_video as gst_video;
-use neoutl_media_api::VideoSource;
+use neoutl_media_api::{FrameBytes, FrameOutput, VideoSource};
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::sync::Once;
@@ -116,21 +116,18 @@ fn wait_state(pipeline: &gst::Pipeline, timeout: gst::ClockTime) -> Result<(), S
     Err("状態遷移失敗（バスにERRORメッセージなし）".to_owned())
 }
 
-/// NV12バッファをY/UVプレーン分割でCPU転送しWGPUテクスチャへアップロードする。
-fn import_frame(
-    device: &wgpu::Device,
-    queue: &wgpu::Queue,
-    buffer: &gst::BufferRef,
-    width: u32,
-    height: u32,
-) -> Result<wgpu::Texture, String> {
+/// NV12バッファからCPU側バイト列を取り出す。
+/// GPUへのアップロード(create_texture + write_texture)は行わず、
+/// 呼び出し元(UIスレッド)が行う前提。デコードスレッドからwgpu::Queueを
+/// 操作するとSurface::present()との競合でデッドロックするため分離している。
+fn extract_nv12_bytes(buffer: &gst::BufferRef, width: u32, height: u32) -> Result<Vec<u8>, String> {
     let map = buffer.map_readable().map_err(|e| e.to_string())?;
     let data = map.as_slice();
 
     let y_plane_size = (width * height) as usize;
     let uv_plane_size = (width * height / 2) as usize;
     eprintln!(
-        "[gstreamer-decoder] import_frame: width={width} height={height} \
+        "[gstreamer-decoder] extract_nv12_bytes: width={width} height={height} \
          data_len={} 必要バイト数={}",
         data.len(),
         y_plane_size + uv_plane_size
@@ -144,66 +141,7 @@ fn import_frame(
         eprintln!("[gstreamer-decoder] {msg}");
         return Err(msg);
     }
-
-    let texture = device.create_texture(&wgpu::TextureDescriptor {
-        label: Some("gst-nv12-frame"),
-        size: wgpu::Extent3d {
-            width,
-            height,
-            depth_or_array_layers: 1,
-        },
-        mip_level_count: 1,
-        sample_count: 1,
-        dimension: wgpu::TextureDimension::D2,
-        format: wgpu::TextureFormat::NV12,
-        usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
-        view_formats: &[],
-    });
-
-    queue.write_texture(
-        wgpu::TexelCopyTextureInfo {
-            texture: &texture,
-            mip_level: 0,
-            origin: wgpu::Origin3d::ZERO,
-            aspect: wgpu::TextureAspect::Plane0,
-        },
-        &data[0..y_plane_size],
-        wgpu::TexelCopyBufferLayout {
-            offset: 0,
-            bytes_per_row: Some(width),
-            rows_per_image: Some(height),
-        },
-        wgpu::Extent3d {
-            width,
-            height,
-            depth_or_array_layers: 1,
-        },
-    );
-
-    queue.write_texture(
-        wgpu::TexelCopyTextureInfo {
-            texture: &texture,
-            mip_level: 0,
-            origin: wgpu::Origin3d::ZERO,
-            aspect: wgpu::TextureAspect::Plane1,
-        },
-        &data[y_plane_size..y_plane_size + uv_plane_size],
-        wgpu::TexelCopyBufferLayout {
-            offset: 0,
-            bytes_per_row: Some(width),
-            rows_per_image: Some(height / 2),
-        },
-        wgpu::Extent3d {
-            width: width / 2,
-            height: height / 2,
-            depth_or_array_layers: 1,
-        },
-    );
-
-    eprintln!(
-        "[gstreamer-decoder] import_frame完了: texture生成成功 width={width} height={height}"
-    );
-    Ok(texture)
+    Ok(data[..y_plane_size + uv_plane_size].to_vec())
 }
 
 /// GStreamer実体。command_thread専有。MainLoop駆動スレッドとは別スレッドで
@@ -411,11 +349,9 @@ impl GstDecoderInner {
 }
 
 enum Command {
-    FrameTexture {
+    Frame {
         frame_index: i64,
-        device: wgpu::Device,
-        queue: wgpu::Queue,
-        reply: mpsc::Sender<Result<wgpu::Texture, String>>,
+        reply: mpsc::Sender<Result<Vec<u8>, String>>,
     },
     Shutdown,
 }
@@ -489,18 +425,16 @@ impl GstDecoder {
                     eprintln!("[gstreamer-decoder] command_thread起動完了");
                     while let Ok(command) = rx.recv() {
                         match command {
-                            Command::FrameTexture {
+                            Command::Frame {
                                 frame_index,
-                                device,
-                                queue,
                                 reply,
                             } => {
                                 eprintln!(
-                                    "[gstreamer-decoder] command_thread: FrameTexture受信 frame_index={frame_index}"
+                                    "[gstreamer-decoder] command_thread: Frame受信 frame_index={frame_index}"
                                 );
                                 let result = inner.sample_at(frame_index).and_then(|sample| {
                                     let buffer = sample.buffer().ok_or("buffer未取得".to_owned())?;
-                                    import_frame(&device, &queue, buffer, inner.width, inner.height)
+                                    extract_nv12_bytes(buffer, inner.width, inner.height)
                                 });
                                 if let Err(e) = &result {
                                     eprintln!(
@@ -548,19 +482,12 @@ impl VideoSource for GstDecoder {
         self.total_frames
     }
 
-    fn frame_texture(
-        &mut self,
-        device: &wgpu::Device,
-        queue: &wgpu::Queue,
-        frame_index: i64,
-    ) -> Result<wgpu::Texture, String> {
-        eprintln!("[gstreamer-decoder] frame_texture呼び出し: frame_index={frame_index}");
+    fn frame(&mut self, frame_index: i64) -> Result<FrameOutput, String> {
+        eprintln!("[gstreamer-decoder] frame呼び出し: frame_index={frame_index}");
         let (reply_tx, reply_rx) = mpsc::channel();
         self.tx
-            .send(Command::FrameTexture {
+            .send(Command::Frame {
                 frame_index,
-                device: device.clone(),
-                queue: queue.clone(),
                 reply: reply_tx,
             })
             .map_err(|e| {
@@ -573,14 +500,22 @@ impl VideoSource for GstDecoder {
             .map_err(|e| e.to_string())
             .and_then(|inner| inner);
         match &result {
-            Ok(_) => {
-                eprintln!("[gstreamer-decoder] frame_texture応答成功: frame_index={frame_index}")
+            Ok(bytes) => {
+                let len = bytes.len();
+                eprintln!(
+                    "[gstreamer-decoder] frame応答成功: frame_index={frame_index} bytes={len}"
+                )
             }
-            Err(e) => eprintln!(
-                "[gstreamer-decoder] frame_texture応答失敗: frame_index={frame_index} 理由={e}"
-            ),
+            Err(e) => {
+                eprintln!("[gstreamer-decoder] frame応答失敗: frame_index={frame_index} 理由={e}")
+            }
         }
-        result
+        let bytes = result?;
+        Ok(FrameOutput::Cpu(FrameBytes::Nv12 {
+            bytes,
+            width: self.width,
+            height: self.height,
+        }))
     }
 }
 

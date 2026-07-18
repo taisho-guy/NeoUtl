@@ -1,8 +1,8 @@
 // src/media/worker.rs
 // 1動画ソース = 1専用デコードスレッド。UIスレッドはrequest()で要求を出すのみで
-// 待機しない。デコード結果はリングキャッシュへ書き込み、on_readyでUI再描画を要求する。
-use neoutl_media_api::VideoSource;
-use slint::wgpu_29::wgpu;
+// 待機しない。デコード結果はCPU側バイト列(FrameOutput)としてリングキャッシュへ書き込み、
+// on_readyでUI再描画を要求する。GPUリソース操作は一切行わない（UIスレッドが行う）。
+use neoutl_media_api::{FrameOutput, VideoSource};
 use std::collections::{HashMap, VecDeque};
 use std::sync::atomic::{AtomicI64, Ordering};
 use std::sync::{Arc, Condvar, Mutex};
@@ -14,7 +14,7 @@ const STOP_SENTINEL: i64 = i64::MIN + 1;
 const NONE_SENTINEL: i64 = i64::MIN;
 
 struct Ring {
-    map: HashMap<i64, wgpu::Texture>,
+    map: HashMap<i64, FrameOutput>,
     order: VecDeque<i64>,
 }
 
@@ -26,17 +26,17 @@ impl Ring {
         }
     }
 
-    fn get(&self, index: i64) -> Option<wgpu::Texture> {
+    fn get(&self, index: i64) -> Option<FrameOutput> {
         self.map.get(&index).cloned()
     }
 
-    fn latest(&self) -> Option<wgpu::Texture> {
+    fn latest(&self) -> Option<FrameOutput> {
         self.order
             .back()
             .and_then(|index| self.map.get(index).cloned())
     }
 
-    fn insert(&mut self, index: i64, texture: wgpu::Texture) {
+    fn insert(&mut self, index: i64, frame: FrameOutput) {
         if !self.map.contains_key(&index) {
             self.order.push_back(index);
             if self.order.len() > RING_CAPACITY
@@ -45,7 +45,7 @@ impl Ring {
                 self.map.remove(&evicted);
             }
         }
-        self.map.insert(index, texture);
+        self.map.insert(index, frame);
     }
 }
 
@@ -57,12 +57,10 @@ pub struct DecodeWorker {
 }
 
 impl DecodeWorker {
-    pub fn spawn(
-        mut decoder: Box<dyn VideoSource>,
-        device: wgpu::Device,
-        queue: wgpu::Queue,
-        on_ready: Arc<dyn Fn() + Send + Sync>,
-    ) -> Self {
+    /// device/queue を取らない。workerはデコードのみを行い、テクスチャ生成・
+    /// アップロードは呼び出し元(UIスレッド)が行う。デコードスレッドから
+    /// wgpu::Queueを操作するとSurface::present()との競合でデッドロックするため。
+    pub fn spawn(mut decoder: Box<dyn VideoSource>, on_ready: Arc<dyn Fn() + Send + Sync>) -> Self {
         let requested = Arc::new(AtomicI64::new(NONE_SENTINEL));
         let signal = Arc::new((Mutex::new(false), Condvar::new()));
         let ring = Arc::new(Mutex::new(Ring::new()));
@@ -91,8 +89,8 @@ impl DecodeWorker {
                 }
                 let already_cached = ring_t.lock().unwrap().get(target).is_some();
                 if !already_cached {
-                    if let Ok(texture) = decoder.frame_texture(&device, &queue, target) {
-                        ring_t.lock().unwrap().insert(target, texture);
+                    if let Ok(frame) = decoder.frame(target) {
+                        ring_t.lock().unwrap().insert(target, frame);
                         served = target;
                         on_ready();
                     }
@@ -107,8 +105,8 @@ impl DecodeWorker {
                     if ring_t.lock().unwrap().get(ahead).is_some() {
                         continue;
                     }
-                    if let Ok(texture) = decoder.frame_texture(&device, &queue, ahead) {
-                        ring_t.lock().unwrap().insert(ahead, texture);
+                    if let Ok(frame) = decoder.frame(ahead) {
+                        ring_t.lock().unwrap().insert(ahead, frame);
                         on_ready();
                     }
                 }
@@ -130,11 +128,11 @@ impl DecodeWorker {
         cvar.notify_one();
     }
 
-    pub fn frame(&self, frame_index: i64) -> Option<wgpu::Texture> {
+    pub fn frame(&self, frame_index: i64) -> Option<FrameOutput> {
         self.ring.lock().unwrap().get(frame_index)
     }
 
-    pub fn latest_available(&self) -> Option<wgpu::Texture> {
+    pub fn latest_available(&self) -> Option<FrameOutput> {
         self.ring.lock().unwrap().latest()
     }
 }

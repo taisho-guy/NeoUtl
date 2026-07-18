@@ -1,7 +1,7 @@
 use ffmpeg_next as ffmpeg;
 use ffmpeg_next::software::scaling::{Context as ScalingContext, Flags as ScalingFlags};
 use ffmpeg_next::util::frame::Video as VideoFrame;
-use neoutl_media_api::VideoSource;
+use neoutl_media_api::{FrameBytes, FrameOutput, VideoSource};
 use std::collections::{HashMap, VecDeque};
 use std::path::Path;
 
@@ -202,47 +202,13 @@ impl VideoSource for FfmpegVideoDecoder {
         self.index.len() as i64
     }
 
-    fn frame_texture(
-        &mut self,
-        device: &wgpu::Device,
-        queue: &wgpu::Queue,
-        frame_index: i64,
-    ) -> Result<wgpu::Texture, String> {
+    fn frame(&mut self, frame_index: i64) -> Result<FrameOutput, String> {
         let rgba = self.rgba_at(frame_index)?;
-        let texture = device.create_texture(&wgpu::TextureDescriptor {
-            label: Some("ffmpeg-video-frame"),
-            size: wgpu::Extent3d {
-                width: self.width,
-                height: self.height,
-                depth_or_array_layers: 1,
-            },
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format: wgpu::TextureFormat::Rgba8Unorm,
-            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
-            view_formats: &[],
-        });
-        queue.write_texture(
-            wgpu::TexelCopyTextureInfo {
-                texture: &texture,
-                mip_level: 0,
-                origin: wgpu::Origin3d::ZERO,
-                aspect: wgpu::TextureAspect::All,
-            },
-            &rgba,
-            wgpu::TexelCopyBufferLayout {
-                offset: 0,
-                bytes_per_row: Some(self.width * 4),
-                rows_per_image: Some(self.height),
-            },
-            wgpu::Extent3d {
-                width: self.width,
-                height: self.height,
-                depth_or_array_layers: 1,
-            },
-        );
-        Ok(texture)
+        Ok(FrameOutput::Cpu(FrameBytes::Rgba8 {
+            bytes: rgba,
+            width: self.width,
+            height: self.height,
+        }))
     }
 }
 

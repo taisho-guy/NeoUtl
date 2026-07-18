@@ -3,13 +3,13 @@ use gpu_video::parameters::{
     WgpuConverterParameters,
 };
 use gpu_video::{EncodedInputChunk, VulkanInstance, WgpuNv12ToRgbaConverter, WgpuTexturesDecoder};
-use neoutl_media_api::VideoSource;
+use neoutl_media_api::{FrameOutput, VideoSource};
 use std::collections::{HashMap, VecDeque};
 use std::fs::File;
 use std::path::Path;
 use symphonia::core::codecs::video::well_known::CODEC_ID_H264;
 use symphonia::core::formats::probe::Hint;
-use symphonia::core::formats::{FormatOptions, FormatReader, SeekMode, SeekTo, TrackType};
+use symphonia::core::formats::{FormatOptions, FormatReader, SeekMode, SeekTo};
 use symphonia::core::io::MediaSourceStream;
 use symphonia::core::meta::MetadataOptions;
 
@@ -184,6 +184,9 @@ impl GpuVideoDecoder {
         })
     }
 
+    /// Stage 2 でUIスレッド上のNV12→RGBA変換として復活させるまで保持。
+    /// 現在 frame() は Err を返すため未使用。
+    #[allow(dead_code)]
     fn decode_until(
         &mut self,
         target: i64,
@@ -265,35 +268,12 @@ impl VideoSource for GpuVideoDecoder {
         self.total_frames
     }
 
-    fn frame_texture(
-        &mut self,
-        device: &wgpu::Device,
-        queue: &wgpu::Queue,
-        frame_index: i64,
-    ) -> Result<wgpu::Texture, String> {
-        let target = frame_index.clamp(0, self.total_frames - 1);
-        if let Some(t) = self.cache.get(target) {
-            self.last_display_index = target;
-            return Ok(t);
-        }
-        if self.last_display_index < 0 || target <= self.last_display_index {
-            let pts = self
-                .display_index
-                .iter()
-                .find(|&(_, &v)| v == target)
-                .map(|(&k, _)| k)
-                .unwrap_or(0);
-            self.demux
-                .seek(
-                    SeekMode::Coarse,
-                    SeekTo::Timestamp {
-                        ts: symphonia::core::units::Timestamp::new(pts),
-                        track_id: self.track_id,
-                    },
-                )
-                .map_err(|e| e.to_string())?;
-            self.last_display_index = -1;
-        }
-        self.decode_until(target, device, queue)
+    /// Stage 1: 一時的に無効化。
+    /// gpuvideo の NV12→RGBA 変換はホストキュー(out_queue.submit)を必要とするため、
+    /// デコードスレッドから呼ぶと Surface::present() との SnatchLock 競合で
+    /// デッドロックする。変換をUIスレッドへ移行する Stage 2 で真ゼロコピーパスとして
+    /// 復活させるまで、FrameOutput::Gpu 経路は封印する。
+    fn frame(&mut self, _frame_index: i64) -> Result<FrameOutput, String> {
+        Err("gpuvideo-decoder はデッドロック回避のため一時無効化されています".to_string())
     }
 }

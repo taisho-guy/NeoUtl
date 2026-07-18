@@ -41,6 +41,11 @@ fn gst_registry_cache_path() -> Option<std::path::PathBuf> {
 fn configure_gst_plugin_path() {
     unsafe {
         std::env::set_var("GST_PLUGIN_FEATURE_RANK", "lv2:NONE,ladspa:NONE");
+
+        // Linuxはディストリビューションパッケージのシステムプラグイン（va, v4l2codecs等）に
+        // 依存するため、GST_PLUGIN_SYSTEM_PATH_1_0を空上書きしない。
+        // Windows/macOSはバンドル配布のためシステムパス走査を無効化する。
+        #[cfg(not(target_os = "linux"))]
         std::env::set_var("GST_PLUGIN_SYSTEM_PATH_1_0", "");
 
         if let Some(registry_path) = gst_registry_cache_path()
