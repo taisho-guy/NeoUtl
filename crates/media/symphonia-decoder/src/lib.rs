@@ -98,3 +98,37 @@ pub fn decode_full(path: &Path) -> Result<AudioBuffer, String> {
         samples,
     })
 }
+
+// --- プラグインエントリ ---
+use neoutl_media_api::{EntryFn, MediaKind, MediaMeta, MediaVTable};
+
+static EXTENSIONS: &[&str] = &["wav", "mp3", "flac", "ogg", "m4a"];
+
+static META: MediaMeta = MediaMeta {
+    id: "neoutl.media.symphonia",
+    name: "Symphonia Audio Decoder",
+    kind: MediaKind::Audio,
+    extensions_ptr: EXTENSIONS.as_ptr(),
+    extensions_len: EXTENSIONS.len(),
+};
+static VTABLE: std::sync::OnceLock<MediaVTable> = std::sync::OnceLock::new();
+
+fn meta() -> &'static MediaMeta {
+    &META
+}
+
+fn decode_audio_entry(path: &Path) -> Result<AudioBuffer, String> {
+    decode_full(path)
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn neoutl_media_entry() -> *const MediaVTable {
+    VTABLE.get_or_init(|| MediaVTable {
+        meta,
+        open_video: None,
+        open_image: None,
+        decode_audio: Some(decode_audio_entry),
+    })
+}
+
+const _: EntryFn = neoutl_media_entry;

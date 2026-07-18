@@ -1,23 +1,14 @@
 // src/media/mod.rs
 pub mod cache;
+pub mod loader;
 pub mod text;
 pub mod worker;
 
-use serde::{Deserialize, Serialize};
+pub use neoutl_media_api::MediaKind;
 
-#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
-pub enum MediaKind {
-    Video,
-    Image,
-    Audio,
-}
-
+/// 拡張子とMediaKindの対応はデコーダプラグイン自身が申告する（loader::MediaPlugin::extensions）。
+/// ホスト側で拡張子リストを固定管理しないため、新規デコーダはdylibを配置するだけで対応拡張子が増える。
 pub fn detect_kind(path: &std::path::Path) -> Option<MediaKind> {
     let ext = path.extension()?.to_str()?.to_ascii_lowercase();
-    match ext.as_str() {
-        "mp4" | "mov" | "mkv" | "webm" | "avi" => Some(MediaKind::Video),
-        "png" | "jpg" | "jpeg" | "bmp" | "webp" | "gif" | "tiff" => Some(MediaKind::Image),
-        "wav" | "mp3" | "flac" | "ogg" | "m4a" => Some(MediaKind::Audio),
-        _ => None,
-    }
+    loader::find_by_extension(&ext).map(|p| p.kind)
 }

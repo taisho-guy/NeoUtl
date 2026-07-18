@@ -18,10 +18,6 @@ neoutl-object-api = { path = "crates/neoutl-object-api" }
 neoutl-effect-api = { path = "crates/neoutl-effect-api" }
 neoutl-media-api = { path = "crates/neoutl-media-api" }
 
-neoutl-media-gstreamer-decoder = { path = "crates/media/gstreamer-decoder" }
-neoutl-media-symphonia-decoder = { path = "crates/media/symphonia-decoder" }
-neoutl-media-image-decoder = { path = "crates/media/image-decoder" }
-
 [package]
 name = "NeoUtl"
 version = "0.0.0"
@@ -32,9 +28,6 @@ neoutl-shared-abi.workspace = true
 neoutl-object-api.workspace = true
 neoutl-effect-api.workspace = true
 neoutl-media-api.workspace = true
-neoutl-media-gstreamer-decoder.workspace = true
-neoutl-media-symphonia-decoder.workspace = true
-neoutl-media-image-decoder.workspace = true
 libloading = "0.9"
 slint = { version = "1.17", default-features = false, features = [
     "std",

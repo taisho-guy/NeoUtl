@@ -13,7 +13,8 @@ struct DiscoveredCrate {
 /// workspace_root/subdir 直下の各ディレクトリのCargo.tomlを走査し、
 /// package.name と lib.name（未指定時はpackage.nameの'-'を'_'置換）を収集する。
 /// 新規追加クレートはディレクトリを置くだけで自動検出対象になる。
-/// subdirには"crates/objects"・"crates/effects"のいずれも渡せる（両者は同一走査規則）。
+/// subdirには"crates/objects"・"crates/effects"・"crates/media"のいずれも渡せる
+/// （3者は同一走査規則）。
 fn discover_crates(workspace_root: &Path, subdir: &str) -> Vec<DiscoveredCrate> {
     let scan_dir = workspace_root.join(subdir);
     let mut result = Vec::new();
@@ -178,6 +179,11 @@ fn main() {
     let effects = discover_crates(&root, "crates/effects");
     build_crates(&root, profile, target, "effects", &effects);
     stage_crates(&root, profile, target, "effects", &effects);
+
+    // 動画/画像/音声デコーダプラグイン（objects/effectsと同一のcdylib外部化規約）。
+    let decoders = discover_crates(&root, "crates/media");
+    build_crates(&root, profile, target, "decoders", &decoders);
+    stage_crates(&root, profile, target, "decoders", &decoders);
 
     // 本体(NeoUtl)は build タスクではビルドのみ、run タスクでは実行まで行う。
     let mut cmd = Command::new("cargo");

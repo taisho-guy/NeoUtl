@@ -1,3 +1,5 @@
+#![allow(non_camel_case_types)]
+
 pub trait VideoSource: Send {
     fn width(&self) -> u32;
     fn height(&self) -> u32;
@@ -40,6 +42,43 @@ impl AudioBuffer {
     }
 }
 
-pub trait AudioSource {
-    fn decode_full(path: &std::path::Path) -> Result<AudioBuffer, String>;
+/// デコーダプラグインが対応するメディア種別。1プラグイン=1種別固定とし、
+/// 動画・音声を同時に扱う複合プラグイン（例: ffmpeg系フルデマルチプレクサ）は
+/// 種別ごとに別プラグインとして分割登録すること（責務分離・拡張子解決の一意性維持のため）。
+#[repr(u8)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub enum MediaKind {
+    Video = 0,
+    Image = 1,
+    Audio = 2,
 }
+
+/// デコーダプラグインの静的メタデータ。objects/effectsのMeta規約
+/// （'static参照 + 生ポインタ配列）に統一する。
+#[repr(C)]
+pub struct MediaMeta {
+    pub id: &'static str,
+    pub name: &'static str,
+    pub kind: MediaKind,
+    /// 小文字・ドット無し拡張子の一覧（例: "mp4"）。ホストはdetect_kind時に
+    /// 全プラグインのこの一覧を走査し、一致した最初のプラグイン（id昇順）へ委譲する。
+    pub extensions_ptr: *const &'static str,
+    pub extensions_len: usize,
+}
+unsafe impl Send for MediaMeta {}
+unsafe impl Sync for MediaMeta {}
+
+/// デコーダプラグインの関数テーブル。
+/// entry関数（neoutl_media_entry、extern "C"）のみがdylib境界を越える対象であり、
+/// 本体各フィールドはホストと同一Cargo.lock・同一rustcで一括ビルドされる前提の
+/// 素のRust関数ポインタとする（objects/effectsのRenderContext拡張点と同一のABI前提）。
+/// kindに応じた1フィールドのみSomeとなる。
+pub struct MediaVTable {
+    pub meta: fn() -> &'static MediaMeta,
+    pub open_video: Option<fn(path: &std::path::Path) -> Result<Box<dyn VideoSource>, String>>,
+    pub open_image: Option<fn(path: &std::path::Path) -> Result<Box<dyn ImageSource>, String>>,
+    pub decode_audio: Option<fn(path: &std::path::Path) -> Result<AudioBuffer, String>>,
+}
+
+pub const ENTRY_SYMBOL: &[u8] = b"neoutl_media_entry\0";
+pub type EntryFn = unsafe extern "C" fn() -> *const MediaVTable;

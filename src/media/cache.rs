@@ -1,4 +1,5 @@
 // src/media/cache.rs
+use super::loader;
 use super::worker::DecodeWorker;
 use super::{MediaKind, detect_kind};
 use neoutl_media_api::{AudioBuffer, ImageSource, VideoSource};
@@ -38,20 +39,54 @@ pub struct MediaCache {
     redraw: Mutex<Option<Arc<dyn Fn() + Send + Sync>>>,
 }
 
+fn ext_of(path: &Path) -> Result<String, String> {
+    path.extension()
+        .and_then(|e| e.to_str())
+        .map(str::to_ascii_lowercase)
+        .ok_or_else(|| format!("拡張子なし: {}", path.display()))
+}
+
 fn open_video(path: &Path) -> Result<Box<dyn VideoSource>, String> {
     eprintln!("[media-cache] open_video開始: {}", path.display());
-    let result = neoutl_media_gstreamer_decoder::GstDecoder::open(path)
-        .map(|decoder| Box::new(decoder) as Box<dyn VideoSource>);
+    let ext = ext_of(path)?;
+    let plugin = loader::find_by_extension(&ext)
+        .ok_or_else(|| format!("動画デコーダ未登録: {}", path.display()))?;
+    let open_fn = plugin
+        .vtable
+        .open_video
+        .ok_or_else(|| format!("プラグイン{}はopen_video未実装", plugin.id))?;
+    let result = open_fn(path);
     match &result {
-        Ok(_) => eprintln!("[media-cache] open_video成功: {}", path.display()),
+        Ok(_) => eprintln!(
+            "[media-cache] open_video成功: {} (plugin={})",
+            path.display(),
+            plugin.id
+        ),
         Err(e) => eprintln!("[media-cache] open_video失敗: {} 理由={e}", path.display()),
     }
     result
 }
 
 fn open_image(path: &Path) -> Result<Box<dyn ImageSource>, String> {
-    neoutl_media_image_decoder::StaticImageDecoder::open(path)
-        .map(|decoder| Box::new(decoder) as Box<dyn ImageSource>)
+    let ext = ext_of(path)?;
+    let plugin = loader::find_by_extension(&ext)
+        .ok_or_else(|| format!("画像デコーダ未登録: {}", path.display()))?;
+    let open_fn = plugin
+        .vtable
+        .open_image
+        .ok_or_else(|| format!("プラグイン{}はopen_image未実装", plugin.id))?;
+    open_fn(path)
+}
+
+fn decode_audio(path: &Path) -> Result<AudioBuffer, String> {
+    let ext = ext_of(path)?;
+    let plugin = loader::find_by_extension(&ext)
+        .ok_or_else(|| format!("音声デコーダ未登録: {}", path.display()))?;
+    let decode_fn = plugin
+        .vtable
+        .decode_audio
+        .ok_or_else(|| format!("プラグイン{}はdecode_audio未実装", plugin.id))?;
+    decode_fn(path)
 }
 
 impl MediaCache {
@@ -85,7 +120,10 @@ impl MediaCache {
         eprintln!("[media-cache] 新規load: {}", path.display());
         let built = match detect_kind(path) {
             None => {
-                let err = format!("未対応の拡張子: {}", path.display());
+                let err = format!(
+                    "未対応の拡張子（対応デコーダプラグイン未検出）: {}",
+                    path.display()
+                );
                 eprintln!("[media-cache] {err}");
                 PathEntry::Failed(err)
             }
@@ -113,7 +151,7 @@ impl MediaCache {
                     PathEntry::Failed(err)
                 }
             },
-            Some(MediaKind::Audio) => match neoutl_media_symphonia_decoder::decode_full(path) {
+            Some(MediaKind::Audio) => match decode_audio(path) {
                 Ok(buf) => PathEntry::Audio(Arc::new(buf)),
                 Err(err) => {
                     eprintln!("[media-cache] load失敗: {} 理由={err}", path.display());

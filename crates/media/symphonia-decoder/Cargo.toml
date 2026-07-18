@@ -3,6 +3,10 @@ name = "neoutl-media-symphonia-decoder"
 version = "0.0.0"
 edition = "2024"
 
+[lib]
+name       = "neoutl_media_symphonia_decoder"
+crate-type = ["cdylib"]
+
 [dependencies]
 neoutl-media-api = { path = "../../neoutl-media-api" }
 symphonia = { version = "0.6", features = ["all"] }

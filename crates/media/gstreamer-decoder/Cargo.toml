@@ -3,6 +3,10 @@ name = "neoutl-media-gstreamer-decoder"
 version = "0.0.0"
 edition = "2024"
 
+[lib]
+name       = "neoutl_media_gstreamer_decoder"
+crate-type = ["cdylib"]
+
 [dependencies]
 neoutl-media-api = { path = "../../neoutl-media-api" }
 gstreamer = "0.25"
