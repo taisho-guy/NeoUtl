@@ -75,11 +75,9 @@
 
 ## 開発状況
 
-まだ開発初期段階ですが、順調です。
+開発状況は[NeoUtlのお部屋](https://neoutl.taisho-guy.org)でご覧下さい。
 
-安定版（1.x）の公開は2027年度以降になりそうです。
-
-ロードマップは[TODO.md](https://codeberg.org/taisho-guy/NeoUtl/src/branch/main/TODO.md)でご確認下さい。
+ロードマップは[TODO.md](https://codeberg.org/taisho-guy/NeoUtl/src/branch/main/TODO.md)でご覧下さい。
 
 ## ダウンロード方法
 
