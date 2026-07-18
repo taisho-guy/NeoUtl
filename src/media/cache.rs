@@ -2,11 +2,52 @@
 use super::loader;
 use super::worker::DecodeWorker;
 use super::{MediaKind, detect_kind};
-use neoutl_media_api::{AudioBuffer, ImageSource, VideoSource};
+use neoutl_media_api::{AudioBuffer, FrameBytes, FrameOutput, ImageSource, VideoSource};
 use slint::wgpu_29::wgpu;
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, OnceLock};
+
+/// UIスレッド側で生成したテクスチャのLRUキャッシュ。
+/// デコードスレッドはCPUバイト列のみを返すため、UIスレッドが毎フレーム
+/// create_texture + write_texture を行う。同一フレームの再描画時の再アップロードを
+/// 抑制するため、変換済みテクスチャを容量付きで保持する。
+struct TextureLru {
+    map: HashMap<i64, wgpu::Texture>,
+    order: VecDeque<i64>,
+    capacity: usize,
+}
+
+impl TextureLru {
+    fn new(capacity: usize) -> Self {
+        Self {
+            map: HashMap::new(),
+            order: VecDeque::new(),
+            capacity,
+        }
+    }
+
+    fn get(&self, index: i64) -> Option<wgpu::Texture> {
+        self.map.get(&index).cloned()
+    }
+
+    fn put(&mut self, index: i64, texture: wgpu::Texture) {
+        if self.map.contains_key(&index) {
+            return;
+        }
+        self.map.insert(index, texture);
+        self.order.push_back(index);
+        while self.order.len() > self.capacity
+            && let Some(evicted) = self.order.pop_front()
+        {
+            self.map.remove(&evicted);
+        }
+    }
+}
+
+/// UIスレッド側テクスチャLRUの容量。worker側リング(worker.rs::RING_CAPACITY)と
+/// 同じ32。デコードが先行して進む範囲をカバーし、毎フレームの再アップロードを抑制する。
+const WORKER_RING_CAPACITY: usize = 32;
 
 struct VideoEntry {
     width: u32,
@@ -16,6 +57,9 @@ struct VideoEntry {
     /// spawn前の未使用デコーダ。frame_at初回呼び出し時にworkerへ移譲する。
     pending_decoder: Option<Box<dyn VideoSource>>,
     worker: Option<DecodeWorker>,
+    /// UIスレッド側で生成したテクスチャのキャッシュ。
+    /// workerから受け取ったCPUバイト列をテクスチャ化した結果を保持する。
+    texture_cache: TextureLru,
 }
 
 struct ImageEntry {
@@ -89,6 +133,135 @@ fn decode_audio(path: &Path) -> Result<AudioBuffer, String> {
     decode_fn(path)
 }
 
+/// FrameOutput を wgpu::Texture へ実体化する。CPUバイト列の場合は create_texture +
+/// write_texture でアップロードする。GPUテクスチャの場合はそのまま返す。
+/// 必ずUIスレッドから呼ぶこと（wgpu::Queue操作を伴うため）。
+fn materialize(frame: &FrameOutput, device: &wgpu::Device, queue: &wgpu::Queue) -> wgpu::Texture {
+    match frame {
+        FrameOutput::Gpu(texture) => texture.clone(),
+        FrameOutput::Cpu(FrameBytes::Nv12 {
+            bytes,
+            width,
+            height,
+        }) => upload_nv12(device, queue, bytes, *width, *height),
+        FrameOutput::Cpu(FrameBytes::Rgba8 {
+            bytes,
+            width,
+            height,
+        }) => upload_rgba8(device, queue, bytes, *width, *height),
+    }
+}
+
+/// NV12バイト列(Y平面 + インターリーブUV平面)をNV12テクスチャへアップロードする。
+/// 旧 gstreamer-decoder::import_frame のテクスチャ生成部をUIスレッド側へ移動したもの。
+fn upload_nv12(
+    device: &wgpu::Device,
+    queue: &wgpu::Queue,
+    data: &[u8],
+    width: u32,
+    height: u32,
+) -> wgpu::Texture {
+    let y_plane_size = (width * height) as usize;
+    let texture = device.create_texture(&wgpu::TextureDescriptor {
+        label: Some("video-nv12-frame"),
+        size: wgpu::Extent3d {
+            width,
+            height,
+            depth_or_array_layers: 1,
+        },
+        mip_level_count: 1,
+        sample_count: 1,
+        dimension: wgpu::TextureDimension::D2,
+        format: wgpu::TextureFormat::NV12,
+        usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+        view_formats: &[],
+    });
+    queue.write_texture(
+        wgpu::TexelCopyTextureInfo {
+            texture: &texture,
+            mip_level: 0,
+            origin: wgpu::Origin3d::ZERO,
+            aspect: wgpu::TextureAspect::Plane0,
+        },
+        &data[0..y_plane_size],
+        wgpu::TexelCopyBufferLayout {
+            offset: 0,
+            bytes_per_row: Some(width),
+            rows_per_image: Some(height),
+        },
+        wgpu::Extent3d {
+            width,
+            height,
+            depth_or_array_layers: 1,
+        },
+    );
+    queue.write_texture(
+        wgpu::TexelCopyTextureInfo {
+            texture: &texture,
+            mip_level: 0,
+            origin: wgpu::Origin3d::ZERO,
+            aspect: wgpu::TextureAspect::Plane1,
+        },
+        &data[y_plane_size..],
+        wgpu::TexelCopyBufferLayout {
+            offset: 0,
+            bytes_per_row: Some(width),
+            rows_per_image: Some(height / 2),
+        },
+        wgpu::Extent3d {
+            width: width / 2,
+            height: height / 2,
+            depth_or_array_layers: 1,
+        },
+    );
+    texture
+}
+
+/// RGBA8バイト列をRgba8Unormテクスチャへアップロードする。
+/// 旧 ffmpeg-decoder::frame_texture のテクスチャ生成部をUIスレッド側へ移動したもの。
+fn upload_rgba8(
+    device: &wgpu::Device,
+    queue: &wgpu::Queue,
+    data: &[u8],
+    width: u32,
+    height: u32,
+) -> wgpu::Texture {
+    let texture = device.create_texture(&wgpu::TextureDescriptor {
+        label: Some("video-rgba8-frame"),
+        size: wgpu::Extent3d {
+            width,
+            height,
+            depth_or_array_layers: 1,
+        },
+        mip_level_count: 1,
+        sample_count: 1,
+        dimension: wgpu::TextureDimension::D2,
+        format: wgpu::TextureFormat::Rgba8Unorm,
+        usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+        view_formats: &[],
+    });
+    queue.write_texture(
+        wgpu::TexelCopyTextureInfo {
+            texture: &texture,
+            mip_level: 0,
+            origin: wgpu::Origin3d::ZERO,
+            aspect: wgpu::TextureAspect::All,
+        },
+        data,
+        wgpu::TexelCopyBufferLayout {
+            offset: 0,
+            bytes_per_row: Some(width * 4),
+            rows_per_image: Some(height),
+        },
+        wgpu::Extent3d {
+            width,
+            height,
+            depth_or_array_layers: 1,
+        },
+    );
+    texture
+}
+
 impl MediaCache {
     fn new() -> Self {
         Self {
@@ -135,6 +308,7 @@ impl MediaCache {
                     total_frames: decoder.total_frames(),
                     pending_decoder: Some(decoder),
                     worker: None,
+                    texture_cache: TextureLru::new(WORKER_RING_CAPACITY),
                 }),
                 Err(err) => {
                     eprintln!("[media-cache] load失敗: {} 理由={err}", path.display());
@@ -171,6 +345,11 @@ impl MediaCache {
     /// 完成テクスチャの即時返却のみを行う非ブロッキング呼び出し。
     /// 目的フレーム未完成時は直前に完成した最新フレームを返す。
     /// 一度も完成していない場合のみErrを返す（初回ロード直後の一瞬に限られる）。
+    ///
+    /// 本メソッドはUIスレッドから呼ばれることを前提とする。デコードスレッドは
+    /// CPUバイト列(FrameOutput::Cpu)のみを返し、create_texture + write_texture は
+    /// ここ（UIスレッド）で実行する。これにより Surface::present() と別スレッドの
+    /// write_texture による wgpu SnatchLock デッドロックを回避する。
     pub fn frame_at(
         &self,
         path: &Path,
@@ -187,19 +366,31 @@ impl MediaCache {
                         .pending_decoder
                         .take()
                         .expect("workerがNoneの間pending_decoderは常時Some");
-                    video.worker = Some(DecodeWorker::spawn(
-                        decoder,
-                        device.clone(),
-                        queue.clone(),
-                        self.redraw_handle(),
-                    ));
+                    video.worker = Some(DecodeWorker::spawn(decoder, self.redraw_handle()));
                 }
                 let worker = video.worker.as_ref().unwrap();
                 worker.request(frame_index);
-                worker
-                    .frame(frame_index)
-                    .or_else(|| worker.latest_available())
-                    .ok_or_else(|| "デコード中".to_string())
+
+                // UIスレッド側テクスチャLRUヒットなら即返却（再アップロード抑制）。
+                if let Some(tex) = video.texture_cache.get(frame_index) {
+                    return Ok(tex);
+                }
+
+                // 目的フレームのデコード結果を取得（非ブロッキング）。
+                // まだ無ければ直近の完成フレームで代用し、表示の継続性を保つ。
+                // 代用フレームはインデックスが一致しないためキャッシュしない。
+                let exact = worker.frame(frame_index);
+                let fallback = worker.latest_available();
+                let (frame_output, is_exact) = match (exact, fallback) {
+                    (Some(f), _) => (f, true),
+                    (None, Some(f)) => (f, false),
+                    (None, None) => return Err("デコード中".to_string()),
+                };
+                let tex = materialize(&frame_output, device, queue);
+                if is_exact {
+                    video.texture_cache.put(frame_index, tex.clone());
+                }
+                Ok(tex)
             }
             PathEntry::Image(image) => {
                 if image.texture.is_none() {
