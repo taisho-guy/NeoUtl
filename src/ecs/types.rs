@@ -58,7 +58,6 @@ pub fn evaluate_keyframes_number(keyframes: &[Keyframe], frame: i32) -> Option<V
         return Some(keyframes[0].value.clone());
     }
 
-    // keyframes are expected sorted by frame ascending
     let mut prev = &keyframes[0];
     for k in &keyframes[1..] {
         if frame < k.frame {

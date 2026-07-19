@@ -1,4 +1,3 @@
-// src/ui/timeline.rs
 use crate::app_state::{self, SharedAppState};
 use crate::ecs::{
     EcsWorld,

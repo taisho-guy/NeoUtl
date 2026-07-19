@@ -1,9 +1,3 @@
-// src/ecs/object_schema.rs
-//
-// 設定ダイアログUI生成用スキーマ。Transform/Text/Shape/Audioはホスト内蔵コンポーネントであり
-// neoutl_object_api::ParamSchema（cdylibプラグイン用）は経由しないが、生成ロジックは同一パターンで統一する。
-// UIのラベル・並び順・レンジはこのテーブルのみが定義源であり、properties.rs/properties.slintは
-// キー名で値を読み書きするだけの汎用コードに限定する（型別ハードコード撤廃）。
 use crate::ecs::effects::ParamKind;
 
 #[derive(Clone, Copy, Debug)]

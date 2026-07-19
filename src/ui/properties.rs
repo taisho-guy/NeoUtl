@@ -1,4 +1,3 @@
-// src/ui/properties.rs
 use crate::app_state::{self, SharedAppState};
 use crate::ecs::{
     EcsWorld,
@@ -221,10 +220,6 @@ fn apply_object_param(world: &mut EcsWorld, oid: usize, group: &str, key: &str, 
                 world.set_audio_params(oid, a.volume, a.pan, a.mute);
             }
         }
-        // トランスフォーム/テキスト/図形/オーディオのいずれでもないgroupは、
-        // プラグインObjectMeta.property_schema由来のキーとみなし汎用格納へ書き込む。
-        // group名自体はUI表示にのみ使い、書き込み先の判定はkeyの存在有無に依存しない
-        // （プラグインは任意のkey集合を持つため、host側で列挙できない）。
         _ => {
             world.set_plugin_param(oid, key, value);
         }
@@ -478,8 +473,6 @@ fn refresh(props: &PropertiesWindow, world: &EcsWorld) {
         .collect();
     props.set_effects(ModelRc::new(VecModel::from(rows)));
 
-    // パラメータ行はエフェクトプラグインのEffectMeta.param_schema（label/kind/min/max）から
-    // 生成する。ハードコード撤廃: キー名の見た目・レンジは全てエフェクト定義側で決まる。
     let mut params = Vec::new();
     for (i, e) in instances.iter().enumerate() {
         let Some(meta) = find_effect(&e.effect_id) else {

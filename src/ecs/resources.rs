@@ -1,4 +1,3 @@
-// src/ecs/resources.rs
 use crate::config;
 use serde::{Deserialize, Serialize};
 use shipyard::Unique;

@@ -1,4 +1,3 @@
-// src/ui/system_settings.rs
 use crate::SystemSettingsWindow;
 use crate::ecs::{EcsWorld, resources::SystemSettingsResource};
 use slint::ComponentHandle;

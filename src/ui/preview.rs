@@ -1,4 +1,3 @@
-// src/ui/preview.rs
 use crate::app_state::{self, SharedAppState};
 use crate::ecs::resources::ProjectResource;
 use crate::ecs::systems::get_active_objects_system;
@@ -112,9 +111,6 @@ pub fn setup(
 ) {
     let preview_weak = preview.as_weak();
 
-    // デコードスレッドがフレーム完成させるたびにここへ通知される。
-    // set_rendering_notifier配下ではなく専用スレッドから呼ばれるため、
-    // invoke_from_event_loop経由でUIスレッドへ再描画要求のみ委譲する。
     crate::media::cache::global().set_redraw_callback({
         let redraw_weak = preview_weak.clone();
         std::sync::Arc::new(move || {
@@ -158,8 +154,6 @@ pub fn setup(
                     *engine_lock = Some(RenderEngine::new(device, queue, proj.width, proj.height));
                 }
                 if let Some(ref mut engine) = *engine_lock {
-                    // シーン切替・シーン設定変更でProjectResourceの解像度が変わった場合、
-                    // レンダーターゲットを確実に追従させる（既知の制約の解消）。
                     if engine.render_width != proj.width || engine.render_height != proj.height {
                         engine.resize_render_target(proj.width, proj.height);
                     }

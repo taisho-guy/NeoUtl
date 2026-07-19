@@ -1,4 +1,3 @@
-// src/ui/scene_settings.rs
 use crate::app_state::{self, SharedAppState};
 use crate::ecs::SceneSettings;
 use crate::project;

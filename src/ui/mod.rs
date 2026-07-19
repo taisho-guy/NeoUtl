@@ -1,4 +1,3 @@
-// src/ui/mod.rs
 pub mod launcher;
 mod preview;
 pub mod project_settings;
@@ -105,7 +104,6 @@ fn build_main_windows(
     let gpu_slot: preview::GpuSlot = Rc::new(RefCell::new(None));
     preview::install_rendering_notifier(&preview, gpu_slot.clone());
 
-    // システム設定は全プロジェクト共通のため、settings_world（先頭セッション固定）へ紐付ける。
     system_settings::setup(&settings, app_state::settings_world(state));
     preview::setup(
         &preview,
@@ -127,8 +125,6 @@ fn build_main_windows(
     scene_settings::setup(&scene_settings_win, state.clone(), timeline.as_weak());
     project_settings::setup(&project_settings_win, state.clone(), preview.as_weak());
 
-    // 本体ウィンドウの「新規プロジェクト」「プロジェクトを開く」は
-    // ランチャーを再表示してプロジェクトタブ追加の入口として使う。
     preview.on_new_project({
         let launcher_weak = launcher_weak.clone();
         move || {

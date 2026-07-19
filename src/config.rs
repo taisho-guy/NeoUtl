@@ -1,5 +1,3 @@
-// src/config.rs
-
 /// プロジェクト既定値（ProjectResource::new）
 pub const PROJECT_DEFAULT_WIDTH: u32 = 1920;
 pub const PROJECT_DEFAULT_HEIGHT: u32 = 1080;

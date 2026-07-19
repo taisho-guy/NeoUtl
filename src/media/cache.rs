@@ -1,4 +1,3 @@
-// src/media/cache.rs
 use super::loader;
 use super::worker::DecodeWorker;
 use super::{MediaKind, detect_kind};
@@ -91,25 +90,48 @@ fn ext_of(path: &Path) -> Result<String, String> {
         .ok_or_else(|| format!("拡張子なし: {}", path.display()))
 }
 
+/// 拡張子に対応する動画デコーダプラグインをid昇順で順次試行する。
+/// 各プラグインのopen_videoが返すErrはハードウェア/ドライバ側の実行時制約
+/// （例: Vulkan Video非対応環境でのgpuvideo-decoder）を含みうるため、
+/// 1プラグインの失敗だけでは即座にopen_video全体を失敗とせず次候補へ移る。
+/// 全候補が失敗した場合のみ、各プラグインの理由を連結して返す。
 fn open_video(path: &Path) -> Result<Box<dyn VideoSource>, String> {
     eprintln!("[media-cache] open_video開始: {}", path.display());
     let ext = ext_of(path)?;
-    let plugin = loader::find_by_extension(&ext)
-        .ok_or_else(|| format!("動画デコーダ未登録: {}", path.display()))?;
-    let open_fn = plugin
-        .vtable
-        .open_video
-        .ok_or_else(|| format!("プラグイン{}はopen_video未実装", plugin.id))?;
-    let result = open_fn(path);
-    match &result {
-        Ok(_) => eprintln!(
-            "[media-cache] open_video成功: {} (plugin={})",
-            path.display(),
-            plugin.id
-        ),
-        Err(e) => eprintln!("[media-cache] open_video失敗: {} 理由={e}", path.display()),
+    let candidates = loader::find_all_by_extension(&ext);
+    if candidates.is_empty() {
+        return Err(format!("動画デコーダ未登録: {}", path.display()));
     }
-    result
+
+    let mut failures: Vec<String> = Vec::new();
+    for plugin in candidates {
+        let Some(open_fn) = plugin.vtable.open_video else {
+            continue;
+        };
+        match open_fn(path) {
+            Ok(decoder) => {
+                eprintln!(
+                    "[media-cache] open_video成功: {} (plugin={})",
+                    path.display(),
+                    plugin.id
+                );
+                return Ok(decoder);
+            }
+            Err(err) => {
+                eprintln!(
+                    "[media-cache] open_videoフォールバック: {} (plugin={}) 理由={err}",
+                    path.display(),
+                    plugin.id
+                );
+                failures.push(format!("{}: {err}", plugin.id));
+            }
+        }
+    }
+    Err(format!(
+        "全デコーダで開けませんでした: {} [{}]",
+        path.display(),
+        failures.join(" / ")
+    ))
 }
 
 fn open_image(path: &Path) -> Result<Box<dyn ImageSource>, String> {
@@ -242,7 +264,6 @@ impl MediaCache {
                 let worker = video.worker.as_ref().unwrap();
                 worker.request(frame_index);
 
-                // UIスレッド側テクスチャLRUヒットなら即返却（再アップロード抑制）。
                 if let Some(tex) = video.texture_cache.get(frame_index) {
                     return Ok(tex);
                 }
@@ -257,7 +278,6 @@ impl MediaCache {
                     return Err("デコード中".to_string());
                 };
 
-                // frame_gpuの排他アクセス（背景スレッドのprefetchはtry_lockで非ブロッキング）。
                 let tex = {
                     let mut decoder = decoder_handle.lock().unwrap();
                     decoder.frame_gpu(index, device, queue)?

@@ -1,4 +1,3 @@
-// src/ui/project_settings.rs
 use crate::app_state::{self, SharedAppState};
 use crate::project;
 use crate::{PreviewWindow, ProjectSettingsWindow};

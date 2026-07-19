@@ -1,4 +1,3 @@
-// src/ecs/effects.rs
 use shipyard::Component;
 
 use crate::ecs::types::{EffectInstance, EffectParam, Value};

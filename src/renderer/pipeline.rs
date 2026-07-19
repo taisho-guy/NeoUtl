@@ -1,4 +1,3 @@
-// src/renderer/pipeline.rs
 use crate::config;
 use crate::ecs::resources::ProjectResource;
 use crate::ecs::systems::ActiveObject;
@@ -537,9 +536,6 @@ impl RenderEngine {
             });
         let video_pipeline = build_media_pipeline(&device, &video_pipeline_layout, VIDEO_WGSL);
 
-        // Render Passはdepth_stencil_attachmentへDEPTH_FORMATを常時添付するため、
-        // text_brush内部パイプラインも同一フォーマットのdepth_stencilを持たせて整合させる。
-        // テキストは深度書込み不要のためdepth_write_enabled=false、常に通過させるためCompareFunction::Always。
         let text_brush = load_font().and_then(|f| {
             FontArc::try_from_vec(f).ok().map(|fa| {
                 BrushBuilder::using_font(fa)
@@ -607,7 +603,6 @@ impl RenderEngine {
             .unwrap_or((4.0, 0.0, [1.0, 1.0, 1.0, 1.0]));
         data[68..72].copy_from_slice(&sides.to_le_bytes());
         data[72..76].copy_from_slice(&extrude_depth.to_le_bytes());
-        // 76..80 は _pad0（未使用）
         data[80..96].copy_from_slice(bytemuck::cast_slice(&fill_color));
 
         let offset = index * UNIFORM_STRIDE;
@@ -827,7 +822,6 @@ impl RenderEngine {
             }
         }
 
-        // 描画対象のみ標準Uniformバッファへ事前書き込みする（テキストはbuffer不要のためスキップ）。
         let mut offsets: Vec<Option<u32>> = Vec::with_capacity(active_objects.len());
         let mut next_index = 0u64;
         for obj in active_objects {
@@ -922,9 +916,6 @@ impl RenderEngine {
                 let (Some(texture), Some(offset)) = (texture, offset) else {
                     continue;
                 };
-                // 動画フレームはNV12（Y/UV 2プレーン）で確保されるため、
-                // RGBA単一プレーン前提のmedia_pipelineへは直接バインド不可（バリデーション不合格）。
-                // VIDEO_STABLE_IDはvideo_pipeline（プレーン分離+YUV変換シェーダ）へ振り分ける。
                 let is_video = matches!(stable_id_of(obj.kind_id), Some(VIDEO_STABLE_ID));
                 if is_video {
                     let plane_y = texture.create_view(&wgpu::TextureViewDescriptor {
