@@ -1,7 +1,52 @@
 use ffmpeg_next as ffmpeg;
 use ffmpeg_next::software::scaling::{Context as ScalingContext, Flags as ScalingFlags};
 use ffmpeg_next::util::frame::Video as VideoFrame;
-use neoutl_media_api::{DEFAULT_DECODE_CACHE_BYTES, FrameBytes, FrameOutput, VideoSource};
+use neoutl_media_api::{DEFAULT_DECODE_CACHE_BYTES, VideoSource};
+
+/// RGBA8バイト列をRgba8Unormテクスチャへアップロードする。cache.rs::materialize撤去に伴い
+/// このCPU系decoderクレート内へ複製移動。
+fn upload_rgba8(
+    device: &wgpu::Device,
+    queue: &wgpu::Queue,
+    data: &[u8],
+    width: u32,
+    height: u32,
+) -> wgpu::Texture {
+    let texture = device.create_texture(&wgpu::TextureDescriptor {
+        label: Some("video-rgba8-frame"),
+        size: wgpu::Extent3d {
+            width,
+            height,
+            depth_or_array_layers: 1,
+        },
+        mip_level_count: 1,
+        sample_count: 1,
+        dimension: wgpu::TextureDimension::D2,
+        format: wgpu::TextureFormat::Rgba8Unorm,
+        usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+        view_formats: &[],
+    });
+    queue.write_texture(
+        wgpu::TexelCopyTextureInfo {
+            texture: &texture,
+            mip_level: 0,
+            origin: wgpu::Origin3d::ZERO,
+            aspect: wgpu::TextureAspect::All,
+        },
+        data,
+        wgpu::TexelCopyBufferLayout {
+            offset: 0,
+            bytes_per_row: Some(width * 4),
+            rows_per_image: Some(height),
+        },
+        wgpu::Extent3d {
+            width,
+            height,
+            depth_or_array_layers: 1,
+        },
+    );
+    texture
+}
 use std::collections::{HashMap, VecDeque};
 use std::path::Path;
 
@@ -200,13 +245,22 @@ impl VideoSource for FfmpegVideoDecoder {
         self.index.len() as i64
     }
 
-    fn frame(&mut self, frame_index: i64) -> Result<FrameOutput, String> {
+    /// バックグラウンドスレッド専用。デコード・カラースペース変換までを完了し
+    /// 内部FrameCacheへ蓄積する。GPU操作なし。
+    fn prefetch(&mut self, frame_index: i64) -> Result<(), String> {
+        self.rgba_at(frame_index)?;
+        Ok(())
+    }
+
+    /// UIスレッド専用。prefetch済みRGBA8バイト列をテクスチャへアップロードする。
+    fn frame_gpu(
+        &mut self,
+        frame_index: i64,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+    ) -> Result<wgpu::Texture, String> {
         let rgba = self.rgba_at(frame_index)?;
-        Ok(FrameOutput::Cpu(FrameBytes::Rgba8 {
-            bytes: rgba,
-            width: self.width,
-            height: self.height,
-        }))
+        Ok(upload_rgba8(device, queue, &rgba, self.width, self.height))
     }
 }
 

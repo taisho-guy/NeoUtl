@@ -12,6 +12,8 @@ mod ui;
 slint::include_modules!();
 
 fn default_gst_plugin_dir() -> Option<std::path::PathBuf> {
+    // linuxビルドでは未使用（システムプラグインパスをそのまま使うため）。
+    #[allow(unused_variables)]
     let exe_dir = std::env::current_exe().ok()?.parent()?.to_path_buf();
 
     #[cfg(target_os = "macos")]
@@ -80,19 +82,54 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     effects::load_all(&effects::default_effects_dir());
     media::loader::load_all(&media::loader::default_decoders_dir());
 
-    let mut wgpu_settings = slint::wgpu_29::WGPUSettings::default();
-    wgpu_settings.device_required_features |= slint::wgpu_29::wgpu::Features::TEXTURE_FORMAT_NV12;
-    #[cfg(any(target_os = "windows", target_os = "linux"))]
+    // 単一デバイス構成: gpu-video側でVulkanInstance/Adapter/Deviceを生成し、
+    // SlintのWGPUConfiguration::Manualへ注入する。これによりSlintのcompositing/present
+    // とgpuvideo-decoderのデコード・変換が同一wgpu::Device上で動作し、
+    // 生成済みテクスチャをslint::Image::try_from()で真のゼロコピー渡しできる。
+    // gpu-video(Vulkan専用)はmacOSで使用不可のため、macOSは従来のAutomatic設定を用い、
+    // gpuvideo-decoderプラグイン自体もmacOS向けビルドでは無効化スタブとなる
+    // （crates/media/gpuvideo-decoder/src/lib.rs参照）。
+    #[cfg(not(target_os = "macos"))]
     {
-        wgpu_settings.backends = slint::wgpu_29::wgpu::Backends::VULKAN;
+        let gpu_instance =
+            gpu_video::VulkanInstance::new().map_err(|e| format!("VulkanInstance生成失敗: {e}"))?;
+        let gpu_adapter = gpu_instance
+            .create_adapter(&gpu_video::parameters::VulkanAdapterDescriptor {
+                compatible_surface: None,
+                ..Default::default()
+            })
+            .map_err(|e| format!("Vulkanアダプタ生成失敗: {e}"))?;
+        let gpu_device = gpu_adapter
+            .create_device(&gpu_video::parameters::VulkanDeviceDescriptor::default())
+            .map_err(|e| format!("Vulkanデバイス生成失敗: {e}"))?;
+
+        // gpuvideo-decoderプラグインのopen_videoは常時この共有インスタンスを参照する
+        // （プラグイン内部でのVulkanInstance再生成を禁止するため、Phase0契約に基づく設定経路）。
+        // MediaVTable自体はgpu_video型へ依存させないため、libloading経由の帯域外注入とする。
+        media::loader::inject_gpuvideo_shared_device(
+            &media::loader::default_decoders_dir(),
+            &gpu_device,
+        );
+
+        slint::BackendSelector::new()
+            .require_wgpu_29(slint::wgpu_29::WGPUConfiguration::Manual {
+                instance: gpu_instance.wgpu_instance().clone(),
+                adapter: gpu_device.wgpu_adapter().clone(),
+                device: gpu_device.wgpu_device().clone(),
+                queue: gpu_device.wgpu_queue().clone(),
+            })
+            .select()?;
     }
     #[cfg(target_os = "macos")]
     {
+        let mut wgpu_settings = slint::wgpu_29::WGPUSettings::default();
+        wgpu_settings.device_required_features |=
+            slint::wgpu_29::wgpu::Features::TEXTURE_FORMAT_NV12;
         wgpu_settings.backends = slint::wgpu_29::wgpu::Backends::METAL;
+        slint::BackendSelector::new()
+            .require_wgpu_29(slint::wgpu_29::WGPUConfiguration::Automatic(wgpu_settings))
+            .select()?;
     }
-    slint::BackendSelector::new()
-        .require_wgpu_29(slint::wgpu_29::WGPUConfiguration::Automatic(wgpu_settings))
-        .select()?;
 
     let launcher = LauncherWindow::new()?;
     ui::install(&launcher);

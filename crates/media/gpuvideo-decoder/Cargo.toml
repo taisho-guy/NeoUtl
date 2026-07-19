@@ -3,8 +3,14 @@ name = "neoutl-media-gpuvideo-decoder"
 version = "0.0.0"
 edition = "2024"
 
+[lib]
+name       = "neoutl_media_gpuvideo_decoder"
+crate-type = ["cdylib"]
+
 [dependencies]
 neoutl-media-api = { path = "../../neoutl-media-api" }
-gpu-video = "0.4"
 wgpu = "29"
 symphonia = { version = "0.6", features = ["isomp4", "mkv"] }
+
+[target.'cfg(not(target_os = "macos"))'.dependencies]
+gpu-video = { version = "0.4", features = ["wgpu"] }

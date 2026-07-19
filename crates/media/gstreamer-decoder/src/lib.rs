@@ -3,12 +3,78 @@ use gst_app::AppSink;
 use gstreamer as gst;
 use gstreamer_app as gst_app;
 use gstreamer_video as gst_video;
-use neoutl_media_api::{FrameBytes, FrameOutput, VideoSource};
+use neoutl_media_api::VideoSource;
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::sync::Once;
 use std::sync::mpsc;
 use std::thread::JoinHandle;
+
+/// NV12バイト列をNV12テクスチャへアップロードする。cache.rs::materialize撤去に伴い
+/// このCPU系decoderクレート内へ複製移動。
+fn upload_nv12(
+    device: &wgpu::Device,
+    queue: &wgpu::Queue,
+    data: &[u8],
+    width: u32,
+    height: u32,
+) -> wgpu::Texture {
+    let y_plane_size = (width * height) as usize;
+    let texture = device.create_texture(&wgpu::TextureDescriptor {
+        label: Some("video-nv12-frame"),
+        size: wgpu::Extent3d {
+            width,
+            height,
+            depth_or_array_layers: 1,
+        },
+        mip_level_count: 1,
+        sample_count: 1,
+        dimension: wgpu::TextureDimension::D2,
+        format: wgpu::TextureFormat::NV12,
+        usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+        view_formats: &[],
+    });
+    queue.write_texture(
+        wgpu::TexelCopyTextureInfo {
+            texture: &texture,
+            mip_level: 0,
+            origin: wgpu::Origin3d::ZERO,
+            aspect: wgpu::TextureAspect::Plane0,
+        },
+        &data[0..y_plane_size],
+        wgpu::TexelCopyBufferLayout {
+            offset: 0,
+            bytes_per_row: Some(width),
+            rows_per_image: Some(height),
+        },
+        wgpu::Extent3d {
+            width,
+            height,
+            depth_or_array_layers: 1,
+        },
+    );
+    queue.write_texture(
+        wgpu::TexelCopyTextureInfo {
+            texture: &texture,
+            mip_level: 0,
+            origin: wgpu::Origin3d::ZERO,
+            aspect: wgpu::TextureAspect::Plane1,
+        },
+        &data[y_plane_size..],
+        wgpu::TexelCopyBufferLayout {
+            offset: 0,
+            bytes_per_row: Some(width),
+            rows_per_image: Some(height / 2),
+        },
+        wgpu::Extent3d {
+            width: width / 2,
+            height: height / 2,
+            depth_or_array_layers: 1,
+        },
+    );
+    texture
+}
 
 static GST_INIT: Once = Once::new();
 
@@ -366,6 +432,8 @@ pub struct GstDecoder {
     tx: mpsc::Sender<Command>,
     mainloop_thread: Option<JoinHandle<()>>,
     command_thread: Option<JoinHandle<()>>,
+    /// prefetchが取得したNV12バイト列。frame_gpuがここからテクスチャアップロードする。
+    pending: HashMap<i64, Vec<u8>>,
 }
 
 impl GstDecoder {
@@ -464,6 +532,7 @@ impl GstDecoder {
             tx,
             mainloop_thread: Some(mainloop_thread),
             command_thread: Some(command_thread),
+            pending: HashMap::new(),
         })
     }
 }
@@ -482,8 +551,13 @@ impl VideoSource for GstDecoder {
         self.total_frames
     }
 
-    fn frame(&mut self, frame_index: i64) -> Result<FrameOutput, String> {
-        eprintln!("[gstreamer-decoder] frame呼び出し: frame_index={frame_index}");
+    /// バックグラウンドスレッド専用。command_threadへNV12バイト列を要求し内部キューへ蓄積する。
+    /// GPU操作なし。
+    fn prefetch(&mut self, frame_index: i64) -> Result<(), String> {
+        if self.pending.contains_key(&frame_index) {
+            return Ok(());
+        }
+        eprintln!("[gstreamer-decoder] prefetch呼び出し: frame_index={frame_index}");
         let (reply_tx, reply_rx) = mpsc::channel();
         self.tx
             .send(Command::Frame {
@@ -495,27 +569,33 @@ impl VideoSource for GstDecoder {
                 eprintln!("[gstreamer-decoder] コマンド送信失敗: {e} ({msg})");
                 msg
             })?;
-        let result = reply_rx
+        let bytes = reply_rx
             .recv()
             .map_err(|e| e.to_string())
-            .and_then(|inner| inner);
-        match &result {
-            Ok(bytes) => {
-                let len = bytes.len();
-                eprintln!(
-                    "[gstreamer-decoder] frame応答成功: frame_index={frame_index} bytes={len}"
-                )
-            }
-            Err(e) => {
-                eprintln!("[gstreamer-decoder] frame応答失敗: frame_index={frame_index} 理由={e}")
-            }
+            .and_then(|inner| inner)?;
+        eprintln!(
+            "[gstreamer-decoder] prefetch完了: frame_index={frame_index} bytes={}",
+            bytes.len()
+        );
+        self.pending.insert(frame_index, bytes);
+        Ok(())
+    }
+
+    /// UIスレッド専用。prefetch済みNV12バイト列をテクスチャへアップロードする。
+    fn frame_gpu(
+        &mut self,
+        frame_index: i64,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+    ) -> Result<wgpu::Texture, String> {
+        if !self.pending.contains_key(&frame_index) {
+            self.prefetch(frame_index)?;
         }
-        let bytes = result?;
-        Ok(FrameOutput::Cpu(FrameBytes::Nv12 {
-            bytes,
-            width: self.width,
-            height: self.height,
-        }))
+        let bytes = self
+            .pending
+            .remove(&frame_index)
+            .ok_or("対象フレーム未生成（prefetch未完了）".to_owned())?;
+        Ok(upload_nv12(device, queue, &bytes, self.width, self.height))
     }
 }
 

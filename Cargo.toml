@@ -7,7 +7,11 @@ members = [
     "crates/objects/*",
     "crates/effects/*",
     "crates/neoutl-media-api",
-    "crates/media/*",
+    "crates/media/gstreamer-decoder",
+    "crates/media/symphonia-decoder",
+    "crates/media/gpuvideo-decoder",
+    "crates/media/image-decoder",
+    # "crates/media/ffmpeg-decoder",
     "crates/xtask",
 ]
 resolver = "2"
@@ -49,6 +53,9 @@ rfd = "0.17"
 [build-dependencies]
 lucide-slint = "1.24"
 slint-build = "1.17"
+
+[target.'cfg(not(target_os = "macos"))'.dependencies]
+gpu-video = { version = "0.4", features = ["wgpu"] }
 
 [profile.release]
 opt-level = 3
