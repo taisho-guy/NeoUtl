@@ -281,6 +281,17 @@ impl MediaCache {
         self.handle_prefetch_failure_with_reason(path, "prefetch連続失敗".to_string());
     }
 
+    pub fn schedule_prefetch_failure_with_reason(&self, path: PathBuf, reason: String) {
+        eprintln!(
+            "[media-cache] schedule prefetch failure path={} reason={}",
+            path.display(),
+            reason
+        );
+        super::runtime::handle().spawn_blocking(move || {
+            crate::media::cache::global().handle_prefetch_failure_with_reason(&path, reason);
+        });
+    }
+
     pub fn handle_prefetch_failure_with_reason(&self, path: &Path, reason: String) {
         let entry = {
             let map = self.entries.lock().unwrap();
@@ -290,32 +301,36 @@ impl MediaCache {
             existing.clone()
         };
 
-        let (generation_after, failed_plugins) = {
+        let (generation_after, failed_plugins, old_worker) = {
             let mut guard = entry.lock().unwrap();
             let PathEntry::Video(video) = &mut *guard else {
                 return;
             };
 
-            let prev_plugin = video.plugin_id.clone();
-            let prev_gen = video.generation;
-
             eprintln!(
                 "[media-cache] prefetch failure path={} plugin={} gen={} -> gen+1 旧worker/pending無効化 reason={}",
                 path.display(),
-                prev_plugin,
-                prev_gen,
+                video.plugin_id,
+                video.generation,
                 reason
             );
 
+            video.last_worker_error = Some(reason.clone());
             video.failed_plugins.insert(video.plugin_id.clone());
             video.generation = video.generation.wrapping_add(1);
-            video.worker = None;
+
+            let old_worker = video.worker.take();
             video.pending_decoder = None;
+
+            video.texture_cache = TextureLru::new(super::worker::RING_CAPACITY);
+            video.last_index = None;
 
             let generation_after = video.generation;
             let failed_plugins = video.failed_plugins.clone();
-            (generation_after, failed_plugins)
+            (generation_after, failed_plugins, old_worker)
         };
+
+        drop(old_worker);
 
         let result = open_video_excluding(path, &failed_plugins);
 
@@ -340,6 +355,7 @@ impl MediaCache {
                 video.pending_decoder = Some(decoder);
                 video.texture_cache = TextureLru::new(super::worker::RING_CAPACITY);
                 video.last_index = None;
+                video.last_worker_error = None;
             }
             Err(err) => {
                 eprintln!(
@@ -387,8 +403,11 @@ impl MediaCache {
 
                     let redraw = self.redraw_handle();
                     let on_fail = Arc::new(move |reason: String| {
-                        crate::media::cache::global()
-                            .handle_prefetch_failure_with_reason(&fail_path, reason);
+                        crate::media::cache::MediaCache::schedule_prefetch_failure_with_reason(
+                            &crate::media::cache::global(),
+                            fail_path.clone(),
+                            reason,
+                        );
                     });
 
                     video.worker = Some(DecodeWorker::spawn(
@@ -409,16 +428,33 @@ impl MediaCache {
                     return Ok(tex);
                 }
 
-                if let Some(tex) = worker.cached_texture(frame_index) {
-                    video.texture_cache.put(frame_index, tex.clone());
-                    video.last_index = Some(frame_index);
-                    return Ok(tex);
+                match worker.frame_gpu(frame_index) {
+                    Ok(Some(tex)) => {
+                        video.texture_cache.put(frame_index, tex.clone());
+                        video.last_index = Some(frame_index);
+                        return Ok(tex);
+                    }
+                    Ok(None) => {}
+                    Err(err) => {
+                        video.last_worker_error = Some(err.clone());
+                        return Err(format!("{} / plugin={}", err, video.plugin_id));
+                    }
                 }
 
                 if let Some(last) = video.last_index {
-                    if let Some(tex) = worker.cached_texture(last) {
-                        video.texture_cache.put(last, tex.clone());
+                    if let Some(tex) = video.texture_cache.get(last) {
                         return Ok(tex);
+                    }
+                    match worker.frame_gpu(last) {
+                        Ok(Some(tex)) => {
+                            video.texture_cache.put(last, tex.clone());
+                            return Ok(tex);
+                        }
+                        Ok(None) => {}
+                        Err(err) => {
+                            video.last_worker_error = Some(err.clone());
+                            return Err(format!("{} / plugin={}", err, video.plugin_id));
+                        }
                     }
                 }
 
