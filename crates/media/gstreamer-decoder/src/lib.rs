@@ -150,6 +150,10 @@ const DOWNLOAD_CHAIN: &str = "d3d11download ! ";
 const DOWNLOAD_CHAIN: &str = "";
 
 const SYSMEM_CAPS: &str = "video/x-raw,format=NV12";
+/// pull_preroll/pull_sample系の無期限ブロック回避用タイムアウト。
+/// オートプラグ先デコーダがハードウェア制約等でサンプルを一切生成できない場合に
+/// この時間で打ち切りErrへ変換する。
+const PULL_TIMEOUT: gst::ClockTime = gst::ClockTime::from_seconds(10);
 
 fn duration_to_frames(duration_ns: u64, frame_duration_ns: u64) -> i64 {
     (duration_ns / frame_duration_ns.max(1)) as i64
@@ -258,19 +262,13 @@ impl GstDecoderInner {
             }};
         }
 
-        // バスウォッチはpipeline状態遷移開始前にmainloop_thread上へ登録する。
-        // add_watchはSendクロージャを要求する代わりに呼び出し元スレッドを問わないため、
-        // main_context.invokeでmainloop_thread側へ登録処理自体を委譲できる。
-        let bus = match pipeline.bus() {
-            Some(b) => b,
-            None => fail!("バス未取得".to_owned()),
-        };
-        main_context.invoke(move || {
-            let _ = bus.add_watch(|_, msg| {
-                let _ = msg;
-                gst::glib::ControlFlow::Continue
-            });
-        });
+        // バスウォッチは登録しない。wait_state()のtimed_pop_filteredが
+        // ERRORメッセージの唯一の消費者となるため、全メッセージ無条件消費の
+        // add_watchはERROR握り潰しの原因にしかならず廃止する。
+        let _ = main_context;
+        if pipeline.bus().is_none() {
+            fail!("バス未取得".to_owned());
+        }
 
         if let Err(e) = pipeline.set_state(gst::State::Paused) {
             fail!(e.to_string());
@@ -279,9 +277,9 @@ impl GstDecoderInner {
             fail!(e);
         }
 
-        let preroll = match appsink.pull_preroll() {
-            Ok(p) => p,
-            Err(e) => fail!(e.to_string()),
+        let preroll = match appsink.try_pull_preroll(PULL_TIMEOUT) {
+            Some(p) => p,
+            None => fail!("preroll取得タイムアウト（デコーダがサンプルを生成しません）".to_owned()),
         };
         let caps = match preroll.caps() {
             Some(c) => c,
@@ -380,9 +378,9 @@ impl GstDecoderInner {
         })?;
         let result = self
             .appsink
-            .pull_preroll()
-            .or_else(|_| self.appsink.pull_sample())
-            .map_err(|e| e.to_string());
+            .try_pull_preroll(PULL_TIMEOUT)
+            .or_else(|| self.appsink.try_pull_sample(PULL_TIMEOUT))
+            .ok_or_else(|| "sample取得タイムアウト（デコーダがサンプルを生成しません）".to_owned());
         match &result {
             Ok(sample) => {
                 let buffer_size = sample.buffer().map(|b| b.size()).unwrap_or(0);
@@ -582,15 +580,18 @@ impl VideoSource for GstDecoder {
     }
 
     /// UIスレッド専用。prefetch済みNV12バイト列をテクスチャへアップロードする。
+    /// pending未生成時にself.prefetch()を呼ぶ同期フォールバックは行わない。
+    /// prefetch()はコマンドチャネル経由でcommand_threadへの往復を伴うブロッキング
+    /// 呼び出しであり、UIスレッド上のこの関数から呼ぶと、呼び出し元
+    /// （media/cache.rs::frame_at）が保持するentryロックを長時間（最悪
+    /// PULL_TIMEOUT×複数回分）占有し続け、他の全アクセスを道連れに停止させる。
+    /// 未生成時は即座にErrを返し、非同期のDecodeWorkerによる生成を待つ。
     fn frame_gpu(
         &mut self,
         frame_index: i64,
         device: &wgpu::Device,
         queue: &wgpu::Queue,
     ) -> Result<wgpu::Texture, String> {
-        if !self.pending.contains_key(&frame_index) {
-            self.prefetch(frame_index)?;
-        }
         let bytes = self
             .pending
             .remove(&frame_index)
