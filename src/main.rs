@@ -12,7 +12,6 @@ mod ui;
 slint::include_modules!();
 
 fn default_gst_plugin_dir() -> Option<std::path::PathBuf> {
-    // linuxビルドでは未使用（システムプラグインパスをそのまま使うため）。
     #[allow(unused_variables)]
     let exe_dir = std::env::current_exe().ok()?.parent()?.to_path_buf();
 
@@ -47,9 +46,6 @@ fn configure_gst_plugin_path() {
     media::runtime::apply_decode_backend_env(system_settings.decode_backend);
 
     unsafe {
-        // Linuxはディストリビューションパッケージのシステムプラグイン（va, v4l2codecs等）に
-        // 依存するため、GST_PLUGIN_SYSTEM_PATH_1_0を空上書きしない。
-        // Windows/macOSはバンドル配布のためシステムパス走査を無効化する。
         #[cfg(not(target_os = "linux"))]
         std::env::set_var("GST_PLUGIN_SYSTEM_PATH_1_0", "");
 
@@ -82,13 +78,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     effects::load_all(&effects::default_effects_dir());
     media::loader::load_all(&media::loader::default_decoders_dir());
 
-    // 単一デバイス構成: gpu-video側でVulkanInstance/Adapter/Deviceを生成し、
-    // SlintのWGPUConfiguration::Manualへ注入する。これによりSlintのcompositing/present
-    // とgpuvideo-decoderのデコード・変換が同一wgpu::Device上で動作し、
-    // 生成済みテクスチャをslint::Image::try_from()で真のゼロコピー渡しできる。
-    // gpu-video(Vulkan専用)はmacOSで使用不可のため、macOSは従来のAutomatic設定を用い、
-    // gpuvideo-decoderプラグイン自体もmacOS向けビルドでは無効化スタブとなる
-    // （crates/media/gpuvideo-decoder/src/lib.rs参照）。
     #[cfg(not(target_os = "macos"))]
     {
         let gpu_instance =
@@ -103,12 +92,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             .create_device(&gpu_video::parameters::VulkanDeviceDescriptor::default())
             .map_err(|e| format!("Vulkanデバイス生成失敗: {e}"))?;
 
-        // gpuvideo-decoderプラグインのopen_videoは常時この共有インスタンスを参照する
-        // （プラグイン内部でのVulkanInstance再生成を禁止するため、Phase0契約に基づく設定経路）。
-        // MediaVTable自体はgpu_video型へ依存させないため、libloading経由の帯域外注入とする。
+        let gpu_device: &'static gpu_video::VulkanDevice = Box::leak(Box::new(gpu_device));
+
         media::loader::inject_gpuvideo_shared_device(
             &media::loader::default_decoders_dir(),
-            &gpu_device,
+            gpu_device,
         );
 
         slint::BackendSelector::new()

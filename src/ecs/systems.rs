@@ -1,4 +1,3 @@
-// src/ecs/systems.rs
 use super::EcsWorld;
 use crate::ecs::components::{
     AudioParams, KindId, MediaSource, SceneId, ShapeParams, TextContent, TimeRange,

@@ -1,4 +1,3 @@
-// src/media/text.rs
 use crate::ecs::components::{TextAlign, TextContent};
 use wgpu_text::glyph_brush::{HorizontalAlign, Layout, Section, Text};
 

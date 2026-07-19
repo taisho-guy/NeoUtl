@@ -1,4 +1,3 @@
-// src/ecs/components.rs
 use serde::{Deserialize, Serialize};
 use shipyard::Component;
 use std::collections::HashMap;

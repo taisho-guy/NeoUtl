@@ -1,4 +1,3 @@
-// src/ecs/mod.rs
 pub mod components;
 pub mod effects;
 pub mod object_schema;
@@ -413,8 +412,6 @@ impl EcsWorld {
         })
     }
 
-    // --- Transform / GlobalMatrix ---
-
     pub fn get_transform(&self, object_id: usize) -> Option<Transform> {
         let entity = self.find_entity(object_id)?;
         self.world
@@ -455,8 +452,6 @@ impl EcsWorld {
             .run(|matrices: View<GlobalMatrix>| matrices.get(entity).ok().map(|m| m.0))
     }
 
-    // --- Camera ---
-
     pub fn get_camera(&self) -> Camera {
         self.world.run(|camera: UniqueView<Camera>| *camera)
     }
@@ -465,8 +460,6 @@ impl EcsWorld {
         self.world
             .run(|mut slot: UniqueViewMut<Camera>| *slot = camera);
     }
-
-    // --- EffectStack ---
 
     pub fn add_effect(&mut self, object_id: usize, effect_id: &str) {
         if effects::find_effect(effect_id).is_none() {
@@ -556,8 +549,6 @@ impl EcsWorld {
         })
     }
 
-    // --- TextContent ---
-
     pub fn get_text(&self, object_id: usize) -> Option<TextContent> {
         let entity = self.find_entity(object_id)?;
         self.world
@@ -578,8 +569,6 @@ impl EcsWorld {
         });
     }
 
-    // --- ShapeParams ---
-
     pub fn get_shape(&self, object_id: usize) -> Option<ShapeParams> {
         let entity = self.find_entity(object_id)?;
         self.world
@@ -597,8 +586,6 @@ impl EcsWorld {
         });
     }
 
-    // --- MediaSource ---
-
     pub fn get_media(&self, object_id: usize) -> Option<MediaSource> {
         let entity = self.find_entity(object_id)?;
         self.world
@@ -615,8 +602,6 @@ impl EcsWorld {
             }
         });
     }
-
-    // --- AudioParams ---
 
     pub fn set_audio_params(&mut self, object_id: usize, volume: f32, pan: f32, mute: bool) {
         let Some(entity) = self.find_entity(object_id) else {
@@ -636,8 +621,6 @@ impl EcsWorld {
         self.world
             .run(|audio: View<AudioParams>| audio.get(entity).ok().copied())
     }
-
-    // --- KindId / PluginParams ---
 
     pub fn get_kind_id(&self, object_id: usize) -> Option<u32> {
         let entity = self.find_entity(object_id)?;
@@ -662,8 +645,6 @@ impl EcsWorld {
         params.insert(key.to_string(), value);
         self.world.add_component(entity, PluginParams(params));
     }
-
-    // --- Scene ---
 
     pub fn add_scene(&mut self, name: impl Into<String>) -> i32 {
         let project = self.get_project();
@@ -789,10 +770,6 @@ impl EcsWorld {
         self.world
             .run(|mut slot: UniqueViewMut<SystemSettingsResource>| *slot = s);
     }
-
-    // --- DocumentModel（正本データ）変換 ---
-    // ECSは常にDocumentModelから焼き込まれた描画専用ランタイム状態として扱う。
-    // Undo/Redo・ファイル保存はto_document/load_documentのみを窓口とする。
 
     pub fn to_document(&self) -> DocumentModel {
         let project = self.get_project();

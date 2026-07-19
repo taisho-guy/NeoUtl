@@ -1,4 +1,3 @@
-// src/document.rs
 use crate::ecs::components::{AudioParams, MediaSource, ShapeParams, TextContent};
 use crate::ecs::resources::SceneMeta;
 use crate::ecs::transform::Transform;

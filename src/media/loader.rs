@@ -1,4 +1,3 @@
-// src/media/loader.rs
 use libloading::{Library, Symbol};
 use neoutl_media_api::{ENTRY_SYMBOL, EntryFn, MediaKind, MediaVTable};
 use std::{
@@ -65,6 +64,16 @@ pub fn find_by_extension(ext: &str) -> Option<&'static MediaPlugin> {
     registry()
         .iter()
         .find(|p| p.extensions.iter().any(|e| e == ext))
+}
+
+/// 拡張子（小文字・ドット無し）に対応する全プラグインをid昇順で返す。
+/// open_video等が先頭から順に試行し、失敗時は次候補へフォールバックする用途。
+/// registry()自体がid昇順ソート済みのため、フィルタのみで順序は保たれる。
+pub fn find_all_by_extension(ext: &str) -> Vec<&'static MediaPlugin> {
+    registry()
+        .iter()
+        .filter(|p| p.extensions.iter().any(|e| e == ext))
+        .collect()
 }
 
 pub fn default_decoders_dir() -> PathBuf {

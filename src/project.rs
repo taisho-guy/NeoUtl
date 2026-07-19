@@ -1,4 +1,3 @@
-// src/project.rs
 use crate::document::{DocumentModel, ObjectDoc};
 use crate::ecs::EcsWorld;
 use crate::ecs::resources::SceneMeta;

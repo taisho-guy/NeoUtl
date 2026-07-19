@@ -1,4 +1,3 @@
-// src/ui/launcher.rs
 use crate::LauncherWindow;
 use crate::ProjectListItem;
 use crate::project::{self, ProjectMeta};

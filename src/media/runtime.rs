@@ -1,11 +1,3 @@
-// src/media/runtime.rs
-// SystemSettingsResource::worker_threads / decode_backend を実処理へ反映する唯一の経路。
-// - worker_threads: デコードワーカー(DecodeWorker)を実行するtokioマルチスレッドランタイムの
-//   ワーカースレッド数として使う。0は論理コア数に追従する「自動」を意味する。
-// - decode_backend: GStreamerのハードウェアデコーダ候補要素（gstreamer-decoder::
-//   log_hardware_decoder_availabilityが列挙する候補と同一集合）のrankを
-//   GST_PLUGIN_FEATURE_RANK環境変数経由で切り替える。main.rs::configure_gst_plugin_path()
-//   が読むGST_INITはOnce実行のため、初回動画オープンより前に確定させる必要がある。
 use crate::config::{DECODE_BACKEND_CPU_FIXED, DECODE_BACKEND_GPU_FIXED};
 use std::sync::OnceLock;
 use std::sync::atomic::{AtomicI32, Ordering};

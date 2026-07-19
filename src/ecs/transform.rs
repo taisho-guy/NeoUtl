@@ -1,4 +1,3 @@
-// src/ecs/transform.rs
 use crate::ecs::components::ParamAccess;
 use neoutl_object_api::UNIT_SIZE_PX;
 use serde::{Deserialize, Serialize};
@@ -187,8 +186,6 @@ impl Camera {
             target_x: 0.0,
             target_y: 0.0,
             target_z: 0.0,
-            // near/farはpos_zに対して十分な余裕を持たせ、解像度が変わっても
-            // オブジェクトがクリップされないようpos_z基準で比例させる。
             near: (pos_z * 0.01).max(0.1),
             far: (pos_z * 100.0).max(project_width.max(project_height) * 10.0),
         }
@@ -197,9 +194,6 @@ impl Camera {
 
 impl Default for Camera {
     fn default() -> Self {
-        // ブートストラップ時（EcsWorld::new）専用の暫定値。
-        // 実際のプロジェクト解像度が確定次第、apply_scene_resolution経由で
-        // Camera::for_resolution()により必ず上書きされる。
         Self::for_resolution(
             crate::ecs::resources::ProjectResource::DEFAULT_WIDTH as f32,
             crate::ecs::resources::ProjectResource::DEFAULT_HEIGHT as f32,

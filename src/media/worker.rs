@@ -1,11 +1,3 @@
-// src/media/worker.rs
-// 1動画ソース = 1デコードタスク。UIスレッドはrequest()で要求を出すのみで待機しない。
-// デコードタスクはmedia::runtime（SystemSettingsResource::worker_threadsでサイズが
-// 決まるtokioマルチスレッドランタイム）上でspawn_blockingされ、ホスト全体で
-// 並列デコード数の上限を共有する（1タスク=1専用OSスレッドの無制限生成を防ぐ）。
-// 背景スレッドはdecoder.prefetch(idx)（GPU操作なし）のみ呼び、準備完了フレーム番号を
-// Ringへ記録する。実データ取得(decoder.frame_gpu)はUIスレッドがdecoder_handle()経由の
-// Mutexを越えて直接呼ぶ（cache.rs::frame_at参照）。
 use crate::config::{DECODE_PREFETCH_RADIUS, DECODE_RING_CAPACITY};
 use neoutl_media_api::VideoSource;
 use std::collections::{HashSet, VecDeque};
@@ -93,8 +85,6 @@ impl DecodeWorker {
                 }
                 let already_ready = ring_t.lock().unwrap().contains(target);
                 if !already_ready {
-                    // frame_gpu(UIスレッド)を優先するため、ロック取得失敗時は
-                    // 当該フレームをスキップし次周期へ回す（非ブロッキング）。
                     if let Ok(mut guard) = decoder_t.try_lock()
                         && guard.prefetch(target).is_ok()
                     {
