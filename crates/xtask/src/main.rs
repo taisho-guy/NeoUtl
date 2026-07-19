@@ -15,6 +15,13 @@ struct DiscoveredCrate {
 /// 新規追加クレートはディレクトリを置くだけで自動検出対象になる。
 /// subdirには"crates/objects"・"crates/effects"・"crates/media"のいずれも渡せる
 /// （3者は同一走査規則）。
+/// workspace([workspace].members)から意図的に除外されたクレートディレクトリ。
+/// cargo build -p はworkspace非対象パッケージを解決できないため、ディレクトリが
+/// 存在していてもここに含まれるものはxtaskの検出対象から外す。
+/// ffmpeg-decoder: gstreamer/symphonia経路で代替、要件確定まで凍結（Cargo.toml側の
+/// [workspace].membersコメントアウトと対で管理する）。
+const WORKSPACE_EXCLUDED_DIRS: &[&str] = &["ffmpeg-decoder"];
+
 fn discover_crates(workspace_root: &Path, subdir: &str) -> Vec<DiscoveredCrate> {
     let scan_dir = workspace_root.join(subdir);
     let mut result = Vec::new();
@@ -30,6 +37,13 @@ fn discover_crates(workspace_root: &Path, subdir: &str) -> Vec<DiscoveredCrate> 
     for entry in entries.flatten() {
         let manifest_dir = entry.path();
         if !manifest_dir.is_dir() {
+            continue;
+        }
+        if manifest_dir
+            .file_name()
+            .and_then(|n| n.to_str())
+            .is_some_and(|name| WORKSPACE_EXCLUDED_DIRS.contains(&name))
+        {
             continue;
         }
         let manifest_path = manifest_dir.join("Cargo.toml");

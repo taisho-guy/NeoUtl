@@ -140,7 +140,7 @@ NeoUtlはRust言語で実装されています。
 |プレビュー|[wgpu](https://wgpu.rs/)|
 |ECS|[Shipyard](https://github.com/leudz/shipyard)|
 |非同期処理|[tokio](https://tokio.rs/)|
-|動画デコード・エンコード|[gstreamer](https://gstreamer.freedesktop.org/)|
+|動画デコード・エンコード|H.264ゼロコピー: [gpu-video](https://crates.io/crates/gpu-video) + [symphonia](https://crates.io/crates/symphonia)、互換フォールバック: [gstreamer](https://gstreamer.freedesktop.org/) / [ffmpeg](https://ffmpeg.org/)（VideoSource::prefetch/frame_gpu契約、拡張子重複時はid昇順でgpu-video経路を優先採用）|
 
 ## 派生
 

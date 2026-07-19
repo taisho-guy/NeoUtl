@@ -14,6 +14,7 @@
 - [x] 動画・画像・音声・テキストのバックエンド・APIを実装
 - [x] 動画・画像・音声・テキストオブジェクトを実装（VIDEO/IMAGE/AUDIO_STABLE_IDをneoutl-object-apiへ予約、host専有描画をTEXT_STABLE_IDと同一契約で拡張。MediaSourceコンポーネント・media_pipeline(media.wgsl)によりデコードはMediaCache経由でフレームテクスチャ化。音声はAudioParamsのみ保持しミキサー・波形表示は0.2.0/0.3.0へ持ち越し）
 - [x] EffectStackのGPU実行機構を実装（compute_effect相当。renderer/pipeline.rsにポストプロセスパス接続。ActiveObject.effectsを連結したチェーンをeffect_ping/pong間で順次適用し、各エフェクトのWGSLフラグメント処理・Uniformパッキングをneoutl-effect-api経由で実行）
+- [x] 動画デコードのゼロコピー実装完了（VideoSource::prefetch/frame_gpu契約。prefetchは背景スレッドがパケット読出しのみ実行、frame_gpuはUIスレッドがデコード・GPUアップロードまで直結実行。gpuvideo-decoderはSlint WGPUConfiguration::Manual注入によるホスト単一wgpu::Device上でH.264をゼロコピー描画。GStreamer/ffmpeg経路はNV12/RGBA8バイト列を各decoderクレート内でテクスチャ化する互換フォールバックとして存続、新規動画は拡張子競合時id昇順でgpuvideo-decoderが優先採用される）
 - [ ] 設定ダイアログの拡張
 - [ ] レンダリングパイプラインのエラー処理を実装（GPUデバイスロスト・シェーダコンパイル失敗時のフォールバック）
 - [ ] 単体・結合テスト基盤を整備（ECS system・RenderEngine・project.rsシリアライズ）

@@ -3,11 +3,12 @@
 // デコードタスクはmedia::runtime（SystemSettingsResource::worker_threadsでサイズが
 // 決まるtokioマルチスレッドランタイム）上でspawn_blockingされ、ホスト全体で
 // 並列デコード数の上限を共有する（1タスク=1専用OSスレッドの無制限生成を防ぐ）。
-// デコード結果はCPU側バイト列(FrameOutput)としてリングキャッシュへ書き込み、
-// on_readyでUI再描画を要求する。GPUリソース操作は一切行わない（UIスレッドが行う）。
+// 背景スレッドはdecoder.prefetch(idx)（GPU操作なし）のみ呼び、準備完了フレーム番号を
+// Ringへ記録する。実データ取得(decoder.frame_gpu)はUIスレッドがdecoder_handle()経由の
+// Mutexを越えて直接呼ぶ（cache.rs::frame_at参照）。
 use crate::config::{DECODE_PREFETCH_RADIUS, DECODE_RING_CAPACITY};
-use neoutl_media_api::{FrameOutput, VideoSource};
-use std::collections::{HashMap, VecDeque};
+use neoutl_media_api::VideoSource;
+use std::collections::{HashSet, VecDeque};
 use std::sync::atomic::{AtomicI64, Ordering};
 use std::sync::{Arc, Condvar, Mutex};
 
@@ -17,39 +18,34 @@ pub(crate) const RING_CAPACITY: usize = DECODE_RING_CAPACITY;
 const STOP_SENTINEL: i64 = i64::MIN + 1;
 const NONE_SENTINEL: i64 = i64::MIN;
 
+/// 準備完了フレーム番号集合。実データは保持しない（decoder内部キャッシュが保持する）。
 struct Ring {
-    map: HashMap<i64, FrameOutput>,
+    set: HashSet<i64>,
     order: VecDeque<i64>,
 }
 
 impl Ring {
     fn new() -> Self {
         Self {
-            map: HashMap::new(),
+            set: HashSet::new(),
             order: VecDeque::new(),
         }
     }
 
-    fn get(&self, index: i64) -> Option<FrameOutput> {
-        self.map.get(&index).cloned()
+    fn contains(&self, index: i64) -> bool {
+        self.set.contains(&index)
     }
 
-    fn latest(&self) -> Option<FrameOutput> {
-        self.order
-            .back()
-            .and_then(|index| self.map.get(index).cloned())
-    }
-
-    fn insert(&mut self, index: i64, frame: FrameOutput) {
-        if !self.map.contains_key(&index) {
+    fn mark_ready(&mut self, index: i64) {
+        if !self.set.contains(&index) {
             self.order.push_back(index);
+            self.set.insert(index);
             if self.order.len() > RING_CAPACITY
                 && let Some(evicted) = self.order.pop_front()
             {
-                self.map.remove(&evicted);
+                self.set.remove(&evicted);
             }
         }
-        self.map.insert(index, frame);
     }
 }
 
@@ -57,22 +53,25 @@ pub struct DecodeWorker {
     requested: Arc<AtomicI64>,
     signal: Arc<(Mutex<bool>, Condvar)>,
     ring: Arc<Mutex<Ring>>,
+    /// UIスレッド(cache.rs::frame_at)がframe_gpuを直接呼ぶための実体アクセス経路。
+    decoder: Arc<Mutex<Box<dyn VideoSource>>>,
     task: Option<tokio::task::JoinHandle<()>>,
 }
 
 impl DecodeWorker {
-    /// device/queue を取らない。workerはデコードのみを行い、テクスチャ生成・
-    /// アップロードは呼び出し元(UIスレッド)が行う。デコードスレッドから
-    /// wgpu::Queueを操作するとSurface::present()との競合でデッドロックするため。
+    /// device/queue を取らない。workerはprefetch(パケット読出しのみ)を行い、
+    /// テクスチャ生成・アップロードは呼び出し元(UIスレッド)がdecoder_handle()経由で行う。
     /// 実行スレッドはcrate::media::runtime（worker_threads設定でサイズ確定）から借りる。
-    pub fn spawn(mut decoder: Box<dyn VideoSource>, on_ready: Arc<dyn Fn() + Send + Sync>) -> Self {
+    pub fn spawn(decoder: Box<dyn VideoSource>, on_ready: Arc<dyn Fn() + Send + Sync>) -> Self {
         let requested = Arc::new(AtomicI64::new(NONE_SENTINEL));
         let signal = Arc::new((Mutex::new(false), Condvar::new()));
         let ring = Arc::new(Mutex::new(Ring::new()));
+        let decoder = Arc::new(Mutex::new(decoder));
 
         let requested_t = requested.clone();
         let signal_t = signal.clone();
         let ring_t = ring.clone();
+        let decoder_t = decoder.clone();
 
         let task = super::runtime::handle().spawn_blocking(move || {
             let mut served = NONE_SENTINEL;
@@ -92,10 +91,14 @@ impl DecodeWorker {
                 if target == served {
                     continue;
                 }
-                let already_cached = ring_t.lock().unwrap().get(target).is_some();
-                if !already_cached {
-                    if let Ok(frame) = decoder.frame(target) {
-                        ring_t.lock().unwrap().insert(target, frame);
+                let already_ready = ring_t.lock().unwrap().contains(target);
+                if !already_ready {
+                    // frame_gpu(UIスレッド)を優先するため、ロック取得失敗時は
+                    // 当該フレームをスキップし次周期へ回す（非ブロッキング）。
+                    if let Ok(mut guard) = decoder_t.try_lock()
+                        && guard.prefetch(target).is_ok()
+                    {
+                        ring_t.lock().unwrap().mark_ready(target);
                         served = target;
                         on_ready();
                     }
@@ -107,11 +110,13 @@ impl DecodeWorker {
                         break;
                     }
                     let ahead = target + offset;
-                    if ring_t.lock().unwrap().get(ahead).is_some() {
+                    if ring_t.lock().unwrap().contains(ahead) {
                         continue;
                     }
-                    if let Ok(frame) = decoder.frame(ahead) {
-                        ring_t.lock().unwrap().insert(ahead, frame);
+                    if let Ok(mut guard) = decoder_t.try_lock()
+                        && guard.prefetch(ahead).is_ok()
+                    {
+                        ring_t.lock().unwrap().mark_ready(ahead);
                         on_ready();
                     }
                 }
@@ -122,6 +127,7 @@ impl DecodeWorker {
             requested,
             signal,
             ring,
+            decoder,
             task: Some(task),
         }
     }
@@ -133,12 +139,14 @@ impl DecodeWorker {
         cvar.notify_one();
     }
 
-    pub fn frame(&self, frame_index: i64) -> Option<FrameOutput> {
-        self.ring.lock().unwrap().get(frame_index)
+    /// 準備完了判定のみ返す。実データ取得は行わない。
+    pub fn frame_ready(&self, frame_index: i64) -> bool {
+        self.ring.lock().unwrap().contains(frame_index)
     }
 
-    pub fn latest_available(&self) -> Option<FrameOutput> {
-        self.ring.lock().unwrap().latest()
+    /// UIスレッドがframe_gpuを直接呼ぶための実体アクセス経路。
+    pub fn decoder_handle(&self) -> Arc<Mutex<Box<dyn VideoSource>>> {
+        self.decoder.clone()
     }
 }
 

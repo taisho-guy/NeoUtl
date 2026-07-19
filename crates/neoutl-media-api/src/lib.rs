@@ -4,44 +4,29 @@
 /// gpuvideo-decoder等）間で個別定義せず、この値を唯一の定義元として参照する。
 pub const DEFAULT_DECODE_CACHE_BYTES: i64 = 512 * 1024 * 1024;
 
-/// デコーダが返す1フレーム分のデータ。
-/// GPU リソース(wgpu::Texture)の生成・書き込みは原則としてUIスレッドが行う。
-/// デコードスレッドがwgpu::Queueを操作するとSurface::present()とのSnatchLock
-/// 競合でデッドロックするため、デコード結果はCPU側バイト列で返すのが基本。
-/// ただしゼロコピーを達成できるデコーダに限りGpuバリアントで生成済みテクスチャを
-/// 直接返す経路も許容する（この場合、submit等のQueue操作はUIスレッドで行う責務を持つ）。
-#[derive(Clone, Debug)]
-pub enum FrameOutput {
-    /// CPU側バイト列。呼び出し元(UIスレッド)が create_texture + write_texture でアップロードする。
-    Cpu(FrameBytes),
-    /// 既にGPU上に生成済みのテクスチャ（ゼロコピーパス）。
-    Gpu(wgpu::Texture),
-}
-
-/// CPU経由で受け渡すフレームのピクセルレイアウト。
-/// NV12はY平面(w*h)とインターリーブUV平面(w*h/2)の2プレーン構成。
-#[derive(Clone, Debug)]
-pub enum FrameBytes {
-    Nv12 {
-        bytes: Vec<u8>,
-        width: u32,
-        height: u32,
-    },
-    Rgba8 {
-        bytes: Vec<u8>,
-        width: u32,
-        height: u32,
-    },
-}
-
+/// VideoSourceの2メソッド契約。
+/// prefetch: バックグラウンドスレッドが呼ぶ。パケット読出し・内部キュー蓄積のみ実行し、
+/// GPUリソース(Device/Queue)を一切操作しない。
+/// frame_gpu: UIスレッドが呼ぶ。蓄積済みパケットのデコード・変換・テクスチャ生成
+/// (create_texture + write_texture)まで完了し、wgpu::Textureを直接返す。
+/// UIスレッド以外からのframe_gpu呼び出しはSurface::present()とのSnatchLock競合により
+/// デッドロックしうるため禁止する。
 pub trait VideoSource: Send {
     fn width(&self) -> u32;
     fn height(&self) -> u32;
     fn fps(&self) -> f64;
     fn total_frames(&self) -> i64;
-    /// デコード結果を返す。本メソッドはGPUリソースを一切操作せず、
-    /// 呼び出し元(UIスレッド)がテクスチャ生成・アップロードを行う前提。
-    fn frame(&mut self, frame_index: i64) -> Result<FrameOutput, String>;
+    /// frame_indexのパケットを先読みし内部キューへ蓄積する。GPU操作なし。
+    /// バックグラウンドスレッド専用。
+    fn prefetch(&mut self, frame_index: i64) -> Result<(), String>;
+    /// frame_indexのフレームをデコード・GPUアップロードし、生成済みテクスチャを返す。
+    /// UIスレッド専用。呼び出し前提としてframe_indexのprefetch完了を要求する。
+    fn frame_gpu(
+        &mut self,
+        frame_index: i64,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+    ) -> Result<wgpu::Texture, String>;
 }
 
 pub trait ImageSource: Send {

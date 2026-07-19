@@ -2,7 +2,7 @@
 use super::loader;
 use super::worker::DecodeWorker;
 use super::{MediaKind, detect_kind};
-use neoutl_media_api::{AudioBuffer, FrameBytes, FrameOutput, ImageSource, VideoSource};
+use neoutl_media_api::{AudioBuffer, ImageSource, VideoSource};
 use slint::wgpu_29::wgpu;
 use std::collections::{HashMap, VecDeque};
 use std::path::{Path, PathBuf};
@@ -57,8 +57,10 @@ struct VideoEntry {
     pending_decoder: Option<Box<dyn VideoSource>>,
     worker: Option<DecodeWorker>,
     /// UIスレッド側で生成したテクスチャのキャッシュ。
-    /// workerから受け取ったCPUバイト列をテクスチャ化した結果を保持する。
+    /// decoder.frame_gpuの結果をキャッシュした結果を保持する。
     texture_cache: TextureLru,
+    /// 直近にframe_gpuで確定したフレーム番号。目的フレーム未準備時の代用元。
+    last_index: Option<i64>,
 }
 
 struct ImageEntry {
@@ -132,135 +134,6 @@ fn decode_audio(path: &Path) -> Result<AudioBuffer, String> {
     decode_fn(path)
 }
 
-/// FrameOutput を wgpu::Texture へ実体化する。CPUバイト列の場合は create_texture +
-/// write_texture でアップロードする。GPUテクスチャの場合はそのまま返す。
-/// 必ずUIスレッドから呼ぶこと（wgpu::Queue操作を伴うため）。
-fn materialize(frame: &FrameOutput, device: &wgpu::Device, queue: &wgpu::Queue) -> wgpu::Texture {
-    match frame {
-        FrameOutput::Gpu(texture) => texture.clone(),
-        FrameOutput::Cpu(FrameBytes::Nv12 {
-            bytes,
-            width,
-            height,
-        }) => upload_nv12(device, queue, bytes, *width, *height),
-        FrameOutput::Cpu(FrameBytes::Rgba8 {
-            bytes,
-            width,
-            height,
-        }) => upload_rgba8(device, queue, bytes, *width, *height),
-    }
-}
-
-/// NV12バイト列(Y平面 + インターリーブUV平面)をNV12テクスチャへアップロードする。
-/// 旧 gstreamer-decoder::import_frame のテクスチャ生成部をUIスレッド側へ移動したもの。
-fn upload_nv12(
-    device: &wgpu::Device,
-    queue: &wgpu::Queue,
-    data: &[u8],
-    width: u32,
-    height: u32,
-) -> wgpu::Texture {
-    let y_plane_size = (width * height) as usize;
-    let texture = device.create_texture(&wgpu::TextureDescriptor {
-        label: Some("video-nv12-frame"),
-        size: wgpu::Extent3d {
-            width,
-            height,
-            depth_or_array_layers: 1,
-        },
-        mip_level_count: 1,
-        sample_count: 1,
-        dimension: wgpu::TextureDimension::D2,
-        format: wgpu::TextureFormat::NV12,
-        usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
-        view_formats: &[],
-    });
-    queue.write_texture(
-        wgpu::TexelCopyTextureInfo {
-            texture: &texture,
-            mip_level: 0,
-            origin: wgpu::Origin3d::ZERO,
-            aspect: wgpu::TextureAspect::Plane0,
-        },
-        &data[0..y_plane_size],
-        wgpu::TexelCopyBufferLayout {
-            offset: 0,
-            bytes_per_row: Some(width),
-            rows_per_image: Some(height),
-        },
-        wgpu::Extent3d {
-            width,
-            height,
-            depth_or_array_layers: 1,
-        },
-    );
-    queue.write_texture(
-        wgpu::TexelCopyTextureInfo {
-            texture: &texture,
-            mip_level: 0,
-            origin: wgpu::Origin3d::ZERO,
-            aspect: wgpu::TextureAspect::Plane1,
-        },
-        &data[y_plane_size..],
-        wgpu::TexelCopyBufferLayout {
-            offset: 0,
-            bytes_per_row: Some(width),
-            rows_per_image: Some(height / 2),
-        },
-        wgpu::Extent3d {
-            width: width / 2,
-            height: height / 2,
-            depth_or_array_layers: 1,
-        },
-    );
-    texture
-}
-
-/// RGBA8バイト列をRgba8Unormテクスチャへアップロードする。
-/// 旧 ffmpeg-decoder::frame_texture のテクスチャ生成部をUIスレッド側へ移動したもの。
-fn upload_rgba8(
-    device: &wgpu::Device,
-    queue: &wgpu::Queue,
-    data: &[u8],
-    width: u32,
-    height: u32,
-) -> wgpu::Texture {
-    let texture = device.create_texture(&wgpu::TextureDescriptor {
-        label: Some("video-rgba8-frame"),
-        size: wgpu::Extent3d {
-            width,
-            height,
-            depth_or_array_layers: 1,
-        },
-        mip_level_count: 1,
-        sample_count: 1,
-        dimension: wgpu::TextureDimension::D2,
-        format: wgpu::TextureFormat::Rgba8Unorm,
-        usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
-        view_formats: &[],
-    });
-    queue.write_texture(
-        wgpu::TexelCopyTextureInfo {
-            texture: &texture,
-            mip_level: 0,
-            origin: wgpu::Origin3d::ZERO,
-            aspect: wgpu::TextureAspect::All,
-        },
-        data,
-        wgpu::TexelCopyBufferLayout {
-            offset: 0,
-            bytes_per_row: Some(width * 4),
-            rows_per_image: Some(height),
-        },
-        wgpu::Extent3d {
-            width,
-            height,
-            depth_or_array_layers: 1,
-        },
-    );
-    texture
-}
-
 impl MediaCache {
     fn new() -> Self {
         Self {
@@ -308,6 +181,7 @@ impl MediaCache {
                     pending_decoder: Some(decoder),
                     worker: None,
                     texture_cache: TextureLru::new(super::worker::RING_CAPACITY),
+                    last_index: None,
                 }),
                 Err(err) => {
                     eprintln!("[media-cache] load失敗: {} 理由={err}", path.display());
@@ -341,14 +215,11 @@ impl MediaCache {
             .clone()
     }
 
-    /// 完成テクスチャの即時返却のみを行う非ブロッキング呼び出し。
-    /// 目的フレーム未完成時は直前に完成した最新フレームを返す。
-    /// 一度も完成していない場合のみErrを返す（初回ロード直後の一瞬に限られる）。
-    ///
-    /// 本メソッドはUIスレッドから呼ばれることを前提とする。デコードスレッドは
-    /// CPUバイト列(FrameOutput::Cpu)のみを返し、create_texture + write_texture は
-    /// ここ（UIスレッド）で実行する。これにより Surface::present() と別スレッドの
-    /// write_texture による wgpu SnatchLock デッドロックを回避する。
+    /// UIスレッド専用。目的フレームの準備完了を確認後、decoder.frame_gpu()を
+    /// worker/cache間で共有するMutex越しに直接呼びテクスチャを取得する。
+    /// これにより create_texture + write_texture もデコーダ実体もUIスレッド上で
+    /// 完結し、Surface::present() との wgpu SnatchLock デッドロックを回避する。
+    /// 未完成時は直前に完成した最新フレームで代用し、表示の継続性を保つ。
     pub fn frame_at(
         &self,
         path: &Path,
@@ -366,6 +237,7 @@ impl MediaCache {
                         .take()
                         .expect("workerがNoneの間pending_decoderは常時Some");
                     video.worker = Some(DecodeWorker::spawn(decoder, self.redraw_handle()));
+                    video.last_index = None;
                 }
                 let worker = video.worker.as_ref().unwrap();
                 worker.request(frame_index);
@@ -375,19 +247,24 @@ impl MediaCache {
                     return Ok(tex);
                 }
 
-                // 目的フレームのデコード結果を取得（非ブロッキング）。
-                // まだ無ければ直近の完成フレームで代用し、表示の継続性を保つ。
-                // 代用フレームはインデックスが一致しないためキャッシュしない。
-                let exact = worker.frame(frame_index);
-                let fallback = worker.latest_available();
-                let (frame_output, is_exact) = match (exact, fallback) {
-                    (Some(f), _) => (f, true),
-                    (None, Some(f)) => (f, false),
-                    (None, None) => return Err("デコード中".to_string()),
+                let decoder_handle = worker.decoder_handle();
+                let target_ready = worker.frame_ready(frame_index);
+                let (index, is_exact) = if target_ready {
+                    (frame_index, true)
+                } else if let Some(last) = video.last_index {
+                    (last, false)
+                } else {
+                    return Err("デコード中".to_string());
                 };
-                let tex = materialize(&frame_output, device, queue);
+
+                // frame_gpuの排他アクセス（背景スレッドのprefetchはtry_lockで非ブロッキング）。
+                let tex = {
+                    let mut decoder = decoder_handle.lock().unwrap();
+                    decoder.frame_gpu(index, device, queue)?
+                };
                 if is_exact {
                     video.texture_cache.put(frame_index, tex.clone());
+                    video.last_index = Some(frame_index);
                 }
                 Ok(tex)
             }

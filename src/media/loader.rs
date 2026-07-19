@@ -112,3 +112,29 @@ fn is_dylib(path: &Path) -> bool {
         Some("so" | "dylib" | "dll")
     )
 }
+
+/// gpuvideo-decoderプラグイン固有の帯域外注入経路。MediaVTable(neoutl-media-api)は
+/// gpu_video型へ依存させないため、libloadingで同一dylibを個別に再オープンし
+/// neoutl_gpuvideo_inject_deviceシンボルを直接呼ぶ。プラグイン未配置・シンボル
+/// 未検出時は無音でスキップする（gpuvideo-decoder非導入環境を許容するため）。
+pub fn inject_gpuvideo_shared_device<T>(decoders_dir: &Path, device: &T) {
+    let Ok(entries) = std::fs::read_dir(decoders_dir) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if !is_dylib(&path) {
+            continue;
+        }
+        let Ok(lib) = (unsafe { Library::new(&path) }) else {
+            continue;
+        };
+        let symbol: Result<Symbol<unsafe extern "C" fn(*const T)>, _> =
+            unsafe { lib.get(b"neoutl_gpuvideo_inject_device\0") };
+        if let Ok(inject) = symbol {
+            unsafe { inject(device as *const T) };
+            eprintln!("[NeoUtl] gpu_video共有デバイス注入: {}", path.display());
+        }
+        std::mem::forget(lib);
+    }
+}
