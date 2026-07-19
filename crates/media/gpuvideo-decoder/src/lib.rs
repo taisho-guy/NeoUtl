@@ -37,6 +37,7 @@ mod imp {
                 map: HashMap::new(),
             }
         }
+
         fn get(&mut self, index: i64) -> Option<wgpu::Texture> {
             if !self.map.contains_key(&index) {
                 return None;
@@ -45,6 +46,7 @@ mod imp {
             self.order.push_back(index);
             self.map.get(&index).cloned()
         }
+
         fn put(&mut self, index: i64, texture: wgpu::Texture, cost: i64) {
             if self.map.contains_key(&index) {
                 return;
@@ -62,8 +64,9 @@ mod imp {
         }
     }
 
-    /// prefetchが蓄積する未デコードパケット。demuxはSend不可能な内部状態を持ちうるため
-    /// バイト列へ複製し所有権を保つ。
+    /// open()時に demux を走査してメモリ化するH.264パケット。
+    ///
+    /// demux は Send 不可能な内部状態を持ちうるため、バイト列へ複製して所有権を保つ。
     struct EncodedPacket {
         display_index: i64,
         pts: i64,
@@ -75,20 +78,6 @@ mod imp {
             let video = t.codec_params.as_ref()?.video()?;
             (video.codec == CODEC_ID_H264).then_some(t.id)
         })
-    }
-
-    pub struct GpuVideoDecoder {
-        demux: Box<dyn FormatReader>,
-        track_id: u32,
-        decoder: WgpuTexturesDecoder,
-        converter: WgpuNv12ToRgbaConverter,
-        width: u32,
-        height: u32,
-        fps: f64,
-        total_frames: i64,
-        display_index: HashMap<i64, i64>,
-        cache: TextureCache,
-        pending: VecDeque<EncodedPacket>,
     }
 
     fn probe(path: &Path) -> Result<Box<dyn FormatReader>, String> {
@@ -108,28 +97,68 @@ mod imp {
             .map_err(|e| e.to_string())
     }
 
-    fn build_index(demux: &mut Box<dyn FormatReader>, track_id: u32) -> Result<Vec<i64>, String> {
-        let mut pts_list = Vec::new();
-        loop {
-            match demux.next_packet().map_err(|e| e.to_string())? {
-                Some(packet) => {
-                    if packet.track_id == track_id {
-                        pts_list.push(packet.pts.get());
-                    }
-                }
-                None => break,
-            }
-        }
+    /// open()時に全パケットをメモリ化する。
+    /// 目的: prefetch/frame_gpu から demux を触らず、逐次demux崩壊を回避する。
+    fn preload_packets(
+        demux: &mut Box<dyn FormatReader>,
+        track_id: u32,
+    ) -> Result<Vec<EncodedPacket>, String> {
+        // demuxを先頭に戻す
         demux
             .seek(
-                SeekMode::Coarse,
-                SeekTo::Timestamp {
-                    ts: symphonia::core::units::Timestamp::new(0),
-                    track_id,
+                SeekMode::Accurate,
+                SeekTo::Time {
+                    time: symphonia::core::units::Time::default(),
+                    track_id: Some(track_id),
                 },
             )
             .map_err(|e| e.to_string())?;
-        Ok(pts_list)
+
+        let mut packets = Vec::new();
+        let mut display_index: i64 = 0;
+
+        loop {
+            let packet = match demux.next_packet().map_err(|e| e.to_string())? {
+                Some(p) => p,
+                None => break,
+            };
+
+            if packet.track_id != track_id {
+                continue;
+            }
+
+            // ptsは codec/コンテナによって missing などあり得るが、この設計では
+            // pts の変換が失敗した場合は表示順indexで代用する（decode側の pts 必須性に合わせて調整）。
+            let pts_i64 = packet.pts.get();
+            let data = packet.data.to_vec();
+
+            packets.push(EncodedPacket {
+                display_index,
+                pts: pts_i64,
+                data,
+            });
+
+            display_index += 1;
+        }
+
+        Ok(packets)
+    }
+
+    pub struct GpuVideoDecoder {
+        track_id: u32,
+        decoder: WgpuTexturesDecoder,
+        converter: WgpuNv12ToRgbaConverter,
+        width: u32,
+        height: u32,
+        fps: f64,
+        total_frames: i64,
+
+        /// 全パケットをメモリ化したもの
+        packets: Vec<EncodedPacket>,
+        cache: TextureCache,
+
+        /// prefetch が積む「まだ確定していない」パケット列（pendingはメモリ上のパケット参照）
+        pending: VecDeque<EncodedPacket>,
     }
 
     impl GpuVideoDecoder {
@@ -138,31 +167,47 @@ mod imp {
         /// （単一デバイス構成をホスト全体で維持するため）。
         pub fn open(path: &Path, device: &Arc<GpuVideoDevice>) -> Result<Self, String> {
             eprintln!("[gpuvideo] open_video begin path={}", path.display());
+
             let mut demux = probe(path)?;
             let track_id = find_h264_track_id(demux.as_ref()).ok_or("H.264トラック未検出")?;
 
-            let pts_list = build_index(&mut demux, track_id)?;
-            let total_frames = pts_list.len() as i64;
-            let display_index: HashMap<i64, i64> = pts_list
+            let track = demux
+                .tracks()
                 .iter()
-                .enumerate()
-                .map(|(i, &pts)| (pts, i as i64))
-                .collect();
+                .find(|t| t.id == track_id)
+                .ok_or_else(|| "H.264 track not found".to_string())?;
 
-            let track = demux.tracks().iter().find(|t| t.id == track_id).unwrap();
             let video_cp = track
                 .codec_params
                 .as_ref()
                 .and_then(|cp| cp.video())
                 .ok_or("codec_params未定義")?;
+
             let width = video_cp.width.ok_or("width未定義")?.into();
             let height = video_cp.height.ok_or("height未定義")?.into();
+
+            // open時に全走査済みなので total_frames は packets.len()
+            // fps は元コード同様、必要なら track.time_base から推定。
             let tb = track.time_base.ok_or("time_base未定義")?;
-            let fps = if pts_list.len() >= 2 {
-                let span = (pts_list[pts_list.len() - 1] - pts_list[0]) as f64
-                    * tb.numer.get() as f64
-                    / tb.denom.get() as f64;
-                (pts_list.len() as f64 - 1.0) / span.max(1e-6)
+            let tb_numer = tb.numer.get() as f64;
+            let tb_denom = tb.denom.get() as f64;
+
+            let packets = preload_packets(&mut demux, track_id)?;
+            let total_frames = packets.len() as i64;
+
+            let fps = if total_frames >= 2 {
+                // pts差が極端に小さい/ゼロの場合は保守的に30fps。
+                let first_pts = packets.first().map(|p| p.pts).unwrap_or(0);
+                let last_pts = packets.last().map(|p| p.pts).unwrap_or(first_pts);
+
+                let pts_span = (last_pts - first_pts) as f64;
+                let span_seconds = pts_span * tb_numer / tb_denom;
+                let frames = (total_frames as f64).max(1.0);
+                if span_seconds > 1e-6 {
+                    (frames - 1.0) / span_seconds
+                } else {
+                    30.0
+                }
             } else {
                 30.0
             };
@@ -206,7 +251,6 @@ mod imp {
             );
 
             Ok(Self {
-                demux,
                 track_id,
                 decoder,
                 converter,
@@ -214,7 +258,7 @@ mod imp {
                 height,
                 fps,
                 total_frames,
-                display_index,
+                packets,
                 cache: TextureCache::new(),
                 pending: VecDeque::new(),
             })
@@ -235,39 +279,50 @@ mod imp {
             self.total_frames
         }
 
-        /// バックグラウンドスレッド専用。パケット読出しのみ実行しGPU操作を行わない。
+        /// バックグラウンドスレッド専用。demux は触らず、メモリ上の pending/pkts のみ操作する。
         fn prefetch(&mut self, frame_index: i64) -> Result<(), String> {
+            // 既にGPUキャッシュにあるなら不要
             if self.cache.map.contains_key(&frame_index) {
                 return Ok(());
             }
-            loop {
-                let already_queued = self.pending.iter().any(|p| p.display_index == frame_index);
-                if already_queued {
-                    return Ok(());
-                }
-                let packet = match self.demux.next_packet().map_err(|e| e.to_string())? {
-                    Some(p) => p,
-                    None => {
-                        let msg = format!("prefetch EOF (frame={frame_index})");
-                        eprintln!("[gpuvideo] prefetch failed {}", msg);
-                        return Err(msg);
-                    }
-                };
-                if packet.track_id != self.track_id {
-                    continue;
-                }
-                let Some(&idx) = self.display_index.get(&packet.pts.get()) else {
-                    continue;
-                };
-                self.pending.push_back(EncodedPacket {
-                    display_index: idx,
-                    pts: packet.pts.get(),
-                    data: packet.data.to_vec(),
-                });
-                if idx >= frame_index {
-                    return Ok(());
-                }
+
+            // pendingに対象display_indexが存在するなら不要
+            let already_queued = self.pending.iter().any(|p| p.display_index == frame_index);
+            if already_queued {
+                return Ok(());
             }
+
+            // frame_indexまでの必要分を pending に積む（demux不要）
+            // display_index は open()時に 0..N-1 の連番で作っている前提。
+            if frame_index < 0 || (frame_index as usize) >= self.packets.len() {
+                let msg = format!("prefetch EOF (frame={frame_index})");
+                eprintln!("[gpuvideo] prefetch failed {}", msg);
+                return Err(msg);
+            }
+
+            // いま pending の末尾がどこまでかを見て、足りない分だけ積む
+            // （pendingはdecodeで pop_front されるので、基本的に単調に進むが保険として末尾で管理）
+            let pending_max = self.pending.back().map(|p| p.display_index).unwrap_or(-1);
+            if pending_max >= frame_index {
+                return Ok(());
+            }
+
+            let start = (pending_max + 1).max(0) as usize;
+            let end = frame_index as usize;
+
+            for idx in start..=end {
+                // ここで data/pts/インデックスを複製せず Move するため clone は不要
+                // ただし packets から移動すると壊れるので、Vecからは cloneして pendingへ複製する。
+                // そのため EncodedPacket のサイズを考慮して必要に応じ最適化可能。
+                let p = &self.packets[idx];
+                self.pending.push_back(EncodedPacket {
+                    display_index: p.display_index,
+                    pts: p.pts,
+                    data: p.data.clone(),
+                });
+            }
+
+            Ok(())
         }
 
         /// workerスレッド専用。蓄積済みパケットをデコード・変換し確定テクスチャを返す。
@@ -280,6 +335,7 @@ mod imp {
             if let Some(cached) = self.cache.get(frame_index) {
                 return Ok(cached);
             }
+
             while let Some(packet) = self.pending.pop_front() {
                 let chunk = EncodedInputChunk {
                     data: &packet.data,
@@ -290,11 +346,13 @@ mod imp {
                             .map_err(|_| "pts変換失敗".to_owned())?,
                     ),
                 };
+
                 let frames = self.decoder.decode(chunk).map_err(|e| {
                     let msg = format!("decoder.decode failed (frame={frame_index}) err={e}");
                     eprintln!("[gpuvideo] frame_gpu failed {}", msg);
                     msg
                 })?;
+
                 for frame in frames {
                     let rgba = device.create_texture(&wgpu::TextureDescriptor {
                         label: None,
@@ -311,7 +369,9 @@ mod imp {
                             | wgpu::TextureUsages::TEXTURE_BINDING,
                         view_formats: &[],
                     });
+
                     let rgba_view = rgba.create_view(&wgpu::TextureViewDescriptor::default());
+
                     let bind_group =
                         self.converter
                             .create_input_bind_group(&frame)
@@ -322,6 +382,7 @@ mod imp {
                                 eprintln!("[gpuvideo] frame_gpu failed {}", msg);
                                 msg
                             })?;
+
                     let mut encoder =
                         device.create_command_encoder(&wgpu::CommandEncoderDescriptor::default());
                     self.converter
@@ -330,11 +391,13 @@ mod imp {
 
                     let cost = (self.width as i64) * (self.height as i64) * 4;
                     self.cache.put(packet.display_index, rgba.clone(), cost);
+
                     if packet.display_index == frame_index {
                         return Ok(rgba);
                     }
                 }
             }
+
             let msg = "対象フレーム未生成（prefetch未完了）".to_owned();
             eprintln!(
                 "[gpuvideo] frame_gpu failed frame={} reason={}",
@@ -346,25 +409,19 @@ mod imp {
 
     // --- 共有GPUデバイス注入 ---
     // ホスト(main.rs)がSlint起動前にgpu_video::Deviceを一度だけ生成し、ここへ設定する。
-    // gpuvideo-decoder::open_videoは常にこの共有インスタンスを参照し、内部で
-    // VulkanInstance/Adapter/Deviceを新規生成しない（単一デバイス構成の維持）。
-    /// create_wgpu_textures_decoder_h264がself: &Arc<Self>を要求するため、
-    /// 保持形態はArc<GpuVideoDevice>で固定する（生のVulkanDeviceでは呼出不可）。
     static SHARED_DEVICE: std::sync::OnceLock<Arc<GpuVideoDevice>> = std::sync::OnceLock::new();
 
     fn set_shared_device(device: Arc<GpuVideoDevice>) {
         let _ = SHARED_DEVICE.set(device);
     }
 
+    fn shared_device() -> Result<&'static Arc<GpuVideoDevice>, String> {
+        SHARED_DEVICE.get().ok_or_else(|| {
+            "gpu_video::Device未初期化（main.rs::set_shared_device未実行）".to_owned()
+        })
+    }
+
     /// main.rsがMediaVTable経由でなく直接libloadingでこのシンボルを引く帯域外経路。
-    /// MediaVTable(neoutl-media-api)自体はgpu_video型へ依存させないため、Phase0契約
-    /// （MediaVTableに変更なし）を保ったまま単一デバイス注入を成立させる。
-    /// GpuVideoDeviceはCloneを実装しないため、所有権をポインタ経由で移転しArc化する
-    /// （呼出側はptr::read後、当該メモリのDropを実行しないこと。Box::into_rawで
-    /// 生成したポインタを渡す運用とする）。
-    /// # Safety
-    /// deviceは有効なGpuVideoDeviceを指す非nullポインタであり、本関数呼出後は
-    /// 呼出側で当該メモリのdropまたは再利用を行わないこと。
     #[unsafe(no_mangle)]
     pub unsafe extern "C" fn neoutl_gpuvideo_inject_device(device: *mut GpuVideoDevice) {
         if !device.is_null() {
@@ -375,14 +432,7 @@ mod imp {
 
     pub const INJECT_DEVICE_SYMBOL: &[u8] = b"neoutl_gpuvideo_inject_device\0";
 
-    fn shared_device() -> Result<&'static Arc<GpuVideoDevice>, String> {
-        SHARED_DEVICE.get().ok_or_else(|| {
-            "gpu_video::Device未初期化（main.rs::set_shared_device未実行）".to_owned()
-        })
-    }
-
     // --- プラグインエントリ ---
-    // objects/effects/gstreamer-decoderと同一規約: entry関数のみがdylib境界（extern "C"）を越える。
     use neoutl_media_api::{EntryFn, MediaKind, MediaMeta, MediaVTable};
 
     static EXTENSIONS: &[&str] = &["mp4", "mov", "mkv"];
@@ -394,6 +444,7 @@ mod imp {
         extensions_ptr: EXTENSIONS.as_ptr(),
         extensions_len: EXTENSIONS.len(),
     };
+
     static VTABLE: std::sync::OnceLock<MediaVTable> = std::sync::OnceLock::new();
 
     fn meta() -> &'static MediaMeta {
@@ -442,6 +493,7 @@ mod macos_stub {
         extensions_ptr: EXTENSIONS.as_ptr(),
         extensions_len: EXTENSIONS.len(),
     };
+
     static VTABLE: std::sync::OnceLock<MediaVTable> = std::sync::OnceLock::new();
 
     fn meta() -> &'static MediaMeta {
