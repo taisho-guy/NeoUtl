@@ -44,6 +44,10 @@ pub const UNDO_HISTORY_LIMIT: usize = 100;
 pub const DECODE_RING_CAPACITY: usize = 32;
 /// 先読み対象フレーム数
 pub const DECODE_PREFETCH_RADIUS: i64 = 8;
+/// prefetch()の連続失敗許容回数。超過時、当該デコーダプラグインを除外し
+/// 次点候補（拡張子重複時の後順位デコーダ、例: gstreamer）へフォールバックする。
+/// media/worker.rs（計上）とmedia/cache.rs（除外集合管理・再オープン）で共有する。
+pub const DECODE_PREFETCH_FAIL_THRESHOLD: i64 = 30;
 
 /// レンダリング上限（renderer/pipeline.rs）
 pub const MAX_SCENE_OBJECTS: u64 = 512;

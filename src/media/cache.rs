@@ -3,7 +3,7 @@ use super::worker::DecodeWorker;
 use super::{MediaKind, detect_kind};
 use neoutl_media_api::{AudioBuffer, ImageSource, VideoSource};
 use slint::wgpu_29::wgpu;
-use std::collections::{HashMap, VecDeque};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, OnceLock};
 
@@ -48,6 +48,7 @@ impl TextureLru {
 /// config::DECODE_RING_CAPACITYを唯一の定義元とする。
 
 struct VideoEntry {
+    generation: u64,
     width: u32,
     height: u32,
     fps: f64,
@@ -60,6 +61,12 @@ struct VideoEntry {
     texture_cache: TextureLru,
     /// 直近にframe_gpuで確定したフレーム番号。目的フレーム未準備時の代用元。
     last_index: Option<i64>,
+    /// worker側で保持している最終エラー（次回フレーム返却用/デバッグ用）。
+    last_worker_error: Option<String>,
+    /// 現在採用中のデコーダプラグインid（フォールバック判定・ログ用）。
+    plugin_id: String,
+    /// prefetch連続失敗により見限った（今後候補から除外する）プラグインidの集合。
+    failed_plugins: HashSet<String>,
 }
 
 struct ImageEntry {
@@ -90,12 +97,17 @@ fn ext_of(path: &Path) -> Result<String, String> {
         .ok_or_else(|| format!("拡張子なし: {}", path.display()))
 }
 
-/// 拡張子に対応する動画デコーダプラグインをid昇順で順次試行する。
+/// 拡張子に対応する動画デコーダプラグインをid昇順で順次試行する。excluded_pluginsに
+/// 含まれるidは連続失敗により見限られた候補のため試行対象から除外する。
 /// 各プラグインのopen_videoが返すErrはハードウェア/ドライバ側の実行時制約
 /// （例: Vulkan Video非対応環境でのgpuvideo-decoder）を含みうるため、
 /// 1プラグインの失敗だけでは即座にopen_video全体を失敗とせず次候補へ移る。
-/// 全候補が失敗した場合のみ、各プラグインの理由を連結して返す。
-fn open_video(path: &Path) -> Result<Box<dyn VideoSource>, String> {
+/// 全候補が失敗（または除外済み）の場合のみ、各プラグインの理由を連結して返す。
+/// 成功時は採用したプラグインidも合わせて返す（フォールバック判定用）。
+fn open_video_excluding(
+    path: &Path,
+    excluded_plugins: &HashSet<String>,
+) -> Result<(Box<dyn VideoSource>, String), String> {
     eprintln!("[media-cache] open_video開始: {}", path.display());
     let ext = ext_of(path)?;
     let candidates = loader::find_all_by_extension(&ext);
@@ -105,6 +117,14 @@ fn open_video(path: &Path) -> Result<Box<dyn VideoSource>, String> {
 
     let mut failures: Vec<String> = Vec::new();
     for plugin in candidates {
+        if excluded_plugins.contains(&plugin.id) {
+            eprintln!(
+                "[media-cache] open_video候補除外（過去に連続失敗）: {} (plugin={})",
+                path.display(),
+                plugin.id
+            );
+            continue;
+        }
         let Some(open_fn) = plugin.vtable.open_video else {
             continue;
         };
@@ -115,7 +135,7 @@ fn open_video(path: &Path) -> Result<Box<dyn VideoSource>, String> {
                     path.display(),
                     plugin.id
                 );
-                return Ok(decoder);
+                return Ok((decoder, plugin.id.clone()));
             }
             Err(err) => {
                 eprintln!(
@@ -132,6 +152,10 @@ fn open_video(path: &Path) -> Result<Box<dyn VideoSource>, String> {
         path.display(),
         failures.join(" / ")
     ))
+}
+
+fn open_video(path: &Path) -> Result<(Box<dyn VideoSource>, String), String> {
+    open_video_excluding(path, &HashSet::new())
 }
 
 fn open_image(path: &Path) -> Result<Box<dyn ImageSource>, String> {
@@ -195,15 +219,19 @@ impl MediaCache {
                 PathEntry::Failed(err)
             }
             Some(MediaKind::Video) => match open_video(path) {
-                Ok(decoder) => PathEntry::Video(VideoEntry {
+                Ok((decoder, plugin_id)) => PathEntry::Video(VideoEntry {
                     width: decoder.width(),
                     height: decoder.height(),
                     fps: decoder.fps(),
                     total_frames: decoder.total_frames(),
+                    generation: 0,
                     pending_decoder: Some(decoder),
                     worker: None,
                     texture_cache: TextureLru::new(super::worker::RING_CAPACITY),
                     last_index: None,
+                    last_worker_error: None,
+                    plugin_id,
+                    failed_plugins: HashSet::new(),
                 }),
                 Err(err) => {
                     eprintln!("[media-cache] load失敗: {} 理由={err}", path.display());
@@ -237,6 +265,95 @@ impl MediaCache {
             .clone()
     }
 
+    /// 既存エントリのみ返す。新規ロードは行わない（entries mutex の待ちを避けるため）。
+    fn entry_existing(&self, path: &Path) -> Option<Arc<Mutex<PathEntry>>> {
+        let map = self.entries.lock().unwrap();
+        map.get(path).cloned()
+    }
+
+    /// DecodeWorkerのon_fail経由で呼ばれる。prefetch連続失敗により現在のデコーダ
+    /// プラグインを見限り、除外集合に加えた上で次点候補（拡張子重複時の後順位
+    /// デコーダ、例: gpuvideo失敗時のgstreamer）へ再オープンする。
+    /// 候補が尽きた場合はエントリをFailedへ遷移させ、以後の再試行を止める。
+    /// worker自体は既にon_fail呼び出し直後に終了しているため、ここでは
+    /// pending_decoder/workerを新しいものへ差し替えるのみでよい。
+    pub fn handle_prefetch_failure(&self, path: &Path) {
+        self.handle_prefetch_failure_with_reason(path, "prefetch連続失敗".to_string());
+    }
+
+    pub fn handle_prefetch_failure_with_reason(&self, path: &Path, reason: String) {
+        let entry = {
+            let map = self.entries.lock().unwrap();
+            let Some(existing) = map.get(path) else {
+                return;
+            };
+            existing.clone()
+        };
+
+        let (generation_after, failed_plugins) = {
+            let mut guard = entry.lock().unwrap();
+            let PathEntry::Video(video) = &mut *guard else {
+                return;
+            };
+
+            let prev_plugin = video.plugin_id.clone();
+            let prev_gen = video.generation;
+
+            eprintln!(
+                "[media-cache] prefetch failure path={} plugin={} gen={} -> gen+1 旧worker/pending無効化 reason={}",
+                path.display(),
+                prev_plugin,
+                prev_gen,
+                reason
+            );
+
+            video.failed_plugins.insert(video.plugin_id.clone());
+            video.generation = video.generation.wrapping_add(1);
+            video.worker = None;
+            video.pending_decoder = None;
+
+            let generation_after = video.generation;
+            let failed_plugins = video.failed_plugins.clone();
+            (generation_after, failed_plugins)
+        };
+
+        let result = open_video_excluding(path, &failed_plugins);
+
+        let mut guard = entry.lock().unwrap();
+        let PathEntry::Video(video) = &mut *guard else {
+            return;
+        };
+        match result {
+            Ok((decoder, plugin_id)) => {
+                eprintln!(
+                    "[media-cache] fallback apply/open success path={} plugin={} gen={} fps={}",
+                    path.display(),
+                    plugin_id,
+                    generation_after,
+                    decoder.fps()
+                );
+                video.width = decoder.width();
+                video.height = decoder.height();
+                video.fps = decoder.fps();
+                video.total_frames = decoder.total_frames();
+                video.plugin_id = plugin_id;
+                video.pending_decoder = Some(decoder);
+                video.texture_cache = TextureLru::new(super::worker::RING_CAPACITY);
+                video.last_index = None;
+            }
+            Err(err) => {
+                eprintln!(
+                    "[media-cache] fallback apply/open failed path={} reason={err}",
+                    path.display()
+                );
+                *guard = PathEntry::Failed(err);
+            }
+        }
+        drop(guard);
+
+        (self.redraw_handle())();
+    }
+
     /// UIスレッド専用。目的フレームの準備完了を確認後、decoder.frame_gpu()を
     /// worker/cache間で共有するMutex越しに直接呼びテクスチャを取得する。
     /// これにより create_texture + write_texture もデコーダ実体もUIスレッド上で
@@ -253,14 +370,38 @@ impl MediaCache {
         let mut guard = entry.lock().unwrap();
         match &mut *guard {
             PathEntry::Video(video) => {
-                if video.worker.is_none() {
+                // NOTE:
+                let current_gen = video.generation;
+                let worker_needs_refresh = match &video.worker {
+                    None => true,
+                    Some(w) => w.generation() != current_gen,
+                };
+                if worker_needs_refresh {
+                    video.worker = None;
                     let decoder = video
                         .pending_decoder
                         .take()
-                        .expect("workerがNoneの間pending_decoderは常時Some");
-                    video.worker = Some(DecodeWorker::spawn(decoder, self.redraw_handle()));
+                        .ok_or_else(|| "デコーダ未準備（フォールバック中）".to_string())?;
+                    let fail_path = path.to_path_buf();
+                    let generation = current_gen;
+
+                    let redraw = self.redraw_handle();
+                    let on_fail = Arc::new(move |reason: String| {
+                        crate::media::cache::global()
+                            .handle_prefetch_failure_with_reason(&fail_path, reason);
+                    });
+
+                    video.worker = Some(DecodeWorker::spawn(
+                        generation,
+                        decoder,
+                        Arc::new(device.clone()),
+                        Arc::new(queue.clone()),
+                        redraw,
+                        on_fail,
+                    ));
                     video.last_index = None;
                 }
+
                 let worker = video.worker.as_ref().unwrap();
                 worker.request(frame_index);
 
@@ -268,25 +409,25 @@ impl MediaCache {
                     return Ok(tex);
                 }
 
-                let decoder_handle = worker.decoder_handle();
-                let target_ready = worker.frame_ready(frame_index);
-                let (index, is_exact) = if target_ready {
-                    (frame_index, true)
-                } else if let Some(last) = video.last_index {
-                    (last, false)
-                } else {
-                    return Err("デコード中".to_string());
-                };
-
-                let tex = {
-                    let mut decoder = decoder_handle.lock().unwrap();
-                    decoder.frame_gpu(index, device, queue)?
-                };
-                if is_exact {
+                if let Some(tex) = worker.cached_texture(frame_index) {
                     video.texture_cache.put(frame_index, tex.clone());
                     video.last_index = Some(frame_index);
+                    return Ok(tex);
                 }
-                Ok(tex)
+
+                if let Some(last) = video.last_index {
+                    if let Some(tex) = worker.cached_texture(last) {
+                        video.texture_cache.put(last, tex.clone());
+                        return Ok(tex);
+                    }
+                }
+
+                if let Some(err) = worker.take_last_error() {
+                    video.last_worker_error = Some(err.clone());
+                    return Err(format!("{} / plugin={}", err, video.plugin_id));
+                }
+
+                Err("デコード中".to_string())
             }
             PathEntry::Image(image) => {
                 if image.texture.is_none() {
@@ -305,7 +446,9 @@ impl MediaCache {
     /// ソース映像/画像のピクセル寸法を返す。open時点で確定済みの値のみ参照するため
     /// デコードスレッドの完了状況に依存しない。
     pub fn dimensions(&self, path: &Path) -> Result<(u32, u32), String> {
-        let entry = self.entry(path);
+        let entry = self
+            .entry_existing(path)
+            .ok_or_else(|| format!("メディアがまだロードされていません: {}", path.display()))?;
         let guard = entry.lock().unwrap();
         match &*guard {
             PathEntry::Video(video) => Ok((video.width, video.height)),
@@ -320,8 +463,12 @@ impl MediaCache {
 
     /// ソース動画のフレームレート。プロジェクトFPSとの比率換算に用いる（画像/音声は不使用）。
     pub fn source_fps(&self, path: &Path) -> Result<f64, String> {
-        let entry = self.entry(path);
+        let entry = self
+            .entry_existing(path)
+            .ok_or_else(|| format!("メディアがまだロードされていません: {}", path.display()))?;
+
         let guard = entry.lock().unwrap();
+
         match &*guard {
             PathEntry::Video(video) => Ok(video.fps),
             PathEntry::Image(_) => Ok(0.0),
@@ -335,7 +482,9 @@ impl MediaCache {
 
     #[allow(dead_code)]
     pub fn total_frames(&self, path: &Path) -> Result<i64, String> {
-        let entry = self.entry(path);
+        let entry = self
+            .entry_existing(path)
+            .ok_or_else(|| format!("メディアがまだロードされていません: {}", path.display()))?;
         let guard = entry.lock().unwrap();
         match &*guard {
             PathEntry::Video(video) => Ok(video.total_frames),
@@ -347,7 +496,9 @@ impl MediaCache {
     }
 
     pub fn audio(&self, path: &Path) -> Result<Arc<AudioBuffer>, String> {
-        let entry = self.entry(path);
+        let entry = self
+            .entry_existing(path)
+            .ok_or_else(|| format!("メディアがまだロードされていません: {}", path.display()))?;
         let guard = entry.lock().unwrap();
         match &*guard {
             PathEntry::Audio(buffer) => Ok(buffer.clone()),

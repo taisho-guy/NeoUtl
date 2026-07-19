@@ -137,6 +137,7 @@ mod imp {
         /// 本関数内でVulkanInstance/Adapter/Deviceを新規生成しない
         /// （単一デバイス構成をホスト全体で維持するため）。
         pub fn open(path: &Path, device: &Arc<GpuVideoDevice>) -> Result<Self, String> {
+            eprintln!("[gpuvideo] open_video begin path={}", path.display());
             let mut demux = probe(path)?;
             let track_id = find_h264_track_id(demux.as_ref()).ok_or("H.264トラック未検出")?;
 
@@ -168,7 +169,15 @@ mod imp {
 
             let decoder = device
                 .create_wgpu_textures_decoder_h264(DecoderParameters::default())
-                .map_err(|e| e.to_string())?;
+                .map_err(|e| {
+                    let msg = format!("create_wgpu_textures_decoder_h264 failed: {e}");
+                    eprintln!(
+                        "[gpuvideo] open_video failed path={} reason={}",
+                        path.display(),
+                        msg
+                    );
+                    msg
+                })?;
 
             let converter = WgpuNv12ToRgbaConverter::new(
                 &device.wgpu_device(),
@@ -177,7 +186,24 @@ mod imp {
                     color_range: ColorRange::Limited,
                 },
             )
-            .map_err(|e| e.to_string())?;
+            .map_err(|e| {
+                let msg = format!("WgpuNv12ToRgbaConverter::new failed: {e}");
+                eprintln!(
+                    "[gpuvideo] open_video failed path={} reason={}",
+                    path.display(),
+                    msg
+                );
+                msg
+            })?;
+
+            eprintln!(
+                "[gpuvideo] open_video ok path={} codec=h264 {}x{} fps={} frames={}",
+                path.display(),
+                width,
+                height,
+                fps,
+                total_frames
+            );
 
             Ok(Self {
                 demux,
@@ -221,7 +247,11 @@ mod imp {
                 }
                 let packet = match self.demux.next_packet().map_err(|e| e.to_string())? {
                     Some(p) => p,
-                    None => return Err("EOF".to_owned()),
+                    None => {
+                        let msg = format!("prefetch EOF (frame={frame_index})");
+                        eprintln!("[gpuvideo] prefetch failed {}", msg);
+                        return Err(msg);
+                    }
                 };
                 if packet.track_id != self.track_id {
                     continue;
@@ -240,7 +270,7 @@ mod imp {
             }
         }
 
-        /// UIスレッド専用。蓄積済みパケットをデコード・変換し確定テクスチャを返す。
+        /// workerスレッド専用。蓄積済みパケットをデコード・変換し確定テクスチャを返す。
         fn frame_gpu(
             &mut self,
             frame_index: i64,
@@ -260,7 +290,11 @@ mod imp {
                             .map_err(|_| "pts変換失敗".to_owned())?,
                     ),
                 };
-                let frames = self.decoder.decode(chunk).map_err(|e| e.to_string())?;
+                let frames = self.decoder.decode(chunk).map_err(|e| {
+                    let msg = format!("decoder.decode failed (frame={frame_index}) err={e}");
+                    eprintln!("[gpuvideo] frame_gpu failed {}", msg);
+                    msg
+                })?;
                 for frame in frames {
                     let rgba = device.create_texture(&wgpu::TextureDescriptor {
                         label: None,
@@ -278,10 +312,16 @@ mod imp {
                         view_formats: &[],
                     });
                     let rgba_view = rgba.create_view(&wgpu::TextureViewDescriptor::default());
-                    let bind_group = self
-                        .converter
-                        .create_input_bind_group(&frame)
-                        .map_err(|e| e.to_string())?;
+                    let bind_group =
+                        self.converter
+                            .create_input_bind_group(&frame)
+                            .map_err(|e| {
+                                let msg = format!(
+                                    "create_input_bind_group failed (frame={frame_index}) err={e}"
+                                );
+                                eprintln!("[gpuvideo] frame_gpu failed {}", msg);
+                                msg
+                            })?;
                     let mut encoder =
                         device.create_command_encoder(&wgpu::CommandEncoderDescriptor::default());
                     self.converter
@@ -295,9 +335,12 @@ mod imp {
                     }
                 }
             }
-            self.cache
-                .get(frame_index)
-                .ok_or("対象フレーム未生成（prefetch未完了）".to_owned())
+            let msg = "対象フレーム未生成（prefetch未完了）".to_owned();
+            eprintln!(
+                "[gpuvideo] frame_gpu failed frame={} reason={}",
+                frame_index, msg
+            );
+            Err(msg)
         }
     }
 
@@ -359,7 +402,13 @@ mod imp {
 
     fn open_video(path: &Path) -> Result<Box<dyn VideoSource>, String> {
         let device = shared_device()?;
-        GpuVideoDecoder::open(path, device).map(|d| Box::new(d) as Box<dyn VideoSource>)
+        GpuVideoDecoder::open(path, device)
+            .map(|d| Box::new(d) as Box<dyn VideoSource>)
+            .map_err(|e| {
+                let msg = format!("open_video failed path={} err={e}", path.display());
+                eprintln!("[gpuvideo] open_video failed {}", msg);
+                msg
+            })
     }
 
     #[unsafe(no_mangle)]
