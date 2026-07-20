@@ -4,9 +4,6 @@ use neoutl_object_api::{
 };
 use std::sync::OnceLock;
 
-// デコード・フレームテクスチャ取得はホスト専有のMediaCacheが担うため、
-// GPU頂点/WGSLを持たずvertex_count=0を返す。ホストはVIDEO_STABLE_IDを検出した場合、
-// このVTable.renderを呼ばず、MediaSourceコンポーネントを直接media_pipelineへ描画する。
 static PARAM_SCHEMA: &[ParamSchema] = &[];
 
 static META: ObjectMeta = ObjectMeta {

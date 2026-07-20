@@ -262,9 +262,6 @@ impl GstDecoderInner {
             }};
         }
 
-        // バスウォッチは登録しない。wait_state()のtimed_pop_filteredが
-        // ERRORメッセージの唯一の消費者となるため、全メッセージ無条件消費の
-        // add_watchはERROR握り潰しの原因にしかならず廃止する。
         let _ = main_context;
         if pipeline.bus().is_none() {
             fail!("バス未取得".to_owned());
@@ -442,9 +439,6 @@ impl GstDecoder {
         let main_context = gst::glib::MainContext::new();
         let main_loop = gst::glib::MainLoop::new(Some(&main_context), false);
 
-        // mainloop_thread: MainContextの所有スレッド。ここでのみ
-        // with_thread_defaultを呼び、run()を占有的に駆動し続ける。
-        // このスレッドはGstDecoderInnerを一切保持しない（完全分離）。
         let mainloop_thread = {
             let main_context = main_context.clone();
             let main_loop = main_loop.clone();
@@ -460,10 +454,6 @@ impl GstDecoder {
                 .map_err(|e| e.to_string())?
         };
 
-        // open()自体はこの呼び出しスレッド（GstDecoder::open呼び出し元、
-        // 通常はcommand_thread生成前の一時スレッド文脈）で実行する。
-        // バスウォッチ登録はmain_context.invoke経由でmainloop_threadへ委譲済みのため、
-        // wait_state内のブロッキング待機中もmainloop_threadがメッセージを処理できる。
         let inner = match GstDecoderInner::open(&path, &main_context) {
             Ok(inner) => inner,
             Err(e) => {
@@ -480,8 +470,6 @@ impl GstDecoder {
 
         let (tx, rx) = mpsc::channel::<Command>();
 
-        // command_thread: GstDecoderInnerの所有スレッド。sample_at等の
-        // ブロッキング呼び出しはここでのみ発生し、mainloop_threadには一切影響しない。
         let command_thread = {
             let main_loop = main_loop.clone();
             std::thread::Builder::new()
@@ -612,9 +600,6 @@ impl Drop for GstDecoder {
     }
 }
 
-// --- プラグインエントリ ---
-// objects/effectsと同一規約: entry関数のみがdylib境界（extern "C"）を越え、
-// VTable本体はホストと同一Cargo.lock・同一rustcで一括ビルドされる前提の素のRust型を保持する。
 use neoutl_media_api::{EntryFn, MediaKind, MediaMeta, MediaVTable};
 
 static EXTENSIONS: &[&str] = &["mp4", "mov", "mkv", "webm", "avi"];

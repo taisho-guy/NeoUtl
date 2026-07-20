@@ -99,7 +99,6 @@ pub fn decode_full(path: &Path) -> Result<AudioBuffer, String> {
     })
 }
 
-// --- プラグインエントリ ---
 use neoutl_media_api::{EntryFn, MediaKind, MediaMeta, MediaVTable};
 
 static EXTENSIONS: &[&str] = &["wav", "mp3", "flac", "ogg", "m4a"];

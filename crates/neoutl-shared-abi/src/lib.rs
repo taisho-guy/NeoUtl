@@ -1,7 +1,4 @@
 #![allow(non_camel_case_types)]
-// neoutl-object-api / neoutl-effect-api 共有C ABI型。
-// 両APIが同一のプラグイン設定UI（properties.rs）から参照されるため、
-// ParamKind/ParamSchema/StrRef/WgslSameを二重定義せずここへ一本化する。
 
 /// オブジェクト・エフェクト双方が対応する次元。ホストはこの値でカメラ行列を切替える。
 /// エフェクトは現状常時2Dパス（フルスクリーンポストプロセス）で適用するため、
