@@ -428,16 +428,18 @@ impl MediaCache {
                     return Ok(tex);
                 }
 
-                match worker.frame_gpu(frame_index) {
-                    Ok(Some(tex)) => {
-                        video.texture_cache.put(frame_index, tex.clone());
-                        video.last_index = Some(frame_index);
-                        return Ok(tex);
-                    }
-                    Ok(None) => {}
-                    Err(err) => {
-                        video.last_worker_error = Some(err.clone());
-                        return Err(format!("{} / plugin={}", err, video.plugin_id));
+                if worker.last_ready_index() == Some(frame_index) {
+                    match worker.frame_gpu(frame_index) {
+                        Ok(Some(tex)) => {
+                            video.texture_cache.put(frame_index, tex.clone());
+                            video.last_index = Some(frame_index);
+                            return Ok(tex);
+                        }
+                        Ok(None) => {}
+                        Err(err) => {
+                            video.last_worker_error = Some(err.clone());
+                            return Err(format!("{} / plugin={}", err, video.plugin_id));
+                        }
                     }
                 }
 
@@ -445,15 +447,17 @@ impl MediaCache {
                     if let Some(tex) = video.texture_cache.get(last) {
                         return Ok(tex);
                     }
-                    match worker.frame_gpu(last) {
-                        Ok(Some(tex)) => {
-                            video.texture_cache.put(last, tex.clone());
-                            return Ok(tex);
-                        }
-                        Ok(None) => {}
-                        Err(err) => {
-                            video.last_worker_error = Some(err.clone());
-                            return Err(format!("{} / plugin={}", err, video.plugin_id));
+                    if worker.last_ready_index() == Some(last) {
+                        match worker.frame_gpu(last) {
+                            Ok(Some(tex)) => {
+                                video.texture_cache.put(last, tex.clone());
+                                return Ok(tex);
+                            }
+                            Ok(None) => {}
+                            Err(err) => {
+                                video.last_worker_error = Some(err.clone());
+                                return Err(format!("{} / plugin={}", err, video.plugin_id));
+                            }
                         }
                     }
                 }

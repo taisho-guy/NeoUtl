@@ -200,6 +200,10 @@ impl DecodeWorker {
         cvar.notify_one();
     }
 
+    pub fn last_ready_index(&self) -> Option<i64> {
+        *self.last_ready_index.lock().unwrap()
+    }
+
     /// cached_texture相当をworker内では生成せず、ringにreadyが立っているときだけUI側で frame_gpu を試す。
     pub fn frame_gpu(&self, frame_index: i64) -> Result<Option<wgpu::Texture>, String> {
         if !self.ring.lock().unwrap().contains(frame_index) {
@@ -219,6 +223,10 @@ impl DecodeWorker {
             }
             Err(e) => {
                 let msg = format!("frame_gpu(frame={frame_index}) failed: {e}");
+                if msg.contains("prefetch") || e.contains("prefetch") {
+                    return Ok(None);
+                }
+
                 eprintln!("[decode-worker] {msg}");
                 *self.last_error.lock().unwrap() = Some(msg.clone());
                 Err(msg)
