@@ -22,6 +22,131 @@ mod imp {
     use symphonia::core::io::MediaSourceStream;
     use symphonia::core::meta::MetadataOptions;
 
+    const START_CODE: &[u8] = &[0, 0, 0, 1];
+
+    #[derive(Clone, Debug)]
+    struct H264Config {
+        nal_length_size: usize,
+        sps: Vec<Vec<u8>>,
+        pps: Vec<Vec<u8>>,
+    }
+
+    impl H264Config {
+        fn inject_sps_pps(&self, out: &mut Vec<u8>) {
+            for sps in &self.sps {
+                out.extend_from_slice(START_CODE);
+                out.extend_from_slice(sps);
+            }
+            for pps in &self.pps {
+                out.extend_from_slice(START_CODE);
+                out.extend_from_slice(pps);
+            }
+        }
+    }
+
+    fn parse_avcc_config(extra: &[u8]) -> Result<H264Config, String> {
+        if extra.len() < 7 {
+            return Err("avcC too short".to_string());
+        }
+
+        let nal_length_size = ((extra[4] & 0x03) + 1) as usize;
+        let num_sps = (extra[5] & 0x1f) as usize;
+        let mut off = 6;
+
+        let mut sps = Vec::with_capacity(num_sps);
+        for _ in 0..num_sps {
+            if off + 2 > extra.len() {
+                return Err("avcC truncated before SPS len".to_string());
+            }
+            let len = u16::from_be_bytes([extra[off], extra[off + 1]]) as usize;
+            off += 2;
+            if off + len > extra.len() {
+                return Err("avcC truncated inside SPS".to_string());
+            }
+            sps.push(extra[off..off + len].to_vec());
+            off += len;
+        }
+
+        if off >= extra.len() {
+            return Err("avcC truncated before PPS count".to_string());
+        }
+        let num_pps = extra[off] as usize;
+        off += 1;
+
+        let mut pps = Vec::with_capacity(num_pps);
+        for _ in 0..num_pps {
+            if off + 2 > extra.len() {
+                return Err("avcC truncated before PPS len".to_string());
+            }
+            let len = u16::from_be_bytes([extra[off], extra[off + 1]]) as usize;
+            off += 2;
+            if off + len > extra.len() {
+                return Err("avcC truncated inside PPS".to_string());
+            }
+            pps.push(extra[off..off + len].to_vec());
+            off += len;
+        }
+
+        if sps.is_empty() || pps.is_empty() {
+            return Err("avcC missing SPS/PPS".to_string());
+        }
+
+        Ok(H264Config {
+            nal_length_size,
+            sps,
+            pps,
+        })
+    }
+
+    fn avcc_sample_to_annexb(
+        cfg: &H264Config,
+        sample_avcc: &[u8],
+        inject_ps: bool,
+    ) -> Result<Vec<u8>, String> {
+        let mut out = Vec::with_capacity(sample_avcc.len() + 256);
+
+        if inject_ps {
+            cfg.inject_sps_pps(&mut out);
+        }
+
+        let mut off = 0usize;
+        while off + cfg.nal_length_size <= sample_avcc.len() {
+            let len = match cfg.nal_length_size {
+                1 => sample_avcc[off] as usize,
+                2 => u16::from_be_bytes([sample_avcc[off], sample_avcc[off + 1]]) as usize,
+                4 => u32::from_be_bytes([
+                    sample_avcc[off],
+                    sample_avcc[off + 1],
+                    sample_avcc[off + 2],
+                    sample_avcc[off + 3],
+                ]) as usize,
+                n => return Err(format!("unsupported nal_length_size={n}")),
+            };
+            off += cfg.nal_length_size;
+
+            if len == 0 {
+                continue;
+            }
+            if off + len > sample_avcc.len() {
+                return Err(format!(
+                    "AVCC sample truncated: off={} len={} total={}",
+                    off,
+                    len,
+                    sample_avcc.len()
+                ));
+            }
+
+            out.extend_from_slice(START_CODE);
+            out.extend_from_slice(&sample_avcc[off..off + len]);
+            off += len;
+        }
+
+        if out.is_empty() {
+            return Err("empty AnnexB output".to_string());
+        }
+        Ok(out)
+    }
+
     /// frame_gpu内キャッシュ。UIスレッド専有アクセスのため排他制御不要（Mutex除去）。
     struct TextureCache {
         used_bytes: i64,
@@ -71,6 +196,48 @@ mod imp {
         display_index: i64,
         pts: i64,
         data: Vec<u8>,
+        is_sync: bool,
+    }
+
+    /// AVCC sample内のNALユニットを走査し、IDR(NALタイプ5)の有無でsync sample判定する。
+    /// symphonia Packetはコンテナ非依存でsync flagを保証しないため、ビットストリーム側の
+    /// NALタイプで自前判定する（コンテナのstss解析より単純かつ本デコーダの用途で十分）。
+    fn packet_is_sync(cfg: &H264Config, sample_avcc: &[u8]) -> bool {
+        let mut off = 0usize;
+        while off + cfg.nal_length_size <= sample_avcc.len() {
+            let len = match cfg.nal_length_size {
+                1 => sample_avcc[off] as usize,
+                2 => u16::from_be_bytes([sample_avcc[off], sample_avcc[off + 1]]) as usize,
+                4 => u32::from_be_bytes([
+                    sample_avcc[off],
+                    sample_avcc[off + 1],
+                    sample_avcc[off + 2],
+                    sample_avcc[off + 3],
+                ]) as usize,
+                _ => return false,
+            };
+            off += cfg.nal_length_size;
+            if len == 0 || off + len > sample_avcc.len() {
+                break;
+            }
+            let nal_type = sample_avcc[off] & 0x1f;
+            if nal_type == 5 {
+                return true;
+            }
+            off += len;
+        }
+        false
+    }
+
+    /// packets中でidx以下の最も近いsync sampleのdisplay_indexを返す。無ければ0。
+    fn find_prev_sync(packets: &[EncodedPacket], idx: i64) -> i64 {
+        let idx = idx.clamp(0, packets.len() as i64 - 1);
+        for i in (0..=idx).rev() {
+            if packets[i as usize].is_sync {
+                return i;
+            }
+        }
+        0
     }
 
     fn find_h264_track_id(demux: &dyn FormatReader) -> Option<u32> {
@@ -102,8 +269,8 @@ mod imp {
     fn preload_packets(
         demux: &mut Box<dyn FormatReader>,
         track_id: u32,
+        h264_cfg: &H264Config,
     ) -> Result<Vec<EncodedPacket>, String> {
-        // demuxを先頭に戻す
         demux
             .seek(
                 SeekMode::Accurate,
@@ -127,15 +294,15 @@ mod imp {
                 continue;
             }
 
-            // ptsは codec/コンテナによって missing などあり得るが、この設計では
-            // pts の変換が失敗した場合は表示順indexで代用する（decode側の pts 必須性に合わせて調整）。
             let pts_i64 = packet.pts.get();
             let data = packet.data.to_vec();
+            let is_sync = packet_is_sync(h264_cfg, &data);
 
             packets.push(EncodedPacket {
                 display_index,
                 pts: pts_i64,
                 data,
+                is_sync,
             });
 
             display_index += 1;
@@ -153,12 +320,23 @@ mod imp {
         fps: f64,
         total_frames: i64,
 
-        /// 全パケットをメモリ化したもの
+        /// 全パケットをメモリ化したもの（AVCC sample bytes）
         packets: Vec<EncodedPacket>,
         cache: TextureCache,
 
         /// prefetch が積む「まだ確定していない」パケット列（pendingはメモリ上のパケット参照）
         pending: VecDeque<EncodedPacket>,
+
+        /// avcC-derived H.264 config for AnnexB conversion
+        h264_cfg: H264Config,
+
+        /// decoder再生成用。openで注入された共有デバイスをそのまま保持する。
+        device: Arc<GpuVideoDevice>,
+
+        /// frame_gpuが最後にデコーダへ供給したpacketの次に来るべきdisplay_index。
+        /// pop_frontしたpacketのdisplay_indexがこれと一致しない場合、連続性が
+        /// 途切れている（シーク発生）とみなしdecoderを再生成しSPS/PPSを再注入する。
+        expected_next: Option<i64>,
     }
 
     impl GpuVideoDecoder {
@@ -186,17 +364,25 @@ mod imp {
             let width = video_cp.width.ok_or("width未定義")?.into();
             let height = video_cp.height.ok_or("height未定義")?.into();
 
-            // open時に全走査済みなので total_frames は packets.len()
-            // fps は元コード同様、必要なら track.time_base から推定。
             let tb = track.time_base.ok_or("time_base未定義")?;
             let tb_numer = tb.numer.get() as f64;
             let tb_denom = tb.denom.get() as f64;
 
-            let packets = preload_packets(&mut demux, track_id)?;
+            let extra_data = video_cp
+                .extra_data
+                .iter()
+                .find(|d| {
+                    d.id == symphonia::core::codecs::video::well_known::extra_data::VIDEO_EXTRA_DATA_ID_AVC_DECODER_CONFIG
+                })
+                .map(|d| d.data.as_ref())
+                .ok_or_else(|| "missing H.264 extra_data (AVCDecoderConfigurationRecord)".to_string())?;
+
+            let h264_cfg = parse_avcc_config(extra_data)?;
+
+            let packets = preload_packets(&mut demux, track_id, &h264_cfg)?;
             let total_frames = packets.len() as i64;
 
             let fps = if total_frames >= 2 {
-                // pts差が極端に小さい/ゼロの場合は保守的に30fps。
                 let first_pts = packets.first().map(|p| p.pts).unwrap_or(0);
                 let last_pts = packets.last().map(|p| p.pts).unwrap_or(first_pts);
 
@@ -261,6 +447,9 @@ mod imp {
                 packets,
                 cache: TextureCache::new(),
                 pending: VecDeque::new(),
+                h264_cfg,
+                device: Arc::clone(device),
+                expected_next: None,
             })
         }
     }
@@ -280,45 +469,61 @@ mod imp {
         }
 
         /// バックグラウンドスレッド専用。demux は触らず、メモリ上の pending/pkts のみ操作する。
+        ///
+        /// pending は常に「直前sync sampleから連続するAVCC sample列」を保つ。
+        /// frame_indexが属するGOPの起点（needed_sync）とpending先頭が食い違う場合、
+        /// pendingを全消去して needed_sync からframe_indexまでを積み直す
+        /// （順再生の継続・GOP跨ぎ・逆シークの3ケースを同一ロジックで処理する）。
         fn prefetch(&mut self, frame_index: i64) -> Result<(), String> {
-            // 既にGPUキャッシュにあるなら不要
             if self.cache.map.contains_key(&frame_index) {
                 return Ok(());
             }
 
-            // pendingに対象display_indexが存在するなら不要
-            let already_queued = self.pending.iter().any(|p| p.display_index == frame_index);
-            if already_queued {
-                return Ok(());
-            }
-
-            // frame_indexまでの必要分を pending に積む（demux不要）
-            // display_index は open()時に 0..N-1 の連番で作っている前提。
             if frame_index < 0 || (frame_index as usize) >= self.packets.len() {
                 let msg = format!("prefetch EOF (frame={frame_index})");
                 eprintln!("[gpuvideo] prefetch failed {}", msg);
                 return Err(msg);
             }
 
-            // いま pending の末尾がどこまでかを見て、足りない分だけ積む
-            // （pendingはdecodeで pop_front されるので、基本的に単調に進むが保険として末尾で管理）
-            let pending_max = self.pending.back().map(|p| p.display_index).unwrap_or(-1);
-            if pending_max >= frame_index {
+            if self.pending.iter().any(|p| p.display_index == frame_index) {
                 return Ok(());
             }
 
-            let start = (pending_max + 1).max(0) as usize;
-            let end = frame_index as usize;
+            let needed_sync = find_prev_sync(&self.packets, frame_index);
+            let reset = match self.pending.front() {
+                Some(front) => front.display_index != needed_sync,
+                None => true,
+            };
 
-            for idx in start..=end {
-                // ここで data/pts/インデックスを複製せず Move するため clone は不要
-                // ただし packets から移動すると壊れるので、Vecからは cloneして pendingへ複製する。
-                // そのため EncodedPacket のサイズを考慮して必要に応じ最適化可能。
-                let p = &self.packets[idx];
+            if reset {
+                self.pending.clear();
+                for idx in needed_sync..=frame_index {
+                    let p = &self.packets[idx as usize];
+                    self.pending.push_back(EncodedPacket {
+                        display_index: p.display_index,
+                        pts: p.pts,
+                        data: p.data.clone(),
+                        is_sync: p.is_sync,
+                    });
+                }
+                return Ok(());
+            }
+
+            let start = self
+                .pending
+                .back()
+                .map(|p| p.display_index + 1)
+                .unwrap_or(needed_sync);
+            if start > frame_index {
+                return Ok(());
+            }
+            for idx in start..=frame_index {
+                let p = &self.packets[idx as usize];
                 self.pending.push_back(EncodedPacket {
                     display_index: p.display_index,
                     pts: p.pts,
                     data: p.data.clone(),
+                    is_sync: p.is_sync,
                 });
             }
 
@@ -336,9 +541,51 @@ mod imp {
                 return Ok(cached);
             }
 
+            let mut logged_first = false;
+
             while let Some(packet) = self.pending.pop_front() {
+                if !logged_first {
+                    logged_first = true;
+                    let head_len = packet.data.len().min(16);
+                    let head_hex: String = packet.data[..head_len]
+                        .iter()
+                        .map(|b| format!("{:02x}", b))
+                        .collect::<Vec<_>>()
+                        .join(" ");
+
+                    eprintln!(
+                        "[gpuvideo] frame_gpu first packet debug frame_index={} packet.display_index={} pts={} data_len={} head=[{}]",
+                        frame_index,
+                        packet.display_index,
+                        packet.pts,
+                        packet.data.len(),
+                        head_hex
+                    );
+                }
+
+                let discontinuous = self.expected_next != Some(packet.display_index);
+                if discontinuous {
+                    if !packet.is_sync {
+                        eprintln!(
+                            "[gpuvideo] frame_gpu warning: non-sync packet at decode-run start display_index={} frame_index={}",
+                            packet.display_index, frame_index
+                        );
+                    }
+                    self.decoder = self
+                        .device
+                        .create_wgpu_textures_decoder_h264(DecoderParameters::default())
+                        .map_err(|e| {
+                            let msg = format!("decoder再生成失敗 (frame={frame_index}) err={e}");
+                            eprintln!("[gpuvideo] frame_gpu failed {}", msg);
+                            msg
+                        })?;
+                }
+                let inject_ps = discontinuous;
+                let annexb = avcc_sample_to_annexb(&self.h264_cfg, &packet.data, inject_ps)?;
+                self.expected_next = Some(packet.display_index + 1);
+
                 let chunk = EncodedInputChunk {
-                    data: &packet.data,
+                    data: &annexb,
                     pts: Some(
                         packet
                             .pts
@@ -407,8 +654,6 @@ mod imp {
         }
     }
 
-    // --- 共有GPUデバイス注入 ---
-    // ホスト(main.rs)がSlint起動前にgpu_video::Deviceを一度だけ生成し、ここへ設定する。
     static SHARED_DEVICE: std::sync::OnceLock<Arc<GpuVideoDevice>> = std::sync::OnceLock::new();
 
     fn set_shared_device(device: Arc<GpuVideoDevice>) {
@@ -432,7 +677,6 @@ mod imp {
 
     pub const INJECT_DEVICE_SYMBOL: &[u8] = b"neoutl_gpuvideo_inject_device\0";
 
-    // --- プラグインエントリ ---
     use neoutl_media_api::{EntryFn, MediaKind, MediaMeta, MediaVTable};
 
     static EXTENSIONS: &[&str] = &["mp4", "mov", "mkv"];

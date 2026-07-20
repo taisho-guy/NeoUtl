@@ -1,7 +1,5 @@
 #![allow(non_camel_case_types)]
 
-// ParamKind/ParamSchema/StrRef/WgslSourceはneoutl-effect-apiと共有するため
-// neoutl-shared-abiに一本化されている。オブジェクトAPI固有の型のみここに残す。
 pub use neoutl_shared_abi::{Dimensionality, ParamKind, ParamSchema, StrRef, WgslSource};
 
 #[repr(C)]

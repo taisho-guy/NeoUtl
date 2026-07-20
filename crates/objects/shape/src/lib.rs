@@ -58,7 +58,6 @@ unsafe extern "C" fn meta() -> *const ObjectMeta {
     &raw const META
 }
 unsafe extern "C" fn vertex_count() -> u32 {
-    // MAX_SIDES(32) * 2面(表裏=押し出し用) * 3頂点
     32 * 2 * 3
 }
 unsafe extern "C" fn wgsl() -> WgslSource {
@@ -67,8 +66,6 @@ unsafe extern "C" fn wgsl() -> WgslSource {
         len: WGSL.len(),
     }
 }
-// 実描画はホストの標準Uniform契約(mvp/opacity/sides/extrude_depth/fill_color)を通して行われるため、
-// per-object固有処理は不要。将来、頂点バッファ差し替え等が必要になった場合の拡張点として維持する。
 unsafe extern "C" fn render(_ctx: *const RenderContext) {}
 
 #[unsafe(no_mangle)]

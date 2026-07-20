@@ -4,9 +4,6 @@ use neoutl_object_api::{
 };
 use std::sync::OnceLock;
 
-// 音声は視覚描画を持たないため、vertex_count=0・wgsl無し・render空実装に固定する。
-// AUDIO_STABLE_IDの検出時、ホストはpipelines/media_pipelineいずれの描画経路にも進まず、
-// AudioParams（volume/pan/mute）のみタイムライン上のクリップとして保持・編集する。
 static PARAM_SCHEMA: &[ParamSchema] = &[];
 
 static META: ObjectMeta = ObjectMeta {

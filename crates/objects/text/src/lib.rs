@@ -4,10 +4,6 @@ use neoutl_object_api::{
 };
 use std::sync::OnceLock;
 
-// テキストはフォント・IME・レイアウトがホスト専有API(wgpu_text)に依存するため、
-// GPU頂点/WGSLを持たずvertex_count=0を返す。ホストはTEXT_STABLE_IDを検出した場合、
-// このVTable.renderを呼ばず、TextContentコンポーネントを直接text_brushへ描画する。
-// これは回避策ではなく、AviQtl比較で確定した正式仕様である。
 static PARAM_SCHEMA: &[ParamSchema] = &[
     ParamSchema {
         key: StrRef::from_str("font_size"),

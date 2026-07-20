@@ -66,7 +66,6 @@ impl ImageSource for StaticImageDecoder {
     }
 }
 
-// --- プラグインエントリ ---
 use neoutl_media_api::{EntryFn, MediaKind, MediaMeta, MediaVTable};
 
 static EXTENSIONS: &[&str] = &["png", "jpg", "jpeg", "bmp", "webp", "gif", "tiff"];

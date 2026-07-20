@@ -1,4 +1,3 @@
-// crates/xtask/src/main.rs
 use std::{
     env, fs,
     path::{Path, PathBuf},
@@ -154,7 +153,6 @@ fn stage_crates(
 }
 
 fn workspace_root() -> PathBuf {
-    // crates/xtask/Cargo.toml から見て2階層上がワークスペースルート。
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .parent()
         .and_then(Path::parent)
@@ -194,12 +192,10 @@ fn main() {
     build_crates(&root, profile, target, "effects", &effects);
     stage_crates(&root, profile, target, "effects", &effects);
 
-    // 動画/画像/音声デコーダプラグイン（objects/effectsと同一のcdylib外部化規約）。
     let decoders = discover_crates(&root, "crates/media");
     build_crates(&root, profile, target, "decoders", &decoders);
     stage_crates(&root, profile, target, "decoders", &decoders);
 
-    // 本体(NeoUtl)は build タスクではビルドのみ、run タスクでは実行まで行う。
     let mut cmd = Command::new("cargo");
     cmd.current_dir(&root)
         .arg(if task == "run" { "run" } else { "build" })
