@@ -16,6 +16,8 @@ mod imp {
     use std::fs::File;
     use std::path::Path;
     use std::sync::Arc;
+    use std::thread;
+    use std::time::Instant;
     use symphonia::core::codecs::video::well_known::CODEC_ID_H264;
     use symphonia::core::formats::probe::Hint;
     use symphonia::core::formats::{FormatOptions, FormatReader, SeekMode, SeekTo};
@@ -23,6 +25,12 @@ mod imp {
     use symphonia::core::meta::MetadataOptions;
 
     const START_CODE: &[u8] = &[0, 0, 0, 1];
+
+    /// decoder内部バッファリングにより「packet Nをfeedしても即座にframe Nが
+    /// 出力されるとは限らない」ため、対象frame_indexより先読みしてpendingへ
+    /// 積んでおく必要のあるフレーム数。値はgpu-video側の内部バッファ段数に
+    /// 対する保守的な余裕。
+    const DECODE_LOOKAHEAD: i64 = 8;
 
     #[derive(Clone, Debug)]
     struct H264Config {
@@ -147,7 +155,9 @@ mod imp {
         Ok(out)
     }
 
-    /// frame_gpu内キャッシュ。UIスレッド専有アクセスのため排他制御不要（Mutex除去）。
+    /// 呼び出し元スレッドを混同すると自明でない競合を生むため、
+    /// get/putの双方でthread::current().id()を記録し、実際に単一スレッドから
+    /// しか呼ばれていないか検証可能にする。
     struct TextureCache {
         used_bytes: i64,
         order: VecDeque<i64>,
@@ -169,6 +179,13 @@ mod imp {
             }
             self.order.retain(|&i| i != index);
             self.order.push_back(index);
+            eprintln!(
+                "[gpuvideo][cache] get hit index={} thread={:?} entries={} used_bytes={}",
+                index,
+                thread::current().id(),
+                self.map.len(),
+                self.used_bytes
+            );
             self.map.get(&index).cloned()
         }
 
@@ -179,12 +196,27 @@ mod imp {
             self.map.insert(index, texture);
             self.order.push_back(index);
             self.used_bytes += cost;
+            eprintln!(
+                "[gpuvideo][cache] put index={} thread={:?} entries={} used_bytes={} limit={}",
+                index,
+                thread::current().id(),
+                self.map.len(),
+                self.used_bytes,
+                DEFAULT_DECODE_CACHE_BYTES
+            );
             while self.used_bytes > DEFAULT_DECODE_CACHE_BYTES {
                 let Some(oldest) = self.order.pop_front() else {
                     break;
                 };
                 self.map.remove(&oldest);
                 self.used_bytes -= cost;
+                eprintln!(
+                    "[gpuvideo][cache] evict index={} thread={:?} entries={} used_bytes={}",
+                    oldest,
+                    thread::current().id(),
+                    self.map.len(),
+                    self.used_bytes
+                );
             }
         }
     }
@@ -337,6 +369,21 @@ mod imp {
         /// pop_frontしたpacketのdisplay_indexがこれと一致しない場合、連続性が
         /// 途切れている（シーク発生）とみなしdecoderを再生成しSPS/PPSを再注入する。
         expected_next: Option<i64>,
+
+        /// decoderが実際に出力したフレームへ割り当てる次のdisplay_index。
+        ///
+        /// feedしたpacket.display_indexをそのまま出力フレームのcacheキーに使うと、
+        /// decoder内部バッファリング（1 packet feedが即1 frame出力とは限らない）により
+        /// 出力とfeed順がずれてcacheキーが実際の表示順と食い違う。出力が確定した順に
+        /// この専用カウンタを進めてcacheキーとすることで、feed側のインデックスと
+        /// 出力側のインデックスを分離する。decoder再生成時は再生成の起点となる
+        /// sync sampleのdisplay_indexへ合わせてリセットする。
+        next_output_index: i64,
+
+        /// create_wgpu_textures_decoder_h264を呼んだ累計回数。
+        /// discontinuous判定の誤爆でdecoder再生成・GPUリソース確保が
+        /// 想定外に高頻度発生していないかログで確認するためのカウンタ。
+        reset_count: u64,
     }
 
     impl GpuVideoDecoder {
@@ -398,6 +445,12 @@ mod imp {
                 30.0
             };
 
+            let decoder_init_started = Instant::now();
+            eprintln!(
+                "[gpuvideo][open] create_wgpu_textures_decoder_h264 begin path={} thread={:?}",
+                path.display(),
+                thread::current().id()
+            );
             let decoder = device
                 .create_wgpu_textures_decoder_h264(DecoderParameters::default())
                 .map_err(|e| {
@@ -409,7 +462,14 @@ mod imp {
                     );
                     msg
                 })?;
+            eprintln!(
+                "[gpuvideo][open] create_wgpu_textures_decoder_h264 end path={} elapsed_ms={} thread={:?}",
+                path.display(),
+                decoder_init_started.elapsed().as_millis(),
+                thread::current().id()
+            );
 
+            let converter_init_started = Instant::now();
             let converter = WgpuNv12ToRgbaConverter::new(
                 &device.wgpu_device(),
                 WgpuConverterParameters {
@@ -426,6 +486,12 @@ mod imp {
                 );
                 msg
             })?;
+            eprintln!(
+                "[gpuvideo][open] converter init end path={} elapsed_ms={} thread={:?}",
+                path.display(),
+                converter_init_started.elapsed().as_millis(),
+                thread::current().id()
+            );
 
             eprintln!(
                 "[gpuvideo] open_video ok path={} codec=h264 {}x{} fps={} frames={}",
@@ -450,6 +516,8 @@ mod imp {
                 h264_cfg,
                 device: Arc::clone(device),
                 expected_next: None,
+                next_output_index: 0,
+                reset_count: 0,
             })
         }
     }
@@ -475,6 +543,15 @@ mod imp {
         /// pendingを全消去して needed_sync からframe_indexまでを積み直す
         /// （順再生の継続・GOP跨ぎ・逆シークの3ケースを同一ロジックで処理する）。
         fn prefetch(&mut self, frame_index: i64) -> Result<(), String> {
+            eprintln!(
+                "[gpuvideo][prefetch] enter frame_index={} thread={:?} pending_len={} pending_front={:?} pending_back={:?} cache_entries={}",
+                frame_index,
+                thread::current().id(),
+                self.pending.len(),
+                self.pending.front().map(|p| p.display_index),
+                self.pending.back().map(|p| p.display_index),
+                self.cache.map.len()
+            );
             if self.cache.map.contains_key(&frame_index) {
                 return Ok(());
             }
@@ -490,14 +567,24 @@ mod imp {
             }
 
             let needed_sync = find_prev_sync(&self.packets, frame_index);
+            let queue_end = (frame_index + DECODE_LOOKAHEAD).min(self.packets.len() as i64 - 1);
             let reset = match self.pending.front() {
                 Some(front) => front.display_index != needed_sync,
                 None => true,
             };
 
+            eprintln!(
+                "[gpuvideo][prefetch] plan frame_index={} needed_sync={} queue_end={} reset={} thread={:?}",
+                frame_index,
+                needed_sync,
+                queue_end,
+                reset,
+                thread::current().id()
+            );
+
             if reset {
                 self.pending.clear();
-                for idx in needed_sync..=frame_index {
+                for idx in needed_sync..=queue_end {
                     let p = &self.packets[idx as usize];
                     self.pending.push_back(EncodedPacket {
                         display_index: p.display_index,
@@ -514,10 +601,10 @@ mod imp {
                 .back()
                 .map(|p| p.display_index + 1)
                 .unwrap_or(needed_sync);
-            if start > frame_index {
+            if start > queue_end {
                 return Ok(());
             }
-            for idx in start..=frame_index {
+            for idx in start..=queue_end {
                 let p = &self.packets[idx as usize];
                 self.pending.push_back(EncodedPacket {
                     display_index: p.display_index,
@@ -537,32 +624,25 @@ mod imp {
             device: &wgpu::Device,
             queue: &wgpu::Queue,
         ) -> Result<wgpu::Texture, String> {
+            eprintln!(
+                "[gpuvideo][frame_gpu] enter frame_index={} thread={:?} pending_len={} expected_next={:?} next_output_index={} reset_count={}",
+                frame_index,
+                thread::current().id(),
+                self.pending.len(),
+                self.expected_next,
+                self.next_output_index,
+                self.reset_count
+            );
             if let Some(cached) = self.cache.get(frame_index) {
+                eprintln!(
+                    "[gpuvideo][frame_gpu] cache_hit frame_index={} thread={:?}",
+                    frame_index,
+                    thread::current().id()
+                );
                 return Ok(cached);
             }
 
-            let mut logged_first = false;
-
             while let Some(packet) = self.pending.pop_front() {
-                if !logged_first {
-                    logged_first = true;
-                    let head_len = packet.data.len().min(16);
-                    let head_hex: String = packet.data[..head_len]
-                        .iter()
-                        .map(|b| format!("{:02x}", b))
-                        .collect::<Vec<_>>()
-                        .join(" ");
-
-                    eprintln!(
-                        "[gpuvideo] frame_gpu first packet debug frame_index={} packet.display_index={} pts={} data_len={} head=[{}]",
-                        frame_index,
-                        packet.display_index,
-                        packet.pts,
-                        packet.data.len(),
-                        head_hex
-                    );
-                }
-
                 let discontinuous = self.expected_next != Some(packet.display_index);
                 if discontinuous {
                     if !packet.is_sync {
@@ -571,6 +651,15 @@ mod imp {
                             packet.display_index, frame_index
                         );
                     }
+                    self.reset_count += 1;
+                    let reset_started = Instant::now();
+                    eprintln!(
+                        "[gpuvideo][reset] begin #{} display_index={} frame_index={} thread={:?}",
+                        self.reset_count,
+                        packet.display_index,
+                        frame_index,
+                        thread::current().id()
+                    );
                     self.decoder = self
                         .device
                         .create_wgpu_textures_decoder_h264(DecoderParameters::default())
@@ -579,10 +668,27 @@ mod imp {
                             eprintln!("[gpuvideo] frame_gpu failed {}", msg);
                             msg
                         })?;
+                    eprintln!(
+                        "[gpuvideo][reset] end #{} elapsed_ms={} thread={:?}",
+                        self.reset_count,
+                        reset_started.elapsed().as_millis(),
+                        thread::current().id()
+                    );
+                    self.next_output_index = packet.display_index;
                 }
                 let inject_ps = discontinuous;
                 let annexb = avcc_sample_to_annexb(&self.h264_cfg, &packet.data, inject_ps)?;
                 self.expected_next = Some(packet.display_index + 1);
+
+                eprintln!(
+                    "[gpuvideo] feed display_index={} frame_index={} is_sync={} pts={} avcc_len={} annexb_len={}",
+                    packet.display_index,
+                    frame_index,
+                    packet.is_sync,
+                    packet.pts,
+                    packet.data.len(),
+                    annexb.len()
+                );
 
                 let chunk = EncodedInputChunk {
                     data: &annexb,
@@ -594,13 +700,36 @@ mod imp {
                     ),
                 };
 
+                let decode_started = Instant::now();
+                eprintln!(
+                    "[gpuvideo][decode] call_begin display_index={} frame_index={} thread={:?}",
+                    packet.display_index,
+                    frame_index,
+                    thread::current().id()
+                );
                 let frames = self.decoder.decode(chunk).map_err(|e| {
                     let msg = format!("decoder.decode failed (frame={frame_index}) err={e}");
                     eprintln!("[gpuvideo] frame_gpu failed {}", msg);
                     msg
                 })?;
+                eprintln!(
+                    "[gpuvideo][decode] call_end display_index={} frame_index={} elapsed_ms={} output_count={} thread={:?}",
+                    packet.display_index,
+                    frame_index,
+                    decode_started.elapsed().as_millis(),
+                    frames.len(),
+                    thread::current().id()
+                );
 
                 for frame in frames {
+                    let display_index = self.next_output_index;
+                    self.next_output_index += 1;
+
+                    eprintln!(
+                        "[gpuvideo] output display_index={} frame_index={}",
+                        display_index, frame_index
+                    );
+
                     let rgba = device.create_texture(&wgpu::TextureDescriptor {
                         label: None,
                         size: wgpu::Extent3d {
@@ -630,25 +759,41 @@ mod imp {
                                 msg
                             })?;
 
+                    let convert_started = Instant::now();
                     let mut encoder =
                         device.create_command_encoder(&wgpu::CommandEncoderDescriptor::default());
                     self.converter
                         .convert(&mut encoder, &bind_group, &rgba_view);
                     queue.submit(Some(encoder.finish()));
+                    eprintln!(
+                        "[gpuvideo][convert] display_index={} frame_index={} elapsed_ms={} thread={:?}",
+                        display_index,
+                        frame_index,
+                        convert_started.elapsed().as_millis(),
+                        thread::current().id()
+                    );
 
                     let cost = (self.width as i64) * (self.height as i64) * 4;
-                    self.cache.put(packet.display_index, rgba.clone(), cost);
+                    self.cache.put(display_index, rgba.clone(), cost);
 
-                    if packet.display_index == frame_index {
+                    if display_index == frame_index {
                         return Ok(rgba);
                     }
                 }
             }
 
-            let msg = "対象フレーム未生成（prefetch未完了）".to_owned();
+            let msg = format!(
+                "対象フレーム未生成（デコード中。prefetchのlookahead={}不足の可能性）",
+                DECODE_LOOKAHEAD
+            );
             eprintln!(
-                "[gpuvideo] frame_gpu failed frame={} reason={}",
-                frame_index, msg
+                "[gpuvideo] frame_gpu failed frame={} reason={} thread={:?} next_output_index={} expected_next={:?} reset_count={}",
+                frame_index,
+                msg,
+                thread::current().id(),
+                self.next_output_index,
+                self.expected_next,
+                self.reset_count
             );
             Err(msg)
         }
