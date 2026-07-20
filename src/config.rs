@@ -48,6 +48,10 @@ pub const DECODE_PREFETCH_RADIUS: i64 = 8;
 /// 次点候補（拡張子重複時の後順位デコーダ、例: gstreamer）へフォールバックする。
 /// media/worker.rs（計上）とmedia/cache.rs（除外集合管理・再オープン）で共有する。
 pub const DECODE_PREFETCH_FAIL_THRESHOLD: i64 = 30;
+/// frame_gpu()単発呼び出し（GPU decode()実行含む）の監視タイムアウト（ミリ秒）。
+/// gpu-videoクレート内部（vulkan_decoder.rs: wait_for(..., u64::MAX)）がVulkan側で
+/// 無期限停止する既知障害に対する回収不能検知用。超過時はdecoderを放棄し世代を切り替える。
+pub const DECODE_WATCHDOG_TIMEOUT_MS: u64 = 5_000;
 
 /// レンダリング上限（renderer/pipeline.rs）
 pub const MAX_SCENE_OBJECTS: u64 = 512;

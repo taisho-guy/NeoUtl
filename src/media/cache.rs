@@ -428,7 +428,7 @@ impl MediaCache {
                     return Ok(tex);
                 }
 
-                if worker.last_ready_index() == Some(frame_index) {
+                if worker.is_ready(frame_index) {
                     match worker.frame_gpu(frame_index) {
                         Ok(Some(tex)) => {
                             video.texture_cache.put(frame_index, tex.clone());
@@ -447,7 +447,7 @@ impl MediaCache {
                     if let Some(tex) = video.texture_cache.get(last) {
                         return Ok(tex);
                     }
-                    if worker.last_ready_index() == Some(last) {
+                    if worker.is_ready(last) {
                         match worker.frame_gpu(last) {
                             Ok(Some(tex)) => {
                                 video.texture_cache.put(last, tex.clone());
