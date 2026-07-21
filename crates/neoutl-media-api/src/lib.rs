@@ -4,6 +4,18 @@
 /// gpuvideo-decoder等）間で個別定義せず、この値を唯一の定義元として参照する。
 pub const DEFAULT_DECODE_CACHE_BYTES: i64 = 512 * 1024 * 1024;
 
+/// CPU系デコーダ（NV12バイト列 → wgpu::Texture変換を自前実装するプラグイン、
+/// 例: gstreamer-decoder）が内部で保持する固定テクスチャプールの枚数。
+/// ホスト側 media/cache.rs::TextureLru および media/worker.rs::RING_CAPACITY
+/// （config::DECODE_RING_CAPACITY由来）と同一値を用いること。
+/// プール容量 < LRU容量だと、LRUが「まだキャッシュ済」と誤認したテクスチャハンドルの
+/// 実体がプールのローテーションにより既に上書き済みとなり、古いフレーム番号で
+/// 新しいフレームの映像が表示される（stale handle aliasing）不具合を招く。
+/// この値を両者の唯一の定義元とし、host側では
+/// `config::DECODE_RING_CAPACITY = neoutl_media_api::VIDEO_TEXTURE_POOL_CAPACITY` と
+/// 直接参照させることで値の乖離を構造的に防ぐ。
+pub const VIDEO_TEXTURE_POOL_CAPACITY: usize = 32;
+
 /// VideoSourceの2メソッド契約。
 /// prefetch: バックグラウンドスレッドが呼ぶ。パケット読出し・内部キュー蓄積のみ実行し、
 /// GPUリソース(Device/Queue)を一切操作しない。

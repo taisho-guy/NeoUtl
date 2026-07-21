@@ -780,6 +780,7 @@ impl RenderEngine {
                     match &obj.media_source {
                         Some(src) => match cache.frame_at(
                             &src.path,
+                            obj.clip_instance,
                             obj.source_frame,
                             &self.device,
                             &self.queue,

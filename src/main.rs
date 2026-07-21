@@ -92,19 +92,19 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             .create_device(&gpu_video::parameters::VulkanDeviceDescriptor::default())
             .map_err(|e| format!("Vulkanデバイス生成失敗: {e}"))?;
 
-        let gpu_device: &'static gpu_video::VulkanDevice = Box::leak(Box::new(gpu_device));
+        let wgpu_instance = gpu_instance.wgpu_instance().clone();
+        let wgpu_adapter = gpu_device.wgpu_adapter().clone();
+        let wgpu_device = gpu_device.wgpu_device().clone();
+        let wgpu_queue = gpu_device.wgpu_queue().clone();
 
-        media::loader::inject_gpuvideo_shared_device(
-            &media::loader::default_decoders_dir(),
-            gpu_device,
-        );
+        media::loader::inject_gpuvideo_shared_device(gpu_device);
 
         slint::BackendSelector::new()
             .require_wgpu_29(slint::wgpu_29::WGPUConfiguration::Manual {
-                instance: gpu_instance.wgpu_instance().clone(),
-                adapter: gpu_device.wgpu_adapter().clone(),
-                device: gpu_device.wgpu_device().clone(),
-                queue: gpu_device.wgpu_queue().clone(),
+                instance: wgpu_instance,
+                adapter: wgpu_adapter,
+                device: wgpu_device,
+                queue: wgpu_queue,
             })
             .select()?;
     }

@@ -19,7 +19,8 @@ struct DiscoveredCrate {
 /// 存在していてもここに含まれるものはxtaskの検出対象から外す。
 /// ffmpeg-decoder: gstreamer/symphonia経路で代替、要件確定まで凍結（Cargo.toml側の
 /// [workspace].membersコメントアウトと対で管理する）。
-const WORKSPACE_EXCLUDED_DIRS: &[&str] = &["ffmpeg-decoder"];
+const WORKSPACE_EXCLUDED_DIRS: &[&str] =
+    &["ffmpeg-decoder", "gpuvideo-decoder", "gstreamer-decoder"];
 
 fn discover_crates(workspace_root: &Path, subdir: &str) -> Vec<DiscoveredCrate> {
     let scan_dir = workspace_root.join(subdir);

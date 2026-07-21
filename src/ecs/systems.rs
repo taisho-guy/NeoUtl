@@ -1,6 +1,6 @@
 use super::EcsWorld;
 use crate::ecs::components::{
-    AudioParams, KindId, MediaSource, SceneId, ShapeParams, TextContent, TimeRange,
+    AudioParams, KindId, MediaSource, ObjectId, SceneId, ShapeParams, TextContent, TimeRange,
 };
 use crate::ecs::effects::{EffectStack, compute_effect_params_at};
 use crate::ecs::resources::{ProjectResource, SceneResource, TimelineResource};
@@ -18,6 +18,9 @@ pub struct ActiveObject {
     pub kind_id: u32,
     pub start_frame: i32,
     pub source_frame: i64,
+    /// ObjectId由来のクリップ識別子。MediaCache::frame_atのinstance_keyとして渡し、
+    /// 同一ソースファイルを複数クリップが同時参照する際のデコードセッション分離に用いる。
+    pub clip_instance: u64,
     pub text_content: Option<TextContent>,
     pub shape_params: Option<ShapeParams>,
     pub media_source: Option<MediaSource>,
@@ -54,6 +57,7 @@ type SelectorGroupViews<'v> = (
     View<'v, TextContent>,
     View<'v, ShapeParams>,
     View<'v, MediaSource>,
+    View<'v, ObjectId>,
 );
 type PayloadGroupViews<'v> = (
     View<'v, Transform>,
@@ -65,7 +69,15 @@ type PayloadGroupViews<'v> = (
 pub fn get_active_objects_system(world: &EcsWorld) -> Vec<ActiveObject> {
     world.world.run(
         |(timeline, scenes, project, camera): UniqueGroupViews,
-         (time_ranges, kind_ids, scene_ids, text_contents, shape_params, media_sources): SelectorGroupViews,
+         (
+            time_ranges,
+            kind_ids,
+            scene_ids,
+            text_contents,
+            shape_params,
+            media_sources,
+            object_ids,
+        ): SelectorGroupViews,
          (transforms, global_matrices, audio_params, effect_stacks): PayloadGroupViews| {
             let current = timeline.current_frame;
             let active_scene = scenes.active_scene;
@@ -126,6 +138,7 @@ pub fn get_active_objects_system(world: &EcsWorld) -> Vec<ActiveObject> {
                 active.push(ActiveObject {
                     kind_id: kind.0,
                     start_frame: range.start_frame,
+                    clip_instance: object_ids.get(id).map(|o| o.0 as u64).unwrap_or(0),
                     source_frame,
                     text_content,
                     shape_params: shape,

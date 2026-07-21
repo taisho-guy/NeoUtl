@@ -47,22 +47,43 @@ impl TextureLru {
 /// UIスレッド側テクスチャLRUの容量。worker側リング(worker::RING_CAPACITY)と共有し、
 /// config::DECODE_RING_CAPACITYを唯一の定義元とする。
 
+struct VideoInstance {
+    pending_decoder: Option<Box<dyn VideoSource>>,
+    worker: Option<DecodeWorker>,
+    texture_cache: TextureLru,
+    /// 直近にframe_gpuで確定したフレーム番号。目的フレーム未準備時の代用元。
+    last_index: Option<i64>,
+    /// worker側で保持している最終エラー（次回フレーム返却用/デバッグ用）。
+    last_worker_error: Option<String>,
+}
+
+impl VideoInstance {
+    fn new() -> Self {
+        Self {
+            pending_decoder: None,
+            worker: None,
+            texture_cache: TextureLru::new(super::worker::RING_CAPACITY),
+            last_index: None,
+            last_worker_error: None,
+        }
+    }
+}
+
 struct VideoEntry {
     generation: u64,
     width: u32,
     height: u32,
     fps: f64,
     total_frames: i64,
-    /// spawn前の未使用デコーダ。frame_at初回呼び出し時にworkerへ移譲する。
+    /// spawn前の未使用デコーダ。最初にframe_atを呼んだインスタンスへ移譲する。
+    /// 2つ目以降の同時インスタンスはopen_video_excludingで個別に新規オープンする
+    /// （同一ファイルを複数のタイムラインクリップが同時参照する場合、GStreamer
+    /// パイプラインは1本につき1つの再生ヘッドしか持てないため共有できない）。
     pending_decoder: Option<Box<dyn VideoSource>>,
-    worker: Option<DecodeWorker>,
-    /// UIスレッド側で生成したテクスチャのキャッシュ。
-    /// decoder.frame_gpuの結果をキャッシュした結果を保持する。
-    texture_cache: TextureLru,
-    /// 直近にframe_gpuで確定したフレーム番号。目的フレーム未準備時の代用元。
-    last_index: Option<i64>,
-    /// worker側で保持している最終エラー（次回フレーム返却用/デバッグ用）。
-    last_worker_error: Option<String>,
+    /// クリップインスタンス（呼び出し側が渡すkey。通常はECS上のObjectId）ごとの
+    /// デコードセッション。同一ファイルの複数同時利用（同一ソースを2箇所の
+    /// タイムラインクリップで使う等）間でシークヘッドが競合しないよう分離する。
+    instances: HashMap<u64, VideoInstance>,
     /// 現在採用中のデコーダプラグインid（フォールバック判定・ログ用）。
     plugin_id: String,
     /// prefetch連続失敗により見限った（今後候補から除外する）プラグインidの集合。
@@ -97,7 +118,8 @@ fn ext_of(path: &Path) -> Result<String, String> {
         .ok_or_else(|| format!("拡張子なし: {}", path.display()))
 }
 
-/// 拡張子に対応する動画デコーダプラグインをid昇順で順次試行する。excluded_pluginsに
+/// 拡張子に対応する動画デコーダプラグインをloader::decoder_priority順（同値はid昇順）で
+/// 順次試行する。excluded_pluginsに
 /// 含まれるidは連続失敗により見限られた候補のため試行対象から除外する。
 /// 各プラグインのopen_videoが返すErrはハードウェア/ドライバ側の実行時制約
 /// （例: Vulkan Video非対応環境でのgpuvideo-decoder）を含みうるため、
@@ -226,10 +248,7 @@ impl MediaCache {
                     total_frames: decoder.total_frames(),
                     generation: 0,
                     pending_decoder: Some(decoder),
-                    worker: None,
-                    texture_cache: TextureLru::new(super::worker::RING_CAPACITY),
-                    last_index: None,
-                    last_worker_error: None,
+                    instances: HashMap::new(),
                     plugin_id,
                     failed_plugins: HashSet::new(),
                 }),
@@ -301,7 +320,7 @@ impl MediaCache {
             existing.clone()
         };
 
-        let (generation_after, failed_plugins, old_worker) = {
+        let (generation_after, failed_plugins, old_workers) = {
             let mut guard = entry.lock().unwrap();
             let PathEntry::Video(video) = &mut *guard else {
                 return;
@@ -315,22 +334,27 @@ impl MediaCache {
                 reason
             );
 
-            video.last_worker_error = Some(reason.clone());
             video.failed_plugins.insert(video.plugin_id.clone());
             video.generation = video.generation.wrapping_add(1);
 
-            let old_worker = video.worker.take();
+            let old_workers: Vec<DecodeWorker> = video
+                .instances
+                .values_mut()
+                .filter_map(|inst| inst.worker.take())
+                .collect();
             video.pending_decoder = None;
-
-            video.texture_cache = TextureLru::new(super::worker::RING_CAPACITY);
-            video.last_index = None;
+            for inst in video.instances.values_mut() {
+                inst.pending_decoder = None;
+                inst.texture_cache = TextureLru::new(super::worker::RING_CAPACITY);
+                inst.last_index = None;
+            }
 
             let generation_after = video.generation;
             let failed_plugins = video.failed_plugins.clone();
-            (generation_after, failed_plugins, old_worker)
+            (generation_after, failed_plugins, old_workers)
         };
 
-        drop(old_worker);
+        drop(old_workers);
 
         let result = open_video_excluding(path, &failed_plugins);
 
@@ -353,9 +377,6 @@ impl MediaCache {
                 video.total_frames = decoder.total_frames();
                 video.plugin_id = plugin_id;
                 video.pending_decoder = Some(decoder);
-                video.texture_cache = TextureLru::new(super::worker::RING_CAPACITY);
-                video.last_index = None;
-                video.last_worker_error = None;
             }
             Err(err) => {
                 eprintln!(
@@ -378,6 +399,7 @@ impl MediaCache {
     pub fn frame_at(
         &self,
         path: &Path,
+        instance_key: u64,
         frame_index: i64,
         device: &wgpu::Device,
         queue: &wgpu::Queue,
@@ -386,18 +408,30 @@ impl MediaCache {
         let mut guard = entry.lock().unwrap();
         match &mut *guard {
             PathEntry::Video(video) => {
-                // NOTE:
                 let current_gen = video.generation;
-                let worker_needs_refresh = match &video.worker {
+                let failed_plugins = video.failed_plugins.clone();
+                let spare_decoder = video.pending_decoder.take();
+                let plugin_id = video.plugin_id.clone();
+
+                let instance = video
+                    .instances
+                    .entry(instance_key)
+                    .or_insert_with(VideoInstance::new);
+
+                let worker_needs_refresh = match &instance.worker {
                     None => true,
                     Some(w) => w.generation() != current_gen,
                 };
                 if worker_needs_refresh {
-                    video.worker = None;
-                    let decoder = video
-                        .pending_decoder
-                        .take()
-                        .ok_or_else(|| "デコーダ未準備（フォールバック中）".to_string())?;
+                    instance.worker = None;
+                    let decoder = match spare_decoder.or_else(|| instance.pending_decoder.take()) {
+                        Some(d) => d,
+                        None => {
+                            let (d, _) = open_video_excluding(path, &failed_plugins)
+                                .map_err(|e| format!("追加インスタンス用デコーダを開けません: {e} / plugin={plugin_id}"))?;
+                            d
+                        }
+                    };
                     let fail_path = path.to_path_buf();
                     let generation = current_gen;
 
@@ -410,7 +444,7 @@ impl MediaCache {
                         );
                     });
 
-                    video.worker = Some(DecodeWorker::spawn(
+                    instance.worker = Some(DecodeWorker::spawn(
                         generation,
                         decoder,
                         Arc::new(device.clone()),
@@ -418,53 +452,55 @@ impl MediaCache {
                         redraw,
                         on_fail,
                     ));
-                    video.last_index = None;
+                    instance.last_index = None;
+                } else if let Some(d) = spare_decoder {
+                    video.pending_decoder = Some(d);
                 }
 
-                let worker = video.worker.as_ref().unwrap();
+                let worker = instance.worker.as_ref().unwrap();
                 worker.request(frame_index);
 
-                if let Some(tex) = video.texture_cache.get(frame_index) {
+                if let Some(tex) = instance.texture_cache.get(frame_index) {
                     return Ok(tex);
                 }
 
                 if worker.is_ready(frame_index) {
                     match worker.frame_gpu(frame_index) {
                         Ok(Some(tex)) => {
-                            video.texture_cache.put(frame_index, tex.clone());
-                            video.last_index = Some(frame_index);
+                            instance.texture_cache.put(frame_index, tex.clone());
+                            instance.last_index = Some(frame_index);
                             return Ok(tex);
                         }
                         Ok(None) => {}
                         Err(err) => {
-                            video.last_worker_error = Some(err.clone());
-                            return Err(format!("{} / plugin={}", err, video.plugin_id));
+                            instance.last_worker_error = Some(err.clone());
+                            return Err(format!("{} / plugin={}", err, plugin_id));
                         }
                     }
                 }
 
-                if let Some(last) = video.last_index {
-                    if let Some(tex) = video.texture_cache.get(last) {
+                if let Some(last) = instance.last_index {
+                    if let Some(tex) = instance.texture_cache.get(last) {
                         return Ok(tex);
                     }
                     if worker.is_ready(last) {
                         match worker.frame_gpu(last) {
                             Ok(Some(tex)) => {
-                                video.texture_cache.put(last, tex.clone());
+                                instance.texture_cache.put(last, tex.clone());
                                 return Ok(tex);
                             }
                             Ok(None) => {}
                             Err(err) => {
-                                video.last_worker_error = Some(err.clone());
-                                return Err(format!("{} / plugin={}", err, video.plugin_id));
+                                instance.last_worker_error = Some(err.clone());
+                                return Err(format!("{} / plugin={}", err, plugin_id));
                             }
                         }
                     }
                 }
 
                 if let Some(err) = worker.take_last_error() {
-                    video.last_worker_error = Some(err.clone());
-                    return Err(format!("{} / plugin={}", err, video.plugin_id));
+                    instance.last_worker_error = Some(err.clone());
+                    return Err(format!("{} / plugin={}", err, plugin_id));
                 }
 
                 Err("デコード中".to_string())
