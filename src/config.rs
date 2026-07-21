@@ -41,7 +41,9 @@ pub const UNDO_HISTORY_LIMIT: usize = 100;
 
 /// デコードワーカーのリングキャッシュ容量（フレーム数）。
 /// media/worker.rs（デコード結果本体）とmedia/cache.rs（UIスレッド側テクスチャ）で共有する。
-pub const DECODE_RING_CAPACITY: usize = 32;
+/// neoutl_media_api::VIDEO_TEXTURE_POOL_CAPACITY（CPU系デコーダプラグインの固定テクスチャ
+/// プール枚数）と同一値を保つ必要があるため、後者を唯一の定義元として直接参照する。
+pub const DECODE_RING_CAPACITY: usize = neoutl_media_api::VIDEO_TEXTURE_POOL_CAPACITY;
 /// 先読み対象フレーム数
 pub const DECODE_PREFETCH_RADIUS: i64 = 8;
 /// prefetch()の連続失敗許容回数。超過時、当該デコーダプラグインを除外し

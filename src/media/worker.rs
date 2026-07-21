@@ -18,6 +18,13 @@ const STOP_SENTINEL: i64 = i64::MIN + 1;
 const NONE_SENTINEL: i64 = i64::MIN;
 const DECODE_WATCHDOG_TIMEOUT: Duration = Duration::from_millis(DECODE_WATCHDOG_TIMEOUT_MS);
 
+/// gpu-video crateのGPU decodeパス(wgpu::Device::as_hal内部リソースガード)は、
+/// 同一wgpu::Deviceに対する複数スレッドからの同時呼び出しに対して排他制御されていない。
+/// 共有デバイス構成下で複数DecodeWorkerが並行してframe_gpu()を実行すると、
+/// as_hal()がリソース競合によりNoneを返しunwrapでpanicする(gpu-video側の既知の制約)。
+/// プロセス全体でGPU decode呼び出しを直列化し、この競合を回避する。
+static GPU_DECODE_LOCK: Mutex<()> = Mutex::new(());
+
 /// 準備完了フレーム番号集合。順序保持のためringを持つ。
 struct Ring {
     set: HashSet<i64>,
@@ -240,37 +247,40 @@ impl DecodeWorker {
     ///
     /// decoder.frame_gpu()（内部でGPU decode()を呼ぶ）は専用の監視スレッドへ所有権ごと
     /// 移譲して実行し、DECODE_WATCHDOG_TIMEOUT以内に完了しなければ回収を諦める。
-    /// 監視スレッドはdecoderを保持したまま永久に残留する（gpu-videoクレート内部の
-    /// 無期限wait_forに起因し、Rust側からは安全に中断できないため）。
-    /// 以後decoder_slotは二度とSomeへ戻らず、当該DecodeWorkerは実質的に停止する。
+    /// 監視スレッドはgpu-videoクレート内部の無期限wait_forに起因しRust側から安全に
+    /// 中断できないため、タイムアウト後もブロックしたまま残留しうる。decoderの所有権は
+    /// 監視スレッド自身がdecoder_slotへ直接返却するため、ブロックが解けた時点で
+    /// decoder_slotは自動的にSomeへ復帰し、当該DecodeWorkerは次回呼び出しから再稼働する。
     pub fn frame_gpu(&self, frame_index: i64) -> Result<Option<wgpu::Texture>, String> {
         if !self.ring.lock().unwrap().contains(frame_index) {
             return Ok(None);
         }
 
-        let Some(decoder) = self.decoder_slot.lock().unwrap().take() else {
+        let Some(mut decoder) = self.decoder_slot.lock().unwrap().take() else {
             return Ok(None);
         };
 
         let device = self.device.clone();
         let queue = self.queue.clone();
+        let slot = self.decoder_slot.clone();
         let (tx, rx) = mpsc::channel();
 
         thread::spawn(move || {
-            let mut decoder = decoder;
-            let result = decoder.frame_gpu(frame_index, &device, &queue);
-            let _ = tx.send((decoder, result));
+            let result = {
+                let _gpu_guard = GPU_DECODE_LOCK.lock().unwrap();
+                decoder.frame_gpu(frame_index, &device, &queue)
+            };
+            *slot.lock().unwrap() = Some(decoder);
+            let _ = tx.send(result);
         });
 
         match rx.recv_timeout(DECODE_WATCHDOG_TIMEOUT) {
-            Ok((decoder, Ok(tex))) => {
-                *self.decoder_slot.lock().unwrap() = Some(decoder);
+            Ok(Ok(tex)) => {
                 *self.last_error.lock().unwrap() = None;
                 *self.last_ready_index.lock().unwrap() = Some(frame_index);
                 Ok(Some(tex))
             }
-            Ok((decoder, Err(e))) => {
-                *self.decoder_slot.lock().unwrap() = Some(decoder);
+            Ok(Err(e)) => {
                 let msg = format!("frame_gpu(frame={frame_index}) failed: {e}");
                 if msg.contains("prefetch") || e.contains("prefetch") {
                     return Ok(None);
@@ -282,7 +292,7 @@ impl DecodeWorker {
             Err(RecvTimeoutError::Timeout) => {
                 let msg = format!(
                     "decode watchdog timeout (frame={frame_index}, timeout={:?}) \
-                     decoderを放棄しました。次回描画時に再生成します。",
+                     decoderを分離しました。復帰次第slotへ復帰します。",
                     DECODE_WATCHDOG_TIMEOUT
                 );
                 eprintln!("[decode-worker] {msg}");

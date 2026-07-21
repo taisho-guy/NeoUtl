@@ -11,18 +11,27 @@ use std::sync::Once;
 use std::sync::mpsc;
 use std::thread::JoinHandle;
 
-/// NV12バイト列をNV12テクスチャへアップロードする。cache.rs::materialize撤去に伴い
-/// このCPU系decoderクレート内へ複製移動。
-fn upload_nv12(
+/// 固定枚数のNV12テクスチャを解像度確定時に一括生成し、以後はwrite_textureのみで
+/// 内容を上書き（ローテーション）する。毎フレームのcreate_texture呼び出し
+/// （GPUアロケーションスパイクの発生源）を排除するための固定リソースプール。
+/// 容量はneoutl_media_api::VIDEO_TEXTURE_POOL_CAPACITYに一致させ、host側
+/// media/cache.rs::TextureLruの容量を超えないようにする（超えるとLRUが
+/// 保持するテクスチャハンドルの実体がローテーションにより上書きされ、
+/// 古いフレーム番号で新しい映像が表示されるstale handle aliasingを招く）。
+struct TexturePool {
+    textures: Vec<wgpu::Texture>,
+    next_write_index: usize,
+}
+
+fn create_nv12_texture(
     device: &wgpu::Device,
-    queue: &wgpu::Queue,
-    data: &[u8],
     width: u32,
     height: u32,
+    slot: usize,
 ) -> wgpu::Texture {
-    let y_plane_size = (width * height) as usize;
-    let texture = device.create_texture(&wgpu::TextureDescriptor {
-        label: Some("video-nv12-frame"),
+    let label = format!("video-nv12-pool-slot-{slot}");
+    device.create_texture(&wgpu::TextureDescriptor {
+        label: Some(&label),
         size: wgpu::Extent3d {
             width,
             height,
@@ -34,10 +43,40 @@ fn upload_nv12(
         format: wgpu::TextureFormat::NV12,
         usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
         view_formats: &[],
-    });
+    })
+}
+
+impl TexturePool {
+    fn new(device: &wgpu::Device, width: u32, height: u32, capacity: usize) -> Self {
+        let textures = (0..capacity)
+            .map(|slot| create_nv12_texture(device, width, height, slot))
+            .collect();
+        Self {
+            textures,
+            next_write_index: 0,
+        }
+    }
+
+    /// ローテーション先のスロットを1つ進めてテクスチャ参照を返す。
+    fn next_write_target(&mut self) -> &wgpu::Texture {
+        let idx = self.next_write_index;
+        self.next_write_index = (self.next_write_index + 1) % self.textures.len();
+        &self.textures[idx]
+    }
+}
+
+/// 既存テクスチャへNV12バイト列を上書きする（create_texture不要）。
+fn update_nv12_texture(
+    queue: &wgpu::Queue,
+    texture: &wgpu::Texture,
+    data: &[u8],
+    width: u32,
+    height: u32,
+) {
+    let y_plane_size = (width * height) as usize;
     queue.write_texture(
         wgpu::TexelCopyTextureInfo {
-            texture: &texture,
+            texture,
             mip_level: 0,
             origin: wgpu::Origin3d::ZERO,
             aspect: wgpu::TextureAspect::Plane0,
@@ -56,7 +95,7 @@ fn upload_nv12(
     );
     queue.write_texture(
         wgpu::TexelCopyTextureInfo {
-            texture: &texture,
+            texture,
             mip_level: 0,
             origin: wgpu::Origin3d::ZERO,
             aspect: wgpu::TextureAspect::Plane1,
@@ -73,7 +112,6 @@ fn upload_nv12(
             depth_or_array_layers: 1,
         },
     );
-    texture
 }
 
 static GST_INIT: Once = Once::new();
@@ -154,6 +192,14 @@ const SYSMEM_CAPS: &str = "video/x-raw,format=NV12";
 /// オートプラグ先デコーダがハードウェア制約等でサンプルを一切生成できない場合に
 /// この時間で打ち切りErrへ変換する。
 const PULL_TIMEOUT: gst::ClockTime = gst::ClockTime::from_seconds(10);
+/// pending（prefetch済みNV12バイト列）の保持上限件数。超過時、target近傍以外を破棄する。
+const PENDING_PURGE_THRESHOLD: usize = 16;
+/// pending破棄時にtargetから残す半径。
+const PENDING_KEEP_RADIUS: i64 = 8;
+/// GOP保護区間[gop_start, frame_index]として無条件保持してよい最大フレーム数。
+/// 超過する場合（長大GOPを持つ配信系コンテンツ等）はPENDING_KEEP_RADIUSのみへ縮退し、
+/// pending肥大化の再発を防ぐ。
+const MAX_GOP_PROTECT_SPAN: i64 = 256;
 
 fn duration_to_frames(duration_ns: u64, frame_duration_ns: u64) -> i64 {
     (duration_ns / frame_duration_ns.max(1)) as i64
@@ -229,6 +275,11 @@ struct GstDecoderInner {
     /// ACCURATEシークを省略しPLAYING状態での継続デコードへ切替える。
     /// 非連番（スクラブ・逆再生・シーク）検出時は-1へ戻さず、単に不一致として扱う。
     last_frame: i64,
+    /// 直近に観測したキーフレーム（GOP先頭）のフレーム番号。
+    /// 連番再生では各バッファのDELTA_UNITフラグから、シークでは着地したバッファ自体の
+    /// フラグから更新する。同一GOP内のスクラブでpending破棄を回避する判定に用いる
+    /// （GstDecoder::prefetch参照）。
+    last_gop_start: i64,
 }
 
 impl GstDecoderInner {
@@ -316,6 +367,7 @@ impl GstDecoderInner {
             frame_duration_ns,
             total_frames,
             last_frame: -1,
+            last_gop_start: 0,
         })
     }
 
@@ -349,21 +401,33 @@ impl GstDecoderInner {
         }
     }
 
-    /// 非連番アクセス（スクラブ・逆再生・初回シーク）専用の正確シーク経路。
-    /// PAUSED状態へ戻した上でACCURATEシークを行い、対象フレームを一意に確定する。
+    /// 非連番アクセス（スクラブ・逆再生・初回シーク）専用のシーク経路。
+    /// PAUSED状態へ戻した上でシークを行い、対象フレームを確定する。
+    /// 常にACCURATEを用いる。ACCURATE seekはGStreamer内部で
+    /// 直近キーフレームへ着地後、target位置まで自動的に前進デコードするため、
+    /// KEY_UNITへ切替える距離最適化は不要であり、かつ危険である：
+    /// 旧実装はKEY_UNIT時に着地フレームがtargetと一致する保証がないにも
+    /// かかわらず`self.last_frame = target`を代入していた。これにより
+    /// 着地フレームの画素内容が`frame_index`という誤ったラベルでpendingへ
+    /// 格納され、以後の連番再生パスも誤位置基準のまま進行し続ける
+    /// （frame_indexラベルと表示内容の恒久的乖離＝再生時のランダムな
+    /// 前後跳躍・速度異常の原因）。
+    /// 着地バッファのPTSはログ出力のみに用い、target一致検証は行わない
+    /// （コンテナのPTSベースオフセットやB-frame遅延により、正しく着地して
+    /// いてもPTS/frame_duration_nsの整数演算はtargetと恒常的にずれうるため、
+    /// 誤検知によるprefetch失敗の連鎖・デコーダフォールバックを避ける）。
     fn sample_at_seek(&mut self, frame_index: i64, target: i64) -> Result<gst::Sample, String> {
         let target_ns = target as u64 * self.frame_duration_ns;
+        let seek_flags = gst::SeekFlags::FLUSH | gst::SeekFlags::ACCURATE;
         eprintln!(
-            "[gstreamer-decoder] sample_at正確シーク: frame_index={frame_index} target={target} target_ns={target_ns}"
+            "[gstreamer-decoder] sample_atシーク: frame_index={frame_index} target={target} \
+             target_ns={target_ns}"
         );
         if self.pipeline.current_state() != gst::State::Paused {
             let _ = self.pipeline.set_state(gst::State::Paused);
         }
         self.pipeline
-            .seek_simple(
-                gst::SeekFlags::FLUSH | gst::SeekFlags::ACCURATE,
-                gst::ClockTime::from_nseconds(target_ns),
-            )
+            .seek_simple(seek_flags, gst::ClockTime::from_nseconds(target_ns))
             .map_err(|e| {
                 let msg = e.to_string();
                 eprintln!("[gstreamer-decoder] seek失敗: {msg}");
@@ -385,9 +449,10 @@ impl GstDecoderInner {
                     .caps()
                     .map(|c| c.to_string())
                     .unwrap_or_else(|| "なし".to_owned());
+                let landed_pts_ns = sample.buffer().and_then(|b| b.pts()).map(|p| p.nseconds());
                 eprintln!(
                     "[gstreamer-decoder] sample取得成功: frame_index={frame_index} \
-                     buffer_size={buffer_size} caps={caps_str}"
+                     buffer_size={buffer_size} caps={caps_str} landed_pts_ns={landed_pts_ns:?}"
                 );
                 self.last_frame = target;
             }
@@ -412,7 +477,7 @@ impl GstDecoderInner {
 enum Command {
     Frame {
         frame_index: i64,
-        reply: mpsc::Sender<Result<Vec<u8>, String>>,
+        reply: mpsc::Sender<Result<(Vec<u8>, i64), String>>,
     },
     Shutdown,
 }
@@ -429,6 +494,8 @@ pub struct GstDecoder {
     command_thread: Option<JoinHandle<()>>,
     /// prefetchが取得したNV12バイト列。frame_gpuがここからテクスチャアップロードする。
     pending: HashMap<i64, Vec<u8>>,
+    /// 固定テクスチャプール。device取得後（初回frame_gpu呼び出し時）に遅延初期化する。
+    pool: Option<TexturePool>,
 }
 
 impl GstDecoder {
@@ -488,7 +555,11 @@ impl GstDecoder {
                                 );
                                 let result = inner.sample_at(frame_index).and_then(|sample| {
                                     let buffer = sample.buffer().ok_or("buffer未取得".to_owned())?;
+                                    if !buffer.flags().contains(gst::BufferFlags::DELTA_UNIT) {
+                                        inner.last_gop_start = inner.last_frame;
+                                    }
                                     extract_nv12_bytes(buffer, inner.width, inner.height)
+                                        .map(|bytes| (bytes, inner.last_gop_start))
                                 });
                                 if let Err(e) = &result {
                                     eprintln!(
@@ -519,6 +590,7 @@ impl GstDecoder {
             mainloop_thread: Some(mainloop_thread),
             command_thread: Some(command_thread),
             pending: HashMap::new(),
+            pool: None,
         })
     }
 }
@@ -555,14 +627,22 @@ impl VideoSource for GstDecoder {
                 eprintln!("[gstreamer-decoder] コマンド送信失敗: {e} ({msg})");
                 msg
             })?;
-        let bytes = reply_rx
+        let (bytes, gop_start) = reply_rx
             .recv()
             .map_err(|e| e.to_string())
             .and_then(|inner| inner)?;
         eprintln!(
-            "[gstreamer-decoder] prefetch完了: frame_index={frame_index} bytes={}",
+            "[gstreamer-decoder] prefetch完了: frame_index={frame_index} bytes={} gop_start={gop_start}",
             bytes.len()
         );
+        if self.pending.len() >= PENDING_PURGE_THRESHOLD {
+            let gop_span = frame_index - gop_start;
+            let protect_gop = gop_span >= 0 && gop_span <= MAX_GOP_PROTECT_SPAN;
+            self.pending.retain(|k, _| {
+                (protect_gop && *k >= gop_start && *k <= frame_index)
+                    || (k - frame_index).abs() <= PENDING_KEEP_RADIUS
+            });
+        }
         self.pending.insert(frame_index, bytes);
         Ok(())
     }
@@ -584,7 +664,17 @@ impl VideoSource for GstDecoder {
             .pending
             .remove(&frame_index)
             .ok_or("対象フレーム未生成（prefetch未完了）".to_owned())?;
-        Ok(upload_nv12(device, queue, &bytes, self.width, self.height))
+        let pool = self.pool.get_or_insert_with(|| {
+            TexturePool::new(
+                device,
+                self.width,
+                self.height,
+                neoutl_media_api::VIDEO_TEXTURE_POOL_CAPACITY,
+            )
+        });
+        let texture = pool.next_write_target();
+        update_nv12_texture(queue, texture, &bytes, self.width, self.height);
+        Ok(texture.clone())
     }
 }
 
@@ -600,7 +690,7 @@ impl Drop for GstDecoder {
     }
 }
 
-use neoutl_media_api::{EntryFn, MediaKind, MediaMeta, MediaVTable};
+use neoutl_media_api::{MediaKind, MediaMeta, MediaVTable};
 
 static EXTENSIONS: &[&str] = &["mp4", "mov", "mkv", "webm", "avi"];
 
@@ -611,9 +701,8 @@ static META: MediaMeta = MediaMeta {
     extensions_ptr: EXTENSIONS.as_ptr(),
     extensions_len: EXTENSIONS.len(),
 };
-static VTABLE: std::sync::OnceLock<MediaVTable> = std::sync::OnceLock::new();
 
-fn meta() -> &'static MediaMeta {
+pub fn meta() -> &'static MediaMeta {
     &META
 }
 
@@ -621,14 +710,13 @@ fn open_video(path: &std::path::Path) -> Result<Box<dyn neoutl_media_api::VideoS
     GstDecoder::open(path).map(|d| Box::new(d) as Box<dyn neoutl_media_api::VideoSource>)
 }
 
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn neoutl_media_entry() -> *const MediaVTable {
-    VTABLE.get_or_init(|| MediaVTable {
+/// src/media/loader.rsのネイティブプラグインレジストリへ直接登録するためのVTable生成。
+/// gpuvideo-decoder::native_vtable()と同様、dylib境界を経由しない。
+pub fn native_vtable() -> MediaVTable {
+    MediaVTable {
         meta,
         open_video: Some(open_video),
         open_image: None,
         decode_audio: None,
-    })
+    }
 }
-
-const _: EntryFn = neoutl_media_entry;

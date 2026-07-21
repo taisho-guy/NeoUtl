@@ -3,10 +3,6 @@ name = "neoutl-media-gpuvideo-decoder"
 version = "0.0.0"
 edition = "2024"
 
-[lib]
-name       = "neoutl_media_gpuvideo_decoder"
-crate-type = ["cdylib"]
-
 [dependencies]
 neoutl-media-api = { path = "../../neoutl-media-api" }
 wgpu = "29"

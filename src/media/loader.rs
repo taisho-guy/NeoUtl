@@ -12,18 +12,26 @@ pub struct MediaPlugin {
     pub kind: MediaKind,
     pub extensions: Vec<String>,
     pub vtable: &'static MediaVTable,
-    _lib: Library,
+    /// dylibロードで得たプラグインのみSome。ネイティブリンクプラグイン（gpuvideo/gstreamer）は
+    /// 本体と同一コンパイル単位のためLibraryを持たない。
+    _lib: Option<Library>,
 }
 
 static REGISTRY: OnceLock<Vec<MediaPlugin>> = OnceLock::new();
+static GPUVIDEO_VTABLE: OnceLock<MediaVTable> = OnceLock::new();
+static GSTREAMER_VTABLE: OnceLock<MediaVTable> = OnceLock::new();
 
 pub fn load_all(decoders_dir: &Path) {
     REGISTRY.get_or_init(|| {
+        let mut plugins: Vec<MediaPlugin> = Vec::new();
+        plugins.extend(native_plugins());
+
         let entries = match std::fs::read_dir(decoders_dir) {
             Ok(e) => e,
             Err(err) => {
                 eprintln!("[NeoUtl] decoders/ 読み込み失敗: {err}");
-                return Vec::new();
+                plugins.sort_by(|a, b| a.id.cmp(&b.id));
+                return plugins;
             }
         };
         let candidates: Vec<PathBuf> = entries
@@ -32,16 +40,13 @@ pub fn load_all(decoders_dir: &Path) {
             .filter(|p| is_dylib(p))
             .collect();
 
-        let mut plugins: Vec<MediaPlugin> = candidates
-            .iter()
-            .filter_map(|path| match load_one(path) {
-                Ok(p) => Some(p),
-                Err(err) => {
-                    eprintln!("[NeoUtl] デコーダ読み込み失敗 {}: {err}", path.display());
-                    None
-                }
-            })
-            .collect();
+        plugins.extend(candidates.iter().filter_map(|path| match load_one(path) {
+            Ok(p) => Some(p),
+            Err(err) => {
+                eprintln!("[NeoUtl] デコーダ読み込み失敗 {}: {err}", path.display());
+                None
+            }
+        }));
 
         plugins.sort_by(|a, b| a.id.cmp(&b.id));
         for plugin in &plugins {
@@ -52,6 +57,46 @@ pub fn load_all(decoders_dir: &Path) {
         }
         plugins
     });
+}
+
+/// gpu-video/GStreamerに依存するデコーダを本体と同一コンパイル単位のまま登録する。
+/// libloading/extern "C"境界を経由しないため、wgpu::Device等の複雑な型を跨いだ
+/// ABI不一致（as_hal()のNone化）が構造的に発生しない。
+fn native_plugins() -> Vec<MediaPlugin> {
+    let mut plugins = Vec::new();
+
+    let gpuvideo_vtable = GPUVIDEO_VTABLE.get_or_init(neoutl_media_gpuvideo_decoder::native_vtable);
+    if let Some(plugin) = build_native_plugin(gpuvideo_vtable) {
+        plugins.push(plugin);
+    }
+
+    let gstreamer_vtable =
+        GSTREAMER_VTABLE.get_or_init(neoutl_media_gstreamer_decoder::native_vtable);
+    if let Some(plugin) = build_native_plugin(gstreamer_vtable) {
+        plugins.push(plugin);
+    }
+
+    plugins
+}
+
+fn build_native_plugin(vtable: &'static MediaVTable) -> Option<MediaPlugin> {
+    let meta = (vtable.meta)();
+    if meta.extensions_len == 0 {
+        return None;
+    }
+    let extensions: Vec<String> =
+        unsafe { std::slice::from_raw_parts(meta.extensions_ptr, meta.extensions_len) }
+            .iter()
+            .map(|s| s.to_ascii_lowercase())
+            .collect();
+    Some(MediaPlugin {
+        id: meta.id.to_owned(),
+        name: meta.name.to_owned(),
+        kind: meta.kind,
+        extensions,
+        vtable,
+        _lib: None,
+    })
 }
 
 pub fn registry() -> &'static [MediaPlugin] {
@@ -111,7 +156,7 @@ fn load_one(path: &Path) -> Result<MediaPlugin, Box<dyn std::error::Error>> {
         kind: meta.kind,
         extensions,
         vtable,
-        _lib: lib,
+        _lib: Some(lib),
     })
 }
 
@@ -122,28 +167,10 @@ fn is_dylib(path: &Path) -> bool {
     )
 }
 
-/// gpuvideo-decoderプラグイン固有の帯域外注入経路。MediaVTable(neoutl-media-api)は
-/// gpu_video型へ依存させないため、libloadingで同一dylibを個別に再オープンし
-/// neoutl_gpuvideo_inject_deviceシンボルを直接呼ぶ。プラグイン未配置・シンボル
-/// 未検出時は無音でスキップする（gpuvideo-decoder非導入環境を許容するため）。
-pub fn inject_gpuvideo_shared_device<T>(decoders_dir: &Path, device: &T) {
-    let Ok(entries) = std::fs::read_dir(decoders_dir) else {
-        return;
-    };
-    for entry in entries.flatten() {
-        let path = entry.path();
-        if !is_dylib(&path) {
-            continue;
-        }
-        let Ok(lib) = (unsafe { Library::new(&path) }) else {
-            continue;
-        };
-        let symbol: Result<Symbol<unsafe extern "C" fn(*const T)>, _> =
-            unsafe { lib.get(b"neoutl_gpuvideo_inject_device\0") };
-        if let Ok(inject) = symbol {
-            unsafe { inject(device as *const T) };
-            eprintln!("[NeoUtl] gpu_video共有デバイス注入: {}", path.display());
-        }
-        std::mem::forget(lib);
-    }
+/// Vulkanデバイスをgpuvideo-decoderへ渡す。ネイティブリンクのため素の関数呼び出しであり、
+/// libloadingでの再オープンやextern "C"生ポインタ受け渡しを伴わない。
+#[cfg(not(target_os = "macos"))]
+pub fn inject_gpuvideo_shared_device(device: std::sync::Arc<gpu_video::VulkanDevice>) {
+    neoutl_media_gpuvideo_decoder::set_shared_device(device);
+    eprintln!("[NeoUtl] gpu_video共有デバイス注入（ネイティブ呼び出し）");
 }

@@ -801,7 +801,11 @@ mod imp {
 
     static SHARED_DEVICE: std::sync::OnceLock<Arc<GpuVideoDevice>> = std::sync::OnceLock::new();
 
-    fn set_shared_device(device: Arc<GpuVideoDevice>) {
+    /// main.rsが起動時に一度だけ呼ぶ。本体プロセス内で直接呼ばれる素のRust関数呼び出しであり、
+    /// dylib境界（libloading + extern "C" + 生ポインタ受け渡し）を経由しない。
+    /// これによりVulkanDevice/wgpu::Deviceの内部レイアウトは常に単一コンパイル単位内で
+    /// 一貫し、ABI不一致によるas_hal()のNone化を構造的に排除する。
+    pub fn set_shared_device(device: Arc<GpuVideoDevice>) {
         let _ = SHARED_DEVICE.set(device);
     }
 
@@ -811,18 +815,7 @@ mod imp {
         })
     }
 
-    /// main.rsがMediaVTable経由でなく直接libloadingでこのシンボルを引く帯域外経路。
-    #[unsafe(no_mangle)]
-    pub unsafe extern "C" fn neoutl_gpuvideo_inject_device(device: *mut GpuVideoDevice) {
-        if !device.is_null() {
-            let owned = unsafe { std::ptr::read(device) };
-            set_shared_device(Arc::new(owned));
-        }
-    }
-
-    pub const INJECT_DEVICE_SYMBOL: &[u8] = b"neoutl_gpuvideo_inject_device\0";
-
-    use neoutl_media_api::{EntryFn, MediaKind, MediaMeta, MediaVTable};
+    use neoutl_media_api::{MediaKind, MediaMeta, MediaVTable};
 
     static EXTENSIONS: &[&str] = &["mp4", "mov", "mkv"];
 
@@ -834,9 +827,7 @@ mod imp {
         extensions_len: EXTENSIONS.len(),
     };
 
-    static VTABLE: std::sync::OnceLock<MediaVTable> = std::sync::OnceLock::new();
-
-    fn meta() -> &'static MediaMeta {
+    pub fn meta() -> &'static MediaMeta {
         &META
     }
 
@@ -851,17 +842,17 @@ mod imp {
             })
     }
 
-    #[unsafe(no_mangle)]
-    pub unsafe extern "C" fn neoutl_media_entry() -> *const MediaVTable {
-        VTABLE.get_or_init(|| MediaVTable {
+    /// src/media/loader.rsのネイティブプラグインレジストリへ直接登録するためのVTable生成。
+    /// dylibロード（libloading::Library::get）を経由せず、本体バイナリと同一コンパイル単位の
+    /// 関数ポインタをそのまま束ねるだけの操作。
+    pub fn native_vtable() -> MediaVTable {
+        MediaVTable {
             meta,
             open_video: Some(open_video),
             open_image: None,
             decode_audio: None,
-        })
+        }
     }
-
-    const _: EntryFn = neoutl_media_entry;
 }
 
 #[cfg(not(target_os = "macos"))]
@@ -870,8 +861,8 @@ pub use imp::*;
 /// macOS向け無効化スタブ。gpu-video(Vulkan)非対応のため実デコード機能を持たず、
 /// MediaVTable登録もextensions_len=0のため実質何もマッチしない（安全側フォールバック）。
 #[cfg(target_os = "macos")]
-mod macos_stub {
-    use neoutl_media_api::{EntryFn, MediaKind, MediaMeta, MediaVTable};
+pub mod macos_stub {
+    use neoutl_media_api::{MediaKind, MediaMeta, MediaVTable};
 
     static EXTENSIONS: &[&str] = &[];
 
@@ -883,21 +874,19 @@ mod macos_stub {
         extensions_len: EXTENSIONS.len(),
     };
 
-    static VTABLE: std::sync::OnceLock<MediaVTable> = std::sync::OnceLock::new();
-
-    fn meta() -> &'static MediaMeta {
+    pub fn meta() -> &'static MediaMeta {
         &META
     }
 
-    #[unsafe(no_mangle)]
-    pub unsafe extern "C" fn neoutl_media_entry() -> *const MediaVTable {
-        VTABLE.get_or_init(|| MediaVTable {
+    pub fn native_vtable() -> MediaVTable {
+        MediaVTable {
             meta,
             open_video: None,
             open_image: None,
             decode_audio: None,
-        })
+        }
     }
-
-    const _: EntryFn = neoutl_media_entry;
 }
+
+#[cfg(target_os = "macos")]
+pub use macos_stub::native_vtable;
