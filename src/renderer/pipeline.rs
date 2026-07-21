@@ -917,8 +917,8 @@ impl RenderEngine {
                 let (Some(texture), Some(offset)) = (texture, offset) else {
                     continue;
                 };
-                let is_video = matches!(stable_id_of(obj.kind_id), Some(VIDEO_STABLE_ID));
-                if is_video {
+                let is_planar_nv12 = texture.format() == wgpu::TextureFormat::NV12;
+                if is_planar_nv12 {
                     let plane_y = texture.create_view(&wgpu::TextureViewDescriptor {
                         aspect: wgpu::TextureAspect::Plane0,
                         ..Default::default()
