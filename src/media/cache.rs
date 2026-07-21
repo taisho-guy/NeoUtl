@@ -464,37 +464,19 @@ impl MediaCache {
                     return Ok(tex);
                 }
 
-                if worker.is_ready(frame_index) {
-                    match worker.frame_gpu(frame_index) {
-                        Ok(Some(tex)) => {
-                            instance.texture_cache.put(frame_index, tex.clone());
-                            instance.last_index = Some(frame_index);
-                            return Ok(tex);
-                        }
-                        Ok(None) => {}
-                        Err(err) => {
-                            instance.last_worker_error = Some(err.clone());
-                            return Err(format!("{} / plugin={}", err, plugin_id));
-                        }
-                    }
+                if let Some(tex) = worker.poll_texture(frame_index) {
+                    instance.texture_cache.put(frame_index, tex.clone());
+                    instance.last_index = Some(frame_index);
+                    return Ok(tex);
                 }
 
                 if let Some(last) = instance.last_index {
                     if let Some(tex) = instance.texture_cache.get(last) {
                         return Ok(tex);
                     }
-                    if worker.is_ready(last) {
-                        match worker.frame_gpu(last) {
-                            Ok(Some(tex)) => {
-                                instance.texture_cache.put(last, tex.clone());
-                                return Ok(tex);
-                            }
-                            Ok(None) => {}
-                            Err(err) => {
-                                instance.last_worker_error = Some(err.clone());
-                                return Err(format!("{} / plugin={}", err, plugin_id));
-                            }
-                        }
+                    if let Some(tex) = worker.poll_texture(last) {
+                        instance.texture_cache.put(last, tex.clone());
+                        return Ok(tex);
                     }
                 }
 
