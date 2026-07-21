@@ -150,6 +150,14 @@ NeoUtlはRust言語で実装されています。
 | AviQtl | [taisho-guy](https://codeberg.org/taisho-guy) / [GT-610](https://codeberg.org/GT610) | [`aviqtl`ブランチ](https://codeberg.org/taisho-guy/NeoUtl/src/branch/aviqtl) | Qt Quick | ❌️ 開発終了 |
 | AviQtl Plus | [GT-610](https://github.com/GT-610) | [GitHub](https://github.com/GT-610/AviQtl-Plus) | Qt Quick | ✅️ AviQtlのフォーク |
 
+## 貢献方法
+
+理想のアーキテクチャを追求するために、開発初期段階である現在はコントリビュートを受け付けておりません。
+
+0.1.0に達した段階でプルリクエストを含めたコントリビュートをお受けする予定です。
+
+気になる点がございましたらお気軽にイシューをお立て下さい。
+
 ## ライセンス
 
 This program is free software: you can redistribute it and/or modify it under the terms of the GNU Affero General Public License as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.
