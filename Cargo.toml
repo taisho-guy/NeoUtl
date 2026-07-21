@@ -33,8 +33,6 @@ neoutl-object-api.workspace = true
 neoutl-effect-api.workspace = true
 neoutl-media-api.workspace = true
 libloading = "0.9"
-# gpu-video/GStreamerに依存するデコーダは、cdylibプラグイン境界(libloading)を越えず
-# 本体と同一コンパイル単位でリンクする（ABI非保証の型を跨がせないため）。
 neoutl-media-gpuvideo-decoder = { path = "crates/media/gpuvideo-decoder" }
 neoutl-media-gstreamer-decoder = { path = "crates/media/gstreamer-decoder" }
 slint = { version = "1.17", default-features = false, features = [
