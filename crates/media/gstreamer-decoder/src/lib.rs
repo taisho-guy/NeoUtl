@@ -200,6 +200,11 @@ const PENDING_KEEP_RADIUS: i64 = 8;
 /// 超過する場合（長大GOPを持つ配信系コンテンツ等）はPENDING_KEEP_RADIUSのみへ縮退し、
 /// pending肥大化の再発を防ぐ。
 const MAX_GOP_PROTECT_SPAN: i64 = 256;
+/// sample_at_sequentialの`target == last_frame + 1`厳密一致から外れた際、
+/// ACCURATE seekへ即フォールバックせず追いつき用に許容する最大ギャップ。
+/// DECODE_PREFETCH_RADIUS（呼び出し元 media/worker.rs）と揃える。
+/// これを超えるギャップは実質シーク（逆再生・スクラブ）とみなしseek経路へ委ねる。
+const SEQUENTIAL_CATCHUP_MAX: i64 = 8;
 
 fn duration_to_frames(duration_ns: u64, frame_duration_ns: u64) -> i64 {
     (duration_ns / frame_duration_ns.max(1)) as i64
@@ -463,10 +468,60 @@ impl GstDecoderInner {
         result
     }
 
+    /// last_frame+1からtargetまでの間に小さな前方ギャップがある場合の追いつき経路。
+    /// PLAYING状態を維持したままappsinkから連続してpull_sampleし、target未満のサンプルは
+    /// 表示に使わず読み捨てる。ACCURATE seek（キーフレームからの再デコード＋FLUSH）より
+    /// 常に安価であり、prefetch側の先読み半径超過（worker.rs::PREFETCH_RADIUS由来の
+    /// わずかな前方ずれ）でシークへ誤って落ちることを防ぐ。
+    fn sample_at_sequential_catchup(&mut self, target: i64) -> Option<gst::Sample> {
+        let gap = target - self.last_frame;
+        if gap <= 0 || gap > SEQUENTIAL_CATCHUP_MAX {
+            return None;
+        }
+        if self.pipeline.current_state() != gst::State::Playing
+            && let Err(e) = self.pipeline.set_state(gst::State::Playing)
+        {
+            eprintln!("[gstreamer-decoder] 追いつきパス: PLAYING遷移失敗 {e}");
+            return None;
+        }
+        if wait_state(&self.pipeline, gst::ClockTime::from_seconds(2)).is_err() {
+            eprintln!("[gstreamer-decoder] 追いつきパス: 状態遷移待機失敗");
+            return None;
+        }
+        for step in 1..=gap {
+            match self
+                .appsink
+                .try_pull_sample(gst::ClockTime::from_seconds(2))
+            {
+                Some(sample) => {
+                    self.last_frame += 1;
+                    if step == gap {
+                        eprintln!(
+                            "[gstreamer-decoder] 追いつきパス成功: target={target} gap={gap}"
+                        );
+                        return Some(sample);
+                    }
+                }
+                None => {
+                    eprintln!(
+                        "[gstreamer-decoder] 追いつきパス: サンプル取得タイムアウト target={target} step={step}/{gap}"
+                    );
+                    return None;
+                }
+            }
+        }
+        None
+    }
+
     fn sample_at(&mut self, frame_index: i64) -> Result<gst::Sample, String> {
         let target = frame_index.clamp(0, self.total_frames - 1);
         if target == self.last_frame + 1
             && let Some(sample) = self.sample_at_sequential(target)
+        {
+            return Ok(sample);
+        }
+        if target > self.last_frame
+            && let Some(sample) = self.sample_at_sequential_catchup(target)
         {
             return Ok(sample);
         }
