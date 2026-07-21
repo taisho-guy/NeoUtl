@@ -17,7 +17,7 @@ mod imp {
     use std::path::Path;
     use std::sync::{Arc, Mutex};
     use std::thread;
-    use std::time::Instant;
+    use std::time::{Duration, Instant};
     use symphonia::core::codecs::video::well_known::CODEC_ID_H264;
     use symphonia::core::formats::probe::Hint;
     use symphonia::core::formats::{FormatOptions, FormatReader, SeekMode, SeekTo};
@@ -161,7 +161,43 @@ mod imp {
     /// as_hal()がリソース競合によりNoneを返しunwrapでpanicする(gpu-video側の既知の制約)。
     /// decode()呼び出しのみを直列化する（NV12→RGBA変換・テクスチャ確保・queue.submitは
     /// 通常のwgpu操作でありwgpu自体が内部同期するため、この範囲には含めない）。
+    ///
+    /// このMutexは全GpuVideoDecoderインスタンス間で共有される単一の静的ロックであり、
+    /// いずれか1インスタンスのdecode()呼び出しがgpu-video crate内部で無期限停止すると、
+    /// 保持スレッドはロックを永久に解放しない。worker.rs側は各frame_gpu()呼び出しを
+    /// 新規スレッドへ委譲するため、この状態で後続の全インスタンスがロック取得待ちの
+    /// スレッドを新規に生成し続け、いずれも解放されずに滞留する
+    /// （デコーダースレッド無限生成の直接要因）。lock()による無期限ブロックを禁止し、
+    /// 上限時間内のtry_lockポーリングへ置き換えることで、スレッドが最終的に必ず
+    /// 終了する（成功またはタイムアウトエラー）ことを保証する。
     static GPU_DECODE_LOCK: Mutex<()> = Mutex::new(());
+    const GPU_DECODE_LOCK_WAIT: Duration = Duration::from_millis(1500);
+    const GPU_DECODE_LOCK_POLL: Duration = Duration::from_millis(5);
+
+    /// GPU_DECODE_LOCKを上限時間内で取得する。取得不能時はErrを返し、
+    /// 呼び出し元スレッドを解放させる（無期限park禁止）。
+    fn acquire_gpu_decode_lock(
+        frame_index: i64,
+    ) -> Result<std::sync::MutexGuard<'static, ()>, String> {
+        let deadline = Instant::now() + GPU_DECODE_LOCK_WAIT;
+        loop {
+            match GPU_DECODE_LOCK.try_lock() {
+                Ok(guard) => return Ok(guard),
+                Err(std::sync::TryLockError::Poisoned(poisoned)) => {
+                    return Ok(poisoned.into_inner());
+                }
+                Err(std::sync::TryLockError::WouldBlock) => {
+                    if Instant::now() >= deadline {
+                        return Err(format!(
+                            "GPU_DECODE_LOCK取得タイムアウト (frame={frame_index}, wait={:?})",
+                            GPU_DECODE_LOCK_WAIT
+                        ));
+                    }
+                    thread::sleep(GPU_DECODE_LOCK_POLL);
+                }
+            }
+        }
+    }
 
     /// RGBA変換先テクスチャの固定プール。
     ///
@@ -770,7 +806,10 @@ mod imp {
                     thread::current().id()
                 );
                 let frames = {
-                    let _guard = GPU_DECODE_LOCK.lock().unwrap();
+                    let _guard = acquire_gpu_decode_lock(frame_index).map_err(|e| {
+                        eprintln!("[gpuvideo] frame_gpu failed {}", e);
+                        e
+                    })?;
                     self.decoder.decode(chunk)
                 }
                 .map_err(|e| {
