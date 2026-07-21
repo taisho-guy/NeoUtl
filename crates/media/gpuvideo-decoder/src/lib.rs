@@ -15,7 +15,7 @@ mod imp {
     use std::collections::{HashMap, VecDeque};
     use std::fs::File;
     use std::path::Path;
-    use std::sync::Arc;
+    use std::sync::{Arc, Mutex};
     use std::thread;
     use std::time::Instant;
     use symphonia::core::codecs::video::well_known::CODEC_ID_H264;
@@ -155,69 +155,124 @@ mod imp {
         Ok(out)
     }
 
+    /// gpu-video crateのGPU decodeパス(wgpu::Device::as_hal内部リソースガード)は、
+    /// 同一wgpu::Deviceに対する複数スレッドからの同時呼び出しに対して排他制御されていない。
+    /// 共有デバイス構成下で複数GpuVideoDecoderインスタンスが並行してdecode()を実行すると、
+    /// as_hal()がリソース競合によりNoneを返しunwrapでpanicする(gpu-video側の既知の制約)。
+    /// decode()呼び出しのみを直列化する（NV12→RGBA変換・テクスチャ確保・queue.submitは
+    /// 通常のwgpu操作でありwgpu自体が内部同期するため、この範囲には含めない）。
+    static GPU_DECODE_LOCK: Mutex<()> = Mutex::new(());
+
+    /// RGBA変換先テクスチャの固定プール。
+    ///
+    /// 旧実装は出力フレームごとにdevice.create_texture()を新規発行しており、
+    /// 頻繁なVkImage確保・解放がGPUアロケータの断片化・スループット低下要因となっていた。
+    /// open()時にDEFAULT_DECODE_CACHE_BYTES / costで算出した固定枚数を一括確保し、
+    /// 以降はスロットの再割当のみで運用する（確保コスト自体は当初のバイト予算LRUと同一挙動）。
+    ///
     /// 呼び出し元スレッドを混同すると自明でない競合を生むため、
-    /// get/putの双方でthread::current().id()を記録し、実際に単一スレッドから
+    /// get/acquire_for_writeの双方でthread::current().id()を記録し、実際に単一スレッドから
     /// しか呼ばれていないか検証可能にする。
     struct TextureCache {
-        used_bytes: i64,
+        pool: Vec<wgpu::Texture>,
+        free: VecDeque<usize>,
+        map: HashMap<i64, usize>,
         order: VecDeque<i64>,
-        map: HashMap<i64, wgpu::Texture>,
+        capacity: usize,
     }
 
     impl TextureCache {
-        fn new() -> Self {
+        fn new(device: &wgpu::Device, width: u32, height: u32) -> Self {
+            let cost = (width as i64) * (height as i64) * 4;
+            let capacity = (DEFAULT_DECODE_CACHE_BYTES / cost.max(1)).max(1) as usize;
+
+            let pool: Vec<wgpu::Texture> = (0..capacity)
+                .map(|_| {
+                    device.create_texture(&wgpu::TextureDescriptor {
+                        label: None,
+                        size: wgpu::Extent3d {
+                            width,
+                            height,
+                            depth_or_array_layers: 1,
+                        },
+                        mip_level_count: 1,
+                        sample_count: 1,
+                        dimension: wgpu::TextureDimension::D2,
+                        format: wgpu::TextureFormat::Rgba8Unorm,
+                        usage: wgpu::TextureUsages::RENDER_ATTACHMENT
+                            | wgpu::TextureUsages::TEXTURE_BINDING,
+                        view_formats: &[],
+                    })
+                })
+                .collect();
+
+            eprintln!(
+                "[gpuvideo][cache] pool allocated capacity={} cost_per_slot={} limit={}",
+                capacity, cost, DEFAULT_DECODE_CACHE_BYTES
+            );
+
             Self {
-                used_bytes: 0,
-                order: VecDeque::new(),
+                pool,
+                free: (0..capacity).collect(),
                 map: HashMap::new(),
+                order: VecDeque::new(),
+                capacity,
             }
         }
 
         fn get(&mut self, index: i64) -> Option<wgpu::Texture> {
-            if !self.map.contains_key(&index) {
-                return None;
-            }
+            let slot = *self.map.get(&index)?;
             self.order.retain(|&i| i != index);
             self.order.push_back(index);
             eprintln!(
-                "[gpuvideo][cache] get hit index={} thread={:?} entries={} used_bytes={}",
+                "[gpuvideo][cache] get hit index={} slot={} thread={:?} entries={}",
                 index,
+                slot,
                 thread::current().id(),
-                self.map.len(),
-                self.used_bytes
+                self.map.len()
             );
-            self.map.get(&index).cloned()
+            Some(self.pool[slot].clone())
         }
 
-        fn put(&mut self, index: i64, texture: wgpu::Texture, cost: i64) {
-            if self.map.contains_key(&index) {
-                return;
+        /// indexの書き込み先テクスチャを確保する。既存スロットがあればそれを返し、
+        /// 無ければ空きスロット、それも無ければ最古indexのスロットを回収し再割当する。
+        /// 呼び出し側はこのテクスチャへNV12→RGBA変換結果を書き込む。
+        fn acquire_for_write(&mut self, index: i64) -> wgpu::Texture {
+            if let Some(&slot) = self.map.get(&index) {
+                self.order.retain(|&i| i != index);
+                self.order.push_back(index);
+                return self.pool[slot].clone();
             }
-            self.map.insert(index, texture);
+
+            let slot = if let Some(s) = self.free.pop_front() {
+                s
+            } else {
+                let oldest = self
+                    .order
+                    .pop_front()
+                    .expect("capacity>=1のためプール枯渇時はorderが必ず非空");
+                let s = self.map.remove(&oldest).expect("orderとmapは常に同期");
+                eprintln!(
+                    "[gpuvideo][cache] evict index={} slot={} thread={:?} entries={}",
+                    oldest,
+                    s,
+                    thread::current().id(),
+                    self.map.len()
+                );
+                s
+            };
+
+            self.map.insert(index, slot);
             self.order.push_back(index);
-            self.used_bytes += cost;
             eprintln!(
-                "[gpuvideo][cache] put index={} thread={:?} entries={} used_bytes={} limit={}",
+                "[gpuvideo][cache] put index={} slot={} thread={:?} entries={}/{}",
                 index,
+                slot,
                 thread::current().id(),
                 self.map.len(),
-                self.used_bytes,
-                DEFAULT_DECODE_CACHE_BYTES
+                self.capacity
             );
-            while self.used_bytes > DEFAULT_DECODE_CACHE_BYTES {
-                let Some(oldest) = self.order.pop_front() else {
-                    break;
-                };
-                self.map.remove(&oldest);
-                self.used_bytes -= cost;
-                eprintln!(
-                    "[gpuvideo][cache] evict index={} thread={:?} entries={} used_bytes={}",
-                    oldest,
-                    thread::current().id(),
-                    self.map.len(),
-                    self.used_bytes
-                );
-            }
+            self.pool[slot].clone()
         }
     }
 
@@ -358,6 +413,14 @@ mod imp {
 
         /// prefetch が積む「まだ確定していない」パケット列（pendingはメモリ上のパケット参照）
         pending: VecDeque<EncodedPacket>,
+
+        /// pendingが現在カバーしているGOP先頭のdisplay_index。
+        /// pending.front()はframe_gpuの消費により前進するため、reset要否の判定に
+        /// pending.front()そのものを使うと「同一GOP内で単に消費が進んだだけ」を
+        /// 「GOP境界超過・シーク」と誤認する。この専用フィールドはprefetchが実際に
+        /// pendingを（reset経由で）組み直した時にのみ更新し、消費による前進では
+        /// 変化しない。
+        planned_gop_start: Option<i64>,
 
         /// avcC-derived H.264 config for AnnexB conversion
         h264_cfg: H264Config,
@@ -511,8 +574,9 @@ mod imp {
                 fps,
                 total_frames,
                 packets,
-                cache: TextureCache::new(),
+                cache: TextureCache::new(&device.wgpu_device(), width, height),
                 pending: VecDeque::new(),
+                planned_gop_start: None,
                 h264_cfg,
                 device: Arc::clone(device),
                 expected_next: None,
@@ -568,10 +632,7 @@ mod imp {
 
             let needed_sync = find_prev_sync(&self.packets, frame_index);
             let queue_end = (frame_index + DECODE_LOOKAHEAD).min(self.packets.len() as i64 - 1);
-            let reset = match self.pending.front() {
-                Some(front) => front.display_index != needed_sync,
-                None => true,
-            };
+            let reset = self.planned_gop_start != Some(needed_sync);
 
             eprintln!(
                 "[gpuvideo][prefetch] plan frame_index={} needed_sync={} queue_end={} reset={} thread={:?}",
@@ -593,6 +654,7 @@ mod imp {
                         is_sync: p.is_sync,
                     });
                 }
+                self.planned_gop_start = Some(needed_sync);
                 return Ok(());
             }
 
@@ -707,7 +769,11 @@ mod imp {
                     frame_index,
                     thread::current().id()
                 );
-                let frames = self.decoder.decode(chunk).map_err(|e| {
+                let frames = {
+                    let _guard = GPU_DECODE_LOCK.lock().unwrap();
+                    self.decoder.decode(chunk)
+                }
+                .map_err(|e| {
                     let msg = format!("decoder.decode failed (frame={frame_index}) err={e}");
                     eprintln!("[gpuvideo] frame_gpu failed {}", msg);
                     msg
@@ -730,22 +796,7 @@ mod imp {
                         display_index, frame_index
                     );
 
-                    let rgba = device.create_texture(&wgpu::TextureDescriptor {
-                        label: None,
-                        size: wgpu::Extent3d {
-                            width: self.width,
-                            height: self.height,
-                            depth_or_array_layers: 1,
-                        },
-                        mip_level_count: 1,
-                        sample_count: 1,
-                        dimension: wgpu::TextureDimension::D2,
-                        format: wgpu::TextureFormat::Rgba8Unorm,
-                        usage: wgpu::TextureUsages::RENDER_ATTACHMENT
-                            | wgpu::TextureUsages::TEXTURE_BINDING,
-                        view_formats: &[],
-                    });
-
+                    let rgba = self.cache.acquire_for_write(display_index);
                     let rgba_view = rgba.create_view(&wgpu::TextureViewDescriptor::default());
 
                     let bind_group =
@@ -772,9 +823,6 @@ mod imp {
                         convert_started.elapsed().as_millis(),
                         thread::current().id()
                     );
-
-                    let cost = (self.width as i64) * (self.height as i64) * 4;
-                    self.cache.put(display_index, rgba.clone(), cost);
 
                     if display_index == frame_index {
                         return Ok(rgba);

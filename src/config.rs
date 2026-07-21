@@ -46,6 +46,11 @@ pub const UNDO_HISTORY_LIMIT: usize = 100;
 pub const DECODE_RING_CAPACITY: usize = neoutl_media_api::VIDEO_TEXTURE_POOL_CAPACITY;
 /// 先読み対象フレーム数
 pub const DECODE_PREFETCH_RADIUS: i64 = 8;
+/// RING_CAPACITYがPREFETCH_RADIUS*2以下だと、先読み中のフレームが表示側の
+/// 消費より先にLRUで破棄され、is_ready判定が恒常的にfalseとなり再デコードが
+/// 繰り返される（media/worker.rs::Ring::mark_ready参照）。両者の関係が
+/// ビルド時に破綻しないよう固定する。
+const _: () = assert!(DECODE_RING_CAPACITY as i64 > DECODE_PREFETCH_RADIUS * 2);
 /// prefetch()の連続失敗許容回数。超過時、当該デコーダプラグインを除外し
 /// 次点候補（拡張子重複時の後順位デコーダ、例: gstreamer）へフォールバックする。
 /// media/worker.rs（計上）とmedia/cache.rs（除外集合管理・再オープン）で共有する。

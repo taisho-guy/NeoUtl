@@ -13,17 +13,13 @@ use std::time::Duration;
 
 const PREFETCH_RADIUS: i64 = DECODE_PREFETCH_RADIUS;
 /// UIスレッド側テクスチャLRU(media/cache.rs::TextureLru)も同容量を共有する。
+/// gstreamer-decoder等CPU系デコーダの固定テクスチャプール枚数
+/// (neoutl_media_api::VIDEO_TEXTURE_POOL_CAPACITY)ともstale handle aliasing回避のため
+/// 同一値を維持する必要があり、GOP長等に応じた動的変更は禁止。
 pub(crate) const RING_CAPACITY: usize = DECODE_RING_CAPACITY;
 const STOP_SENTINEL: i64 = i64::MIN + 1;
 const NONE_SENTINEL: i64 = i64::MIN;
 const DECODE_WATCHDOG_TIMEOUT: Duration = Duration::from_millis(DECODE_WATCHDOG_TIMEOUT_MS);
-
-/// gpu-video crateのGPU decodeパス(wgpu::Device::as_hal内部リソースガード)は、
-/// 同一wgpu::Deviceに対する複数スレッドからの同時呼び出しに対して排他制御されていない。
-/// 共有デバイス構成下で複数DecodeWorkerが並行してframe_gpu()を実行すると、
-/// as_hal()がリソース競合によりNoneを返しunwrapでpanicする(gpu-video側の既知の制約)。
-/// プロセス全体でGPU decode呼び出しを直列化し、この競合を回避する。
-static GPU_DECODE_LOCK: Mutex<()> = Mutex::new(());
 
 /// 準備完了フレーム番号集合。順序保持のためringを持つ。
 struct Ring {
@@ -119,7 +115,13 @@ impl DecodeWorker {
         let task = super::runtime::handle().spawn_blocking(move || {
             *worker_thread_id_t.lock().unwrap() = Some(std::thread::current().id());
 
+            let total_frames_t: i64 = {
+                let guard = decoder_slot_t.lock().unwrap();
+                guard.as_ref().map(|d| d.total_frames()).unwrap_or(i64::MAX)
+            };
+
             let mut served = NONE_SENTINEL;
+            let mut direction: i64 = 1;
             let mut consecutive_fails: i64 = 0;
 
             let try_prefetch = |target: i64| -> Option<Result<(), String>> {
@@ -145,6 +147,13 @@ impl DecodeWorker {
                 }
                 if target == served {
                     continue;
+                }
+
+                if served != NONE_SENTINEL && target != served {
+                    let delta = target - served;
+                    if delta != 0 {
+                        direction = if delta > 0 { 1 } else { -1 };
+                    }
                 }
 
                 let already_ready = ring_t.lock().unwrap().contains(target);
@@ -181,7 +190,10 @@ impl DecodeWorker {
                     if requested_t.load(Ordering::Acquire) != target {
                         break;
                     }
-                    let ahead = target + offset;
+                    let ahead = target + offset * direction;
+                    if ahead < 0 || ahead >= total_frames_t {
+                        break;
+                    }
                     if ring_t.lock().unwrap().contains(ahead) {
                         continue;
                     }
@@ -266,10 +278,7 @@ impl DecodeWorker {
         let (tx, rx) = mpsc::channel();
 
         thread::spawn(move || {
-            let result = {
-                let _gpu_guard = GPU_DECODE_LOCK.lock().unwrap();
-                decoder.frame_gpu(frame_index, &device, &queue)
-            };
+            let result = decoder.frame_gpu(frame_index, &device, &queue);
             *slot.lock().unwrap() = Some(decoder);
             let _ = tx.send(result);
         });
