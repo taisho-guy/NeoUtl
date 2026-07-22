@@ -220,7 +220,8 @@ mod imp {
     impl TextureCache {
         fn new(device: &wgpu::Device, width: u32, height: u32) -> Self {
             let cost = (width as i64) * (height as i64) * 4;
-            let capacity = (DEFAULT_DECODE_CACHE_BYTES / cost.max(1)).max(1) as usize;
+            let byte_budget_capacity = (DEFAULT_DECODE_CACHE_BYTES / cost.max(1)).max(1) as usize;
+            let capacity = byte_budget_capacity.max((DECODE_LOOKAHEAD as usize) + 1);
 
             let pool: Vec<wgpu::Texture> = (0..capacity)
                 .map(|_| {
