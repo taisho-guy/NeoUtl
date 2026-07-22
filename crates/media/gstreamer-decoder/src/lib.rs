@@ -7,9 +7,12 @@ use neoutl_media_api::VideoSource;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
+use std::sync::Arc;
 use std::sync::Once;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc;
 use std::thread::JoinHandle;
+use std::time::Duration;
 
 /// 固定枚数のNV12テクスチャを解像度確定時に一括生成し、以後はwrite_textureのみで
 /// 内容を上書き（ローテーション）する。毎フレームのcreate_texture呼び出し
@@ -205,6 +208,15 @@ const MAX_GOP_PROTECT_SPAN: i64 = 256;
 /// DECODE_PREFETCH_RADIUS（呼び出し元 media/worker.rs）と揃える。
 /// これを超えるギャップは実質シーク（逆再生・スクラブ）とみなしseek経路へ委ねる。
 const SEQUENTIAL_CATCHUP_MAX: i64 = 8;
+/// prefetch()がcommand_threadからの応答を待つ上限。sample_at内部の各種待機
+/// （PULL_TIMEOUT×2 + wait_state 10秒等）の合算最悪値に対し十分な余裕を持たせる。
+/// 超過時はcommand_threadを待たずErrへ変換する（バグ7: 無限ブロック防止。
+/// gpuvideo-decoder::DECODE_WATCHDOG_TIMEOUTと同種の防御をGStreamer経路にも導入）。
+const COMMAND_REPLY_TIMEOUT: Duration = Duration::from_secs(30);
+/// バス排出スレッドのポーリング間隔。gst::Bus::timed_popの単発ブロック時間として使う。
+const BUS_DRAIN_POLL: gst::ClockTime = gst::ClockTime::from_mseconds(200);
+/// Drop時、スタックしたスレッドの終了をポーリングで待つ上限（超過時は明示的にリークする）。
+const THREAD_JOIN_TIMEOUT: Duration = Duration::from_secs(5);
 
 fn duration_to_frames(duration_ns: u64, frame_duration_ns: u64) -> i64 {
     (duration_ns / frame_duration_ns.max(1)) as i64
@@ -265,9 +277,9 @@ fn extract_nv12_bytes(buffer: &gst::BufferRef, width: u32, height: u32) -> Resul
     Ok(data[..y_plane_size + uv_plane_size].to_vec())
 }
 
-/// GStreamer実体。command_thread専有。MainLoop駆動スレッドとは別スレッドで
-/// sample_at（ブロッキング呼び出し）を実行するため、バスメッセージの
-/// ディスパッチはmainloop_threadが並行して継続する。
+/// GStreamer実体。command_thread専有。busdrain_thread（バスメッセージの
+/// 継続排出専用スレッド）とは別スレッドでsample_at（ブロッキング呼び出し）
+/// を実行するため、両者は並行して動作する。
 struct GstDecoderInner {
     pipeline: gst::Pipeline,
     appsink: AppSink,
@@ -280,22 +292,31 @@ struct GstDecoderInner {
     /// ACCURATEシークを省略しPLAYING状態での継続デコードへ切替える。
     /// 非連番（スクラブ・逆再生・シーク）検出時は-1へ戻さず、単に不一致として扱う。
     last_frame: i64,
-    /// 直近に観測したキーフレーム（GOP先頭）のフレーム番号。
-    /// 連番再生では各バッファのDELTA_UNITフラグから、シークでは着地したバッファ自体の
-    /// フラグから更新する。同一GOP内のスクラブでpending破棄を回避する判定に用いる
-    /// （GstDecoder::prefetch参照）。
+    /// 直近の「決定論的デコード起点」のフレーム番号。同一GOP内のスクラブで
+    /// pending破棄を回避する判定に用いる（GstDecoder::prefetch参照）。
+    ///
+    /// バグ2の修正: 旧実装は`buffer.flags().contains(DELTA_UNIT)`でキーフレーム判定を
+    /// 行っていたが、videoconvert通過後の全バッファでこのフラグが観測されず
+    /// （実機ログ上、全フレームでgop_start==frame_indexとなり判定が機能していなかった）、
+    /// GOP保護は事実上常に無効化されていた。DELTA_UNITフラグの消失原因（videoconvertの
+    /// バッファ複製実装、または特定パイプライン構成での不伝播）を特定・修正する代わりに、
+    /// フラグに一切依存しない決定論的な代替指標へ置き換える：
+    /// ACCURATE seekが成功した時点のtargetを「新しい安全な再デコード起点」として記録し
+    /// （sample_at_seek内で更新）、連番再生・追いつき経路では起点を変更しない
+    /// （sample_at_sequential/catchup内では更新しない）。
+    /// これにより「前回のシーク以降、連続デコードが途切れていない区間」を正確に表現でき、
+    /// GStreamer側のバッファフラグ実装に依存しない。
     last_gop_start: i64,
 }
 
 impl GstDecoderInner {
-    /// main_context: バスウォッチ登録先。登録自体はmain_context.invoke経由で
-    /// mainloop_thread上で実行されるため、この関数はどのスレッドから呼んでもよい。
-    fn open(path: &Path, main_context: &gst::glib::MainContext) -> Result<Self, String> {
+    fn open(path: &Path) -> Result<Self, String> {
         let uri = gst::glib::filename_to_uri(path, None).map_err(|e| e.to_string())?;
         let pipeline_desc = format!(
-            "uridecodebin uri={uri} name=src \
-             src. ! {DOWNLOAD_CHAIN}videoconvert ! appsink name=sink sync=false max-buffers=1 drop=true \
-             src. ! fakesink name=drain sync=false async=false"
+            "uridecodebin uri={uri} name=src caps=video/x-raw \
+             src. ! {DOWNLOAD_CHAIN}videoconvert ! \
+             queue leaky=downstream max-size-buffers=4 max-size-bytes=0 max-size-time=0 ! \
+             appsink name=sink sync=false"
         );
         let pipeline = gst::parse::launch(&pipeline_desc)
             .map_err(|e| e.to_string())?
@@ -318,7 +339,6 @@ impl GstDecoderInner {
             }};
         }
 
-        let _ = main_context;
         if pipeline.bus().is_none() {
             fail!("バス未取得".to_owned());
         }
@@ -348,9 +368,20 @@ impl GstDecoderInner {
         let fps = if fps_frac.denom() != 0 {
             fps_frac.numer() as f64 / fps_frac.denom() as f64
         } else {
+            eprintln!(
+                "[gstreamer-decoder] 警告: fps未申告のためフォールバック値30.0を使用（VFR疑い、seek精度が低下する可能性）: {}",
+                path.display()
+            );
             30.0
         };
         let frame_duration_ns = (1_000_000_000.0 / fps.max(1e-6)) as u64;
+
+        if width % 2 != 0 || height % 2 != 0 {
+            eprintln!(
+                "[gstreamer-decoder] 警告: 奇数寸法動画（width={width} height={height}）はNV12 4:2:0平面計算が破綻する可能性: {}",
+                path.display()
+            );
+        }
 
         let duration_ns = pipeline
             .query_duration::<gst::ClockTime>()
@@ -460,6 +491,7 @@ impl GstDecoderInner {
                      buffer_size={buffer_size} caps={caps_str} landed_pts_ns={landed_pts_ns:?}"
                 );
                 self.last_frame = target;
+                self.last_gop_start = target;
             }
             Err(e) => {
                 eprintln!("[gstreamer-decoder] sample取得失敗: frame_index={frame_index} 理由={e}");
@@ -545,12 +577,44 @@ pub struct GstDecoder {
     fps: f64,
     total_frames: i64,
     tx: mpsc::Sender<Command>,
-    mainloop_thread: Option<JoinHandle<()>>,
+    /// バス排出スレッド停止フラグ。Dropで先に立ててからjoinを試みる。
+    bus_stop: Arc<AtomicBool>,
+    busdrain_thread: Option<JoinHandle<()>>,
     command_thread: Option<JoinHandle<()>>,
     /// prefetchが取得したNV12バイト列。frame_gpuがここからテクスチャアップロードする。
+    /// キーは常にclamp済みフレーム番号（バグ9修正: 範囲外の生frame_indexで
+    /// 重複登録されないよう、prefetch()冒頭で一度だけclampする）。
     pending: HashMap<i64, Vec<u8>>,
     /// 固定テクスチャプール。device取得後（初回frame_gpu呼び出し時）に遅延初期化する。
     pool: Option<TexturePool>,
+}
+
+/// スタックしたスレッドの終了を一定時間ポーリング待機する。
+/// 超過時はJoinHandleを明示的に手放し（mem::forget）、呼び出し元をブロックしない。
+/// バグ8修正: 旧Drop実装はcommand_thread/mainloop_threadを無条件joinしており、
+/// GStreamer内部の無期限ブロック（例: ドライバハング中のpipeline.state()）に
+///巻き込まれるとプロセス終了処理自体が止まりかねなかった。
+fn bounded_join(handle: Option<JoinHandle<()>>, timeout: Duration, name: &str) {
+    let Some(handle) = handle else {
+        return;
+    };
+    let start = std::time::Instant::now();
+    let mut handle = handle;
+    loop {
+        if handle.is_finished() {
+            let _ = handle.join();
+            return;
+        }
+        if start.elapsed() >= timeout {
+            eprintln!(
+                "[gstreamer-decoder] {name} 終了待機タイムアウト（{timeout:?}）。\
+                 スレッドを解放せず放棄します（プロセス終了までのリークを許容し、呼び出し元の停止を回避）"
+            );
+            std::mem::forget(handle);
+            return;
+        }
+        std::thread::sleep(Duration::from_millis(50));
+    }
 }
 
 impl GstDecoder {
@@ -558,42 +622,61 @@ impl GstDecoder {
         ensure_gst_init();
         let path: PathBuf = path.to_owned();
 
-        let main_context = gst::glib::MainContext::new();
-        let main_loop = gst::glib::MainLoop::new(Some(&main_context), false);
-
-        let mainloop_thread = {
-            let main_context = main_context.clone();
-            let main_loop = main_loop.clone();
-            std::thread::Builder::new()
-                .name("gst-decoder-mainloop".to_owned())
-                .spawn(move || {
-                    main_context
-                        .with_thread_default(|| {
-                            main_loop.run();
-                        })
-                        .expect("MainContext設定失敗");
-                })
-                .map_err(|e| e.to_string())?
-        };
-
-        let inner = match GstDecoderInner::open(&path, &main_context) {
-            Ok(inner) => inner,
-            Err(e) => {
-                main_loop.quit();
-                let _ = mainloop_thread.join();
-                return Err(e);
-            }
-        };
+        let inner = GstDecoderInner::open(&path)?;
 
         let width = inner.width;
         let height = inner.height;
         let fps = inner.fps;
         let total_frames = inner.total_frames;
 
+        let bus_stop = Arc::new(AtomicBool::new(false));
+        let busdrain_thread = {
+            let pipeline = inner.pipeline.clone();
+            let bus_stop = bus_stop.clone();
+            std::thread::Builder::new()
+                .name("gst-decoder-busdrain".to_owned())
+                .spawn(move || {
+                    let Some(bus) = pipeline.bus() else {
+                        eprintln!("[gstreamer-decoder] busdrain_thread: バス未取得のため即終了");
+                        return;
+                    };
+                    eprintln!("[gstreamer-decoder] busdrain_thread起動完了");
+                    while !bus_stop.load(Ordering::Acquire) {
+                        let Some(msg) = bus.timed_pop(BUS_DRAIN_POLL) else {
+                            continue;
+                        };
+                        match msg.view() {
+                            gst::MessageView::Error(err) => {
+                                let src = err
+                                    .src()
+                                    .map(|s| s.path_string().to_string())
+                                    .unwrap_or_else(|| "不明".to_owned());
+                                eprintln!(
+                                    "[gstreamer-decoder] busdrain: ERROR 要素={src} 理由={} 詳細={:?}",
+                                    err.error(),
+                                    err.debug()
+                                );
+                            }
+                            gst::MessageView::Warning(warn) => {
+                                eprintln!(
+                                    "[gstreamer-decoder] busdrain: WARNING 理由={}",
+                                    warn.error()
+                                );
+                            }
+                            gst::MessageView::Eos(_) => {
+                                eprintln!("[gstreamer-decoder] busdrain: EOS受信");
+                            }
+                            _ => {}
+                        }
+                    }
+                    eprintln!("[gstreamer-decoder] busdrain_thread終了");
+                })
+                .map_err(|e| e.to_string())?
+        };
+
         let (tx, rx) = mpsc::channel::<Command>();
 
         let command_thread = {
-            let main_loop = main_loop.clone();
             std::thread::Builder::new()
                 .name("gst-decoder-command".to_owned())
                 .spawn(move || {
@@ -610,9 +693,6 @@ impl GstDecoder {
                                 );
                                 let result = inner.sample_at(frame_index).and_then(|sample| {
                                     let buffer = sample.buffer().ok_or("buffer未取得".to_owned())?;
-                                    if !buffer.flags().contains(gst::BufferFlags::DELTA_UNIT) {
-                                        inner.last_gop_start = inner.last_frame;
-                                    }
                                     extract_nv12_bytes(buffer, inner.width, inner.height)
                                         .map(|bytes| (bytes, inner.last_gop_start))
                                 });
@@ -630,7 +710,6 @@ impl GstDecoder {
                         }
                     }
                     let _ = inner.pipeline.set_state(gst::State::Null);
-                    main_loop.quit();
                     eprintln!("[gstreamer-decoder] command_thread終了");
                 })
                 .map_err(|e| e.to_string())?
@@ -642,7 +721,8 @@ impl GstDecoder {
             fps,
             total_frames,
             tx,
-            mainloop_thread: Some(mainloop_thread),
+            bus_stop,
+            busdrain_thread: Some(busdrain_thread),
             command_thread: Some(command_thread),
             pending: HashMap::new(),
             pool: None,
@@ -667,14 +747,15 @@ impl VideoSource for GstDecoder {
     /// バックグラウンドスレッド専用。command_threadへNV12バイト列を要求し内部キューへ蓄積する。
     /// GPU操作なし。
     fn prefetch(&mut self, frame_index: i64) -> Result<(), String> {
-        if self.pending.contains_key(&frame_index) {
+        let clamped = frame_index.clamp(0, (self.total_frames - 1).max(0));
+        if self.pending.contains_key(&clamped) {
             return Ok(());
         }
-        eprintln!("[gstreamer-decoder] prefetch呼び出し: frame_index={frame_index}");
+        eprintln!("[gstreamer-decoder] prefetch呼び出し: frame_index={clamped}");
         let (reply_tx, reply_rx) = mpsc::channel();
         self.tx
             .send(Command::Frame {
-                frame_index,
+                frame_index: clamped,
                 reply: reply_tx,
             })
             .map_err(|e| {
@@ -683,22 +764,28 @@ impl VideoSource for GstDecoder {
                 msg
             })?;
         let (bytes, gop_start) = reply_rx
-            .recv()
-            .map_err(|e| e.to_string())
+            .recv_timeout(COMMAND_REPLY_TIMEOUT)
+            .map_err(|e| {
+                let msg = format!(
+                    "command_thread応答タイムアウト（{COMMAND_REPLY_TIMEOUT:?}経過、詳細={e}）"
+                );
+                eprintln!("[gstreamer-decoder] {msg}");
+                msg
+            })
             .and_then(|inner| inner)?;
         eprintln!(
-            "[gstreamer-decoder] prefetch完了: frame_index={frame_index} bytes={} gop_start={gop_start}",
+            "[gstreamer-decoder] prefetch完了: frame_index={clamped} bytes={} gop_start={gop_start}",
             bytes.len()
         );
         if self.pending.len() >= PENDING_PURGE_THRESHOLD {
-            let gop_span = frame_index - gop_start;
+            let gop_span = clamped - gop_start;
             let protect_gop = gop_span >= 0 && gop_span <= MAX_GOP_PROTECT_SPAN;
             self.pending.retain(|k, _| {
-                (protect_gop && *k >= gop_start && *k <= frame_index)
-                    || (k - frame_index).abs() <= PENDING_KEEP_RADIUS
+                (protect_gop && *k >= gop_start && *k <= clamped)
+                    || (k - clamped).abs() <= PENDING_KEEP_RADIUS
             });
         }
-        self.pending.insert(frame_index, bytes);
+        self.pending.insert(clamped, bytes);
         Ok(())
     }
 
@@ -715,9 +802,10 @@ impl VideoSource for GstDecoder {
         device: &wgpu::Device,
         queue: &wgpu::Queue,
     ) -> Result<wgpu::Texture, String> {
+        let clamped = frame_index.clamp(0, (self.total_frames - 1).max(0));
         let bytes = self
             .pending
-            .remove(&frame_index)
+            .remove(&clamped)
             .ok_or("対象フレーム未生成（prefetch未完了）".to_owned())?;
         let pool = self.pool.get_or_insert_with(|| {
             TexturePool::new(
@@ -736,12 +824,17 @@ impl VideoSource for GstDecoder {
 impl Drop for GstDecoder {
     fn drop(&mut self) {
         let _ = self.tx.send(Command::Shutdown);
-        if let Some(command_thread) = self.command_thread.take() {
-            let _ = command_thread.join();
-        }
-        if let Some(mainloop_thread) = self.mainloop_thread.take() {
-            let _ = mainloop_thread.join();
-        }
+        self.bus_stop.store(true, Ordering::Release);
+        bounded_join(
+            self.command_thread.take(),
+            THREAD_JOIN_TIMEOUT,
+            "command_thread",
+        );
+        bounded_join(
+            self.busdrain_thread.take(),
+            THREAD_JOIN_TIMEOUT,
+            "busdrain_thread",
+        );
     }
 }
 

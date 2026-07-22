@@ -17,6 +17,23 @@ const PREFETCH_RADIUS: i64 = DECODE_PREFETCH_RADIUS;
 /// (neoutl_media_api::VIDEO_TEXTURE_POOL_CAPACITY)ともstale handle aliasing回避のため
 /// 同一値を維持する必要があり、GOP長等に応じた動的変更は禁止。
 pub(crate) const RING_CAPACITY: usize = DECODE_RING_CAPACITY;
+
+/// ここで保持するwgpu::Textureはgpuvideo-decoder側の固定プールスロットへの
+/// 参照であり、実体の生存はgpuvideo側TextureCacheの容量に依存する。
+/// RING_CAPACITYがgpuvideo側容量を上回ると、gpuvideo側が既に別フレーム用に
+/// 再割当て済みのスロットをこちらがまだ「有効」として保持し続け、
+/// 中身がすり替わったテクスチャ(stale handle aliasing)をUIへ返しかねない。
+/// 投機的先読みの窓(PREFETCH_RADIUS)より大きくは絶対に広げない安全側の
+/// 上限を明示的に課す。
+const SAFE_RING_CAPACITY: usize = {
+    let radius_window = (PREFETCH_RADIUS as usize) * 2 + 2;
+    if RING_CAPACITY < radius_window {
+        RING_CAPACITY
+    } else {
+        radius_window
+    }
+};
+
 const STOP_SENTINEL: i64 = i64::MIN + 1;
 const NONE_SENTINEL: i64 = i64::MIN;
 const DECODE_WATCHDOG_TIMEOUT: Duration = Duration::from_millis(DECODE_WATCHDOG_TIMEOUT_MS);
@@ -24,6 +41,11 @@ const DECODE_WATCHDOG_TIMEOUT: Duration = Duration::from_millis(DECODE_WATCHDOG_
 /// 準備完了フレームのVRAMテクスチャ保持。wgpu::Textureは参照カウント付きハンドルであり、
 /// 実体はgpuvideo-decoder側の固定プール(open()時に確保済み)に存在する。ここでの
 /// clone/保持は追加VRAM確保を発生させない(ゼロコピー維持)。
+///
+/// get/putいずれの参照でも該当indexを最新扱いへ昇格させる真のLRUとして動作する
+/// (旧実装はputでの新規挿入時のみ順序を更新し、既存hitやgetでは順序を
+/// 一切更新しない単純FIFOだったため、直近に読まれた頻出フレームが
+/// 未使用の古いフレームより先にevictされ得た)。
 struct TextureStore {
     map: HashMap<i64, wgpu::Texture>,
     order: VecDeque<i64>,
@@ -41,17 +63,27 @@ impl TextureStore {
         self.map.contains_key(&index)
     }
 
-    fn get(&self, index: i64) -> Option<wgpu::Texture> {
-        self.map.get(&index).cloned()
+    fn touch(&mut self, index: i64) {
+        self.order.retain(|&i| i != index);
+        self.order.push_back(index);
+    }
+
+    fn get(&mut self, index: i64) -> Option<wgpu::Texture> {
+        let tex = self.map.get(&index).cloned();
+        if tex.is_some() {
+            self.touch(index);
+        }
+        tex
     }
 
     fn put(&mut self, index: i64, texture: wgpu::Texture) {
         if self.map.contains_key(&index) {
+            self.touch(index);
             return;
         }
         self.map.insert(index, texture);
         self.order.push_back(index);
-        while self.order.len() > RING_CAPACITY {
+        while self.order.len() > SAFE_RING_CAPACITY {
             if let Some(evicted) = self.order.pop_front() {
                 self.map.remove(&evicted);
             }
@@ -59,35 +91,159 @@ impl TextureStore {
     }
 }
 
-/// decode()の監視付き実行結果。decoderはサブスレッドへ委譲される。
-/// DECODE_WATCHDOG_TIMEOUT以内に完了すれば所有権はSomeで戻る。
-/// タイムアウト時はNone(所有権はサブスレッド側に永久残留)。
-fn watchdog_frame_gpu(
-    mut decoder: Box<dyn VideoSource>,
-    frame_index: i64,
-    device: Arc<wgpu::Device>,
-    queue: Arc<wgpu::Queue>,
-) -> (Option<Box<dyn VideoSource>>, Result<wgpu::Texture, String>) {
-    let (tx, rx) = mpsc::channel();
-    thread::spawn(move || {
-        let result = decoder.frame_gpu(frame_index, &device, &queue);
-        let _ = tx.send((decoder, result));
-    });
-    match rx.recv_timeout(DECODE_WATCHDOG_TIMEOUT) {
-        Ok((decoder, result)) => (Some(decoder), result),
-        Err(RecvTimeoutError::Timeout) => (
-            None,
-            Err(format!(
-                "decode watchdog timeout (frame={frame_index}, timeout={:?})",
-                DECODE_WATCHDOG_TIMEOUT
-            )),
-        ),
-        Err(RecvTimeoutError::Disconnected) => (
-            None,
-            Err(format!(
-                "decode watchdogスレッドとの接続が切断されました (frame={frame_index})"
-            )),
-        ),
+/// バックグラウンド専有スレッドへの1件のリクエスト。
+enum DecodeRequest {
+    /// prefetchのみ実行する(投機的先読み窓の事前構築用。GPU decode()は伴わない)。
+    PrefetchOnly(i64),
+    /// prefetch + frame_gpu(GPU decode()を伴う)を実行し、確定テクスチャを返す。
+    Full(i64),
+}
+
+enum DecodeResponse {
+    PrefetchDone(i64, Result<(), String>),
+    FrameDone(i64, Result<wgpu::Texture, String>),
+}
+
+/// decoder1個につき専有される永続バックグラウンドスレッド。
+///
+/// 旧実装はframe_gpu()呼び出し1回ごとにthread::spawnしていたため、再生中は
+/// 毎フレームOSスレッドが生成・破棄され続けていた(ログ上でframe_gpu呼び出し毎に
+/// ThreadIdが変わっていた現象の直接原因)。本実装ではDecodeThreadHandle::spawn()時に
+/// 1回だけスレッドを起動し、decoder本体の所有権もそのスレッドへ完全に移す。
+/// 以後この1本のスレッドがprefetch/frame_gpu双方を順に処理し続ける。
+///
+/// watchdogタイムアウト時、この専有スレッドはgpu-video内部の無期限待機に
+/// 取り残され回収不能となる(ハードウェアデコーダのブロッキング呼び出しである以上、
+/// 安全に中断する手段がないため構造的に不可避)。この場合でも新規スレッドは
+/// 一切追加生成されず、当該decoderインスタンス用のスレッドが1本残留するのみに
+/// 留める。またこのスレッドの内部ループが完了/終了した際に必ずログを出すため、
+/// リークが発生したかどうかは常に事後確認可能(可観測)にする。
+struct DecodeThreadHandle {
+    req_tx: mpsc::Sender<DecodeRequest>,
+    resp_rx: mpsc::Receiver<DecodeResponse>,
+    hung: bool,
+}
+
+impl DecodeThreadHandle {
+    fn spawn(
+        mut decoder: Box<dyn VideoSource>,
+        device: Arc<wgpu::Device>,
+        queue: Arc<wgpu::Queue>,
+    ) -> Self {
+        let (req_tx, req_rx) = mpsc::channel::<DecodeRequest>();
+        let (resp_tx, resp_rx) = mpsc::channel::<DecodeResponse>();
+
+        thread::spawn(move || {
+            while let Ok(req) = req_rx.recv() {
+                match req {
+                    DecodeRequest::PrefetchOnly(index) => {
+                        let result = decoder.prefetch(index);
+                        if resp_tx
+                            .send(DecodeResponse::PrefetchDone(index, result))
+                            .is_err()
+                        {
+                            break;
+                        }
+                    }
+                    DecodeRequest::Full(index) => {
+                        let result = decoder
+                            .prefetch(index)
+                            .and_then(|_| decoder.frame_gpu(index, &device, &queue));
+                        if resp_tx
+                            .send(DecodeResponse::FrameDone(index, result))
+                            .is_err()
+                        {
+                            eprintln!(
+                                "[decode-worker] frame={} decode完了もwatchdogは既に諦めていた(遅延完了) thread={:?}",
+                                index,
+                                thread::current().id()
+                            );
+                        }
+                    }
+                }
+            }
+            eprintln!(
+                "[decode-worker] decode thread終了 thread={:?}",
+                thread::current().id()
+            );
+        });
+
+        Self {
+            req_tx,
+            resp_rx,
+            hung: false,
+        }
+    }
+
+    fn prefetch_only(&mut self, frame_index: i64) -> Result<(), String> {
+        if self.hung {
+            return Err(format!(
+                "decoderはhung状態のためprefetch不可 (frame={frame_index})"
+            ));
+        }
+        if self
+            .req_tx
+            .send(DecodeRequest::PrefetchOnly(frame_index))
+            .is_err()
+        {
+            self.hung = true;
+            return Err(format!("decode thread消失 (frame={frame_index})"));
+        }
+        match self.resp_rx.recv_timeout(DECODE_WATCHDOG_TIMEOUT) {
+            Ok(DecodeResponse::PrefetchDone(got, result)) if got == frame_index => result,
+            Ok(_) => {
+                self.hung = true;
+                Err(format!("decode thread応答不一致 (frame={frame_index})"))
+            }
+            Err(RecvTimeoutError::Timeout) => {
+                self.hung = true;
+                Err(format!(
+                    "prefetch watchdog timeout (frame={frame_index}, timeout={:?})",
+                    DECODE_WATCHDOG_TIMEOUT
+                ))
+            }
+            Err(RecvTimeoutError::Disconnected) => {
+                self.hung = true;
+                Err(format!("decode threadとの接続が切断 (frame={frame_index})"))
+            }
+        }
+    }
+
+    /// watchdog付きでprefetch+frame_gpuを1回実行する。タイムアウト時はこのハンドル自体を
+    /// 「hung」として以後使用不能にする(内部スレッドは回収せず残留させる。
+    /// 安全な強制終了手段がgpu-video側に存在しないため)。
+    fn frame_gpu_watched(&mut self, frame_index: i64) -> Result<wgpu::Texture, String> {
+        if self.hung {
+            return Err(format!(
+                "decoderは既にwatchdogタイムアウトでhung状態 (frame={frame_index})"
+            ));
+        }
+        if self.req_tx.send(DecodeRequest::Full(frame_index)).is_err() {
+            self.hung = true;
+            return Err(format!("decode thread消失 (frame={frame_index})"));
+        }
+        match self.resp_rx.recv_timeout(DECODE_WATCHDOG_TIMEOUT) {
+            Ok(DecodeResponse::FrameDone(got, result)) if got == frame_index => result,
+            Ok(_) => {
+                self.hung = true;
+                Err(format!(
+                    "decode thread応答不一致 expected={frame_index} (プロトコル破壊、以後使用不可)"
+                ))
+            }
+            Err(RecvTimeoutError::Timeout) => {
+                self.hung = true;
+                Err(format!(
+                    "decode watchdog timeout (frame={frame_index}, timeout={:?})",
+                    DECODE_WATCHDOG_TIMEOUT
+                ))
+            }
+            Err(RecvTimeoutError::Disconnected) => {
+                self.hung = true;
+                Err(format!(
+                    "decode watchdogスレッドとの接続が切断されました (frame={frame_index})"
+                ))
+            }
+        }
     }
 }
 
@@ -109,11 +265,11 @@ impl DecodeWorker {
     /// 読み取り(poll_texture)のみを行い、decoder.frame_gpu()を直接呼ばない。
     /// これによりUIスレッドはGOPデコード完了を待たず毎回即座に制御を返す。
     ///
-    /// decoder.frame_gpu()の監視(DECODE_WATCHDOG_TIMEOUT超過時の分離)は
-    /// このバックグラウンドスレッド内で行う(watchdog_frame_gpu)。監視対象サブスレッドが
-    /// gpu-videoクレート内部の無期限待機に陥った場合、当該サブスレッドごとdecoderを
-    /// 永久に手放し、on_fail経由で世代切り替えを誘発してこのワーカー自身を終了する。
-    /// デコーダ実体の停止がUIスレッドの応答性へ波及しない点が従来設計との相違。
+    /// decoder.frame_gpu()の監視(DECODE_WATCHDOG_TIMEOUT超過時の分離)はdecoder本体を
+    /// 専有するDecodeThreadHandleに対して行う。当該スレッドがgpu-videoクレート内部の
+    /// 無期限待機に陥った場合、decoderごと手放し、on_fail経由で世代切り替えを誘発して
+    /// このワーカー自身を終了する。タイムアウトのたびに新規スレッドを増やすことはない
+    /// (1 decoderにつき最大1スレッド)。
     pub fn spawn(
         generation: u64,
         decoder: Box<dyn VideoSource>,
@@ -140,60 +296,48 @@ impl DecodeWorker {
         let task = super::runtime::handle().spawn_blocking(move || {
             *worker_thread_id_t.lock().unwrap() = Some(std::thread::current().id());
 
-            let mut decoder = decoder;
             let total_frames_t = decoder.total_frames();
+            let mut decode_thread = DecodeThreadHandle::spawn(decoder, device, queue);
 
             let mut served = NONE_SENTINEL;
             let mut direction: i64 = 1;
-            let mut consecutive_fails: i64 = 0;
+            /// 実際にUIから要求された「target」フレームの失敗のみを数える。
+            /// 投機的先読み(ahead)の失敗はここへ加算しない。動画境界付近での
+            /// 正常なEOF等により、本来正常に再生できるはずのワーカーが
+            /// 誤ってon_fail経由で強制終了することを防ぐ。
+            let mut consecutive_target_fails: i64 = 0;
 
-            /// prefetch + watchdog付きframe_gpuを1フレーム分実行する。
-            /// 戻り値: 継続不能(decoder永久放棄によりワーカー終了)ならfalse。
             macro_rules! produce {
-                ($index:expr) => {{
+                ($index:expr, $critical:expr) => {{
                     let index = $index;
+                    let critical: bool = $critical;
+                    let result = decode_thread.frame_gpu_watched(index);
                     let mut ok = true;
-                    if let Err(e) = decoder.prefetch(index) {
-                        let msg = format!("prefetch(frame={index}) failed: {e}");
-                        eprintln!("[decode-worker] {msg}");
-                        *last_error_t.lock().unwrap() = Some(msg.clone());
-                        consecutive_fails += 1;
-                        if consecutive_fails > DECODE_PREFETCH_FAIL_THRESHOLD {
-                            on_fail_t(msg);
-                            return;
+                    match result {
+                        Ok(tex) => {
+                            store_t.lock().unwrap().put(index, tex);
+                            *last_ready_index_t.lock().unwrap() = Some(index);
+                            *last_error_t.lock().unwrap() = None;
+                            if critical {
+                                consecutive_target_fails = 0;
+                            }
                         }
-                        ok = false;
-                    }
-                    if ok {
-                        let (returned, result) =
-                            watchdog_frame_gpu(decoder, index, device.clone(), queue.clone());
-                        match returned {
-                            Some(d) => decoder = d,
-                            None => {
-                                let msg = result.err().unwrap_or_default();
-                                *last_error_t.lock().unwrap() = Some(msg.clone());
+                        Err(e) => {
+                            let msg = format!("decode(frame={index}) failed: {e}");
+                            eprintln!("[decode-worker] {msg}");
+                            *last_error_t.lock().unwrap() = Some(msg.clone());
+                            if decode_thread.hung {
                                 on_fail_t(msg);
                                 return;
                             }
-                        }
-                        match result {
-                            Ok(tex) => {
-                                store_t.lock().unwrap().put(index, tex);
-                                *last_ready_index_t.lock().unwrap() = Some(index);
-                                *last_error_t.lock().unwrap() = None;
-                                consecutive_fails = 0;
-                            }
-                            Err(e) => {
-                                let msg = format!("frame_gpu(frame={index}) failed: {e}");
-                                eprintln!("[decode-worker] {msg}");
-                                *last_error_t.lock().unwrap() = Some(msg.clone());
-                                consecutive_fails += 1;
-                                if consecutive_fails > DECODE_PREFETCH_FAIL_THRESHOLD {
+                            if critical {
+                                consecutive_target_fails += 1;
+                                if consecutive_target_fails > DECODE_PREFETCH_FAIL_THRESHOLD {
                                     on_fail_t(msg);
                                     return;
                                 }
-                                ok = false;
                             }
+                            ok = false;
                         }
                     }
                     ok
@@ -217,20 +361,42 @@ impl DecodeWorker {
                 if target == served {
                     continue;
                 }
+
                 if served != NONE_SENTINEL {
-                    let delta = target - served;
-                    if delta != 0 {
-                        direction = if delta > 0 { 1 } else { -1 };
-                    }
+                    direction = if target > served { 1 } else { -1 };
                 }
 
                 let already_ready = store_t.lock().unwrap().contains(target);
                 if already_ready {
                     served = target;
-                    consecutive_fails = 0;
-                } else if produce!(target) {
+                    consecutive_target_fails = 0;
+                } else if produce!(target, true) {
                     served = target;
                     on_ready();
+                }
+
+                let mut farthest_ahead: Option<i64> = None;
+                for offset in 1..=PREFETCH_RADIUS {
+                    let ahead = target + offset * direction;
+                    if ahead < 0 || ahead >= total_frames_t {
+                        break;
+                    }
+                    if !store_t.lock().unwrap().contains(ahead) {
+                        farthest_ahead = Some(ahead);
+                    }
+                }
+                if let Some(far) = farthest_ahead {
+                    if requested_t.load(Ordering::Acquire) == target {
+                        if let Err(e) = decode_thread.prefetch_only(far) {
+                            eprintln!(
+                                "[decode-worker] speculative prefetch(frame={far}) failed: {e}"
+                            );
+                            if decode_thread.hung {
+                                on_fail_t(e);
+                                return;
+                            }
+                        }
+                    }
                 }
 
                 for offset in 1..=PREFETCH_RADIUS {
@@ -244,7 +410,7 @@ impl DecodeWorker {
                     if store_t.lock().unwrap().contains(ahead) {
                         continue;
                     }
-                    if produce!(ahead) {
+                    if produce!(ahead, false) {
                         on_ready();
                     }
                 }
@@ -311,7 +477,9 @@ impl Drop for DecodeWorker {
                 return;
             }
 
-            let _ = super::runtime::handle().block_on(task);
+            super::runtime::handle().spawn(async move {
+                let _ = task.await;
+            });
         }
     }
 }
