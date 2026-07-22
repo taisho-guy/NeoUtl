@@ -45,7 +45,7 @@ pub fn setup(
     }
 
     {
-        let (state, tw) = (state.clone(), timeline.as_weak());
+        let (state, tw, pw) = (state.clone(), timeline.as_weak(), preview_weak.clone());
         timeline.on_add_object_at(move |frame, layer, kind_idx| {
             let Some(t) = tw.upgrade() else { return };
             let Some(plugin) = registry().get(kind_idx as usize) else {
@@ -72,28 +72,28 @@ pub fn setup(
                         trim_in_frame: 0,
                     };
                     world.add_media_object(start, 90, kind_id, layer, media);
-                    sync(&t, &world);
+                    sync(&t, pw.upgrade().as_ref(), &world);
                 }
                 "Text" => {
                     app_state::snapshot_before_edit(&state);
                     let world_holder = app_state::active_world(&state);
                     let mut world = world_holder.lock().unwrap();
                     world.add_object(start, 90, kind_id, layer, Some(TextContent::default()));
-                    sync(&t, &world);
+                    sync(&t, pw.upgrade().as_ref(), &world);
                 }
                 _ => {
                     app_state::snapshot_before_edit(&state);
                     let world_holder = app_state::active_world(&state);
                     let mut world = world_holder.lock().unwrap();
                     world.add_object(start, 90, kind_id, layer, None);
-                    sync(&t, &world);
+                    sync(&t, pw.upgrade().as_ref(), &world);
                 }
             }
         });
     }
 
     {
-        let (state, tw) = (state.clone(), timeline.as_weak());
+        let (state, tw, pw) = (state.clone(), timeline.as_weak(), preview_weak.clone());
         timeline.on_delete_object(move |id| {
             if id < 0 {
                 return;
@@ -103,7 +103,7 @@ pub fn setup(
                 let world_holder = app_state::active_world(&state);
                 let mut world = world_holder.lock().unwrap();
                 world.delete_object(id as usize);
-                sync(&t, &world);
+                sync(&t, pw.upgrade().as_ref(), &world);
             }
         });
     }
@@ -131,27 +131,84 @@ pub fn setup(
     }
 
     {
-        let (state, tw) = (state.clone(), timeline.as_weak());
+        let (state, tw, pw) = (state.clone(), timeline.as_weak(), preview_weak.clone());
         timeline.on_move_object(move |id, start, layer| {
-            if let Some(t) = tw.upgrade() {
-                app_state::snapshot_before_edit(&state);
-                let world_holder = app_state::active_world(&state);
-                let mut world = world_holder.lock().unwrap();
-                world.move_object(id as usize, start, layer);
-                sync(&t, &world);
+            let Some(t) = tw.upgrade() else { return };
+            let world_holder = app_state::active_world(&state);
+            let exists = world_holder.lock().unwrap().object_exists(id as usize);
+            if !exists {
+                let world = world_holder.lock().unwrap();
+                sync(&t, pw.upgrade().as_ref(), &world);
+                return;
+            }
+            app_state::snapshot_before_edit(&state);
+            let mut world = world_holder.lock().unwrap();
+            world.move_object(id as usize, start, layer);
+            sync(&t, pw.upgrade().as_ref(), &world);
+        });
+    }
+
+    {
+        let (state, tw, pw) = (state.clone(), timeline.as_weak(), preview_weak.clone());
+        timeline.on_resize_object(move |id, start, end| {
+            let Some(t) = tw.upgrade() else { return };
+            let world_holder = app_state::active_world(&state);
+            let exists = world_holder.lock().unwrap().object_exists(id as usize);
+            if !exists {
+                let world = world_holder.lock().unwrap();
+                sync(&t, pw.upgrade().as_ref(), &world);
+                return;
+            }
+            app_state::snapshot_before_edit(&state);
+            let mut world = world_holder.lock().unwrap();
+            world.resize_object(id as usize, start, end);
+            sync(&t, pw.upgrade().as_ref(), &world);
+        });
+    }
+
+    {
+        let tw = timeline.as_weak();
+        timeline.on_range_select(move |start_frame, end_frame, start_layer, end_layer| {
+            let Some(t) = tw.upgrade() else { return };
+            let objs = t.get_objects();
+            let updated: Vec<TimelineObject> = objs
+                .iter()
+                .map(|mut o| {
+                    o.selected = o.start_frame < end_frame
+                        && o.end_frame > start_frame
+                        && o.layer >= start_layer
+                        && o.layer <= end_layer;
+                    o
+                })
+                .collect();
+            t.set_objects(ModelRc::new(VecModel::from(updated)));
+        });
+    }
+
+    {
+        let (state, tw, pw, prw) = (
+            state.clone(),
+            timeline.as_weak(),
+            preview_weak.clone(),
+            props_weak.clone(),
+        );
+        timeline.on_undo_requested(move || {
+            if app_state::undo_active(&state) {
+                crate::ui::preview::sync_active_session(&state, &pw, &tw, &prw);
             }
         });
     }
 
     {
-        let (state, tw) = (state.clone(), timeline.as_weak());
-        timeline.on_resize_object(move |id, start, end| {
-            if let Some(t) = tw.upgrade() {
-                app_state::snapshot_before_edit(&state);
-                let world_holder = app_state::active_world(&state);
-                let mut world = world_holder.lock().unwrap();
-                world.resize_object(id as usize, start, end);
-                sync(&t, &world);
+        let (state, tw, pw, prw) = (
+            state.clone(),
+            timeline.as_weak(),
+            preview_weak.clone(),
+            props_weak.clone(),
+        );
+        timeline.on_redo_requested(move || {
+            if app_state::redo_active(&state) {
+                crate::ui::preview::sync_active_session(&state, &pw, &tw, &prw);
             }
         });
     }
@@ -169,7 +226,7 @@ pub fn setup(
     }
 
     {
-        let (state, tw) = (state.clone(), timeline.as_weak());
+        let (state, tw, pw) = (state.clone(), timeline.as_weak(), preview_weak.clone());
         timeline.on_toggle_layer_visible(move |layer| {
             if let Some(t) = tw.upgrade() {
                 let world_holder = app_state::active_world(&state);
@@ -177,13 +234,13 @@ pub fn setup(
                 let current = world.layer_states();
                 let visible = current.get(layer as usize).map(|s| s.0).unwrap_or(true);
                 world.set_layer_visible(layer as usize, !visible);
-                sync(&t, &world);
+                sync(&t, pw.upgrade().as_ref(), &world);
             }
         });
     }
 
     {
-        let (state, tw) = (state.clone(), timeline.as_weak());
+        let (state, tw, pw) = (state.clone(), timeline.as_weak(), preview_weak.clone());
         timeline.on_toggle_layer_locked(move |layer| {
             if let Some(t) = tw.upgrade() {
                 let world_holder = app_state::active_world(&state);
@@ -191,19 +248,19 @@ pub fn setup(
                 let current = world.layer_states();
                 let locked = current.get(layer as usize).map(|s| s.1).unwrap_or(false);
                 world.set_layer_locked(layer as usize, !locked);
-                sync(&t, &world);
+                sync(&t, pw.upgrade().as_ref(), &world);
             }
         });
     }
 
     {
-        let (state, tw) = (state.clone(), timeline.as_weak());
+        let (state, tw, pw) = (state.clone(), timeline.as_weak(), preview_weak.clone());
         timeline.on_switch_scene_tab(move |id| {
             if let Some(t) = tw.upgrade() {
                 let world_holder = app_state::active_world(&state);
                 let mut world = world_holder.lock().unwrap();
                 if world.switch_scene(id) {
-                    sync(&t, &world);
+                    sync(&t, pw.upgrade().as_ref(), &world);
                     sync_scene_tabs(&t, &world);
                 }
             }
@@ -229,7 +286,7 @@ pub fn setup(
     }
 
     {
-        let (state, tw) = (state.clone(), timeline.as_weak());
+        let (state, tw, pw) = (state.clone(), timeline.as_weak(), preview_weak.clone());
         timeline.on_close_scene_tab(move |id| {
             if let Some(t) = tw.upgrade() {
                 app_state::snapshot_before_edit(&state);
@@ -237,7 +294,7 @@ pub fn setup(
                 let mut world = world_holder.lock().unwrap();
                 if world.scenes().len() > 1 {
                     world.remove_scene(id);
-                    sync(&t, &world);
+                    sync(&t, pw.upgrade().as_ref(), &world);
                     sync_scene_tabs(&t, &world);
                 }
             }
@@ -248,37 +305,41 @@ pub fn setup(
 }
 
 /// アクティブプロジェクト切替時、タイムライン全体（オブジェクト・レイヤー・シーンタブ）を再同期する。
+/// プレビュー側のtotal-framesは呼び出し側（preview::sync_active_session）が別途担う。
 pub fn sync_active_session(state: &SharedAppState, timeline_weak: &Weak<TimelineWindow>) {
     let Some(t) = timeline_weak.upgrade() else {
         return;
     };
     let world_holder = app_state::active_world(state);
     let world = world_holder.lock().unwrap();
-    sync(&t, &world);
+    sync(&t, None, &world);
     sync_scene_tabs(&t, &world);
     t.set_zoom_scale(world.zoom());
     t.set_layer_count(world.layer_count());
 }
 
 fn to_slint(data: &crate::ecs::TimelineData) -> TimelineObject {
-    let label = registry()
-        .get(data.kind as usize)
-        .map(|p| p.name.as_str())
-        .unwrap_or("Unknown")
-        .into();
+    let plugin = registry().get(data.kind as usize);
     TimelineObject {
         id: data.id,
         start_frame: data.start_frame,
         end_frame: data.end_frame,
         kind: data.kind,
+        kind_known: plugin.is_some(),
         layer: data.layer,
-        label,
+        label: plugin.map(|p| p.name.as_str()).unwrap_or("Unknown").into(),
         selected: false,
     }
 }
 
-fn sync(timeline: &TimelineWindow, world: &EcsWorld) {
-    timeline.set_total_frames(world.total_frames());
+/// タイムライン内部モデルをECSと同期する。`preview`が渡された場合は本体ウィンドウの
+/// total-framesも同時に更新し、タイムライン編集による総フレーム数変化を伝播させる。
+fn sync(timeline: &TimelineWindow, preview: Option<&PreviewWindow>, world: &EcsWorld) {
+    let total = world.total_frames();
+    timeline.set_total_frames(total);
+    if let Some(p) = preview {
+        p.set_total_frames(total);
+    }
 
     let selected_id = timeline
         .get_objects()

@@ -14,6 +14,8 @@ export component LayerHeader inherits Rectangle {
     callback select-layer(int);
     callback scroll-requested(length /* wheel delta-y */);
 
+    property <LayerState> default-state: { visible: true, locked: false };
+
     width: header-width;
     background: #202028;
     clip: true;
@@ -26,7 +28,7 @@ export component LayerHeader inherits Rectangle {
     }
 
     for i in root.layer-count: Rectangle {
-        property <LayerState> state: root.layer-states[i];
+        property <LayerState> state: i < root.layer-states.length ? root.layer-states[i] : root.default-state;
         property <bool> selected: i == root.selected-layer;
 
         y: i * root.layer-height - root.scroll-y;
@@ -39,13 +41,13 @@ export component LayerHeader inherits Rectangle {
         border-width: selected ? 2px : 1px;
         border-color: selected ? #6a8fff : #2a2a32;
 
-        header-touch := TouchArea {
+        select-touch := TouchArea {
+            width: parent.width - 16px;
+            height: parent.height;
             pointer-event(e) => {
                 if (e.kind != PointerEventKind.down) { return; }
                 root.select-layer(i);
-                if (e.button == PointerEventButton.left) {
-                    root.toggle-visible(i);
-                } else if (e.button == PointerEventButton.right) {
+                if (e.button == PointerEventButton.right) {
                     root.toggle-locked(i);
                 }
             }
@@ -59,18 +61,30 @@ export component LayerHeader inherits Rectangle {
             vertical-alignment: center;
         }
 
-        if (state.locked): Text {
-            x: parent.width - 12px;
-            y: 2px;
-            text: "🔒";
-            font-size: 8px;
-        }
-        if (!state.visible): Text {
-            x: parent.width - 12px;
-            y: parent.height - 12px;
-            text: "—";
-            color: #555560;
-            font-size: 8px;
+        visible-touch := TouchArea {
+            x: parent.width - 16px;
+            width: 16px;
+            height: parent.height;
+            pointer-event(e) => {
+                if (e.kind != PointerEventKind.down) { return; }
+                if (e.button == PointerEventButton.left) {
+                    root.toggle-visible(i);
+                }
+            }
+
+            if (state.locked): Text {
+                x: 2px;
+                y: 2px;
+                text: "🔒";
+                font-size: 8px;
+            }
+            if (!state.visible): Text {
+                x: 2px;
+                y: parent.height - 12px;
+                text: "—";
+                color: #555560;
+                font-size: 8px;
+            }
         }
     }
 }

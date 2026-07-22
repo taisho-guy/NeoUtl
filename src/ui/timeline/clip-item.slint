@@ -13,15 +13,22 @@ export component ClipItem inherits Rectangle {
     callback context-requested(int /* id */, length /* x */, length /* y */);
 
     property <[color]> kind-palette: [#2a4db8, #256e3c, #6a2db8, #b8862a, #2ab8a8, #b82a5f];
-    property <color> base-color: root.kind-palette[mod(obj.kind, root.kind-palette.length)];
+    property <color> base-color: !obj.kind-known ? #5a5a5a : root.kind-palette[mod(obj.kind, root.kind-palette.length)];
 
     property <bool>   dragging: false;
-    property <length> drag-anchor-x: 0px;
+    property <length> press-abs-x: 0px;
+    property <length> press-abs-y: 0px;
     property <int>    drag-start-frame: 0;
     property <int>    drag-start-layer: 0;
     property <int>    preview-start: obj.start-frame;
     property <int>    preview-layer: obj.layer;
     property <int>    preview-end: obj.end-frame;
+
+    function reset-preview() {
+        root.preview-start = obj.start-frame;
+        root.preview-end = obj.end-frame;
+        root.preview-layer = obj.layer;
+    }
 
     x: root.preview-start * root.scale * 1px;
     y: root.preview-layer * root.layer-height + root.layer-height * 0.1;
@@ -46,13 +53,17 @@ export component ClipItem inherits Rectangle {
 
     body-touch := TouchArea {
         mouse-cursor: root.locked ? MouseCursor.not-allowed : (root.dragging ? MouseCursor.grabbing : MouseCursor.grab);
+        property <length> cur-abs-x: self.absolute-position.x + self.mouse-x;
+        property <length> cur-abs-y: self.absolute-position.y + self.mouse-y;
 
         pointer-event(e) => {
             if (root.locked) { return; }
             if (e.kind == PointerEventKind.down && e.button == PointerEventButton.left) {
                 root.clicked(obj.id);
+                root.reset-preview();
                 root.dragging = true;
-                root.drag-anchor-x = self.pressed-x;
+                root.press-abs-x = self.absolute-position.x + self.pressed-x;
+                root.press-abs-y = self.absolute-position.y + self.pressed-y;
                 root.drag-start-frame = obj.start-frame;
                 root.drag-start-layer = obj.layer;
             }
@@ -64,14 +75,15 @@ export component ClipItem inherits Rectangle {
                 if (root.dragging) {
                     root.dragging = false;
                     root.moved(obj.id, root.preview-start, root.preview-layer);
+                    root.reset-preview();
                 }
             }
         }
 
         moved() => {
             if (!root.dragging) { return; }
-            root.preview-start = max(0, root.drag-start-frame + floor((self.mouse-x - root.drag-anchor-x) / root.scale / 1px));
-            root.preview-layer = max(0, root.drag-start-layer + floor((self.mouse-y - self.pressed-y) / root.layer-height));
+            root.preview-start = max(0, root.drag-start-frame + floor((self.cur-abs-x - root.press-abs-x) / root.scale / 1px));
+            root.preview-layer = max(0, root.drag-start-layer + floor((self.cur-abs-y - root.press-abs-y) / root.layer-height));
         }
     }
 
@@ -79,16 +91,18 @@ export component ClipItem inherits Rectangle {
         width: 6px;
         height: parent.height;
         mouse-cursor: root.locked ? MouseCursor.not-allowed : MouseCursor.col-resize;
-        property <bool> resizing: false;
-        property <int>  start-frame: 0;
-        property <int>  end-frame: 0;
-        property <length> anchor-x: 0px;
+        property <bool>   resizing: false;
+        property <int>    start-frame: 0;
+        property <int>    end-frame: 0;
+        property <length> press-abs-x: 0px;
+        property <length> cur-abs-x: self.absolute-position.x + self.mouse-x;
 
         pointer-event(e) => {
             if (root.locked) { return; }
             if (e.kind == PointerEventKind.down) {
+                root.reset-preview();
                 self.resizing = true;
-                self.anchor-x = self.pressed-x;
+                self.press-abs-x = self.absolute-position.x + self.pressed-x;
                 self.start-frame = obj.start-frame;
                 self.end-frame = obj.end-frame;
             }
@@ -96,12 +110,13 @@ export component ClipItem inherits Rectangle {
                 if (self.resizing) {
                     self.resizing = false;
                     root.resized(obj.id, root.preview-start, root.preview-end);
+                    root.reset-preview();
                 }
             }
         }
         moved() => {
             if (!self.resizing) { return; }
-            root.preview-start = min(self.end-frame - 1, max(0, self.start-frame + floor((self.mouse-x - self.anchor-x) / root.scale / 1px)));
+            root.preview-start = min(self.end-frame - 1, max(0, self.start-frame + floor((self.cur-abs-x - self.press-abs-x) / root.scale / 1px)));
         }
     }
 
@@ -110,16 +125,18 @@ export component ClipItem inherits Rectangle {
         width: 6px;
         height: parent.height;
         mouse-cursor: root.locked ? MouseCursor.not-allowed : MouseCursor.col-resize;
-        property <bool> resizing: false;
-        property <int>  start-frame: 0;
-        property <int>  end-frame: 0;
-        property <length> anchor-x: 0px;
+        property <bool>   resizing: false;
+        property <int>    start-frame: 0;
+        property <int>    end-frame: 0;
+        property <length> press-abs-x: 0px;
+        property <length> cur-abs-x: self.absolute-position.x + self.mouse-x;
 
         pointer-event(e) => {
             if (root.locked) { return; }
             if (e.kind == PointerEventKind.down) {
+                root.reset-preview();
                 self.resizing = true;
-                self.anchor-x = self.pressed-x;
+                self.press-abs-x = self.absolute-position.x + self.pressed-x;
                 self.start-frame = obj.start-frame;
                 self.end-frame = obj.end-frame;
             }
@@ -127,12 +144,13 @@ export component ClipItem inherits Rectangle {
                 if (self.resizing) {
                     self.resizing = false;
                     root.resized(obj.id, root.preview-start, root.preview-end);
+                    root.reset-preview();
                 }
             }
         }
         moved() => {
             if (!self.resizing) { return; }
-            root.preview-end = max(self.start-frame + 1, self.end-frame + floor((self.mouse-x - self.anchor-x) / root.scale / 1px));
+            root.preview-end = max(self.start-frame + 1, self.end-frame + floor((self.cur-abs-x - self.press-abs-x) / root.scale / 1px));
         }
     }
 }

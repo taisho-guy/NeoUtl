@@ -1,6 +1,7 @@
 // src/ui/timeline/ruler.slint
 export component Ruler inherits Rectangle {
     in property <float>  scale: 1.0;
+    in property <int>    frame-interval: 30;
     in property <length> scroll-x: 0px;
     in property <int>    fps: 30;
     in property <int>    current-frame: 0;
@@ -8,16 +9,13 @@ export component Ruler inherits Rectangle {
     in property <length> header-width: 60px;
 
     callback scrub(int);
-    callback zoom(float);
+    callback zoom(float /* new-scale */, int /* anchor-frame */);
 
     height: 32px;
     background: #1a1a20;
     border-width: 1px;
     border-color: #2a2a32;
 
-    function frame-interval() -> int {
-        return root.scale > 3.0 ? 10 : root.scale > 1.0 ? 30 : root.scale > 0.3 ? 60 : 300;
-    }
     function px-to-frame(px: length) -> int {
         return max(0, floor((px + root.scroll-x) / root.scale / 1px));
     }
@@ -41,12 +39,11 @@ export component Ruler inherits Rectangle {
             clip: true;
             background: #1a1a20;
 
-            property <int> interval: root.frame-interval();
-            property <int> start-tick: floor(root.scroll-x / root.scale / 1px / body.interval) * body.interval;
-            property <int> tick-count: ceil(body.width / root.scale / 1px / body.interval) + 2;
+            property <int> start-tick: floor(root.scroll-x / root.scale / 1px / root.frame-interval) * root.frame-interval;
+            property <int> tick-count: ceil(body.width / root.scale / 1px / root.frame-interval) + 2;
 
             for i in body.tick-count : Rectangle {
-                property <int>    frame: body.start-tick + i * body.interval;
+                property <int>    frame: body.start-tick + i * root.frame-interval;
                 property <length> tick-x: frame * root.scale * 1px - root.scroll-x;
                 property <bool>   is-second: mod(frame, max(1, root.fps)) == 0;
 
@@ -85,7 +82,7 @@ export component Ruler inherits Rectangle {
                 }
                 scroll-event(e) => {
                     if (e.delta-y != 0) {
-                        root.zoom(e.delta-y > 0 ? root.scale * 1.1 : root.scale * 0.9);
+                        root.zoom(e.delta-y > 0 ? root.scale * 1.1 : root.scale * 0.9, root.px-to-frame(self.mouse-x));
                         return accept;
                     }
                     reject
