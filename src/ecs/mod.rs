@@ -334,6 +334,10 @@ impl EcsWorld {
         })
     }
 
+    pub fn object_exists(&self, object_id: usize) -> bool {
+        self.find_entity(object_id).is_some()
+    }
+
     pub fn move_object(&mut self, object_id: usize, new_start: i32, new_layer: i32) {
         let new_start = self.snap_to_active_scene(new_start);
         self.world.run(

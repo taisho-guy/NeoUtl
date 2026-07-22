@@ -29,6 +29,7 @@ export component TimelineWindow inherits Window {
     callback select-object(int);
     callback move-object(int /* id */, int /* start-frame */, int /* layer */);
     callback resize-object(int /* id */, int /* start-frame */, int /* end-frame */);
+    callback range-select(int /* start-frame */, int /* end-frame */, int /* start-layer */, int /* end-layer */);
     callback set-zoom(float);
     callback toggle-layer-visible(int);
     callback toggle-layer-locked(int);
@@ -36,15 +37,22 @@ export component TimelineWindow inherits Window {
     callback open-scene-settings-create();
     callback open-scene-settings-edit(int);
     callback close-scene-tab(int);
+    callback undo-requested();
+    callback redo-requested();
 
     property <int> header-width: 60;
     property <int> layer-height: 24;
+    // ズーム倍率とグリッド刻み幅の対応表。ruler/grid双方が本プロパティのみを参照する。
     property <int> frame-interval: root.zoom-scale > 3.0 ? 10 : root.zoom-scale > 1.0 ? 30 : root.zoom-scale > 0.3 ? 60 : 300;
 
     property <length> scroll-x: 0px;
     property <length> scroll-y: 0px;
     property <length> content-width: root.total-frames * root.zoom-scale * 1px;
     property <length> content-height: root.layer-count * root.layer-height * 1px;
+
+    function clamp-zoom(s: float) -> float {
+        return max(0.1, min(10.0, s));
+    }
 
     property <bool> show-context-menu: false;
     property <bool> menu-is-delete: false;
@@ -58,6 +66,12 @@ export component TimelineWindow inherits Window {
         key-pressed(event) => {
             if (event.text == Key.Delete && root.menu-target-id >= 0) {
                 root.delete-object(root.menu-target-id);
+            }
+            if (event.modifiers.control && !event.modifiers.shift && event.text == "z") {
+                root.undo-requested();
+            }
+            if (event.modifiers.control && (event.text == "y" || (event.modifiers.shift && event.text == "z"))) {
+                root.redo-requested();
             }
             accept
         }
@@ -126,13 +140,18 @@ export component TimelineWindow inherits Window {
 
         Ruler {
             scale: root.zoom-scale;
+            frame-interval: root.frame-interval;
             scroll-x: root.scroll-x;
             fps: 30;
             current-frame: root.current-frame;
             total-frames: root.total-frames;
             header-width: root.header-width * 1px;
             scrub(frame) => { root.seek-timeline(frame); }
-            zoom(new-scale) => { root.zoom-scale = max(0.1, min(10.0, new-scale)); root.set-zoom(root.zoom-scale); }
+            zoom(new-scale, anchor-frame) => {
+                root.scroll-x = max(0px, root.scroll-x + (root.clamp-zoom(new-scale) - root.zoom-scale) * anchor-frame * 1px);
+                root.zoom-scale = root.clamp-zoom(new-scale);
+                root.set-zoom(root.zoom-scale);
+            }
         }
 
         HorizontalLayout {
@@ -148,7 +167,7 @@ export component TimelineWindow inherits Window {
                 toggle-locked(layer) => { root.toggle-layer-locked(layer); }
                 select-layer(layer) => { root.selected-layer = layer; }
                 scroll-requested(dy) => {
-                    root.scroll-y = max(0px, min(root.scroll-y - dy, max(0px, root.content-height - layer-header.height)));
+                    root.scroll-y = max(0px, min(root.scroll-y - dy, max(0px, root.content-height - max(1px, layer-header.height))));
                 }
             }
 
@@ -166,10 +185,11 @@ export component TimelineWindow inherits Window {
 
                 seek(frame) => { root.seek-timeline(frame); }
                 select-object(id) => { root.select-object(id); }
+                range-select(sf, ef, sl, el) => { root.range-select(sf, ef, sl, el); }
                 move-object(id, start, layer) => { root.move-object(id, start, layer); }
                 resize-object(id, start, end) => { root.resize-object(id, start, end); }
                 scroll-requested(dx) => {
-                    root.scroll-x = max(0px, min(root.scroll-x - dx, max(0px, root.content-width - view.width)));
+                    root.scroll-x = max(0px, min(root.scroll-x - dx, max(0px, root.content-width - max(1px, view.width))));
                 }
                 context-menu(x, y, frame, layer, hit-id) => {
                     root.menu-frame = frame;

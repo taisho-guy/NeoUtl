@@ -18,9 +18,16 @@ export component TimelineView inherits Rectangle {
     callback seek(int);
     callback context-menu(length, length, int /* frame */, int /* layer */, int /* hit-id */);
     callback select-object(int);
+    callback range-select(int /* start-frame */, int /* end-frame */, int /* start-layer */, int /* end-layer */);
     callback move-object(int, int, int);
     callback resize-object(int, int, int);
     callback scroll-requested(length /* wheel delta-y, consumed as horizontal scroll */);
+
+    property <bool>   range-selecting: false;
+    property <length> range-anchor-x: 0px;
+    property <length> range-anchor-y: 0px;
+    property <length> range-cur-x: 0px;
+    property <length> range-cur-y: 0px;
 
     function px-to-frame(px: length) -> int {
         return max(0, floor((px + root.scroll-x) / root.scale / 1px));
@@ -52,17 +59,50 @@ export component TimelineView inherits Rectangle {
 
         bg-touch := TouchArea {
             pointer-event(e) => {
-                if (e.kind != PointerEventKind.down) { return; }
-                if (e.button == PointerEventButton.left) {
+                if (e.kind == PointerEventKind.down && e.button == PointerEventButton.left) {
                     root.seek(root.px-to-frame(self.pressed-x));
-                } else if (e.button == PointerEventButton.right) {
+                    root.range-selecting = true;
+                    root.range-anchor-x = self.pressed-x;
+                    root.range-anchor-y = self.pressed-y;
+                    root.range-cur-x = self.pressed-x;
+                    root.range-cur-y = self.pressed-y;
+                }
+                if (e.kind == PointerEventKind.down && e.button == PointerEventButton.right) {
                     root.context-menu(self.absolute-position.x + self.pressed-x, self.absolute-position.y + self.pressed-y, root.px-to-frame(self.pressed-x), root.px-to-layer(self.pressed-y), -1);
+                }
+                if (e.kind == PointerEventKind.up || e.kind == PointerEventKind.cancel) {
+                    if (root.range-selecting) {
+                        root.range-selecting = false;
+                        if (abs(root.range-cur-x - root.range-anchor-x) > 3px || abs(root.range-cur-y - root.range-anchor-y) > 3px) {
+                            root.range-select(
+                                root.px-to-frame(min(root.range-anchor-x, root.range-cur-x)),
+                                root.px-to-frame(max(root.range-anchor-x, root.range-cur-x)),
+                                root.px-to-layer(min(root.range-anchor-y, root.range-cur-y)),
+                                root.px-to-layer(max(root.range-anchor-y, root.range-cur-y)));
+                        }
+                    }
+                }
+            }
+            moved() => {
+                if (root.range-selecting) {
+                    root.range-cur-x = self.mouse-x;
+                    root.range-cur-y = self.mouse-y;
                 }
             }
             scroll-event(e) => {
                 root.scroll-requested(e.delta-y);
                 return accept;
             }
+        }
+
+        if (root.range-selecting): Rectangle {
+            x: min(root.range-anchor-x, root.range-cur-x);
+            y: min(root.range-anchor-y, root.range-cur-y);
+            width: abs(root.range-cur-x - root.range-anchor-x);
+            height: abs(root.range-cur-y - root.range-anchor-y);
+            background: #4a8fff33;
+            border-width: 1px;
+            border-color: #4a8fff;
         }
 
         for obj in root.objects: ClipItem {
