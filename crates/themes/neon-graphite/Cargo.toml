@@ -1,0 +1,11 @@
+[package]
+name = "neoutl-theme-neon-graphite"
+version = "0.0.0"
+edition = "2024"
+
+[lib]
+name = "neoutl_theme_neon_graphite"
+crate-type = ["cdylib"]
+
+[dependencies]
+neoutl-theme-api.workspace = true

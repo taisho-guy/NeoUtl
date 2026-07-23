@@ -197,6 +197,10 @@ fn main() {
     build_crates(&root, profile, target, "decoders", &decoders);
     stage_crates(&root, profile, target, "decoders", &decoders);
 
+    let themes = discover_crates(&root, "crates/themes");
+    build_crates(&root, profile, target, "themes", &themes);
+    stage_crates(&root, profile, target, "themes", &themes);
+
     let mut cmd = Command::new("cargo");
     cmd.current_dir(&root)
         .arg(if task == "run" { "run" } else { "build" })
