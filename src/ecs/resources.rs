@@ -216,6 +216,9 @@ pub struct SystemSettingsResource {
     pub autosave_enabled: bool,
     pub autosave_interval_sec: i32,
     pub theme_dark: bool,
+    /// 選択中テーマのstable_id。空文字は未選択（theme_darkの明暗2値へフォールバック）
+    #[serde(default)]
+    pub theme_id: String,
     pub ui_scale_percent: i32,
     /// 0: 自動（論理コア数に追従） / 1以上: デコードワーカーの上限並列数
     pub worker_threads: i32,
@@ -243,6 +246,7 @@ impl SystemSettingsResource {
             autosave_enabled: config::SYSTEM_DEFAULT_AUTOSAVE_ENABLED,
             autosave_interval_sec: config::SYSTEM_DEFAULT_AUTOSAVE_INTERVAL_SEC,
             theme_dark: config::SYSTEM_DEFAULT_THEME_DARK,
+            theme_id: config::SYSTEM_DEFAULT_THEME_ID.to_string(),
             ui_scale_percent: config::SYSTEM_DEFAULT_UI_SCALE_PERCENT,
             worker_threads: config::SYSTEM_DEFAULT_WORKER_THREADS,
             audio_max_block_size: config::SYSTEM_DEFAULT_AUDIO_MAX_BLOCK_SIZE,

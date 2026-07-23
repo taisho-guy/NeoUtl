@@ -1,13 +1,25 @@
 // src/ui/system-settings/appearance.slint
-import { ToggleField, IntField } from "fields.slint";
+import { ToggleField, IntField, ChoiceField } from "fields.slint";
 
 export component AppearancePage inherits VerticalLayout {
     in property <bool> theme-dark: true;
     in property <int> ui-scale-percent: 100;
+    in property <[string]> theme-names: [];
+    in property <int> theme-index: 0;
     callback changed(bool, int);
+    callback theme-changed(int);
 
+    width: 100%;
+    height: 100%;
     padding: 10px;
     spacing: 10px;
+
+    ChoiceField {
+        label: "テーマ";
+        options: root.theme-names;
+        selected: root.theme-index;
+        changed(v) => { root.theme-changed(v); }
+    }
 
     ToggleField {
         label: "ダークテーマ";

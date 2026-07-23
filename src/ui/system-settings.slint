@@ -12,7 +12,8 @@ export component SystemSettingsWindow inherits Window {
     title: "NeoUtl - システム設定";
     preferred-width: 640px;
     preferred-height: 460px;
-    background: #0e0e12;
+    in-out property <brush> theme-background: #0e0e12;
+    background: root.theme-background;
 
     in-out property <int> selected-category: 0;
 
@@ -21,6 +22,8 @@ export component SystemSettingsWindow inherits Window {
 
     in-out property <bool> theme-dark: true;
     in-out property <int> ui-scale-percent: 100;
+    in-out property <[string]> theme-names: [];
+    in-out property <int> theme-index: 0;
 
     in-out property <int> worker-threads: 0;
     in-out property <int> audio-max-block-size: 4096;
@@ -37,6 +40,7 @@ export component SystemSettingsWindow inherits Window {
 
     callback set-general(bool, int);
     callback set-appearance(bool, int);
+    callback set-theme(int);
     callback set-performance(int, int);
     callback set-decode(int);
     callback set-timeline-defaults(bool, int);
@@ -47,13 +51,15 @@ export component SystemSettingsWindow inherits Window {
     VerticalLayout {
         HorizontalLayout {
             SettingsSidebar {
+                horizontal-stretch: 0;
                 selected: root.selected-category;
                 categories: ["一般", "外観", "パフォーマンス", "デコード", "タイムライン", "エクスポート"];
                 select(i) => { root.selected-category = i; }
             }
 
             Rectangle {
-                background: #0e0e12;
+                horizontal-stretch: 1;
+                background: root.theme-background;
 
                 if root.selected-category == 0: GeneralPage {
                     autosave-enabled: root.autosave-enabled;
@@ -68,10 +74,16 @@ export component SystemSettingsWindow inherits Window {
                 if root.selected-category == 1: AppearancePage {
                     theme-dark: root.theme-dark;
                     ui-scale-percent: root.ui-scale-percent;
+                    theme-names: root.theme-names;
+                    theme-index: root.theme-index;
                     changed(dark, scale) => {
                         root.theme-dark = dark;
                         root.ui-scale-percent = scale;
                         root.set-appearance(dark, scale);
+                    }
+                    theme-changed(v) => {
+                        root.theme-index = v;
+                        root.set-theme(v);
                     }
                 }
 
