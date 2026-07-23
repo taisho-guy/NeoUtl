@@ -59,13 +59,17 @@ export component ClipItem inherits Rectangle {
         pointer-event(e) => {
             if (root.locked) { return; }
             if (e.kind == PointerEventKind.down && e.button == PointerEventButton.left) {
-                root.clicked(obj.id);
+                // clicked()呼び出し先が選択状態更新のためモデルを再構築する経路を持つ場合、
+                // 本要素自体が再生成され得る。呼び出し後に行うローカル状態書き込みは
+                // 再生成後の別インスタンスに反映されず失われるため、外部コールバック起動前に
+                // ドラッグ開始状態を確定させる。
                 root.reset-preview();
                 root.dragging = true;
                 root.press-abs-x = self.absolute-position.x + self.pressed-x;
                 root.press-abs-y = self.absolute-position.y + self.pressed-y;
                 root.drag-start-frame = obj.start-frame;
                 root.drag-start-layer = obj.layer;
+                root.clicked(obj.id);
             }
             if (e.kind == PointerEventKind.down && e.button == PointerEventButton.right) {
                 root.clicked(obj.id);

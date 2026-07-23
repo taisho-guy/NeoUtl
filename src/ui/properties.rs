@@ -308,7 +308,18 @@ fn push_c_abi_param_rows(
 
 /// プラグイン提供オブジェクトのObjectMeta.property_schemaをParamRow列へ展開する。
 /// 現在値はPluginParams（未設定ならスキーマのdefault_float）から取得する。
+///
+/// 注意: レンダリング側（renderer/pipeline.rs::write_standard_uniform）はShape系の
+/// パラメータをネイティブのShapeParamsコンポーネント（object_schema::SHAPE_SCHEMA、
+/// group="図形"）からのみ読み出し、PluginParamsは一切参照しない。そのためこの関数が
+/// 生成するplugin.name群の行を編集しても描画には反映されない
+/// （SHAPE_SCHEMA側の行を編集すること）。has_shapeがtrue、すなわちネイティブスキーマの
+/// 行が既に同じ内容をカバーしている場合はここでの重複行生成をスキップし、
+/// 「操作してもガン無視される」編集不能な行をUI上に出さないようにする。
 fn push_plugin_rows(out: &mut Vec<ParamRow>, world: &EcsWorld, oid: usize) {
+    if world.get_shape(oid).is_some() {
+        return;
+    }
     let Some(kind_id) = world.get_kind_id(oid) else {
         return;
     };
