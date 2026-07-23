@@ -402,40 +402,37 @@ document.addEventListener("click", ({ target }) => {
     }
 });
 
-const COUNTER_NAMESPACE = "neoutl.taisho-guy.org";
-const COUNTER_API_BASE = "https://api.counterapi.dev/v1";
+// GAS アクセスカウンター
+const GAS_APP_URL = "https://script.google.com/macros/s/AKfycbw8vCfU7uXxWkjeZ1h_yqvOitYqocgENVS1YFa8JVa347a1TpCsqWhs4m05Kpy7p-vCSw/exec";
 
-const jstDateString = (offsetDays) => {
+const getJstDateParts = (offsetDays) => {
     const now = new Date();
     const jst = new Date(now.getTime() + 9 * 3600000 + offsetDays * 86400000);
-    return jst.toISOString().slice(0, 10);
-};
-
-const counterUp = async (name) => {
-    const res = await fetch(`${COUNTER_API_BASE}/${COUNTER_NAMESPACE}/${name}/up`);
-    const body = await res.json();
-    return body.count;
-};
-
-const counterGet = async (name) => {
-    const res = await fetch(`${COUNTER_API_BASE}/${COUNTER_NAMESPACE}/${name}`);
-    if (!res.ok) return 0;
-    const body = await res.json();
-    return body.count;
+    return {
+        year: jst.getUTCFullYear(),
+        month: jst.getUTCMonth() + 1,
+        day: jst.getUTCDate(),
+    };
 };
 
 const renderCounter = async () => {
     const el = document.getElementById("neoutl-counter");
-    const todayName = `day-${jstDateString(0)}`;
-    const yesterdayName = `day-${jstDateString(-1)}`;
+    const todayParts = getJstDateParts(0);
+    const yesterdayParts = getJstDateParts(-1);
+    const todayKey = `neoutl-counter-${todayParts.year}-${todayParts.month}-${todayParts.day}`;
+    const yesterdayKey = `neoutl-counter-${yesterdayParts.year}-${yesterdayParts.month}-${yesterdayParts.day}`;
 
-    const [today, yesterday, total] = await Promise.all([
-        counterUp(todayName).catch(() => "?"),
-        counterGet(yesterdayName).catch(() => 0),
-        counterUp("total").catch(() => "?"),
-    ]);
-
-    el.innerHTML = `今日: <b>${today}</b> / 昨日: <b>${yesterday}</b> / 累計: <b>${total}</b>`;
+    try {
+        const res = await fetch(`${GAS_APP_URL}?today=${todayKey}&yesterday=${yesterdayKey}`);
+        const data = await res.json();
+        if (data.error) {
+            el.innerHTML = `今日: <b>?</b> / 昨日: <b>?</b> / 累計: <b>?</b>`;
+            return;
+        }
+        el.innerHTML = `今日: <b>${data.today}</b> / 昨日: <b>${data.yesterday}</b> / 累計: <b>${data.total}</b>`;
+    } catch {
+        el.innerHTML = `今日: <b>?</b> / 昨日: <b>?</b> / 累計: <b>?</b>`;
+    }
 };
 
 renderCounter();
