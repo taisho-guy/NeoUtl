@@ -1,415 +1,380 @@
-<!doctype html>
-<html lang="ja">
-    <head>
-        <meta charset="UTF-8" />
-        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-        <title>NeoUtl | 動画編集ソフト</title>
-        <link rel="canonical" href="https://neoutl.taisho-guy.org/" />
-        <meta
-            name="description"
-            content="無料・オープンソースなAviUtlクローン。Windows、macOS、Linuxに対応。Slint、wgpu、ECS（Shipyard）を採用し、AviUtlの代替と凌駕を目指す動画編集ソフト。"
-        />
-        <meta
-            name="keywords"
-            content="NeoUtl, 動画編集, 無料,
-            オープンソース, AviUtl, Rust, Slint, wgpu, Shipyard,
-            tokio, ffmpeg, Windows, macOS, Linux, AviQtl"
-        />
-        <meta
-            name="google-site-verification"
-            content="xmXYtl-62Vi0ktTxGecj5qIXhQ81q76_dCKlFycBDEY"
-        />
-        <link rel="manifest" href="manifest.json" />
-        <meta name="theme-color" content="#121b1d" />
-        <meta
-            property="og:title"
-            content="NeoUtlのお部屋 |
-            AviUtlを踏襲し凌駕する次世代動画編集ソフト"
-        />
-        <meta
-            property="og:description"
-            content="無料・オープンソースなAviUtlクローン。Windows、macOS、Linuxに対応。Slint、wgpu、ECS（Shipyard）を採用し、AviUtlの代替と凌駕を目指す動画編集ソフト。"
-        />
-        <meta property="og:type" content="website" />
-        <meta property="og:url" content="https://neoutl.taisho-guy.org" />
-        <meta property="og:image" content="https://neoutl.taisho-guy.org/assets/splash.svg" />
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-        <link
-            rel="preload"
-            as="style"
-            href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@700&family=Lexend:wght@400;700&family=Noto+Sans+JP:wght@400;700&display=swap"
-            fetchpriority="high"
-        />
-        <link
-            href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@700&family=Lexend:wght@400;700&family=Noto+Sans+JP:wght@400;700&display=swap"
-            rel="stylesheet"
-            media="print"
-            onload="this.media = 'all'"
-        />
-        <link rel="icon" href="assets/icon.svg" type="image/svg+xml" fetchpriority="high" />
-        <link rel="apple-touch-icon" href="assets/icon.svg" />
-        <script type="application/ld+json">
-            {
-                "@context": "https://schema.org", "@type":
-                "SoftwareApplication", "name": "NeoUtl", "operatingSystem":
-                "Linux, Windows, macOS", "applicationCategory":
-                "MultimediaApplication", "description":
-                "無料・オープンソースなAviUtlクローン。Windows、macOS、Linuxに対応。Slint、wgpu、ECS（Shipyard）を採用し、AviUtlの代替と凌駕を目指す動画編集ソフト。",
-                "image": "https://neoutl.taisho-guy.org/assets/splash.svg",
-                "url": "https://neoutl.taisho-guy.org/", "author": {
-                    "@type": "Person", "name": "taisho-guy", "url":
-                    "https://codeberg.org/taisho-guy"
-                }, "license": "https://www.gnu.org/licenses/agpl-3.0.txt",
-                "releaseNotes":
-                "https://codeberg.org/taisho-guy/NeoUtl/releases",
-                "softwareVersion": "Stable", "downloadUrl":
-                "https://codeberg.org/taisho-guy/NeoUtl/releases",
-                "featureList": "NeoUtl, 動画編集, 無料,
-                オープンソース, AviUtl, Rust, Slint, wgpu, Shipyard,
-                tokio, ffmpeg, Windows, macOS, Linux, AviQtl", "offers": {
-                    "@type": "Offer", "price": "0", "priceCurrency": "JPY"
-                }
-            }
-        </script>
-        <link rel="stylesheet" href="style.css" />
-        <script src="script.js" defer></script>
-    </head>
-    <body>
-        <main class="container">
-            <header class="hero">
-                <h1 class="hero-title-static">NeoUtlのお部屋</h1>
-                <nav class="hero-links" aria-label="ナビゲーションリンク">
-                    <a href="https://neoutl.taisho-guy.org" title="公式サイト">
-                        <img src="assets/site.svg" alt="公式サイト" class="link-icon" />
-                    </a>
-                    <a href="https://codeberg.org/taisho-guy/NeoUtl" title="Codebergリポジトリ">
-                        <img src="assets/codeberg.svg" alt="Codebergリポジトリ" class="link-icon" />
-                    </a>
-                    <a href="https://github.com/taisho-guy/NeoUtl" title="GitHubミラー">
-                        <img src="assets/github.svg" alt="GitHubミラー" class="link-icon" />
-                    </a>
-                    <a href="https://codeberg.org/taisho-guy/NeoUtl/releases" title="リリース">
-                        <img src="assets/download.svg" alt="リリース" class="link-icon" />
-                    </a>
-                    <a href="https://codeberg.org/taisho-guy/NeoUtl/wiki/Home" title="Wiki">
-                        <img src="assets/wiki.svg" alt="Wiki" class="link-icon" />
-                    </a>
-                </nav>
-            </header>
-            <section>
-                <h2 class="section-header">NeoUtlとは...</h2>
-                <p>
-                    <b>AviUtl 1.10</b> &
-                    <b>ExEdit 0.92</b
-                    >の操作感を踏襲しつつ、<b>AviUtlを超える性能</b>を持つ動画編集ソフトを目標とするプロジェクトです。
-                    目標達成の為に、「<b>LinuxやmacOSでも動く、より速い、より安全、より拡張性が高い、AviUtlライクな自由ソフトウェア</b>」を開発しています。
-                </p>
-            </section>
-
-            <section>
-                <h2 class="section-header">インフォメーション</h2>
-
-                <details>
-                    <summary>実装状況</summary>
-                    <p>
-                        <a href="https://codeberg.org/taisho-guy/NeoUtl/src/branch/main/TODO.md"
-                            >TODO.md</a
-                        >で今後のロードマップを御覧頂けます。<br />
-                        <a href="https://codeberg.org/taisho-guy/NeoUtl/commits/branch/main"
-                            >コミット履歴</a
-                        >で開発の状況をリアルタイムで御覧頂けます。<br />
-                        NeoUtl 0.1.0は2026年8月迄に公開できるかもしれません。
-                    </p>
-                </details>
-
-                <details>
-                    <summary>AviQtlとは</summary>
-                    <p>
-                        AviQtlはNeoUtlの前に開発していた動画編集ソフトです。開発終了の理由は<a
-                            href="https://codeberg.org/taisho-guy/NeoUtl/src/branch/aviqtl#開発終了のお知らせ"
-                            >こちら</a
-                        >をご覧下さい。<br />
-                        AviQtlの実装背景や仕組みに興味がある方はぜひ
-                        <a href="https://zenn.dev/taisho_guy/articles/2fa8e91a6c0a07">Zenn記事</a>
-                        をご覧下さい。
-                    </p>
-                </details>
-
-                <details>
-                    <summary>受験生になります</summary>
-                    <p>
-                        2026年度、私は受験生となります。開発に十分な時間を割くことができません。御了承下さい。
-                    </p>
-                </details>
-            </section>
-
-            <section>
-                <h2 class="section-header">ダウンロード</h2>
-                <div class="alert alert-note">
-                    <div class="alert-title">現在のリリース状況について</div>
-                    <p>
-                        NeoUtlは現在、ビルドをリリースしておりません。 暫定的に、源流である
-                        <b>AviQtl</b>
-                        や、フォークプロジェクトである
-                        <b>AviQtl Plus</b>
-                        のリリースをお試しください。
-                    </p>
-                    <ul>
-                        <li>
-                            <a
-                                href="https://codeberg.org/taisho-guy/NeoUtl/releases/tag/0.0.95-Unstable"
-                                target="_blank"
-                                >AviQtl</a
-                            >
-                        </li>
-                        <li>
-                            <a href="https://github.com/GT-610/AviQtl-Plus/releases" target="_blank"
-                                >AviQtl Plus</a
-                            >
-                        </li>
-                    </ul>
-                </div>
-
-                <div class="download-grid" id="download-grid">
-                    <div
-                        class="arch-tabs"
-                        id="arch-tabs"
-                        role="tablist"
-                        aria-label="CPUアーキテクチャ"
-                    >
-                        <button
-                            type="button"
-                            class="arch-tab"
-                            role="tab"
-                            aria-selected="false"
-                            tabindex="-1"
-                            data-arch="x86_64"
-                        >
-                            x86_64
-                        </button>
-                        <button
-                            type="button"
-                            class="arch-tab"
-                            role="tab"
-                            aria-selected="false"
-                            tabindex="-1"
-                            data-arch="arm64"
-                        >
-                            arm64
-                        </button>
-                    </div>
-                    <a
-                        href="https://codeberg.org/taisho-guy/NeoUtl/releases"
-                        class="download-item"
-                        data-platform="linux"
-                        title="Linux"
-                    >
-                        <div class="download-icon icon-linux is-loading"></div>
-                        <span class="download-label">Linux</span>
-                    </a>
-                    <a
-                        href="https://codeberg.org/taisho-guy/NeoUtl/releases"
-                        class="download-item"
-                        data-platform="windows"
-                        title="Windows"
-                    >
-                        <div class="download-icon icon-windows is-loading"></div>
-                        <span class="download-label">Windows</span>
-                    </a>
-                    <a
-                        href="https://codeberg.org/taisho-guy/NeoUtl/releases"
-                        class="download-item"
-                        data-platform="apple"
-                        title="macOS"
-                    >
-                        <div class="download-icon icon-apple is-loading"></div>
-                        <span class="download-label">macOS</span>
-                    </a>
-                    <a href="#" class="download-item" data-platform="source" title="ソースコード">
-                        <div class="download-icon icon-codeberg is-loading"></div>
-                        <span class="download-label">Code</span>
-                    </a>
-                    <div class="download-info-row" id="download-info-row" role="status">
-                        過去のリリース情報を取得中...
-                    </div>
-                </div>
-            </section>
-
-            <section>
-                <h2 class="section-header">ビルド手順</h2>
-                <p>
-                    最新のNeoUtl（<code>main</code>ブランチ）はRustで実装されています。ビルドを行うには、予め
-                    <b>Rust</b>、<b>Clang</b>、<b>Mold</b>、<b>FFmpeg</b>
-                    をシステムにインストールしてください。
-                </p>
-                <div class="alert alert-note">
-                    <div class="alert-title">ソースコードの取得とビルド</div>
-                    <pre><code>git clone "https://codeberg.org/taisho-guy/NeoUtl.git"
+<!DOCTYPE html> <html style><meta charset=utf-8>
+<meta name=verify-v1 content="9AnDKs+Pb/qfRayvptwacLXhJnCtsPcH1vhn4bt8TOs=">
+<title>NeoUtlのお部屋</title>
+<meta name=referrer content=no-referrer><link rel=icon href="data:image/x-icon;base64,AAABAAEAICAQAAAAAADoAgAAFgAAACgAAAAgAAAAQAAAAAEABAAAAAAAgAIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACAAACAAAAAgIAAgAAAAIAAgACAgAAAwMDAAICAgAAAAP8AAP8AAAD//wD/AAAA/wD/AP//AAD///8A8P8PAAAAAAAAAAAAAPD/D/D/DwAAAAAAAAAAAADw/w/wAA8AAAAAAAAAAAAA8AAP8P8PAAAAAAAAAAAAAPD/D/D/DwAAAAAAAAAAAADw/w/w/w8AAAAAAAAAAAAA8P8P8AAPAAAAAAAAAAAAAPAAD/D/D//////////////w/w/w/w8AAAAAAAAAAAAA8P8P8P8PAAAAAAAAAAAAAPD/D/AADwAAAAAAAAAAAADwAA/w/w8AAAAAAAAAAAAA8P8P8P8PAAAAAAAAAAAAAPD/D/D/DwAAAAAAAAAAAADw/w/wAA8AAAAAAAAAAAAA8AAP8P8PAAAAAAAAAAAAAPD/D/D/DwAAAAAAAAAAAADw/w/w/w8AAAAAAAAAAAAA8P8P8AAPAAAAAAAAAAAAAPAAD/D/DwAAAAAAAAAAAADw/w/w/w8AAAAAAAAAAAAA8P8P8P8PAAAAAAAAAAAAAPD/D/AADwAAAAAAAAAAAADwAA/w/w8AAAAAAAAAAAAA8P8P8P8PAAAAAAAAAAAAAPD/D/D/D//////////////w/w/wAA8AAAAAAAAAAAAA8AAP8P8PAAAAAAAAAAAAAPD/D/D/DwAAAAAAAAAAAADw/w/w/w8AAAAAAAAAAAAA8P8P8AAPAAAAAAAAAAAAAPAAD/D/DwAAAAAAAAAAAADw/w8AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=="><style>.sf-hidden{display:none!important}</style><link rel=canonical href=https://neoutl.taisho-guy.org/><meta http-equiv=content-security-policy content="default-src 'none'; font-src 'self' data:; img-src 'self' data:; style-src 'unsafe-inline'; media-src 'self' data:; script-src 'unsafe-inline' data:; object-src 'self' data:; frame-src 'self' data:; connect-src https://codeberg.org https://api.github.com;"></head>
+<body bgcolor=#efffef text=#1f5f1f link=#2f4fdf vlink=#00009f alink=#9f0000 cz-shortcut-listen=true>
+<center>
+<div style=max-width:800px>
+<table width=100% border=0 cellpadding=0 cellspacing=0 bgcolor=#efffef><tbody><tr><td align=left style=padding:6px 4px>
+<font size=2>Sorry, this web page is Japanese only.</font>
+<td align=right style=padding:6px 4px>
+<font size=2>
+<nav style="white-space:nowrap">
+<a href="https://neoutl.taisho-guy.org" title="公式サイト">Site</a>
+　<a href="https://codeberg.org/taisho-guy/NeoUtl" title="Codebergリポジトリ">Codeberg</a>
+　<a href="https://github.com/taisho-guy/NeoUtl" title="GitHubミラー">GitHub</a>
+　<a href="https://codeberg.org/taisho-guy/NeoUtl/releases" title="リリース">Download</a>
+　<a href="https://codeberg.org/taisho-guy/NeoUtl/wiki/Home" title="Wiki">Wiki</a>
+</nav>
+</font>
+</td></tr></tbody></table>
+</div>
+<hr style=max-width:800px>
+<table width=100% cellpadding=8 cellspacing=0 bgcolor=#efffef><tbody><tr>
+<td></td>
+<td align=center nowrap><font size=6><b>NeoUtlのお部屋</b></font></td>
+<td nowrap align=right>&nbsp;</td>
+</tr></tbody></table>
+<hr style=max-width:800px>
+<div style=max-width:800px>
+<table width=100% cellpadding=2><tbody><tr><th bgcolor=#009fff>
+<font size=4><b><font color=#ffffbf>NeoUtlとは…</font></b></font>
+</th></tr></tbody></table>
+<br>
+<table width=100%><tbody><tr><td align=left>
+<b>AviUtl 1.10</b> & <b>ExEdit 0.92</b>の操作感を踏襲しつつ、<b>AviUtlを超える性能</b>を持つ動画編集ソフトを目標とするプロジェクトです。<br>
+目標達成の為に、「<b>LinuxやmacOSでも動く、より速い、より安全、より拡張性が高い、AviUtlライクな自由ソフトウェア</b>」を開発しています。<br>
+</td></tr></tbody></table>
+</div>
+<br><hr style=max-width:800px>
+<div style=max-width:800px>
+<table width=100% cellpadding=2><tbody><tr><th bgcolor=#009fff>
+<font size=4><b><font color=#dfffaf>★ </font><font color=#ffffbf>インフォメーション</font><font color=#dfffaf> ★</font></b></font>
+</th></tr></tbody></table>
+<br>
+<table width=100% border=4 cellpadding=12 bgcolor=#fdffff><tbody><tr><td align=left>
+<details>
+<summary><b>実装状況</b></summary>
+<p>
+<a href="https://codeberg.org/taisho-guy/NeoUtl/src/branch/main/TODO.md">TODO.md</a>で今後のロードマップを御覧頂けます。<br />
+<a href="https://codeberg.org/taisho-guy/NeoUtl/commits/branch/main">コミット履歴</a>で開発の状況をリアルタイムで御覧頂けます。<br />
+NeoUtl 0.1.0は2026年8月迄に公開できるかもしれません。
+</p>
+</details>
+</td></tr></tbody></table>
+<br>
+<table width=100% border=4 cellpadding=12 bgcolor=#fdffff><tbody><tr><td align=left>
+<details>
+<summary><b>AviQtlとは</b></summary>
+<p>
+AviQtlはNeoUtlの前に開発していた動画編集ソフトです。開発終了の理由は<a href="https://codeberg.org/taisho-guy/NeoUtl/src/branch/aviqtl#開発終了のお知らせ">こちら</a>をご覧下さい。<br />
+AviQtlの実装背景や仕組みに興味がある方はぜひ <a href="https://zenn.dev/taisho_guy/articles/2fa8e91a6c0a07">Zenn記事</a>をご覧下さい。
+</p>
+</details>
+</td></tr></tbody></table>
+<br>
+<table width=100% border=4 cellpadding=12 bgcolor=#fdffff><tbody><tr><td align=left>
+<details>
+<summary><b>受験生になります</b></summary>
+<p>
+2026年度、私は受験生となります。開発に十分な時間を割くことができません。御了承下さい。
+</p>
+</details>
+</td></tr></tbody></table>
+</div>
+<br>
+<hr style=max-width:800px>
+<div style=max-width:800px>
+<table width=100% cellpadding=2><tbody><tr><th bgcolor=#009fff>
+<font size=4><b><font color=#dfffaf>★ </font><font color=#ffffbf>ダウンロード</font><font color=#dfffaf> ★</font></b></font>
+</th></tr></tbody></table>
+<br>
+<table width=100%><tbody><tr><td>
+<table width=100% border=4 cellpadding=12 bgcolor=#fdffff><tbody><tr><td align=left>
+<font color=#2f4fdf><b>現在のリリース状況について</b></font>
+<p>
+NeoUtlは現在、ビルドをリリースしておりません。暫定的に、源流である <b>AviQtl</b> や、フォークプロジェクトである <b>AviQtl Plus</b> のリリースをお試しください。<br>
+AviQtlは開発終了済で更新されません。AviQtl Plusは<a href="https://github.com/GT-610" target="_blank">GT-610</a>氏によるGitHub上のフォークです。<br>
+両者ともWindows/Linuxはx86_64、macOSはarm64のみに対応します。
+</p>
+</td></tr></tbody></table>
+<br>
+<table width=100% border=2 cellpadding=3 bgcolor=#fdffff id="download-table-neoutl" class="dl-table" data-source="codeberg" data-repo="taisho-guy/NeoUtl" data-suppress-version="0.0.95">
+<tbody>
+<tr bgcolor=#efffcf><th colspan=4><font color=#2f4fdf><b>NeoUtl</b></font></th></tr>
+<tr><td colspan=4 align=left><font size=2>
+AviUtl 1.10 & ExEdit 0.92の操作感を踏襲する、次世代動画編集ソフトウェアです。<br>
+Rust、Slint、wgpu、Shipyard、Tokio、ffmpegで構成されています。Windows、macOS、Linuxに対応。
+</font></td></tr>
+<tr align=CENTER bgcolor=#efffcf>
+<th></th><th>Windows</th><th>macOS</th><th>Linux</th>
+</tr>
+<tr>
+<td align=CENTER><b>x86_64</b></td>
+<td align=left><a class="dl-item" data-platform="windows" data-arch="x86_64" href="https://codeberg.org/taisho-guy/NeoUtl/releases">取得中</a></td>
+<td align=left><a class="dl-item" data-platform="apple" data-arch="x86_64" href="https://codeberg.org/taisho-guy/NeoUtl/releases">取得中</a></td>
+<td align=left><a class="dl-item" data-platform="linux" data-arch="x86_64" href="https://codeberg.org/taisho-guy/NeoUtl/releases">取得中</a></td>
+</tr>
+<tr>
+<td align=CENTER><b>arm64</b></td>
+<td align=left><a class="dl-item" data-platform="windows" data-arch="arm64" href="https://codeberg.org/taisho-guy/NeoUtl/releases">取得中</a></td>
+<td align=left><a class="dl-item" data-platform="apple" data-arch="arm64" href="https://codeberg.org/taisho-guy/NeoUtl/releases">取得中</a></td>
+<td align=left><a class="dl-item" data-platform="linux" data-arch="arm64" href="https://codeberg.org/taisho-guy/NeoUtl/releases">取得中</a></td>
+</tr>
+<tr>
+<td colspan=4><span class="dl-info">過去のリリース情報を取得中...</span><a href="https://codeberg.org/taisho-guy/NeoUtl/releases" style=float:right>過去のバージョンはこちら</a></td>
+</tr>
+</tbody></table>
+<br>
+<table width=100% border=2 cellpadding=3 bgcolor=#fdffff id="download-table-aviqtl" class="dl-table" data-source="codeberg-tag" data-repo="taisho-guy/NeoUtl" data-tag="0.0.95-Unstable">
+<tbody>
+<tr bgcolor=#efffcf><th colspan=4><font color=#2f4fdf><b>AviQtl</b></font></th></tr>
+<tr><td colspan=4 align=left><font size=2>
+NeoUtlの源流となる旧プロジェクトです。開発終了済で、0.0.95-Unstableタグ以降更新されません。
+</font></td></tr>
+<tr align=CENTER bgcolor=#efffcf>
+<th></th><th>Windows</th><th>macOS</th><th>Linux</th>
+</tr>
+<tr>
+<td align=CENTER><b>x86_64</b></td>
+<td align=left><a class="dl-item" data-platform="windows" data-arch="x86_64" href="https://codeberg.org/taisho-guy/NeoUtl/releases/tag/0.0.95-Unstable">取得中</a></td>
+<td align=left>&mdash;</td>
+<td align=left><a class="dl-item" data-platform="linux" data-arch="x86_64" href="https://codeberg.org/taisho-guy/NeoUtl/releases/tag/0.0.95-Unstable">取得中</a></td>
+</tr>
+<tr>
+<td align=CENTER><b>arm64</b></td>
+<td align=left>&mdash;</td>
+<td align=left><a class="dl-item" data-platform="apple" data-arch="arm64" href="https://codeberg.org/taisho-guy/NeoUtl/releases/tag/0.0.95-Unstable">取得中</a></td>
+<td align=left>&mdash;</td>
+</tr>
+<tr>
+<td colspan=4><span class="dl-info">リリース情報を取得中...</span><a href="https://codeberg.org/taisho-guy/NeoUtl/releases/tag/0.0.95-Unstable" target="_blank" style=float:right>リリースページはこちら</a></td>
+</tr>
+</tbody></table>
+<br>
+<table width=100% border=2 cellpadding=3 bgcolor=#fdffff id="download-table-aviqtlplus" class="dl-table" data-source="github" data-repo="GT-610/AviQtl-Plus">
+<tbody>
+<tr bgcolor=#efffcf><th colspan=4><font color=#2f4fdf><b>AviQtl Plus</b></font></th></tr>
+<tr><td colspan=4 align=left><font size=2>
+GT-610氏によるAviQtlのフォークプロジェクトです。GitHub上で開発が継続されています。
+</font></td></tr>
+<tr align=CENTER bgcolor=#efffcf>
+<th></th><th>Windows</th><th>macOS</th><th>Linux</th>
+</tr>
+<tr>
+<td align=CENTER><b>x86_64</b></td>
+<td align=left><a class="dl-item" data-platform="windows" data-arch="x86_64" href="https://github.com/GT-610/AviQtl-Plus/releases" target="_blank">取得中</a></td>
+<td align=left><a class="dl-item" data-platform="apple" data-arch="x86_64" href="https://github.com/GT-610/AviQtl-Plus/releases" target="_blank">取得中</a></td>
+<td align=left><a class="dl-item" data-platform="linux" data-arch="x86_64" href="https://github.com/GT-610/AviQtl-Plus/releases" target="_blank">取得中</a></td>
+</tr>
+<tr>
+<td align=CENTER><b>arm64</b></td>
+<td align=left><a class="dl-item" data-platform="windows" data-arch="arm64" href="https://github.com/GT-610/AviQtl-Plus/releases" target="_blank">取得中</a></td>
+<td align=left><a class="dl-item" data-platform="apple" data-arch="arm64" href="https://github.com/GT-610/AviQtl-Plus/releases" target="_blank">取得中</a></td>
+<td align=left><a class="dl-item" data-platform="linux" data-arch="arm64" href="https://github.com/GT-610/AviQtl-Plus/releases" target="_blank">取得中</a></td>
+</tr>
+<tr>
+<td colspan=4><span class="dl-info">リリース情報を取得中...</span><a href="https://github.com/GT-610/AviQtl-Plus/releases" target="_blank" style=float:right>過去のバージョンはこちら</a></td>
+</tr>
+</tbody></table>
+<br>
+<table width=100% border=2 cellpadding=3 bgcolor=#fdffff>
+<tbody><tr bgcolor=#efffcf><th colspan=3><font color=#2f4fdf><b>ビルド手順</b></font></tr>
+<tr><td colspan=3 align=left><font size=2>
+最新のNeoUtl（<code>main</code>ブランチ）はRustで実装されています。ビルドを行うには、予め <b>Rust</b>、<b>Clang</b>、<b>Mold</b>、<b>FFmpeg</b> をシステムにインストールしてください。
+</font></td></tr>
+<tr>
+<td colspan=3 align=left>
+<font size=2><b>ソースコードの取得とビルド</b></font><br>
+<pre><code>git clone "https://codeberg.org/taisho-guy/NeoUtl.git"
 cd NeoUtl
 git switch main
 cargo xtask build --release</code></pre>
-                    <p>
-                        実行可能ファイルは
-                        <code>target/release</code>
-                        以下に生成されます。
-                    </p>
-                </div>
-
-                <details class="deprecated">
-                    <summary>AviQtlをビルドする場合</summary>
-                    <p>Python3およびPySide6環境が必要です。</p>
-                    <pre><code>git switch aviqtl
+<font size=2>実行可能ファイルは <code>target/release</code> 以下に生成されます。</font>
+</td>
+</tr>
+<tr>
+<td colspan=3 align=left>
+<details>
+<summary><b>AviQtlをビルドする場合</b></summary>
+<p>
+Python3およびPySide6環境が必要です。<br>
+<pre><code>git switch aviqtl
 python3 BUILD.py</code></pre>
-                    <p>
-                        実行可能ファイルは <code>build</code>
-                        以下に生成されます。
-                    </p>
-                </details>
-            </section>
+実行可能ファイルは <code>build</code> 以下に生成されます。
+</p>
+</details>
+</td>
+</tr>
+</table>
+<br>
+</div>
+<hr style=max-width:800px>
+<div style=max-width:800px>
+<table width=100% cellpadding=2><tbody><tr><th bgcolor=#009fff>
+<font size=4><b><font color=#dfffaf>★ </font><font color=#ffffbf>採用技術</font><font color=#dfffaf> ★</font></b></font>
+</th></tr></tbody></table>
+<br>
+<table width=100%><tbody><tr><td>
+<font size=2>NeoUtlは、以下の素晴らしいオープンソースプロジェクトと言語の上に成り立っています。</font>
+<br><br>
+<table width=100% border=2 cellpadding=3 bgcolor=#fdffff>
+<tbody><tr bgcolor=#efffcf><th colspan=3><font color=#2f4fdf><b>言語・フレームワーク</b></font></tr>
+<tr>
+<td><a href="https://www.rust-lang.org/" target="_blank">Rust</a></td>
+<td colspan=2><font size=2>安全性と高パフォーマンスを両立した、現行プロジェクトのメイン実装言語です。<br><font size=1>Language</font></font></td>
+</tr>
+<tr>
+<td><a href="https://slint.dev/" target="_blank">Slint</a></td>
+<td colspan=2><font size=2>UI/UXの構築に採用されている、ネイティブかつ軽量なGUIツールキットです。<br><font size=1>GPLv3 / Commercial</font></font></td>
+</tr>
+<tr>
+<td><a href="https://wgpu.rs/" target="_blank">wgpu</a></td>
+<td colspan=2><font size=2>GPUを最大限に引き出し、クロスプラットフォームで高速なプレビューを支えるグラフィックスAPIです。<br><font size=1>MIT / Apache-2.0</font></font></td>
+</tr>
+<tr>
+<td><a href="https://github.com/leudz/shipyard" target="_blank">Shipyard</a></td>
+<td colspan=2><font size=2>データの効率的な管理と高速な処理を支える、Entity Component System (ECS) クレートです。<br><font size=1>MIT / Apache-2.0</font></font></td>
+</tr>
+<tr>
+<td><a href="https://tokio.rs/" target="_blank">Tokio</a></td>
+<td colspan=2><font size=2>マルチスレッド環境での非同期処理やイベント駆動制御を司る基盤です。<br><font size=1>MIT</font></font></td>
+</tr>
+<tr>
+<td><a href="https://github.com/zmwangx/rust-ffmpeg" target="_blank">ffmpeg-next</a></td>
+<td colspan=2><font size=2>動画・音声の高度なデコード、エンコード、変換処理を受け持つ映像処理の要です。<br><font size=1>LGPLv2.1+ / GPLv2+</font></font></td>
+</tr>
+</table>
+<br>
+</td></tr></table>
+</div>
+<hr style=max-width:800px>
+<div style=max-width:800px>
+<table width=100% cellpadding=2><tbody><tr><th bgcolor=#009fff>
+<font size=4><b><font color=#dfffaf>★ </font><font color=#ffffbf>使用上の注意</font><font color=#dfffaf> ★</font></b></font>
+</th></tr></tbody></table>
+<br>
+<table width=100%><tbody><tr><td align=left>
+This program is free software: you can redistribute it and/or modify it under the terms of the GNU Affero General Public License as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.<br>
+<br>
+This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU Affero General Public License for more details.<br>
+<br>
+You should have received a copy of the GNU Affero General Public License along with this program. If not, see <a href="https://www.gnu.org/licenses/agpl.html" target="_blank">https://www.gnu.org/licenses/agpl.html</a>.
+</td></tr></tbody></table>
+</div>
+<br><hr style=max-width:800px>
+<ins class="adsbygoogle sf-hidden" style=display:block data-ad-client=ca-pub-6947625383714468 data-ad-slot=8392879036 data-ad-format=auto data-full-width-responsive=true></ins>
+<table width=100% border=0 cellpadding=8 cellspacing=0 bgcolor=#efffef><tbody><tr>
+<td valign=bottom>
+<td align=center nowrap>
+リンクはフリーですのでご自由にどうぞ。<br>
+<br>
+by <a href="https://codeberg.org/taisho-guy" target="_blank">taisho-guy</a>
+<td valign=top>
+</tr></tbody></table>
+<hr style=max-width:800px>
+</center>
+<script>
+const PATTERNS = {
+    linux: ["linux"],
+    windows: ["win", "msys2", "ucrt"],
+    apple: ["mac", "apple", "darwin"],
+};
+const ARCH_PATTERNS = {
+    x86_64: ["x86_64", "amd64", "x86-64", "universal"],
+    arm64: ["aarch64", "arm64", "arm", "universal"],
+};
+const CACHE_TTL = 3600000;
+const OBSERVER_MARGIN = "100px";
 
-            <section>
-                <h2 class="section-header">採用技術</h2>
-                <p>
-                    NeoUtlは、以下の素晴らしいオープンソースプロジェクトと言語の上に成り立っています。
-                </p>
-                <div class="related-links-grid lazy-render-section">
-                    <div class="link-card">
-                        <div class="link-card-header">
-                            <a href="https://www.rust-lang.org/" target="_blank">Rust</a>
-                            <span class="license-badge">Language</span>
-                        </div>
-                        <p>
-                            安全性と高パフォーマンスを両立した、現行プロジェクトのメイン実装言語です。
-                        </p>
-                    </div>
-                    <div class="link-card">
-                        <div class="link-card-header">
-                            <a href="https://slint.dev/" target="_blank">Slint</a>
-                            <span class="license-badge">GPLv3 / Commercial</span>
-                        </div>
-                        <p>
-                            UI/UXの構築に採用されている、ネイティブかつ軽量なGUIツールキットです。
-                        </p>
-                    </div>
-                    <div class="link-card">
-                        <div class="link-card-header">
-                            <a href="https://wgpu.rs/" target="_blank">wgpu</a>
-                            <span class="license-badge">MIT / Apache-2.0</span>
-                        </div>
-                        <p>
-                            GPUを最大限に引き出し、クロスプラットフォームで高速なプレビューを支えるグラフィックスAPIです。
-                        </p>
-                    </div>
-                    <div class="link-card">
-                        <div class="link-card-header">
-                            <a href="https://github.com/leudz/shipyard" target="_blank">Shipyard</a>
-                            <span class="license-badge">MIT / Apache-2.0</span>
-                        </div>
-                        <p>
-                            データの効率的な管理と高速な処理を支える、Entity Component System (ECS)
-                            クレートです。
-                        </p>
-                    </div>
-                    <div class="link-card">
-                        <div class="link-card-header">
-                            <a href="https://tokio.rs/" target="_blank">Tokio</a>
-                            <span class="license-badge">MIT</span>
-                        </div>
-                        <p>マルチスレッド環境での非同期処理やイベント駆動制御を司る基盤です。</p>
-                    </div>
-                    <div class="link-card">
-                        <div class="link-card-header">
-                            <a href="https://github.com/zmwangx/rust-ffmpeg" target="_blank"
-                                >ffmpeg-next</a
-                            >
-                            <span class="license-badge">LGPLv2.1+ / GPLv2+</span>
-                        </div>
-                        <p>
-                            動画・音声の高度なデコード、エンコード、変換処理を受け持つ映像処理の要です。
-                        </p>
-                    </div>
-                </div>
-            </section>
+const findAsset = (assets, platform, arch) => {
+    return assets.find((a) => {
+        const name = (a.name ?? "").toLowerCase();
+        const osMatch = PATTERNS[platform]?.some((s) => name.includes(s));
+        if (!osMatch) return false;
+        return ARCH_PATTERNS[arch].some((s) => name.includes(s));
+    });
+};
 
-            <section>
-                <h2 class="section-header">プロジェクトの派生と状況</h2>
-                <div class="related-links-grid lazy-render-section">
-                    <div class="link-card">
-                        <div class="link-card-header">
-                            <a
-                                href="https://codeberg.org/taisho-guy/NeoUtl"
-                                target="_blank"
-                                class="tag-link"
-                                >NeoUtl</a
-                            >
-                            <span class="license-badge">実装中</span>
-                        </div>
-                        <p>
-                            開発者: taisho-guy<br />新エンジン（wgpu）を搭載した現行のメインプロジェクトです。
-                        </p>
-                    </div>
-                    <div class="link-card">
-                        <div class="link-card-header">
-                            <a
-                                href="https://codeberg.org/taisho-guy/NeoUtl/src/branch/aviqtl"
-                                target="_blank"
-                                class="tag-link"
-                                >AviQtl</a
-                            >
-                            <span class="license-badge badge-warn">開発終了</span>
-                        </div>
-                        <p>
-                            開発者: taisho-guy / GT-610<br />Qt
-                            Quickを採用していた、NeoUtlの源流となる旧プロジェクトです。
-                        </p>
-                    </div>
-                    <div class="link-card">
-                        <div class="link-card-header">
-                            <a
-                                href="https://github.com/GT-610/AviQtl-Plus"
-                                target="_blank"
-                                class="tag-link"
-                                >AviQtl Plus</a
-                            >
-                            <span class="license-badge">フォーク</span>
-                        </div>
-                        <p>
-                            開発者: GT-610<br />GitHub上で展開されている、AviQtlをベースにしたフォークプロジェクトです。
-                        </p>
-                    </div>
-                </div>
-            </section>
-            <section>
-                <h2 class="section-header">使用上の注意</h2>
-                <p>
-                    NeoUtlは<a href="https://www.gnu.org/licenses/agpl-3.0.txt" target="_blank"
-                        >GNU Affero General Public License</a
-                    >に基づいて公開されている自由ソフトウェアです。
-                </p>
-            </section>
-        </main>
+const fetchRelease = async (source, repo, tag) => {
+    if (source === "codeberg") {
+        const res = await fetch(`https://codeberg.org/api/v1/repos/${repo}/releases?limit=1`);
+        const [latest] = await res.json();
+        return { tag_name: latest.tag_name, name: latest.name, created_at: latest.created_at, assets: latest.assets, html_url: `https://codeberg.org/${repo}/releases/tag/${latest.tag_name}` };
+    }
+    if (source === "codeberg-tag") {
+        const res = await fetch(`https://codeberg.org/api/v1/repos/${repo}/releases/tags/${tag}`);
+        const latest = await res.json();
+        return { tag_name: latest.tag_name, name: latest.name, created_at: latest.created_at, assets: latest.assets, html_url: `https://codeberg.org/${repo}/releases/tag/${latest.tag_name}` };
+    }
+    if (source === "github") {
+        const res = await fetch(`https://api.github.com/repos/${repo}/releases/latest`);
+        const latest = await res.json();
+        return { tag_name: latest.tag_name, name: latest.name, created_at: latest.published_at, assets: latest.assets, html_url: latest.html_url };
+    }
+};
 
-        <footer class="container footer-content">
-            <p>
-                <a
-                    href="https://www.gnu.org/licenses/agpl-3.0.txt"
-                    target="_blank"
-                    class="easter-egg"
-                    >ライセンス</a
-                >は<a
-                    href="https://www.gnu.org/philosophy/free-sw.html"
-                    target="_blank"
-                    class="easter-egg"
-                    >フリー</a
-                >ですので<a
-                    href="https://codeberg.org/taisho-guy/NeoUtl/fork"
-                    target="_blank"
-                    class="easter-egg"
-                    >ご自由にどうぞ</a
-                >。
-            </p>
-            <p>by <a href="https://codeberg.org/taisho-guy" target="_blank">taisho-guy</a></p>
-        </footer>
-    </body>
+const updateTable = (table, latest) => {
+    const suppress = table.dataset.suppressVersion;
+    const suppressed = suppress && (latest.tag_name ?? "").includes(suppress);
+    const label = suppressed
+        ? "未リリース"
+        : `${latest.name || latest.tag_name} (${new Date(latest.created_at).toLocaleDateString("ja-JP")})`;
+
+    for (const el of table.querySelectorAll(".dl-item[data-platform][data-arch]")) {
+        const asset = !suppressed && findAsset(latest.assets ?? [], el.dataset.platform, el.dataset.arch);
+        if (asset) {
+            el.href = asset.browser_download_url ?? latest.html_url;
+            el.textContent = label;
+        } else {
+            const dash = document.createElement("span");
+            dash.textContent = "\u2014";
+            el.replaceWith(dash);
+        }
+    }
+
+    const info = table.querySelector(".dl-info");
+    if (info) info.textContent = label;
+};
+
+const initTable = (table) => {
+    const source = table.dataset.source;
+    const repo = table.dataset.repo;
+    const tag = table.dataset.tag;
+    const cacheKey = `neoutl_release_${source}_${repo}_${tag ?? ""}`;
+
+    const cached = localStorage.getItem(cacheKey);
+    if (cached) {
+        const { latest, timestamp } = JSON.parse(cached);
+        if (Date.now() - timestamp < CACHE_TTL) updateTable(table, latest);
+    }
+
+    const observer = new IntersectionObserver(
+        async ([entry]) => {
+            if (entry.isIntersecting) {
+                observer.disconnect();
+                try {
+                    const latest = await fetchRelease(source, repo, tag);
+                    localStorage.setItem(cacheKey, JSON.stringify({ latest, timestamp: Date.now() }));
+                    updateTable(table, latest);
+                } catch {
+                    const info = table.querySelector(".dl-info");
+                    if (info) info.textContent = "APIエラー";
+                }
+            }
+        },
+        { rootMargin: OBSERVER_MARGIN },
+    );
+    observer.observe(table);
+};
+
+const initReleases = () => {
+    document.querySelectorAll(".dl-table[data-source]").forEach(initTable);
+};
+
+if ("requestIdleCallback" in window) requestIdleCallback(initReleases);
+else {
+    setTimeout(initReleases, 1);
+}
+
+document.addEventListener("click", ({ target }) => {
+    if (target.tagName === "CODE") {
+        navigator.clipboard.writeText(target.textContent).then(() => {
+            target.classList.add("is-copied");
+            setTimeout(() => target.classList.remove("is-copied"), 1500);
+        });
+    }
+});
+</script>
+</body>
 </html>
