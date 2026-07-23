@@ -67,4 +67,5 @@ pub fn open(window: &ProjectSettingsWindow, state: &SharedAppState) {
     window.set_audio_sample_rate(project.audio_sample_rate as i32);
     window.set_audio_channels(project.audio_channels as i32);
     let _ = window.show();
+    window.window().request_redraw();
 }

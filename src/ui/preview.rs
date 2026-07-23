@@ -398,6 +398,7 @@ pub fn setup(
         move || {
             if let Some(w) = settings_weak.upgrade() {
                 let _ = w.show();
+                w.window().request_redraw();
             }
         }
     });
