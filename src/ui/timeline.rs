@@ -1,7 +1,7 @@
 use crate::app_state::{self, SharedAppState};
 use crate::ecs::{
     EcsWorld,
-    components::{MediaSource, TextContent},
+    components::{MediaSource, ShapeParams, TextContent},
 };
 use crate::objects::registry;
 use crate::{
@@ -81,6 +81,13 @@ pub fn setup(
                     world.add_object(start, 90, kind_id, layer, Some(TextContent::default()));
                     sync(&t, pw.upgrade().as_ref(), &world);
                 }
+                "Shape" => {
+                    app_state::snapshot_before_edit(&state);
+                    let world_holder = app_state::active_world(&state);
+                    let mut world = world_holder.lock().unwrap();
+                    world.add_shape_object(start, 90, kind_id, layer, ShapeParams::default());
+                    sync(&t, pw.upgrade().as_ref(), &world);
+                }
                 _ => {
                     app_state::snapshot_before_edit(&state);
                     let world_holder = app_state::active_world(&state);
@@ -113,14 +120,16 @@ pub fn setup(
         timeline.on_select_object(move |id| {
             if let Some(t) = tw.upgrade() {
                 let objs = t.get_objects();
-                let updated: Vec<TimelineObject> = objs
-                    .iter()
-                    .map(|mut o| {
-                        o.selected = o.id == id;
-                        o
-                    })
-                    .collect();
-                t.set_objects(ModelRc::new(VecModel::from(updated)));
+                for i in 0..objs.row_count() {
+                    let Some(mut o) = objs.row_data(i) else {
+                        continue;
+                    };
+                    let selected = o.id == id;
+                    if o.selected != selected {
+                        o.selected = selected;
+                        objs.set_row_data(i, o);
+                    }
+                }
             }
             if let Some(p) = pw.upgrade() {
                 let world_holder = app_state::active_world(&state);

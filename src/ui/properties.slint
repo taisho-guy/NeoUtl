@@ -25,12 +25,6 @@ component PropertyRow inherits Rectangle {
     HorizontalLayout {
         spacing: 4px;
 
-        Rectangle {
-            width: 74px;
-            background: #202026;
-            Text { text: label; color: #b0b0ba; font-size: 11px; horizontal-alignment: center; vertical-alignment: center; width: 100%; height: 100%; }
-        }
-
         // Slider・ボックスとも同一のroot.value/root.changedのみを介して読み書きする。
         // 個々に内部stateを持たせない（＝リンク切れの原因を構造的に排除する）。
         Slider {
@@ -83,6 +77,14 @@ component PropertyRow inherits Rectangle {
                     }
                 }
             }
+        }
+
+        // AviQtl(ParamControl.qml)のトラックバー行はラベルを中央のボタンとして配置し、
+        // 数値・スライダー操作を左側（主操作領域）へ寄せる。NeoUtlも同じ視覚的重み付けへ揃える。
+        Rectangle {
+            width: 74px;
+            background: #202026;
+            Text { text: label; color: #b0b0ba; font-size: 11px; horizontal-alignment: center; vertical-alignment: center; width: 100%; height: 100%; }
         }
     }
 }
