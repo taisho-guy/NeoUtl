@@ -4,8 +4,10 @@ members = [
     "crates/neoutl-shared-abi",
     "crates/neoutl-object-api",
     "crates/neoutl-effect-api",
+    "crates/neoutl-theme-api",
     "crates/objects/*",
     "crates/effects/*",
+    "crates/themes/*",
     "crates/neoutl-media-api",
     "crates/media/gstreamer-decoder",
     "crates/media/symphonia-decoder",
@@ -20,7 +22,10 @@ resolver = "2"
 neoutl-shared-abi = { path = "crates/neoutl-shared-abi" }
 neoutl-object-api = { path = "crates/neoutl-object-api" }
 neoutl-effect-api = { path = "crates/neoutl-effect-api" }
+neoutl-theme-api = { path = "crates/neoutl-theme-api" }
 neoutl-media-api = { path = "crates/neoutl-media-api" }
+toml = "0.9"
+serde_json = "1.0"
 
 [package]
 name = "NeoUtl"
@@ -31,7 +36,10 @@ edition = "2024"
 neoutl-shared-abi.workspace = true
 neoutl-object-api.workspace = true
 neoutl-effect-api.workspace = true
+neoutl-theme-api.workspace = true
 neoutl-media-api.workspace = true
+toml.workspace = true
+serde_json.workspace = true
 libloading = "0.9"
 neoutl-media-gpuvideo-decoder = { path = "crates/media/gpuvideo-decoder" }
 neoutl-media-gstreamer-decoder = { path = "crates/media/gstreamer-decoder" }

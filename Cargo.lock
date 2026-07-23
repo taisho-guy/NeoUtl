@@ -16,13 +16,16 @@ dependencies = [
  "neoutl-media-gstreamer-decoder",
  "neoutl-object-api",
  "neoutl-shared-abi",
+ "neoutl-theme-api",
  "rfd",
  "rust-yaml",
  "serde",
+ "serde_json",
  "shipyard",
  "slint",
  "slint-build",
  "tokio",
+ "toml 0.9.12+spec-1.1.0",
  "wgpu",
  "wgpu_text",
 ]
@@ -3469,6 +3472,20 @@ dependencies = [
 [[package]]
 name = "neoutl-shared-abi"
 version = "0.0.0"
+
+[[package]]
+name = "neoutl-theme-api"
+version = "0.0.0"
+dependencies = [
+ "serde",
+]
+
+[[package]]
+name = "neoutl-theme-neon-graphite"
+version = "0.0.0"
+dependencies = [
+ "neoutl-theme-api",
+]
 
 [[package]]
 name = "new_debug_unreachable"

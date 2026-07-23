@@ -9,6 +9,7 @@ mod media;
 mod objects;
 mod project;
 mod renderer;
+mod theme;
 mod ui;
 
 slint::include_modules!();
@@ -79,6 +80,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     objects::load_all(&objects::default_objects_dir());
     effects::load_all(&effects::default_effects_dir());
     media::loader::load_all(&media::loader::default_decoders_dir());
+    theme::load_all(&theme::default_themes_dir());
 
     #[cfg(not(target_os = "macos"))]
     {
