@@ -105,6 +105,16 @@ fn build_main_windows(
     preview::install_rendering_notifier(&preview, gpu_slot.clone());
 
     system_settings::setup(&settings, app_state::settings_world(state));
+    scene_settings::setup(&scene_settings_win, state.clone(), timeline.as_weak());
+    project_settings::setup(&project_settings_win, state.clone(), preview.as_weak());
+    for w in [
+        settings.window(),
+        scene_settings_win.window(),
+        project_settings_win.window(),
+    ] {
+        let _ = w.show();
+        let _ = w.hide();
+    }
     preview::setup(
         &preview,
         timeline.as_weak(),
@@ -122,8 +132,6 @@ fn build_main_windows(
         state.clone(),
     );
     properties::setup(&props, state.clone());
-    scene_settings::setup(&scene_settings_win, state.clone(), timeline.as_weak());
-    project_settings::setup(&project_settings_win, state.clone(), preview.as_weak());
 
     preview.on_new_project({
         let launcher_weak = launcher_weak.clone();

@@ -1,6 +1,7 @@
 use crate::SystemSettingsWindow;
 use crate::ecs::{EcsWorld, resources::SystemSettingsResource};
-use slint::ComponentHandle;
+use crate::theme;
+use slint::{ComponentHandle, ModelRc, SharedString, VecModel};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
@@ -28,15 +29,77 @@ pub(crate) fn load_from_disk() -> Option<SystemSettingsResource> {
     rust_yaml::from_str(&content).ok()
 }
 
+/// 登録済みテーマのstable_id一覧と表示名一覧を同一順序で返す。
+fn theme_ids_and_names() -> (Vec<String>, Vec<String>) {
+    let ids = theme::registry()
+        .iter()
+        .map(|e| e.stable_id.clone())
+        .collect();
+    let names = theme::registry().iter().map(|e| e.name.clone()).collect();
+    (ids, names)
+}
+
+/// idが一覧中に存在しない場合（未選択・削除済み等）は先頭（0）にフォールバックする。
+fn theme_index_of(ids: &[String], id: &str) -> i32 {
+    ids.iter()
+        .position(|i| i == id)
+        .map(|i| i as i32)
+        .unwrap_or(0)
+}
+
+/// "#RRGGBB" / "RRGGBB" 形式のみ受理する。不正値はNoneを返し呼び出し側は変更を諦める。
+fn parse_hex_color(s: &str) -> Option<slint::Color> {
+    let s = s.trim_start_matches('#');
+    if s.len() != 6 {
+        return None;
+    }
+    let r = u8::from_str_radix(&s[0..2], 16).ok()?;
+    let g = u8::from_str_radix(&s[2..4], 16).ok()?;
+    let b = u8::from_str_radix(&s[4..6], 16).ok()?;
+    Some(slint::Color::from_rgb_u8(r, g, b))
+}
+
+/// 指定stable_idのテーマを解決し、ウィンドウ背景へ即時反映する。
+/// wallpaper_path未使用（空文字）で解決するため、壁紙連動テーマは既定色に留まる。
+fn apply_theme(window: &SystemSettingsWindow, id: &str) {
+    let Some(entry) = theme::by_stable_id(id) else {
+        return;
+    };
+    let wallpaper = std::ffi::CString::new("").unwrap();
+    let ctx = neoutl_theme_api::ThemeContext {
+        wallpaper_path: wallpaper.as_ptr(),
+        unix_time_sec: std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs() as i64)
+            .unwrap_or(0),
+    };
+    let colors = theme::resolve(entry, &ctx);
+    drop(wallpaper);
+
+    if let Some(bg) = colors.background.as_deref().and_then(parse_hex_color) {
+        window.set_theme_background(bg.into());
+    }
+}
+
 pub fn setup(window: &SystemSettingsWindow, world_holder: Arc<Mutex<EcsWorld>>) {
     if let Some(loaded) = load_from_disk() {
         world_holder.lock().unwrap().set_system_settings(loaded);
     }
 
+    let (theme_ids, theme_names) = theme_ids_and_names();
+    let names_model: ModelRc<SharedString> = ModelRc::new(VecModel::from(
+        theme_names
+            .iter()
+            .map(|n| SharedString::from(n.as_str()))
+            .collect::<Vec<_>>(),
+    ));
+    window.set_theme_names(names_model);
+
     let initial = world_holder.lock().unwrap().get_system_settings();
     crate::media::runtime::set_worker_threads(initial.worker_threads);
     crate::media::runtime::apply_decode_backend_env(initial.decode_backend);
-    sync_from_resource(window, &initial);
+    sync_from_resource(window, &initial, &theme_ids);
+    apply_theme(window, &initial.theme_id);
 
     {
         let wc = world_holder.clone();
@@ -57,6 +120,26 @@ pub fn setup(window: &SystemSettingsWindow, world_holder: Arc<Mutex<EcsWorld>>) 
             s.theme_dark = theme_dark;
             s.ui_scale_percent = ui_scale_percent;
             world.set_system_settings(s);
+        });
+    }
+
+    {
+        let wc = world_holder.clone();
+        let weak = window.as_weak();
+        let theme_ids = theme_ids.clone();
+        window.on_set_theme(move |index| {
+            let Some(id) = theme_ids.get(index as usize) else {
+                return;
+            };
+            {
+                let mut world = wc.lock().unwrap();
+                let mut s = world.get_system_settings();
+                s.theme_id = id.clone();
+                world.set_system_settings(s);
+            }
+            if let Some(win) = weak.upgrade() {
+                apply_theme(&win, id);
+            }
         });
     }
 
@@ -123,13 +206,15 @@ pub fn setup(window: &SystemSettingsWindow, world_holder: Arc<Mutex<EcsWorld>>) 
     {
         let wc = world_holder.clone();
         let weak = window.as_weak();
+        let theme_ids = theme_ids.clone();
         window.on_reload_settings(move || {
             if let Some(loaded) = load_from_disk() {
                 wc.lock().unwrap().set_system_settings(loaded.clone());
                 crate::media::runtime::set_worker_threads(loaded.worker_threads);
                 crate::media::runtime::apply_decode_backend_env(loaded.decode_backend);
                 if let Some(win) = weak.upgrade() {
-                    sync_from_resource(&win, &loaded);
+                    sync_from_resource(&win, &loaded, &theme_ids);
+                    apply_theme(&win, &loaded.theme_id);
                     win.set_save_status("再読込完了".into());
                 }
             } else if let Some(win) = weak.upgrade() {
@@ -139,7 +224,12 @@ pub fn setup(window: &SystemSettingsWindow, world_holder: Arc<Mutex<EcsWorld>>) 
     }
 }
 
-fn sync_from_resource(window: &SystemSettingsWindow, s: &SystemSettingsResource) {
+fn sync_from_resource(
+    window: &SystemSettingsWindow,
+    s: &SystemSettingsResource,
+    theme_ids: &[String],
+) {
+    window.set_theme_index(theme_index_of(theme_ids, &s.theme_id));
     window.set_autosave_enabled(s.autosave_enabled);
     window.set_autosave_interval_sec(s.autosave_interval_sec);
     window.set_theme_dark(s.theme_dark);
