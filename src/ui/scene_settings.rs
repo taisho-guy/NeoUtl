@@ -94,6 +94,7 @@ pub fn open_for_create(window: &SceneSettingsWindow, state: &SharedAppState) {
     window.set_grid_interval(defaults.grid_interval);
     window.set_grid_subdivision(defaults.grid_subdivision);
     let _ = window.show();
+    window.window().request_redraw();
 }
 
 /// 既存シーンの編集モードでダイアログを開き、現在値を反映する。
@@ -119,4 +120,5 @@ pub fn open_for_edit(window: &SceneSettingsWindow, state: &SharedAppState, scene
     window.set_grid_interval(s.grid_interval);
     window.set_grid_subdivision(s.grid_subdivision);
     let _ = window.show();
+    window.window().request_redraw();
 }
