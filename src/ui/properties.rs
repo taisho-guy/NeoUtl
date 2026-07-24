@@ -19,6 +19,11 @@ use std::sync::Mutex;
 /// ディスク永続化はしない（最近使用ソートは同一セッション内の利便性のためのもの）。
 static RECENT_EFFECT_IDS: Mutex<Vec<String>> = Mutex::new(Vec::new());
 
+/// エフェクト右クリックメニューの「コピー」で保持する1件分クリップボード。
+/// プロセス生存中のみ保持、ディスク永続化はしない。オブジェクト間貼り付けを許容する
+/// （EffectInstanceはeffect_idと自パラメータのみを保持し、対象オブジェクトに依存しないため）。
+static EFFECT_CLIPBOARD: Mutex<Option<crate::ecs::types::EffectInstance>> = Mutex::new(None);
+
 fn mark_effect_used(id: &str) {
     let mut recent = RECENT_EFFECT_IDS.lock().unwrap();
     recent.retain(|x| x != id);
@@ -326,6 +331,61 @@ pub fn setup(props: &PropertiesWindow, state: SharedAppState) {
             refresh(&p, &world);
         });
     }
+
+    {
+        let state = state.clone();
+        let pw = props.as_weak();
+        props.on_copy_effect(move |index| {
+            let Some(p) = pw.upgrade() else { return };
+            let id = p.get_object_id();
+            if id < 0 || index < 0 {
+                return;
+            }
+            let world_holder = app_state::active_world(&state);
+            let world = world_holder.lock().unwrap();
+            if let Some(instance) = world.get_effect_instance(id as usize, index as usize) {
+                *EFFECT_CLIPBOARD.lock().unwrap() = Some(instance);
+            }
+        });
+    }
+
+    {
+        let state = state.clone();
+        let pw = props.as_weak();
+        props.on_paste_effect(move |index| {
+            let Some(p) = pw.upgrade() else { return };
+            let id = p.get_object_id();
+            if id < 0 {
+                return;
+            }
+            let Some(instance) = EFFECT_CLIPBOARD.lock().unwrap().clone() else {
+                return;
+            };
+            app_state::snapshot_before_edit(&state);
+            let insert_at = if index < 0 { 0 } else { index as usize + 1 };
+            let world_holder = app_state::active_world(&state);
+            let mut world = world_holder.lock().unwrap();
+            world.insert_effect(id as usize, insert_at, instance);
+            refresh(&p, &world);
+        });
+    }
+
+    {
+        let state = state.clone();
+        let pw = props.as_weak();
+        props.on_duplicate_effect(move |index| {
+            let Some(p) = pw.upgrade() else { return };
+            let id = p.get_object_id();
+            if id < 0 || index < 0 {
+                return;
+            }
+            app_state::snapshot_before_edit(&state);
+            let world_holder = app_state::active_world(&state);
+            let mut world = world_holder.lock().unwrap();
+            world.duplicate_effect(id as usize, index as usize);
+            refresh(&p, &world);
+        });
+    }
 }
 
 pub fn select_object(props: &PropertiesWindow, world: &EcsWorld, object_id: i32) {
@@ -622,6 +682,7 @@ fn refresh(props: &PropertiesWindow, world: &EcsWorld) {
                 .unwrap_or(e.effect_id.as_str())
                 .into(),
             enabled: e.enabled,
+            dragging: false,
         })
         .collect();
     props.set_effects(ModelRc::new(VecModel::from(rows)));

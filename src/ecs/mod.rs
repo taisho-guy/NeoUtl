@@ -553,6 +553,37 @@ impl EcsWorld {
         })
     }
 
+    /// コピー用: 指定位置のEffectInstanceを複写取得する。
+    pub fn get_effect_instance(&self, object_id: usize, index: usize) -> Option<EffectInstance> {
+        let entity = self.find_entity(object_id)?;
+        self.world
+            .run(|stacks: View<EffectStack>| stacks.get(entity).ok()?.0.get(index).cloned())
+    }
+
+    /// 貼り付け用: 指定位置へEffectInstanceを挿入する。
+    pub fn insert_effect(&mut self, object_id: usize, index: usize, instance: EffectInstance) {
+        let Some(entity) = self.find_entity(object_id) else {
+            return;
+        };
+        self.world.run(|mut stacks: ViewMut<EffectStack>| {
+            if let Ok(mut stack) = (&mut stacks).get(entity) {
+                stack.insert(index, instance);
+            }
+        });
+    }
+
+    /// 複製用: 指定位置のEffectInstanceを直後へ複製する。
+    pub fn duplicate_effect(&mut self, object_id: usize, index: usize) {
+        let Some(entity) = self.find_entity(object_id) else {
+            return;
+        };
+        self.world.run(|mut stacks: ViewMut<EffectStack>| {
+            if let Ok(mut stack) = (&mut stacks).get(entity) {
+                stack.duplicate(index);
+            }
+        });
+    }
+
     pub fn get_text(&self, object_id: usize) -> Option<TextContent> {
         let entity = self.find_entity(object_id)?;
         self.world
