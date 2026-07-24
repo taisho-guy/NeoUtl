@@ -68,7 +68,9 @@ export component ToggleField inherits Rectangle {
             background: #e8e8ee;
         }
 
-        TouchArea { clicked() => { root.toggled(); } }
+        TouchArea {
+            clicked() => { root.toggled(); }
+        }
     }
 }
 
@@ -154,7 +156,9 @@ export component ChoiceField inherits Rectangle {
                     height: 100%;
                 }
 
-                TouchArea { clicked() => { root.changed(i); } }
+                TouchArea {
+                    clicked() => { root.changed(i); }
+                }
             }
         }
     }

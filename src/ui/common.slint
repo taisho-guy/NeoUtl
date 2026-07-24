@@ -47,5 +47,7 @@ export component Button inherits Rectangle {
         height: 100%;
     }
 
-    touch := TouchArea { clicked() => { root.clicked(); } }
+    touch := TouchArea {
+        clicked() => { root.clicked(); }
+    }
 }

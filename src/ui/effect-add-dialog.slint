@@ -1,0 +1,194 @@
+import { CatalogRow } from "types.slint";
+
+component FilterTab inherits Rectangle {
+    in property <string> label;
+    in property <bool> active;
+    callback pick();
+
+    height: 20px;
+    border-radius: 3px;
+    background: active ? #2a4db8 : #16161b;
+
+    Text {
+        text: label;
+        color: active ? #e8e8ee : #8a8a96;
+        font-size: 9px;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+        width: 100%;
+        height: 100%;
+    }
+
+    TouchArea {
+        clicked => { root.pick(); }
+    }
+}
+
+export component EffectAddDialog inherits Window {
+    title: "エフェクト追加";
+    preferred-width: 420px;
+    preferred-height: 560px;
+    background: #0e0e12;
+
+    in-out property <[CatalogRow]> catalog: [];
+    in property <[string]> categories: [];
+
+    in-out property <string> query: "";
+    in-out property <int> sort-mode: 0;
+    in-out property <string> category-filter: "";
+
+    callback query-changed(string);
+    callback sort-changed(int);
+    callback category-changed(string);
+    callback confirm(string);
+    callback cancel();
+
+    VerticalLayout {
+        padding: 8px;
+        spacing: 6px;
+
+        Rectangle {
+            height: 28px;
+            border-radius: 3px;
+            background: #16161b;
+            border-width: 1px;
+            border-color: #303038;
+
+            TextInput {
+                x: 6px;
+                width: parent.width - 12px;
+                height: 100%;
+                color: #dde3ee;
+                font-size: 11px;
+                vertical-alignment: center;
+                text: root.query;
+                edited => {
+                    root.query = self.text;
+                    root.query-changed(self.text);
+                }
+            }
+        }
+
+        HorizontalLayout {
+            height: 20px;
+            spacing: 4px;
+            FilterTab {
+                label: "カテゴリ順";
+                active: root.sort-mode == 0;
+                pick => { root.sort-mode = 0; root.sort-changed(0); }
+            }
+
+            FilterTab {
+                label: "名前順";
+                active: root.sort-mode == 1;
+                pick => { root.sort-mode = 1; root.sort-changed(1); }
+            }
+
+            FilterTab {
+                label: "最近使用";
+                active: root.sort-mode == 2;
+                pick => { root.sort-mode = 2; root.sort-changed(2); }
+            }
+        }
+
+        Flickable {
+            height: 22px;
+            HorizontalLayout {
+                spacing: 2px;
+                FilterTab {
+                    width: 40px;
+                    label: "全て";
+                    active: root.category-filter == "";
+                    pick => { root.category-filter = ""; root.category-changed(""); }
+                }
+
+                for cat[i] in root.categories: FilterTab {
+                    width: 64px;
+                    label: cat;
+                    active: root.category-filter == cat;
+                    pick => { root.category-filter = cat; root.category-changed(cat); }
+                }
+            }
+        }
+
+        Rectangle {
+            height: 1px;
+            background: #24242c;
+        }
+
+        Flickable {
+            VerticalLayout {
+                spacing: 1px;
+
+                if root.catalog.length == 0: Text {
+                    text: "該当するエフェクトがありません";
+                    color: #55555e;
+                    font-size: 11px;
+                    horizontal-alignment: center;
+                    height: 40px;
+                    vertical-alignment: center;
+                }
+
+                for row[k] in root.catalog: Rectangle {
+                    height: 24px;
+                    background: item-area.pressed ? #22222a : #16161b;
+
+                    HorizontalLayout {
+                        padding-left: 6px;
+                        padding-right: 6px;
+
+                        Text {
+                            text: row.name;
+                            color: #c8c8d2;
+                            font-size: 11px;
+                            vertical-alignment: center;
+                            height: 100%;
+                        }
+
+                        Rectangle { }
+
+                        Text {
+                            text: row.category;
+                            color: #55555e;
+                            font-size: 9px;
+                            vertical-alignment: center;
+                            height: 100%;
+                        }
+                    }
+
+                    item-area := TouchArea {
+                        clicked => { root.confirm(row.id); }
+                    }
+                }
+            }
+        }
+
+        HorizontalLayout {
+            height: 24px;
+            spacing: 6px;
+            Rectangle { }
+
+            Rectangle {
+                width: 60px;
+                border-radius: 3px;
+                background: #1e1e24;
+                border-width: 1px;
+                border-color: #303038;
+
+                Text {
+                    text: "閉じる";
+                    color: #8a8a96;
+                    font-size: 10px;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                    width: 100%;
+                    height: 100%;
+                }
+
+                TouchArea {
+                    clicked => { root.cancel(); }
+                }
+            }
+        }
+    }
+}

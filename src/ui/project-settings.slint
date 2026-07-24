@@ -26,7 +26,11 @@ export component ProjectSettingsWindow inherits Window {
                 padding: 10px;
                 spacing: 8px;
 
-                Text { text: "基本設定"; color: #8aabff; font-size: 11px; }
+                Text {
+                    text: "基本設定";
+                    color: #8aabff;
+                    font-size: 11px;
+                }
 
                 NameField {
                     label: "プロジェクト名:";
@@ -43,7 +47,11 @@ export component ProjectSettingsWindow inherits Window {
                 padding: 10px;
                 spacing: 8px;
 
-                Text { text: "音声フォーマット"; color: #8aabff; font-size: 11px; }
+                Text {
+                    text: "音声フォーマット";
+                    color: #8aabff;
+                    font-size: 11px;
+                }
 
                 ChoiceField {
                     label: "サンプルレート:";
@@ -53,6 +61,7 @@ export component ProjectSettingsWindow inherits Window {
                         root.audio-sample-rate = i == 0 ? 44100 : (i == 2 ? 96000 : 48000);
                     }
                 }
+
                 ChoiceField {
                     label: "チャンネル数:";
                     options: ["モノラル (1ch)", "ステレオ (2ch)"];
@@ -64,7 +73,9 @@ export component ProjectSettingsWindow inherits Window {
             }
         }
 
-        Rectangle { vertical-stretch: 1; }
+        Rectangle {
+            vertical-stretch: 1;
+        }
 
         HorizontalLayout {
             alignment: end;
@@ -74,6 +85,7 @@ export component ProjectSettingsWindow inherits Window {
                 label: "キャンセル";
                 clicked => { root.cancel(); }
             }
+
             Button {
                 label: "OK";
                 primary: true;
