@@ -140,6 +140,27 @@ component SectionHeader inherits Text {
     font-weight: 700;
 }
 
+component MenuItem inherits Rectangle {
+    in property <string> label;
+    callback clicked();
+
+    height: 24px;
+    background: touch.has-hover ? #2a2a32 : transparent;
+
+    Text {
+        x: 8px;
+        text: label;
+        color: #c8c8d2;
+        font-size: 11px;
+        vertical-alignment: center;
+        height: 100%;
+    }
+
+    touch := TouchArea {
+        clicked => { root.clicked(); }
+    }
+}
+
 // ParamRow.kindに応じた描画を一本化する標準コンポーネント。
 // object-params/エフェクトパラメータの両呼び出し元がこれのみを使う。
 // kind: 0=Float(スライダー+数値ボックス), 1=Bool(トグル), 2=Color(0..1スライダー)。
@@ -197,7 +218,7 @@ component ParamField inherits Rectangle {
 
 export component PropertiesWindow inherits Window {
     title: "NeoUtl - オブジェクト設定";
-    preferred-width: 620px;
+    preferred-width: 780px;
     preferred-height: 640px;
     background: #0e0e12;
 
@@ -218,6 +239,16 @@ export component PropertiesWindow inherits Window {
     in-out property <[EffectRow]> effects: [];
     in-out property <[ParamRow]> params: [];
 
+    // サイドバー: ドラッグ並べ替え用の一時状態。press中のみ非-1。
+    property <int> drag-source-index: -1;
+    property <int> drag-target-index: -1;
+
+    // サイドバー: 右クリックメニューの一時状態。
+    property <int> menu-index: -1;
+    property <bool> menu-visible: false;
+    property <length> menu-x: 0;
+    property <length> menu-y: 0;
+
     callback set-object-param(string, string, float);
     callback set-object-param-bool(string, string, bool);
     callback set-object-param-text(string, string, string);
@@ -227,6 +258,9 @@ export component PropertiesWindow inherits Window {
     callback set-param-bool(int, string, bool);
     callback add-effect(string);
     callback move-effect(int, int);
+    callback copy-effect(int);
+    callback paste-effect(int);
+    callback duplicate-effect(int);
     // 一覧・検索・ソートはEffectAddDialog（独立ウィンドウ）側で完結する。
     // このウィンドウはダイアログの起動要求のみを発行する。
     callback open-effect-add-dialog();
@@ -241,178 +275,247 @@ export component PropertiesWindow inherits Window {
         height: 100%;
     }
 
-    if object-id >= 0: Flickable {
-        VerticalLayout {
-            padding: 10px;
-            spacing: 8px;
+    if object-id >= 0: HorizontalLayout {
+        // --- 左サイドバー: エフェクト一覧（有効無効・ドラッグ並べ替え・右クリック操作） ---
+        Rectangle {
+            width: 180px;
+            background: #131318;
 
-            for p[j] in root.object-params: VerticalLayout {
+            VerticalLayout {
+                padding: 6px;
                 spacing: 4px;
 
-                if j == 0 || p.group != root.object-params[j - 1].group: VerticalLayout {
-                    spacing: 4px;
-                    Rectangle {
-                        height: 1px;
-                        background: #24242c;
-                    }
-
+                HorizontalLayout {
+                    height: 20px;
+                    spacing: 6px;
                     SectionHeader {
-                        text: p.group;
-                    }
-                }
-
-                if p.kind == 0: ParamField {
-                    data: p;
-                    changed-float(v) => { root.set-object-param(p.group, p.key, v); }
-                }
-
-                if p.kind == 1: ParamField {
-                    data: p;
-                    changed-bool(v) => { root.set-object-param-bool(p.group, p.key, v); }
-                }
-
-                if p.kind == 2: ParamField {
-                    data: p;
-                    changed-float(v) => { root.set-object-param(p.group, p.key, v); }
-                }
-
-                if p.kind == 3: ParamField {
-                    data: p;
-                    changed-text(v) => { root.set-object-param-text(p.group, p.key, v); }
-                }
-            }
-
-            Rectangle {
-                height: 1px;
-                background: #24242c;
-            }
-
-            HorizontalLayout {
-                height: 20px;
-                spacing: 6px;
-                SectionHeader {
-                    text: "エフェクト";
-                    vertical-alignment: center;
-                    height: 100%;
-                }
-
-                Rectangle {
-                    width: 60px;
-                    height: 18px;
-                    border-radius: 3px;
-                    background: #1e1e24;
-                    border-width: 1px;
-                    border-color: #303038;
-                    Text {
-                        text: "追加";
-                        color: #8a8a96;
-                        font-size: 10px;
-                        horizontal-alignment: center;
+                        text: "エフェクト";
                         vertical-alignment: center;
-                        width: 100%;
                         height: 100%;
                     }
 
-                    TouchArea {
-                        clicked() => { root.open-effect-add-dialog(); }
-                    }
-                }
-            }
-
-            for eff[i] in root.effects: VerticalLayout {
-                spacing: 2px;
-
-                Rectangle {
-                    height: 24px;
-                    background: #16161b;
-
-                    HorizontalLayout {
-                        padding-left: 4px;
-                        padding-right: 4px;
-                        spacing: 6px;
-
-                        ToggleField {
-                            width: 30px;
-                            label: "";
-                            checked: eff.enabled;
-                            toggled => { root.set-effect-enabled(eff.index, !eff.enabled); }
-                        }
-
+                    Rectangle {
+                        width: 44px;
+                        height: 18px;
+                        border-radius: 3px;
+                        background: #1e1e24;
+                        border-width: 1px;
+                        border-color: #303038;
                         Text {
-                            text: eff.name;
-                            color: #c8c8d2;
-                            font-size: 11px;
+                            text: "追加";
+                            color: #8a8a96;
+                            font-size: 10px;
+                            horizontal-alignment: center;
                             vertical-alignment: center;
+                            width: 100%;
                             height: 100%;
                         }
 
-                        Rectangle {
-                            width: 14px;
-                            height: 14px;
-                            visible: eff.index > 0;
-                            Text {
-                                text: "▲";
-                                color: #888894;
-                                font-size: 9px;
-                                horizontal-alignment: center;
-                                vertical-alignment: center;
-                                width: 100%;
-                                height: 100%;
-                            }
-
-                            TouchArea {
-                                clicked() => { root.move-effect(eff.index, eff.index - 1); }
-                            }
-                        }
-
-                        Rectangle {
-                            width: 14px;
-                            height: 14px;
-                            visible: eff.index < root.effects.length - 1;
-                            Text {
-                                text: "▼";
-                                color: #888894;
-                                font-size: 9px;
-                                horizontal-alignment: center;
-                                vertical-alignment: center;
-                                width: 100%;
-                                height: 100%;
-                            }
-
-                            TouchArea {
-                                clicked() => { root.move-effect(eff.index, eff.index + 1); }
-                            }
-                        }
-
-                        Rectangle {
-                            width: 18px;
-                            height: 18px;
-                            TouchArea {
-                                clicked() => { root.remove-effect(eff.index); }
-                            }
-
-                            Text {
-                                text: "×";
-                                color: #888894;
-                                horizontal-alignment: center;
-                                vertical-alignment: center;
-                                width: 100%;
-                                height: 100%;
-                            }
+                        TouchArea {
+                            clicked() => { root.open-effect-add-dialog(); }
                         }
                     }
                 }
 
-                // paramsはParamRow.kindに応じ、ParamFieldが標準描画へ振り分ける。
-                for p[j] in root.params: Rectangle {
-                    height: p.effect-index == eff.index ? 22px : 0px;
-                    clip: true;
+                Rectangle {
+                    height: 1px;
+                    background: #24242c;
+                }
 
-                    if p.effect-index == eff.index: ParamField {
-                        data: p;
-                        changed-float(v) => { root.set-param(eff.index, p.key, v); }
-                        changed-bool(v) => { root.set-param-bool(eff.index, p.key, v); }
+                Flickable {
+                    VerticalLayout {
+                        spacing: 2px;
+
+                        for eff[i] in root.effects: Rectangle {
+                            height: 26px;
+                            border-radius: 3px;
+                            background: i == root.drag-target-index && root.drag-source-index >= 0
+                                && root.drag-source-index != i
+                                ? #2a4db8
+                                : row-touch.has-hover ? #1c1c22 : #16161b;
+
+                            HorizontalLayout {
+                                padding-left: 4px;
+                                padding-right: 4px;
+                                spacing: 6px;
+
+                                ToggleField {
+                                    width: 26px;
+                                    label: "";
+                                    checked: eff.enabled;
+                                    toggled => { root.set-effect-enabled(eff.index, !eff.enabled); }
+                                }
+
+                                Text {
+                                    text: eff.name;
+                                    color: #c8c8d2;
+                                    font-size: 11px;
+                                    vertical-alignment: center;
+                                    height: 100%;
+                                    overflow: elide;
+                                }
+                            }
+
+                            row-touch := TouchArea {
+                                // 左ボタン押下でドラッグ開始。press継続中の行を随時target登録し、
+                                // release時にsource!=targetならmove-effectを一度だけ発行する。
+                                pointer-event(event) => {
+                                    if (event.button == PointerEventButton.left) {
+                                        if (event.kind == PointerEventKind.down) {
+                                            root.drag-source-index = eff.index;
+                                            root.drag-target-index = eff.index;
+                                        }
+                                        if (event.kind == PointerEventKind.up) {
+                                            if (root.drag-source-index >= 0
+                                                && root.drag-target-index >= 0
+                                                && root.drag-target-index != root.drag-source-index) {
+                                                root.move-effect(root.drag-source-index, root.drag-target-index);
+                                            }
+                                            root.drag-source-index = -1;
+                                            root.drag-target-index = -1;
+                                        }
+                                    }
+                                    if (event.button == PointerEventButton.right
+                                        && event.kind == PointerEventKind.down) {
+                                        root.menu-index = eff.index;
+                                        root.menu-x = self.absolute-position.x + self.mouse-x;
+                                        root.menu-y = self.absolute-position.y + self.mouse-y;
+                                        root.menu-visible = true;
+                                    }
+                                }
+                                moved => {
+                                    if (self.pressed && root.drag-source-index >= 0) {
+                                        root.drag-target-index = eff.index;
+                                    }
+                                }
+                            }
+                        }
                     }
+                }
+            }
+        }
+
+        Rectangle {
+            width: 1px;
+            background: #24242c;
+        }
+
+        // --- 右側: オブジェクト直下パラメータ + 選択中エフェクトのパラメータ ---
+        Flickable {
+            VerticalLayout {
+                padding: 10px;
+                spacing: 8px;
+
+                for p[j] in root.object-params: VerticalLayout {
+                    spacing: 4px;
+
+                    if j == 0 || p.group != root.object-params[j - 1].group: VerticalLayout {
+                        spacing: 4px;
+                        Rectangle {
+                            height: 1px;
+                            background: #24242c;
+                        }
+
+                        SectionHeader {
+                            text: p.group;
+                        }
+                    }
+
+                    if p.kind == 0: ParamField {
+                        data: p;
+                        changed-float(v) => { root.set-object-param(p.group, p.key, v); }
+                    }
+
+                    if p.kind == 1: ParamField {
+                        data: p;
+                        changed-bool(v) => { root.set-object-param-bool(p.group, p.key, v); }
+                    }
+
+                    if p.kind == 2: ParamField {
+                        data: p;
+                        changed-float(v) => { root.set-object-param(p.group, p.key, v); }
+                    }
+
+                    if p.kind == 3: ParamField {
+                        data: p;
+                        changed-text(v) => { root.set-object-param-text(p.group, p.key, v); }
+                    }
+                }
+
+                Rectangle {
+                    height: 1px;
+                    background: #24242c;
+                }
+
+                for eff[i] in root.effects: VerticalLayout {
+                    spacing: 2px;
+
+                    SectionHeader {
+                        text: eff.name;
+                    }
+
+                    // paramsはParamRow.kindに応じ、ParamFieldが標準描画へ振り分ける。
+                    for p[j] in root.params: Rectangle {
+                        height: p.effect-index == eff.index ? 22px : 0px;
+                        clip: true;
+
+                        if p.effect-index == eff.index: ParamField {
+                            data: p;
+                            changed-float(v) => { root.set-param(eff.index, p.key, v); }
+                            changed-bool(v) => { root.set-param-bool(eff.index, p.key, v); }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // --- 右クリックコンテキストメニュー: コピー/貼り付け/複製/削除 ---
+    // 背後の透明TouchAreaは全面を覆い、メニュー外クリックで閉じる役目のみを持つ。
+    if root.menu-visible: TouchArea {
+        clicked => { root.menu-visible = false; }
+    }
+
+    if root.menu-visible: Rectangle {
+        x: root.menu-x;
+        y: root.menu-y;
+        width: 128px;
+        height: 100px;
+        background: #1e1e24;
+        border-width: 1px;
+        border-color: #303038;
+        border-radius: 3px;
+
+        VerticalLayout {
+            MenuItem {
+                label: "コピー";
+                clicked => {
+                    root.copy-effect(root.menu-index);
+                    root.menu-visible = false;
+                }
+            }
+
+            MenuItem {
+                label: "貼り付け";
+                clicked => {
+                    root.paste-effect(root.menu-index);
+                    root.menu-visible = false;
+                }
+            }
+
+            MenuItem {
+                label: "複製";
+                clicked => {
+                    root.duplicate-effect(root.menu-index);
+                    root.menu-visible = false;
+                }
+            }
+
+            MenuItem {
+                label: "削除";
+                clicked => {
+                    root.remove-effect(root.menu-index);
+                    root.menu-visible = false;
                 }
             }
         }
