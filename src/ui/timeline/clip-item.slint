@@ -3,9 +3,9 @@ import { TimelineObject } from "../types.slint";
 
 export component ClipItem inherits Rectangle {
     in property <TimelineObject> obj;
-    in property <float>          scale: 1.0;
-    in property <length>         layer-height: 24px;
-    in property <bool>           locked: false;
+    in property <float> scale: 1.0;
+    in property <length> layer-height: 24px;
+    in property <bool> locked: false;
 
     callback clicked(int);
     callback moved(int /* id */, int /* new-start-frame */, int /* new-layer */);
@@ -15,14 +15,14 @@ export component ClipItem inherits Rectangle {
     property <[color]> kind-palette: [#2a4db8, #256e3c, #6a2db8, #b8862a, #2ab8a8, #b82a5f];
     property <color> base-color: !obj.kind-known ? #5a5a5a : root.kind-palette[mod(obj.kind, root.kind-palette.length)];
 
-    property <bool>   dragging: false;
+    property <bool> dragging: false;
     property <length> press-abs-x: 0px;
     property <length> press-abs-y: 0px;
-    property <int>    drag-start-frame: 0;
-    property <int>    drag-start-layer: 0;
-    property <int>    preview-start: obj.start-frame;
-    property <int>    preview-layer: obj.layer;
-    property <int>    preview-end: obj.end-frame;
+    property <int> drag-start-frame: 0;
+    property <int> drag-start-layer: 0;
+    property <int> preview-start: obj.start-frame;
+    property <int> preview-layer: obj.layer;
+    property <int> preview-end: obj.end-frame;
 
     function reset-preview() {
         root.preview-start = obj.start-frame;
@@ -95,9 +95,9 @@ export component ClipItem inherits Rectangle {
         width: 6px;
         height: parent.height;
         mouse-cursor: root.locked ? MouseCursor.not-allowed : MouseCursor.col-resize;
-        property <bool>   resizing: false;
-        property <int>    start-frame: 0;
-        property <int>    end-frame: 0;
+        property <bool> resizing: false;
+        property <int> start-frame: 0;
+        property <int> end-frame: 0;
         property <length> press-abs-x: 0px;
         property <length> cur-abs-x: self.absolute-position.x + self.mouse-x;
 
@@ -129,9 +129,9 @@ export component ClipItem inherits Rectangle {
         width: 6px;
         height: parent.height;
         mouse-cursor: root.locked ? MouseCursor.not-allowed : MouseCursor.col-resize;
-        property <bool>   resizing: false;
-        property <int>    start-frame: 0;
-        property <int>    end-frame: 0;
+        property <bool> resizing: false;
+        property <int> start-frame: 0;
+        property <int> end-frame: 0;
         property <length> press-abs-x: 0px;
         property <length> cur-abs-x: self.absolute-position.x + self.mouse-x;
 

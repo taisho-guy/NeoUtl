@@ -43,9 +43,12 @@ export struct ParamRow {
     text: string,
 }
 
+// category: エフェクトプラグインのEffectMeta.categoryをそのまま転記する。
+// ホスト側でカテゴリ名を固定管理しないため、新規プラグイン追加時もコード変更不要。
 export struct CatalogRow {
     id: string,
     name: string,
+    category: string,
 }
 
 export struct ProjectListItem {
@@ -67,4 +70,3 @@ export struct SceneTabItem {
     name: string,
     active: bool,
 }
-

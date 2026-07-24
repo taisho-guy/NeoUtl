@@ -53,7 +53,14 @@ export component SystemSettingsWindow inherits Window {
             SettingsSidebar {
                 horizontal-stretch: 0;
                 selected: root.selected-category;
-                categories: ["一般", "外観", "パフォーマンス", "デコード", "タイムライン", "エクスポート"];
+                categories: [
+                    "一般",
+                    "外観",
+                    "パフォーマンス",
+                    "デコード",
+                    "タイムライン",
+                    "エクスポート"
+                ];
                 select(i) => { root.selected-category = i; }
             }
 

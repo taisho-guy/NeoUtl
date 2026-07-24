@@ -26,7 +26,9 @@ export component SettingsSidebar inherits Rectangle {
                 height: 100%;
             }
 
-            touch := TouchArea { clicked() => { root.select(i); } }
+            touch := TouchArea {
+                clicked() => { root.select(i); }
+            }
         }
     }
 }

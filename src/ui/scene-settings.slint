@@ -1,7 +1,12 @@
 // src/ui/scene-settings.slint
 import { IconSet } from "@lucide";
 import { Button } from "common.slint";
-import { NameField, ToggleField, IntField, ChoiceField } from "system-settings/fields.slint";
+import {
+    NameField,
+    ToggleField,
+    IntField,
+    ChoiceField,
+} from "system-settings/fields.slint";
 
 component FloatField inherits Rectangle {
     in property <string> label;
@@ -77,13 +82,18 @@ export component SceneSettingsWindow inherits Window {
                 padding: 10px;
                 spacing: 8px;
 
-                Text { text: "基本設定"; color: #8aabff; font-size: 11px; }
+                Text {
+                    text: "基本設定";
+                    color: #8aabff;
+                    font-size: 11px;
+                }
 
                 NameField {
                     label: "シーン名:";
                     value: root.scene-name;
                     changed(v) => { root.scene-name = v; }
                 }
+
                 IntField {
                     label: "幅:";
                     value: root.scene-width;
@@ -91,6 +101,7 @@ export component SceneSettingsWindow inherits Window {
                     max: 8000;
                     changed(v) => { root.scene-width = v; }
                 }
+
                 IntField {
                     label: "高さ:";
                     value: root.scene-height;
@@ -98,6 +109,7 @@ export component SceneSettingsWindow inherits Window {
                     max: 8000;
                     changed(v) => { root.scene-height = v; }
                 }
+
                 FloatField {
                     label: "FPS:";
                     value: root.scene-fps;
@@ -113,13 +125,18 @@ export component SceneSettingsWindow inherits Window {
                 padding: 10px;
                 spacing: 8px;
 
-                Text { text: "編集とスナップ"; color: #8aabff; font-size: 11px; }
+                Text {
+                    text: "編集とスナップ";
+                    color: #8aabff;
+                    font-size: 11px;
+                }
 
                 ToggleField {
                     label: "スナップを有効にする";
                     checked: root.enable-snap;
                     toggled => { root.enable-snap = !root.enable-snap; }
                 }
+
                 IntField {
                     label: "磁力スナップ範囲:";
                     value: root.magnetic-snap-range;
@@ -127,6 +144,7 @@ export component SceneSettingsWindow inherits Window {
                     max: 100;
                     changed(v) => { root.magnetic-snap-range = v; }
                 }
+
                 ChoiceField {
                     label: "グリッドモード:";
                     options: ["自動 (秒/フレーム)", "BPM (音楽)", "フレーム数固定"];
@@ -143,13 +161,18 @@ export component SceneSettingsWindow inherits Window {
                 padding: 10px;
                 spacing: 8px;
 
-                Text { text: "BPM設定"; color: #8aabff; font-size: 11px; }
+                Text {
+                    text: "BPM設定";
+                    color: #8aabff;
+                    font-size: 11px;
+                }
 
                 FloatField {
                     label: "BPM:";
                     value: root.grid-bpm;
                     changed(v) => { root.grid-bpm = v; }
                 }
+
                 IntField {
                     label: "拍子 (分割数):";
                     value: root.grid-subdivision;
@@ -157,6 +180,7 @@ export component SceneSettingsWindow inherits Window {
                     max: 32;
                     changed(v) => { root.grid-subdivision = v; }
                 }
+
                 FloatField {
                     label: "オフセット (秒):";
                     value: root.grid-offset;
@@ -172,7 +196,11 @@ export component SceneSettingsWindow inherits Window {
                 padding: 10px;
                 spacing: 8px;
 
-                Text { text: "フレーム設定"; color: #8aabff; font-size: 11px; }
+                Text {
+                    text: "フレーム設定";
+                    color: #8aabff;
+                    font-size: 11px;
+                }
 
                 IntField {
                     label: "間隔 (Frames):";
@@ -184,7 +212,9 @@ export component SceneSettingsWindow inherits Window {
             }
         }
 
-        Rectangle { vertical-stretch: 1; }
+        Rectangle {
+            vertical-stretch: 1;
+        }
 
         HorizontalLayout {
             alignment: end;
@@ -194,6 +224,7 @@ export component SceneSettingsWindow inherits Window {
                 label: "キャンセル";
                 clicked => { root.cancel(); }
             }
+
             Button {
                 label: "OK";
                 primary: true;

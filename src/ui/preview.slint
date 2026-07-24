@@ -11,13 +11,13 @@ export component PreviewWindow inherits Window {
     background: #0e0e12;
 
     in-out property <image> video-frame;
-    in-out property <int>   current-frame: 0;
-    in-out property <int>   total-frames: 300;
-    in-out property <int>   fps: 30;
-    in-out property <int>   res-width: 1920;
-    in-out property <int>   res-height: 1080;
-    in-out property <bool>  is-playing: false;
-    in-out property <int>   speed-percent: 100;
+    in-out property <int> current-frame: 0;
+    in-out property <int> total-frames: 300;
+    in-out property <int> fps: 30;
+    in-out property <int> res-width: 1920;
+    in-out property <int> res-height: 1080;
+    in-out property <bool> is-playing: false;
+    in-out property <int> speed-percent: 100;
     in-out property <[ProjectTabItem]> project-tabs: [];
 
     callback request-render();
@@ -51,24 +51,71 @@ export component PreviewWindow inherits Window {
     MenuBar {
         Menu {
             title: "ファイル";
-            MenuItem { title: "新規プロジェクト"; activated() => { root.new-project(); } }
-            MenuItem { title: "プロジェクトを開く"; activated() => { root.open-project(); } }
-            MenuItem { title: "上書き保存"; activated() => { root.save-project(); } }
-            MenuItem { title: "名前を付けて保存"; activated() => { root.save-project-as(); } }
-            MenuItem { title: "メディアの書き出し"; activated() => { root.export-media(); } }
-            MenuItem { title: "終了"; activated() => { root.quit(); } }
+            MenuItem {
+                title: "新規プロジェクト";
+                activated() => { root.new-project(); }
+            }
+
+            MenuItem {
+                title: "プロジェクトを開く";
+                activated() => { root.open-project(); }
+            }
+
+            MenuItem {
+                title: "上書き保存";
+                activated() => { root.save-project(); }
+            }
+
+            MenuItem {
+                title: "名前を付けて保存";
+                activated() => { root.save-project-as(); }
+            }
+
+            MenuItem {
+                title: "メディアの書き出し";
+                activated() => { root.export-media(); }
+            }
+
+            MenuItem {
+                title: "終了";
+                activated() => { root.quit(); }
+            }
         }
+
         Menu {
             title: "編集";
-            MenuItem { title: "元に戻す"; activated() => { root.undo(); } }
-            MenuItem { title: "やり直す"; activated() => { root.redo(); } }
-            MenuItem { title: "システム設定"; activated() => { root.show-system-settings(); } }
-            MenuItem { title: "プロジェクト設定"; activated() => { root.show-project-settings(); } }
+            MenuItem {
+                title: "元に戻す";
+                activated() => { root.undo(); }
+            }
+
+            MenuItem {
+                title: "やり直す";
+                activated() => { root.redo(); }
+            }
+
+            MenuItem {
+                title: "システム設定";
+                activated() => { root.show-system-settings(); }
+            }
+
+            MenuItem {
+                title: "プロジェクト設定";
+                activated() => { root.show-project-settings(); }
+            }
         }
+
         Menu {
             title: "表示";
-            MenuItem { title: "タイムライン"; activated() => { root.show-timeline(); } }
-            MenuItem { title: "プロパティ"; activated() => { root.show-properties(); } }
+            MenuItem {
+                title: "タイムライン";
+                activated() => { root.show-timeline(); }
+            }
+
+            MenuItem {
+                title: "プロパティ";
+                activated() => { root.show-properties(); }
+            }
         }
     }
 
