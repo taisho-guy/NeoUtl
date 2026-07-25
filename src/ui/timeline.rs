@@ -142,36 +142,46 @@ pub fn setup(
     {
         let (state, tw, pw) = (state.clone(), timeline.as_weak(), preview_weak.clone());
         timeline.on_move_object(move |id, start, layer| {
-            let Some(t) = tw.upgrade() else { return };
-            let world_holder = app_state::active_world(&state);
-            let exists = world_holder.lock().unwrap().object_exists(id as usize);
-            if !exists {
-                let world = world_holder.lock().unwrap();
+            let state = state.clone();
+            let tw = tw.clone();
+            let pw = pw.clone();
+            let _ = slint::invoke_from_event_loop(move || {
+                let Some(t) = tw.upgrade() else { return };
+                let world_holder = app_state::active_world(&state);
+                let exists = world_holder.lock().unwrap().object_exists(id as usize);
+                if !exists {
+                    let world = world_holder.lock().unwrap();
+                    sync(&t, pw.upgrade().as_ref(), &world);
+                    return;
+                }
+                app_state::snapshot_before_edit(&state);
+                let mut world = world_holder.lock().unwrap();
+                world.move_object(id as usize, start, layer);
                 sync(&t, pw.upgrade().as_ref(), &world);
-                return;
-            }
-            app_state::snapshot_before_edit(&state);
-            let mut world = world_holder.lock().unwrap();
-            world.move_object(id as usize, start, layer);
-            sync(&t, pw.upgrade().as_ref(), &world);
+            });
         });
     }
 
     {
         let (state, tw, pw) = (state.clone(), timeline.as_weak(), preview_weak.clone());
         timeline.on_resize_object(move |id, start, end| {
-            let Some(t) = tw.upgrade() else { return };
-            let world_holder = app_state::active_world(&state);
-            let exists = world_holder.lock().unwrap().object_exists(id as usize);
-            if !exists {
-                let world = world_holder.lock().unwrap();
+            let state = state.clone();
+            let tw = tw.clone();
+            let pw = pw.clone();
+            let _ = slint::invoke_from_event_loop(move || {
+                let Some(t) = tw.upgrade() else { return };
+                let world_holder = app_state::active_world(&state);
+                let exists = world_holder.lock().unwrap().object_exists(id as usize);
+                if !exists {
+                    let world = world_holder.lock().unwrap();
+                    sync(&t, pw.upgrade().as_ref(), &world);
+                    return;
+                }
+                app_state::snapshot_before_edit(&state);
+                let mut world = world_holder.lock().unwrap();
+                world.resize_object(id as usize, start, end);
                 sync(&t, pw.upgrade().as_ref(), &world);
-                return;
-            }
-            app_state::snapshot_before_edit(&state);
-            let mut world = world_holder.lock().unwrap();
-            world.resize_object(id as usize, start, end);
-            sync(&t, pw.upgrade().as_ref(), &world);
+            });
         });
     }
 
