@@ -103,6 +103,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         media::loader::inject_gpuvideo_shared_device(gpu_device);
 
+        renderer::pipeline::install_device_lost_watcher(&wgpu_device);
+
         slint::BackendSelector::new()
             .require_wgpu_29(slint::wgpu_29::WGPUConfiguration::Manual {
                 instance: wgpu_instance,

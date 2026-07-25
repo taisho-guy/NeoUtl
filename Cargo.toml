@@ -59,6 +59,8 @@ lucide-slint = "1.24"
 rust-yaml = { version = "1.1", features = ["serde"] }
 serde = { version = "1.0", features = ["derive"] }
 rfd = "0.17"
+# renderer/pipeline.rsのシェーダコンパイルエラースコープを同期関数内で解決するために使用。
+pollster = "0.4"
 
 [build-dependencies]
 lucide-slint = "1.24"
