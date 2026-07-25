@@ -154,3 +154,137 @@ pub fn get_active_objects_system(world: &EcsWorld) -> Vec<ActiveObject> {
         },
     )
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::ecs::EcsWorld;
+    use crate::ecs::components::MediaSource;
+    use crate::ecs::effects::EffectStack;
+    use crate::ecs::types::{EffectInstance, EffectParam, Value};
+    use crate::media::MediaKind;
+    use shipyard::ViewMut;
+    use std::path::PathBuf;
+
+    const KIND_TEXT: u32 = 100;
+    const KIND_SHAPE: u32 = 200;
+
+    fn world_with_object(start: i32, end: i32) -> (EcsWorld, usize) {
+        let mut world = EcsWorld::new();
+        let id = world.add_object(
+            start,
+            end - start,
+            KIND_TEXT,
+            0,
+            Some(TextContent::default()),
+        );
+        (world, id)
+    }
+
+    #[test]
+    fn frame_range_boundary() {
+        let (mut world, _id) = world_with_object(10, 20);
+
+        world.set_current_frame(9);
+        assert_eq!(get_active_objects_system(&world).len(), 0);
+
+        world.set_current_frame(10);
+        assert_eq!(get_active_objects_system(&world).len(), 1);
+
+        world.set_current_frame(19);
+        assert_eq!(get_active_objects_system(&world).len(), 1);
+
+        world.set_current_frame(20);
+        assert_eq!(get_active_objects_system(&world).len(), 0);
+    }
+
+    #[test]
+    fn scene_filter() {
+        let mut world = EcsWorld::new();
+        let scene_a = world.active_scene();
+        let id_a = world.add_object(0, 30, KIND_TEXT, 0, Some(TextContent::default()));
+        let scene_b = world.add_scene("Scene B");
+        world.switch_scene(scene_b);
+        let id_b = world.add_object(0, 30, KIND_TEXT, 0, Some(TextContent::default()));
+
+        world.switch_scene(scene_a);
+        world.set_current_frame(0);
+        let active_a = get_active_objects_system(&world);
+        assert_eq!(active_a.len(), 1);
+        assert_eq!(active_a[0].clip_instance, id_a as u64);
+
+        world.switch_scene(scene_b);
+        world.set_current_frame(0);
+        let active_b = get_active_objects_system(&world);
+        assert_eq!(active_b.len(), 1);
+        assert_eq!(active_b[0].clip_instance, id_b as u64);
+    }
+
+    #[test]
+    fn unregistered_kind_falls_back_to_ortho_projection() {
+        let (mut world, _id) = world_with_object(0, 30);
+        world.set_current_frame(0);
+        let active = get_active_objects_system(&world);
+        assert_eq!(active.len(), 1);
+        assert_eq!(active[0].mvp[15], 1.0);
+    }
+
+    #[test]
+    fn shape_object_carries_shape_params() {
+        let mut world = EcsWorld::new();
+        let shape = ShapeParams {
+            sides: 6,
+            ..ShapeParams::default()
+        };
+        let id = world.add_shape_object(0, 30, KIND_SHAPE, 0, shape);
+        world.set_current_frame(0);
+        let active = get_active_objects_system(&world);
+        assert_eq!(active.len(), 1);
+        assert_eq!(active[0].clip_instance, id as u64);
+        assert_eq!(active[0].shape_params.map(|s| s.sides), Some(6));
+        assert!(active[0].text_content.is_none());
+    }
+
+    #[test]
+    fn clip_instance_uniqueness_across_same_source() {
+        let mut world = EcsWorld::new();
+        let media = MediaSource {
+            path: PathBuf::from("nonexistent.png"),
+            kind: MediaKind::Image,
+            trim_in_frame: 0,
+        };
+        let id1 = world.add_media_object(0, 30, KIND_SHAPE, 0, media.clone());
+        let id2 = world.add_media_object(0, 30, KIND_SHAPE, 1, media);
+        world.set_current_frame(0);
+        let active = get_active_objects_system(&world);
+        assert_eq!(active.len(), 2);
+        let instances: Vec<u64> = active.iter().map(|a| a.clip_instance).collect();
+        assert_ne!(instances[0], instances[1]);
+        assert!(instances.contains(&(id1 as u64)));
+        assert!(instances.contains(&(id2 as u64)));
+    }
+
+    #[test]
+    fn effect_stack_propagation() {
+        let (mut world, id) = world_with_object(0, 30);
+        let entity = world.find_entity(id).expect("entity存在前提");
+        world.world.run(|mut stacks: ViewMut<EffectStack>| {
+            if let Ok(mut stack) = (&mut stacks).get(entity) {
+                let mut instance = EffectInstance::new("test_effect");
+                instance
+                    .params
+                    .insert("amount".to_string(), EffectParam::new(Value::Number(0.5)));
+                stack.0.push(instance);
+            }
+        });
+        world.set_current_frame(0);
+        let active = get_active_objects_system(&world);
+        assert_eq!(active.len(), 1);
+        assert_eq!(active[0].effects.len(), 1);
+        assert_eq!(active[0].effects[0].0, "test_effect");
+        assert_eq!(
+            active[0].effects[0].1.get("amount"),
+            Some(&Value::Number(0.5))
+        );
+    }
+}

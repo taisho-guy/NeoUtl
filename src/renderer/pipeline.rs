@@ -1064,3 +1064,155 @@ impl RenderEngine {
         self.apply_effect_chain(&chain);
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::ecs::resources::ProjectResource;
+
+    /// テスト専用GPUハンドル取得。GPUアダプタ非搭載環境（CI含む）では
+    /// request_adapterがErrを返しうるため、呼び出し側は戻り値Noneで
+    /// テストを早期スキップする（GPU非依存の判定へフォールバックしない）。
+    fn headless_device() -> Option<(wgpu::Device, wgpu::Queue)> {
+        let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
+            backends: wgpu::Backends::PRIMARY,
+            flags: wgpu::InstanceFlags::default(),
+            memory_budget_thresholds: wgpu::MemoryBudgetThresholds::default(),
+            backend_options: wgpu::BackendOptions::default(),
+            display: None,
+        });
+        let adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
+            power_preference: wgpu::PowerPreference::None,
+            compatible_surface: None,
+            force_fallback_adapter: false,
+        }))
+        .ok()?;
+        pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor::default())).ok()
+    }
+
+    /// RGBA8テクスチャをCPU側Vec<u8>へ読み出す。bytes_per_row 256byteアライン要件を
+    /// 満たすためパディング込みで読み出し、行ごとにトリムして密パックへ変換する。
+    fn read_texture_rgba8(
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        texture: &wgpu::Texture,
+        width: u32,
+        height: u32,
+    ) -> Vec<u8> {
+        let unpadded_bytes_per_row = width * 4;
+        let align = wgpu::COPY_BYTES_PER_ROW_ALIGNMENT;
+        let padded_bytes_per_row = unpadded_bytes_per_row.div_ceil(align) * align;
+        let buffer_size = (padded_bytes_per_row * height) as wgpu::BufferAddress;
+
+        let output_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("Test Readback Buffer"),
+            size: buffer_size,
+            usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
+            mapped_at_creation: false,
+        });
+
+        let mut encoder =
+            device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
+        encoder.copy_texture_to_buffer(
+            wgpu::TexelCopyTextureInfo {
+                texture,
+                mip_level: 0,
+                origin: wgpu::Origin3d::ZERO,
+                aspect: wgpu::TextureAspect::All,
+            },
+            wgpu::TexelCopyBufferInfo {
+                buffer: &output_buffer,
+                layout: wgpu::TexelCopyBufferLayout {
+                    offset: 0,
+                    bytes_per_row: Some(padded_bytes_per_row),
+                    rows_per_image: Some(height),
+                },
+            },
+            wgpu::Extent3d {
+                width,
+                height,
+                depth_or_array_layers: 1,
+            },
+        );
+        queue.submit([encoder.finish()]);
+
+        let slice = output_buffer.slice(..);
+        let (tx, rx) = std::sync::mpsc::channel();
+        slice.map_async(wgpu::MapMode::Read, move |result| {
+            tx.send(result).expect("map_async結果送信失敗");
+        });
+        device
+            .poll(wgpu::PollType::wait_indefinitely())
+            .expect("device poll失敗");
+        rx.recv()
+            .expect("map_async結果受信失敗")
+            .expect("バッファmap失敗");
+
+        let padded = slice.get_mapped_range();
+        let mut dense = Vec::with_capacity((unpadded_bytes_per_row * height) as usize);
+        for row in 0..height as usize {
+            let start = row * padded_bytes_per_row as usize;
+            let end = start + unpadded_bytes_per_row as usize;
+            dense.extend_from_slice(&padded[start..end]);
+        }
+        drop(padded);
+        output_buffer.unmap();
+        dense
+    }
+
+    #[test]
+    fn render_engine_new_succeeds() {
+        let Some((device, queue)) = headless_device() else {
+            eprintln!("[test] GPUアダプタ非検出、テストskip");
+            return;
+        };
+        let engine = RenderEngine::new(device, queue, 64, 64);
+        assert_eq!(engine.render_width, 64);
+        assert_eq!(engine.render_height, 64);
+    }
+
+    #[test]
+    fn render_empty_scene_clears_target() {
+        let Some((device, queue)) = headless_device() else {
+            eprintln!("[test] GPUアダプタ非検出、テストskip");
+            return;
+        };
+        let mut engine = RenderEngine::new(device, queue, 32, 32);
+        let project = ProjectResource::new();
+        engine.render(&[], &project);
+
+        let pixels = read_texture_rgba8(
+            &engine.device,
+            &engine.queue,
+            &engine.texture,
+            engine.render_width,
+            engine.render_height,
+        );
+        assert_eq!(pixels.len(), (32 * 32 * 4) as usize);
+        let alpha_values: Vec<u8> = pixels.iter().skip(3).step_by(4).copied().collect();
+        assert!(alpha_values.iter().all(|&a| a == alpha_values[0]));
+    }
+
+    #[test]
+    fn resize_render_target_updates_dimensions_and_survives_render() {
+        let Some((device, queue)) = headless_device() else {
+            eprintln!("[test] GPUアダプタ非検出、テストskip");
+            return;
+        };
+        let mut engine = RenderEngine::new(device, queue, 64, 64);
+        engine.resize_render_target(128, 72);
+        assert_eq!(engine.render_width, 128);
+        assert_eq!(engine.render_height, 72);
+
+        let project = ProjectResource::new();
+        engine.render(&[], &project);
+        let pixels = read_texture_rgba8(
+            &engine.device,
+            &engine.queue,
+            &engine.texture,
+            engine.render_width,
+            engine.render_height,
+        );
+        assert_eq!(pixels.len(), (128 * 72 * 4) as usize);
+    }
+}
