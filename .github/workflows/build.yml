@@ -10,6 +10,23 @@ permissions:
   contents: read
 
 jobs:
+  test:
+    name: Test (Linux x86_64)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install native dependencies
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends pkg-config clang cmake ninja-build mold libxkbcommon-dev libwayland-dev libegl1-mesa-dev libudev-dev libasound2-dev libfontconfig1-dev libfreetype6-dev libexpat1-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev gstreamer1.0-plugins-base gstreamer1.0-plugins-good gstreamer1.0-plugins-bad gstreamer1.0-plugins-ugly gstreamer1.0-libav mesa-vulkan-drivers libgl1-mesa-dri
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Run tests
+        env:
+          PKG_CONFIG: pkg-config
+        run: cargo test --workspace --locked
+
   build:
     name: ${{ matrix.os_name }}
     strategy:

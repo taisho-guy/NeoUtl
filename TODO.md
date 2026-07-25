@@ -25,9 +25,9 @@
   - prefetchは背景スレッドがパケット読出しのみ実行、frame_gpuはUIスレッドがデコード・GPUアップロードまで直結実行。gpuvideo-decoderはSlint WGPUConfiguration::Manual注入によるホスト単一wgpu::Device上でH.264をゼロコピー描画。
   - GStreamer/ffmpeg経路はNV12/RGBA8バイト列を各decoderクレート内でテクスチャ化する互換フォールバックとして存続、新規動画は拡張子競合時id昇順でgpuvideo-decoderが優先採用される
   -  NV12→RGBA変換段のcreate_input_bind_group/create_viewがsnatchable_lock.read()を経由しpresent()のwrite()と有界のRwLock競合を起こしうる。
-- [ ] 設定ダイアログの拡張
-- [ ] レンダリングパイプラインのエラー処理を実装（GPUデバイスロスト・シェーダコンパイル失敗時のフォールバック）
-- [ ] 単体・結合テスト基盤を整備（ECS system・RenderEngine・project.rsシリアライズ）
+- [x] 設定ダイアログの拡張
+- [x] レンダリングパイプラインのエラー処理を実装（GPUデバイスロスト・シェーダコンパイル失敗時のフォールバック）
+- [x] 単体・結合テスト基盤を整備（ECS system・RenderEngine・project.rsシリアライズ）
 
 # 0.2.0
 - [x] 設定・プロジェクトの保存機能を実装（DocumentModel構造のシリアライズ。project.yamlにobjects一覧を含め全オブジェクト永続化。旧形式ファイルはobjects省略時空Vec補完で後方互換）
