@@ -14,15 +14,37 @@ export component ClipItem inherits Rectangle {
 
     property <[color]> kind-palette: [#2a4db8, #256e3c, #6a2db8, #b8862a, #2ab8a8, #b82a5f];
     property <color> base-color: !obj.kind-known ? #5a5a5a : root.kind-palette[mod(obj.kind, root.kind-palette.length)];
+    property <color> effective-color: obj.selected ? base-color.brighter(40%) : base-color;
 
     property <bool> dragging: false;
+    property <bool> resizing-left: false;
+    property <bool> resizing-right: false;
     property <length> press-abs-x: 0px;
     property <length> press-abs-y: 0px;
     property <int> drag-start-frame: 0;
     property <int> drag-start-layer: 0;
+    property <int> drag-duration: 0;
     property <int> preview-start: obj.start-frame;
     property <int> preview-layer: obj.layer;
     property <int> preview-end: obj.end-frame;
+
+    // 操作完了時、この操作(moved/resized)で確定した値と一致するまでobjの実値が
+    // 届いていないため、reset-preview()をここでは呼ばない。obj自体が更新された
+    // タイミング(下のchanged obj)でのみ、非操作中の軸を実値へ同期する。
+    // これにより「操作完了直後に一瞬旧位置へ戻ってから正しい位置へ再度動く」
+    // ティアリングを排除する（左端リサイズはx/widthが同時に変わるため、この
+    // ティアリングが「戻る＝伸ばせない」ように誤認されていた）。
+    changed obj => {
+        if (!root.dragging) {
+            root.preview-layer = obj.layer;
+        }
+        if (!root.dragging && !root.resizing-left) {
+            root.preview-start = obj.start-frame;
+        }
+        if (!root.dragging && !root.resizing-right) {
+            root.preview-end = obj.end-frame;
+        }
+    }
 
     function reset-preview() {
         root.preview-start = obj.start-frame;
@@ -35,7 +57,7 @@ export component ClipItem inherits Rectangle {
     width: max(4px, (root.preview-end - root.preview-start) * root.scale * 1px);
     height: root.layer-height * 0.8;
 
-    background: obj.selected ? base-color.brighter(40%) : base-color;
+    background: @linear-gradient(90deg, root.effective-color.darker(50%) 0%, root.effective-color 100%);
     border-width: obj.selected ? 2px : 1px;
     border-color: obj.selected ? #ffffff : base-color.darker(30%);
     border-radius: 3px;
@@ -44,7 +66,7 @@ export component ClipItem inherits Rectangle {
         text: obj.label;
         color: white;
         font-size: 10px;
-        horizontal-alignment: center;
+        horizontal-alignment: left;
         vertical-alignment: center;
         overflow: elide;
         width: parent.width - 12px;
@@ -69,6 +91,7 @@ export component ClipItem inherits Rectangle {
                 root.press-abs-y = self.absolute-position.y + self.pressed-y;
                 root.drag-start-frame = obj.start-frame;
                 root.drag-start-layer = obj.layer;
+                root.drag-duration = obj.end-frame - obj.start-frame;
                 root.clicked(obj.id);
             }
             if (e.kind == PointerEventKind.down && e.button == PointerEventButton.right) {
@@ -79,7 +102,6 @@ export component ClipItem inherits Rectangle {
                 if (root.dragging) {
                     root.dragging = false;
                     root.moved(obj.id, root.preview-start, root.preview-layer);
-                    root.reset-preview();
                 }
             }
         }
@@ -87,6 +109,7 @@ export component ClipItem inherits Rectangle {
         moved() => {
             if (!root.dragging) { return; }
             root.preview-start = max(0, root.drag-start-frame + floor((self.cur-abs-x - root.press-abs-x) / root.scale / 1px));
+            root.preview-end = root.preview-start + root.drag-duration;
             root.preview-layer = max(0, root.drag-start-layer + floor((self.cur-abs-y - root.press-abs-y) / root.layer-height));
         }
     }
@@ -95,7 +118,6 @@ export component ClipItem inherits Rectangle {
         width: 6px;
         height: parent.height;
         mouse-cursor: root.locked ? MouseCursor.not-allowed : MouseCursor.col-resize;
-        property <bool> resizing: false;
         property <int> start-frame: 0;
         property <int> end-frame: 0;
         property <length> press-abs-x: 0px;
@@ -105,21 +127,20 @@ export component ClipItem inherits Rectangle {
             if (root.locked) { return; }
             if (e.kind == PointerEventKind.down) {
                 root.reset-preview();
-                self.resizing = true;
+                root.resizing-left = true;
                 self.press-abs-x = self.absolute-position.x + self.pressed-x;
                 self.start-frame = obj.start-frame;
                 self.end-frame = obj.end-frame;
             }
             if (e.kind == PointerEventKind.up || e.kind == PointerEventKind.cancel) {
-                if (self.resizing) {
-                    self.resizing = false;
+                if (root.resizing-left) {
+                    root.resizing-left = false;
                     root.resized(obj.id, root.preview-start, root.preview-end);
-                    root.reset-preview();
                 }
             }
         }
         moved() => {
-            if (!self.resizing) { return; }
+            if (!root.resizing-left) { return; }
             root.preview-start = min(self.end-frame - 1, max(0, self.start-frame + floor((self.cur-abs-x - self.press-abs-x) / root.scale / 1px)));
         }
     }
@@ -129,7 +150,6 @@ export component ClipItem inherits Rectangle {
         width: 6px;
         height: parent.height;
         mouse-cursor: root.locked ? MouseCursor.not-allowed : MouseCursor.col-resize;
-        property <bool> resizing: false;
         property <int> start-frame: 0;
         property <int> end-frame: 0;
         property <length> press-abs-x: 0px;
@@ -139,21 +159,20 @@ export component ClipItem inherits Rectangle {
             if (root.locked) { return; }
             if (e.kind == PointerEventKind.down) {
                 root.reset-preview();
-                self.resizing = true;
+                root.resizing-right = true;
                 self.press-abs-x = self.absolute-position.x + self.pressed-x;
                 self.start-frame = obj.start-frame;
                 self.end-frame = obj.end-frame;
             }
             if (e.kind == PointerEventKind.up || e.kind == PointerEventKind.cancel) {
-                if (self.resizing) {
-                    self.resizing = false;
+                if (root.resizing-right) {
+                    root.resizing-right = false;
                     root.resized(obj.id, root.preview-start, root.preview-end);
-                    root.reset-preview();
                 }
             }
         }
         moved() => {
-            if (!self.resizing) { return; }
+            if (!root.resizing-right) { return; }
             root.preview-end = max(self.start-frame + 1, self.end-frame + floor((self.cur-abs-x - self.press-abs-x) / root.scale / 1px));
         }
     }
