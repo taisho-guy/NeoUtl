@@ -8,8 +8,33 @@ use neoutl_object_api::{IMAGE_STABLE_ID, VIDEO_STABLE_ID};
 use slint::wgpu_29::wgpu;
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use wgpu_text::glyph_brush::ab_glyph::FontArc;
 use wgpu_text::{BrushBuilder, TextBrush};
+
+/// GPUデバイスロスト検知フラグ。wgpuのdevice.lost()コールバック（Send + 'staticのみ許容、
+/// UI操作不可）から立てられ、RenderEngine::render()冒頭で参照される。
+/// UIスレッド側の定期ポーリング（app_state等）からも参照しモーダル表示に使う。
+pub static DEVICE_LOST: AtomicBool = AtomicBool::new(false);
+
+/// DEVICE_LOSTが真か確認する。UIスレッドのタイマー等から呼び出す想定。
+pub fn is_device_lost() -> bool {
+    DEVICE_LOST.load(Ordering::Relaxed)
+}
+
+/// device.lost()完了時に呼ぶ。以後render()は早期returnし、UI側モーダル表示対象になる。
+fn mark_device_lost(reason: &str) {
+    eprintln!("[NeoUtl] GPUデバイスロスト検知: {reason}");
+    DEVICE_LOST.store(true, Ordering::Relaxed);
+}
+
+/// deviceへdevice-lostコールバックを登録する。コールバックはSend + 'staticのみ許容され、
+/// UI操作は行えないため、フラグを立てるのみに留める。main.rsのデバイス取得直後に一度だけ呼ぶ。
+pub fn install_device_lost_watcher(device: &wgpu::Device) {
+    device.set_device_lost_callback(|reason, message| {
+        mark_device_lost(&format!("{reason:?}: {message}"));
+    });
+}
 
 /// 全ObjectVTable実装が共有する標準Uniform契約（shape.wgsl等のUniforms構造体と一致させること）。
 /// mat4x4<f32>(64) + opacity(4) + sides(4) + extrude_depth(4) + _pad0(4) + fill_color(16) = 96 bytes
@@ -114,51 +139,73 @@ fn create_depth_texture(device: &wgpu::Device, width: u32, height: u32) -> wgpu:
     })
 }
 
+/// シェーダコンパイルを検証エラースコープ配下で実行し、失敗を同期的に捕捉する。
+/// create_shader_module自体はエラーを返さず、バリデーション不正時はwgpu既定挙動で
+/// プロセスがpanicする（サードパーティプラグインのWGSL不正がアプリ全体を落とす）ため、
+/// push_error_scope/pop_error_scopeで同期検知しResultへ変換する。
+/// RenderEngine::new()は同期関数のため、pop_error_scopeの返すFutureは
+/// pollster::block_onで即時解決する。生成時のみ発生する一度きりの処理であり、
+/// 描画フレーム毎の待機コストは発生しない。
+fn try_create_shader_module(
+    device: &wgpu::Device,
+    wgsl: &str,
+    label: &str,
+) -> Result<wgpu::ShaderModule, String> {
+    let error_scope = device.push_error_scope(wgpu::ErrorFilter::Validation);
+    let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+        label: Some(label),
+        source: wgpu::ShaderSource::Wgsl(wgsl.into()),
+    });
+    match pollster::block_on(error_scope.pop()) {
+        Some(err) => Err(format!("{err}")),
+        None => Ok(shader),
+    }
+}
+
 fn build_pipeline(
     device: &wgpu::Device,
     layout: &wgpu::PipelineLayout,
     wgsl: &str,
     label: &str,
-) -> wgpu::RenderPipeline {
-    let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-        label: Some(label),
-        source: wgpu::ShaderSource::Wgsl(wgsl.into()),
-    });
-    device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-        label: Some(label),
-        layout: Some(layout),
-        vertex: wgpu::VertexState {
-            module: &shader,
-            entry_point: Some("vs_main"),
-            buffers: &[],
-            compilation_options: Default::default(),
-        },
-        fragment: Some(wgpu::FragmentState {
-            module: &shader,
-            entry_point: Some("fs_main"),
-            targets: &[Some(wgpu::ColorTargetState {
-                format: wgpu::TextureFormat::Rgba8Unorm,
-                blend: Some(wgpu::BlendState::ALPHA_BLENDING),
-                write_mask: wgpu::ColorWrites::ALL,
-            })],
-            compilation_options: Default::default(),
+) -> Result<wgpu::RenderPipeline, String> {
+    let shader = try_create_shader_module(device, wgsl, label)?;
+    Ok(
+        device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some(label),
+            layout: Some(layout),
+            vertex: wgpu::VertexState {
+                module: &shader,
+                entry_point: Some("vs_main"),
+                buffers: &[],
+                compilation_options: Default::default(),
+            },
+            fragment: Some(wgpu::FragmentState {
+                module: &shader,
+                entry_point: Some("fs_main"),
+                targets: &[Some(wgpu::ColorTargetState {
+                    format: wgpu::TextureFormat::Rgba8Unorm,
+                    blend: Some(wgpu::BlendState::ALPHA_BLENDING),
+                    write_mask: wgpu::ColorWrites::ALL,
+                })],
+                compilation_options: Default::default(),
+            }),
+            primitive: wgpu::PrimitiveState {
+                topology: wgpu::PrimitiveTopology::TriangleList,
+                cull_mode: None,
+                ..Default::default()
+            },
+            depth_stencil: Some(wgpu::DepthStencilState {
+                format: DEPTH_FORMAT,
+                depth_write_enabled: Some(true),
+                depth_compare: Some(wgpu::CompareFunction::LessEqual),
+                stencil: wgpu::StencilState::default(),
+                bias: wgpu::DepthBiasState::default(),
+            }),
+            multisample: wgpu::MultisampleState::default(),
+            multiview_mask: None,
+            cache: None,
         }),
-        primitive: wgpu::PrimitiveState {
-            topology: wgpu::PrimitiveTopology::TriangleList,
-            cull_mode: None,
-            ..Default::default()
-        },
-        depth_stencil: Some(wgpu::DepthStencilState {
-            format: DEPTH_FORMAT,
-            depth_write_enabled: Some(true),
-            depth_compare: Some(wgpu::CompareFunction::LessEqual),
-            stencil: wgpu::StencilState::default(),
-            bias: wgpu::DepthBiasState::default(),
-        }),
-        multisample: wgpu::MultisampleState::default(),
-        multiview_mask: None,
-        cache: None,
-    })
+    )
 }
 
 fn build_pipelines_from_registry(
@@ -179,13 +226,16 @@ fn build_pipelines_from_registry(
             let wgsl = unsafe {
                 std::str::from_utf8_unchecked(std::slice::from_raw_parts(src.ptr, src.len))
             };
-            Some((
-                plugin.kind_id,
-                (
-                    build_pipeline(device, layout, wgsl, &plugin.name),
-                    vertex_count,
-                ),
-            ))
+            match build_pipeline(device, layout, wgsl, &plugin.name) {
+                Ok(pipeline) => Some((plugin.kind_id, (pipeline, vertex_count))),
+                Err(err) => {
+                    eprintln!(
+                        "[NeoUtl] オブジェクトプラグインのシェーダコンパイル失敗、除外して継続: kind_id={} name={} 理由={err}",
+                        plugin.kind_id, plugin.name
+                    );
+                    None
+                }
+            }
         })
         .collect()
 }
@@ -215,44 +265,46 @@ fn build_effect_pipeline(
     layout: &wgpu::PipelineLayout,
     wgsl: &str,
     label: &str,
-) -> wgpu::RenderPipeline {
-    let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-        label: Some(label),
-        source: wgpu::ShaderSource::Wgsl(wgsl.into()),
-    });
-    device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-        label: Some(label),
-        layout: Some(layout),
-        vertex: wgpu::VertexState {
-            module: &shader,
-            entry_point: Some("vs_main"),
-            buffers: &[],
-            compilation_options: Default::default(),
-        },
-        fragment: Some(wgpu::FragmentState {
-            module: &shader,
-            entry_point: Some("fs_main"),
-            targets: &[Some(wgpu::ColorTargetState {
-                format: wgpu::TextureFormat::Rgba8Unorm,
-                blend: None,
-                write_mask: wgpu::ColorWrites::ALL,
-            })],
-            compilation_options: Default::default(),
+) -> Result<wgpu::RenderPipeline, String> {
+    let shader = try_create_shader_module(device, wgsl, label)?;
+    Ok(
+        device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some(label),
+            layout: Some(layout),
+            vertex: wgpu::VertexState {
+                module: &shader,
+                entry_point: Some("vs_main"),
+                buffers: &[],
+                compilation_options: Default::default(),
+            },
+            fragment: Some(wgpu::FragmentState {
+                module: &shader,
+                entry_point: Some("fs_main"),
+                targets: &[Some(wgpu::ColorTargetState {
+                    format: wgpu::TextureFormat::Rgba8Unorm,
+                    blend: None,
+                    write_mask: wgpu::ColorWrites::ALL,
+                })],
+                compilation_options: Default::default(),
+            }),
+            primitive: wgpu::PrimitiveState {
+                topology: wgpu::PrimitiveTopology::TriangleList,
+                cull_mode: None,
+                ..Default::default()
+            },
+            depth_stencil: None,
+            multisample: wgpu::MultisampleState::default(),
+            multiview_mask: None,
+            cache: None,
         }),
-        primitive: wgpu::PrimitiveState {
-            topology: wgpu::PrimitiveTopology::TriangleList,
-            cull_mode: None,
-            ..Default::default()
-        },
-        depth_stencil: None,
-        multisample: wgpu::MultisampleState::default(),
-        multiview_mask: None,
-        cache: None,
-    })
+    )
 }
 
 /// effects::loader::registry()の全プラグインからポストプロセスパイプラインを構築する。
 /// エフェクトIDをキーとし、ActiveObject.effectsの並び順に都度引いて適用する。
+/// シェーダコンパイル失敗プラグインは警告出力の上除外し、他プラグインの処理は継続する。
+/// 除外されたエフェクトIDはeffect_pipelinesに登録されず、apply_effect_chain側の
+/// `self.effect_pipelines.get(effect_id)`の既存チェックにより実行時は自動的にスキップされる。
 fn build_effect_pipelines_from_registry(
     device: &wgpu::Device,
     layout: &wgpu::PipelineLayout,
@@ -267,10 +319,16 @@ fn build_effect_pipelines_from_registry(
             let wgsl = unsafe {
                 std::str::from_utf8_unchecked(std::slice::from_raw_parts(src.ptr, src.len))
             };
-            Some((
-                plugin.id.clone(),
-                build_effect_pipeline(device, layout, wgsl, &plugin.name),
-            ))
+            match build_effect_pipeline(device, layout, wgsl, &plugin.name) {
+                Ok(pipeline) => Some((plugin.id.clone(), pipeline)),
+                Err(err) => {
+                    eprintln!(
+                        "[NeoUtl] エフェクトプラグインのシェーダコンパイル失敗、除外して継続: id={} name={} 理由={err}",
+                        plugin.id, plugin.name
+                    );
+                    None
+                }
+            }
         })
         .collect()
 }
@@ -771,6 +829,9 @@ impl RenderEngine {
     }
 
     pub fn render(&mut self, active_objects: &[ActiveObject], _project: &ProjectResource) {
+        if is_device_lost() {
+            return;
+        }
         let mut media_frames: Vec<Option<wgpu::Texture>> = Vec::with_capacity(active_objects.len());
         {
             let cache = crate::media::cache::global();
@@ -913,7 +974,7 @@ impl RenderEngine {
                 }
             }
 
-            for (obj, (texture, offset)) in active_objects
+            for (_obj, (texture, offset)) in active_objects
                 .iter()
                 .zip(media_frames.iter().zip(media_offsets.iter()))
             {

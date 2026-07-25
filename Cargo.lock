@@ -17,6 +17,7 @@ dependencies = [
  "neoutl-object-api",
  "neoutl-shared-abi",
  "neoutl-theme-api",
+ "pollster",
  "rfd",
  "rust-yaml",
  "serde",
