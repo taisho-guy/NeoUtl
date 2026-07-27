@@ -99,7 +99,7 @@ cd NeoUtl
 <details>
 <summary>NeoUtlの場合</summary>
   
-予めRust、Clang、Mold（Linuxの場合）、gstreamer、Slang（S-Langではありません）をインストールしてください。
+予めRust、Clang、Mold（Linuxの場合）、gstreamerをインストールしてください。
 
 ```fish
 git switch main
