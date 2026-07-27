@@ -4,10 +4,10 @@ use crate::ecs::systems::ActiveObject;
 use crate::ecs::types::Value;
 use crate::effects;
 use crate::objects::{by_kind_id, registry};
-use neoutl_object_api::{IMAGE_STABLE_ID, VIDEO_STABLE_ID};
+use neoutl_object_api::{IMAGE_STABLE_ID, UNIT_SIZE_PX, VIDEO_STABLE_ID};
 use slint::wgpu_29::wgpu;
 use std::borrow::Cow;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use wgpu_text::glyph_brush::ab_glyph::FontArc;
@@ -62,7 +62,14 @@ pub struct RenderEngine {
     pub uniform_buffer: wgpu::Buffer,
     pub bind_group_layout: wgpu::BindGroupLayout,
     pub bind_group: wgpu::BindGroup,
-    pub text_brush: Option<TextBrush>,
+    /// テキスト描画に使う共有フォント。オブジェクト単位のオフスクリーン
+    /// テクスチャ寸法算出（media::text::measure）にも同一フォントを用いる。
+    font: Option<FontArc>,
+    /// テキストオブジェクト1件につき1枚のオフスクリーンテクスチャ＋専用TextBrushを保持する。
+    /// キーはActiveObject.clip_instance（ObjectId由来、フレームを跨いで安定）。
+    /// 生成後は標準クアッドパイプライン（media_pipeline）でTransform・不透明度込みの
+    /// MVPにより描画するため、X/Y/Z回転・拡大率・不透明度が他オブジェクトと同様に効く。
+    text_targets: HashMap<u64, TextRenderTarget>,
     pub render_width: u32,
     pub render_height: u32,
     pipelines: HashMap<u32, (wgpu::RenderPipeline, u32)>,
@@ -78,6 +85,42 @@ pub struct RenderEngine {
     media_sampler: wgpu::Sampler,
     video_pipeline: wgpu::RenderPipeline,
     video_bind_group_layout: wgpu::BindGroupLayout,
+}
+
+/// テキスト1オブジェクト分の描画先。widthxheightはmedia::text::measure()の結果と一致し、
+/// 寸法変化時のみ再生成する（内容変化のみの場合はbrush.queueの再実行だけで済む）。
+struct TextRenderTarget {
+    texture: wgpu::Texture,
+    brush: TextBrush,
+    width: u32,
+    height: u32,
+}
+
+/// フォントとテクスチャ寸法からTextRenderTargetを新規構築する。
+/// テクスチャはcreate_effect_texture同形式（Rgba8Unorm、RENDER_ATTACHMENT+TEXTURE_BINDING+
+/// COPY_SRC/DST）を流用し、media_pipelineのサンプリング対象としてそのまま使える。
+/// 深度は不要（オフスクリーンのグリフラスタライズのみで、奥行き合成は行わない）。
+fn build_text_target(
+    device: &wgpu::Device,
+    font: &FontArc,
+    width: u32,
+    height: u32,
+) -> TextRenderTarget {
+    let width = width.max(1);
+    let height = height.max(1);
+    let texture = create_effect_texture(device, width, height);
+    let brush = BrushBuilder::using_font(font.clone()).build(
+        device,
+        width,
+        height,
+        wgpu::TextureFormat::Rgba8Unorm,
+    );
+    TextRenderTarget {
+        texture,
+        brush,
+        width,
+        height,
+    }
 }
 
 fn load_font() -> Option<Vec<u8>> {
@@ -591,19 +634,7 @@ impl RenderEngine {
             });
         let video_pipeline = build_media_pipeline(&device, &video_pipeline_layout, VIDEO_WGSL);
 
-        let text_brush = load_font().and_then(|f| {
-            FontArc::try_from_vec(f).ok().map(|fa| {
-                BrushBuilder::using_font(fa)
-                    .with_depth_stencil(Some(wgpu::DepthStencilState {
-                        format: DEPTH_FORMAT,
-                        depth_write_enabled: Some(false),
-                        depth_compare: Some(wgpu::CompareFunction::Always),
-                        stencil: wgpu::StencilState::default(),
-                        bias: wgpu::DepthBiasState::default(),
-                    }))
-                    .build(&device, width, height, wgpu::TextureFormat::Rgba8Unorm)
-            })
-        });
+        let font = load_font().and_then(|f| FontArc::try_from_vec(f).ok());
 
         Self {
             device,
@@ -613,7 +644,8 @@ impl RenderEngine {
             uniform_buffer,
             bind_group_layout,
             bind_group,
-            text_brush,
+            font,
+            text_targets: HashMap::new(),
             render_width: width,
             render_height: height,
             pipelines,
@@ -639,9 +671,6 @@ impl RenderEngine {
         self.depth_texture = create_depth_texture(&self.device, width, height);
         self.effect_ping = create_effect_texture(&self.device, width, height);
         self.effect_pong = create_effect_texture(&self.device, width, height);
-        if let Some(ref mut b) = self.text_brush {
-            b.resize_view(width as f32, height as f32, &self.queue);
-        }
         eprintln!("[NeoUtl] レンダーターゲット変更: {width}×{height}");
     }
 
@@ -666,16 +695,22 @@ impl RenderEngine {
         offset as u32
     }
 
-    /// ActiveObjectのMVP・不透明度をメディア用Uniformバッファへ書き込み、
-    /// バインド時に使う動的オフセットを返す（write_standard_uniformと同一のストライド運用）。
-    fn write_media_uniform(&self, index: u64, obj: &ActiveObject) -> u32 {
+    /// mvp・不透明度をメディア用Uniformバッファへ書き込む共通経路。
+    /// write_media_uniform（映像/画像）とテキスト（render()内、rescale後のmvp）の両方から呼ぶ。
+    fn write_media_uniform_raw(&self, index: u64, mvp: &[f32; 16], opacity: f32) -> u32 {
         let mut data = [0u8; MEDIA_UNIFORM_SIZE as usize];
-        data[0..64].copy_from_slice(bytemuck::cast_slice(&obj.mvp));
-        data[64..68].copy_from_slice(&obj.opacity.to_le_bytes());
+        data[0..64].copy_from_slice(bytemuck::cast_slice(mvp));
+        data[64..68].copy_from_slice(&opacity.to_le_bytes());
         let offset = index * UNIFORM_STRIDE;
         self.queue
             .write_buffer(&self.media_uniform_buffer, offset, &data);
         offset as u32
+    }
+
+    /// ActiveObjectのMVP・不透明度をメディア用Uniformバッファへ書き込み、
+    /// バインド時に使う動的オフセットを返す（write_standard_uniformと同一のストライド運用）。
+    fn write_media_uniform(&self, index: u64, obj: &ActiveObject) -> u32 {
+        self.write_media_uniform_raw(index, &obj.mvp, obj.opacity)
     }
 
     /// ActiveObject.effectsを連結した順序付きエフェクトチェーンを、
@@ -890,32 +925,93 @@ impl RenderEngine {
             }
         }
 
-        let text_sections: Vec<_> = active_objects
-            .iter()
-            .filter_map(|obj| {
-                let plugin = by_kind_id(obj.kind_id)?;
+        let mut text_draws: Vec<(u64, u32)> = Vec::new();
+        if let Some(ref font) = self.font {
+            let mut seen: HashSet<u64> = HashSet::with_capacity(active_objects.len());
+            for obj in active_objects {
+                let Some(plugin) = by_kind_id(obj.kind_id) else {
+                    continue;
+                };
                 let meta = unsafe { &*((plugin.vtable.meta)()) };
                 if meta.stable_id != neoutl_object_api::TEXT_STABLE_ID {
-                    return None;
+                    continue;
                 }
-                let tc = obj.text_content.as_ref()?;
-                let world_x = obj.global_matrix[12];
-                let world_y = obj.global_matrix[13];
-                Some(crate::media::text::build_section(
-                    tc,
-                    world_x,
-                    world_y,
-                    self.render_width,
-                    self.render_height,
-                ))
-            })
-            .collect();
+                let Some(tc) = obj.text_content.as_ref() else {
+                    continue;
+                };
+                if media_next_index >= MAX_OBJECTS {
+                    continue;
+                }
 
-        if let Some(ref mut brush) = self.text_brush
-            && !text_sections.is_empty()
-        {
-            let refs: Vec<&_> = text_sections.iter().collect();
-            let _ = brush.queue(self.device.as_ref(), self.queue.as_ref(), refs);
+                let (tex_w, tex_h) = crate::media::text::measure(font, tc);
+                seen.insert(obj.clip_instance);
+
+                let needs_rebuild = match self.text_targets.get(&obj.clip_instance) {
+                    Some(t) => t.width != tex_w || t.height != tex_h,
+                    None => true,
+                };
+                if needs_rebuild {
+                    self.text_targets.insert(
+                        obj.clip_instance,
+                        build_text_target(&self.device, font, tex_w, tex_h),
+                    );
+                }
+                let target = self
+                    .text_targets
+                    .get_mut(&obj.clip_instance)
+                    .expect("直前にinsert済み");
+
+                let section = crate::media::text::build_section(tc, target.width, target.height);
+                {
+                    let view = target
+                        .texture
+                        .create_view(&wgpu::TextureViewDescriptor::default());
+                    let _ = target.brush.queue(
+                        self.device.as_ref(),
+                        self.queue.as_ref(),
+                        vec![&section],
+                    );
+                    let mut encoder =
+                        self.device
+                            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                                label: Some("Text Glyph Encoder"),
+                            });
+                    {
+                        let mut glyph_pass =
+                            encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                                label: Some("Text Glyph Pass"),
+                                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                                    view: &view,
+                                    resolve_target: None,
+                                    ops: wgpu::Operations {
+                                        load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
+                                        store: wgpu::StoreOp::Store,
+                                    },
+                                    depth_slice: None,
+                                })],
+                                depth_stencil_attachment: None,
+                                timestamp_writes: None,
+                                occlusion_query_set: None,
+                                multiview_mask: None,
+                            });
+                        target.brush.draw(&mut glyph_pass);
+                    }
+                    self.queue.submit([encoder.finish()]);
+                }
+
+                let ratio_w = tex_w as f32 / UNIT_SIZE_PX;
+                let ratio_h = tex_h as f32 / UNIT_SIZE_PX;
+                let mut mvp = obj.mvp;
+                for i in 0..4 {
+                    mvp[i] *= ratio_w;
+                    mvp[4 + i] *= ratio_h;
+                }
+
+                let offset = self.write_media_uniform_raw(media_next_index, &mvp, obj.opacity);
+                media_next_index += 1;
+                text_draws.push((obj.clip_instance, offset));
+            }
+            self.text_targets.retain(|k, _| seen.contains(k));
         }
 
         let mut encoder = self
@@ -1045,8 +1141,38 @@ impl RenderEngine {
                 }
             }
 
-            if let Some(ref mut brush) = self.text_brush {
-                brush.draw(&mut rpass);
+            for (clip_instance, offset) in &text_draws {
+                let Some(target) = self.text_targets.get(clip_instance) else {
+                    continue;
+                };
+                let view = target
+                    .texture
+                    .create_view(&wgpu::TextureViewDescriptor::default());
+                let bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+                    label: Some("Text Object BG"),
+                    layout: &self.media_bind_group_layout,
+                    entries: &[
+                        wgpu::BindGroupEntry {
+                            binding: 0,
+                            resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
+                                buffer: &self.media_uniform_buffer,
+                                offset: 0,
+                                size: wgpu::BufferSize::new(MEDIA_UNIFORM_SIZE),
+                            }),
+                        },
+                        wgpu::BindGroupEntry {
+                            binding: 1,
+                            resource: wgpu::BindingResource::TextureView(&view),
+                        },
+                        wgpu::BindGroupEntry {
+                            binding: 2,
+                            resource: wgpu::BindingResource::Sampler(&self.media_sampler),
+                        },
+                    ],
+                });
+                rpass.set_pipeline(&self.media_pipeline);
+                rpass.set_bind_group(0, &bind_group, &[*offset]);
+                rpass.draw(0..6, 0..1);
             }
         }
 

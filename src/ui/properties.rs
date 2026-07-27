@@ -511,13 +511,18 @@ fn push_c_abi_param_rows(
 ///
 /// 注意: レンダリング側（renderer/pipeline.rs::write_standard_uniform）はShape系の
 /// パラメータをネイティブのShapeParamsコンポーネント（object_schema::SHAPE_SCHEMA、
-/// group="図形"）からのみ読み出し、PluginParamsは一切参照しない。そのためこの関数が
-/// 生成するplugin.name群の行を編集しても描画には反映されない
-/// （SHAPE_SCHEMA側の行を編集すること）。has_shapeがtrue、すなわちネイティブスキーマの
-/// 行が既に同じ内容をカバーしている場合はここでの重複行生成をスキップし、
-/// 「操作してもガン無視される」編集不能な行をUI上に出さないようにする。
+/// group="図形"）からのみ読み出し、PluginParamsは一切参照しない。Text系も同様に
+/// TextContentコンポーネント（object_schema::TEXT_SCHEMA、group="テキスト"）からのみ
+/// 読み出す。そのためこの関数が生成するplugin.name群の行を編集しても描画には反映されない
+/// （SHAPE_SCHEMA・TEXT_SCHEMA側の行を編集すること）。has_shape/has_textがtrue、
+/// すなわちネイティブスキーマの行が既に同じ内容をカバーしている場合はここでの
+/// 重複行生成をスキップし、「操作してもガン無視される」編集不能な行をUI上に
+/// 出さないようにする。
 fn push_plugin_rows(out: &mut Vec<ParamRow>, world: &EcsWorld, oid: usize) {
     if world.get_shape(oid).is_some() {
+        return;
+    }
+    if world.get_text(oid).is_some() {
         return;
     }
     let Some(kind_id) = world.get_kind_id(oid) else {
