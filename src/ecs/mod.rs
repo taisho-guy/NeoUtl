@@ -586,15 +586,13 @@ impl EcsWorld {
             .run(|texts: View<TextContent>| texts.get(entity).ok().cloned())
     }
 
-    pub fn set_text(&mut self, object_id: usize, text: String, x: f32, y: f32, font_size: f32) {
+    pub fn set_text(&mut self, object_id: usize, text: String, font_size: f32) {
         let Some(entity) = self.find_entity(object_id) else {
             return;
         };
         self.world.run(|mut texts: ViewMut<TextContent>| {
             if let Ok(mut slot) = (&mut texts).get(entity) {
                 slot.text = text;
-                slot.x = x;
-                slot.y = y;
                 slot.font_size = font_size;
             }
         });
@@ -856,7 +854,6 @@ impl EcsWorld {
         }
     }
 
-    /// DocumentModelから全エンティティを再構築する唯一の窓口。
     /// 既存エンティティは全削除の上、doc.objectsから再生成する
     /// （差分検出をせず毎回全再構築。オブジェクト数が数千規模になるまでは
     /// 個別差分焼き込みより実装単純性を優先する）。

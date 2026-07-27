@@ -899,8 +899,12 @@ impl RenderEngine {
                     return None;
                 }
                 let tc = obj.text_content.as_ref()?;
+                let world_x = obj.global_matrix[12];
+                let world_y = obj.global_matrix[13];
                 Some(crate::media::text::build_section(
                     tc,
+                    world_x,
+                    world_y,
                     self.render_width,
                     self.render_height,
                 ))

@@ -162,7 +162,6 @@ pub fn create_project(
     Ok(meta)
 }
 
-/// DocumentModel（正本データ）をディスクへ確定する唯一の窓口。
 /// 編集コマンド確定・オートセーブ・Undo/Redo後の再保存等、保存が必要な全箇所からこの関数を呼ぶ。
 pub fn save_document(dir: &Path, doc: &DocumentModel) -> std::io::Result<()> {
     let active_scene_meta = doc.scenes.iter().find(|s| s.id == doc.active_scene);

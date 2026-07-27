@@ -407,7 +407,7 @@ fn apply_object_param(world: &mut EcsWorld, oid: usize, group: &str, key: &str, 
         TEXT_GROUP => {
             let mut t = world.get_text(oid).unwrap_or_default();
             if t.set_param(key, value) {
-                world.set_text(oid, t.text, t.x, t.y, t.font_size);
+                world.set_text(oid, t.text, t.font_size);
             }
         }
         SHAPE_GROUP => {
@@ -432,7 +432,7 @@ fn apply_object_param(world: &mut EcsWorld, oid: usize, group: &str, key: &str, 
 fn apply_object_param_text(world: &mut EcsWorld, oid: usize, group: &str, key: &str, text: &str) {
     if group == TEXT_GROUP && key == "text" {
         let cur = world.get_text(oid).unwrap_or_default();
-        world.set_text(oid, text.to_owned(), cur.x, cur.y, cur.font_size);
+        world.set_text(oid, text.to_owned(), cur.font_size);
     }
 }
 

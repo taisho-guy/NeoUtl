@@ -118,7 +118,7 @@ def process(path: Path, fix: bool, levels: set):
 def main():
     ap = argparse.ArgumentParser(description="LLM冗長コメント検出・除去")
     ap.add_argument("root", type=Path, nargs="?", default=Path("."))
-    ap.add_argument("--exclude", action="append", default=["aviutl2_sdk", "target", ".git"])
+    ap.add_argument("--exclude", action="append", default=["aviutl2_sdk", "target", ".git", "slang"])
     ap.add_argument("--fix", action="store_true")
     ap.add_argument("--levels", default="noise,echo,empty")
     args = ap.parse_args()
