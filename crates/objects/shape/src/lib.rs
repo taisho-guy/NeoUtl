@@ -4,7 +4,7 @@ use neoutl_object_api::{
 };
 use std::sync::OnceLock;
 
-static SHAPE_SPV: &[u8] = slank::include_slang!("shape");
+static SHAPE_SPV: &[u8] = include_str!(concat!(env!("OUT_DIR"), "/shape.wgsl")).as_bytes();
 
 static PARAM_SCHEMA: &[ParamSchema] = &[
     ParamSchema {

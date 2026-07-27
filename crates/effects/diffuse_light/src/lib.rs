@@ -4,7 +4,8 @@ use neoutl_effect_api::{
 };
 use std::sync::OnceLock;
 
-static FRAGMENT_SPV: &[u8] = slank::include_slang!("diffuse_light");
+static FRAGMENT_SPV: &[u8] =
+    include_str!(concat!(env!("OUT_DIR"), "/diffuse_light.wgsl")).as_bytes();
 
 static PARAM_SCHEMA: &[EffectParamSchema] = &[
     EffectParamSchema {
