@@ -101,11 +101,15 @@ unsafe impl Sync for MediaMeta {}
 /// 本体各フィールドはホストと同一Cargo.lock・同一rustcで一括ビルドされる前提の
 /// 素のRust関数ポインタとする（objects/effectsのRenderContext拡張点と同一のABI前提）。
 /// kindに応じた1フィールドのみSomeとなる。
+pub type OpenVideoFn = fn(path: &std::path::Path) -> Result<Box<dyn VideoSource>, String>;
+pub type OpenImageFn = fn(path: &std::path::Path) -> Result<Box<dyn ImageSource>, String>;
+pub type DecodeAudioFn = fn(path: &std::path::Path) -> Result<AudioBuffer, String>;
+
 pub struct MediaVTable {
     pub meta: fn() -> &'static MediaMeta,
-    pub open_video: Option<fn(path: &std::path::Path) -> Result<Box<dyn VideoSource>, String>>,
-    pub open_image: Option<fn(path: &std::path::Path) -> Result<Box<dyn ImageSource>, String>>,
-    pub decode_audio: Option<fn(path: &std::path::Path) -> Result<AudioBuffer, String>>,
+    pub open_video: Option<OpenVideoFn>,
+    pub open_image: Option<OpenImageFn>,
+    pub decode_audio: Option<DecodeAudioFn>,
 }
 
 pub const ENTRY_SYMBOL: &[u8] = b"neoutl_media_entry\0";

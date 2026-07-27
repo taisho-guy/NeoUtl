@@ -77,7 +77,7 @@ fn frame_from_anchor(
         return anchor_frame;
     }
     let elapsed_secs = anchor_instant.elapsed().as_secs_f64();
-    let advanced_frames = elapsed_secs * fps as f64 * (speed_percent as f64 / 100.0);
+    let advanced_frames = elapsed_secs * f64::from(fps) * (f64::from(speed_percent) / 100.0);
     anchor_frame + advanced_frames.floor() as i32
 }
 

@@ -233,18 +233,17 @@ fn wait_state(pipeline: &gst::Pipeline, timeout: gst::ClockTime) -> Result<(), S
     if let Some(msg) = bus.timed_pop_filtered(
         gst::ClockTime::from_mseconds(500),
         &[gst::MessageType::Error],
-    ) {
-        if let gst::MessageView::Error(err) = msg.view() {
-            let src = err
-                .src()
-                .map(|s| s.path_string().to_string())
-                .unwrap_or_else(|| "不明".to_owned());
-            return Err(format!(
-                "状態遷移失敗: 要素={src} 理由={} 詳細={:?}",
-                err.error(),
-                err.debug()
-            ));
-        }
+    ) && let gst::MessageView::Error(err) = msg.view()
+    {
+        let src = err
+            .src()
+            .map(|s| s.path_string().to_string())
+            .unwrap_or_else(|| "不明".to_owned());
+        return Err(format!(
+            "状態遷移失敗: 要素={src} 理由={} 詳細={:?}",
+            err.error(),
+            err.debug()
+        ));
     }
     Err("状態遷移失敗（バスにERRORメッセージなし）".to_owned())
 }
@@ -599,7 +598,6 @@ fn bounded_join(handle: Option<JoinHandle<()>>, timeout: Duration, name: &str) {
         return;
     };
     let start = std::time::Instant::now();
-    let mut handle = handle;
     loop {
         if handle.is_finished() {
             let _ = handle.join();
@@ -779,7 +777,7 @@ impl VideoSource for GstDecoder {
         );
         if self.pending.len() >= PENDING_PURGE_THRESHOLD {
             let gop_span = clamped - gop_start;
-            let protect_gop = gop_span >= 0 && gop_span <= MAX_GOP_PROTECT_SPAN;
+            let protect_gop = (0..=MAX_GOP_PROTECT_SPAN).contains(&gop_span);
             self.pending.retain(|k, _| {
                 (protect_gop && *k >= gop_start && *k <= clamped)
                     || (k - clamped).abs() <= PENDING_KEEP_RADIUS

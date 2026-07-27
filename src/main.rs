@@ -1,4 +1,7 @@
 #![recursion_limit = "256"]
+#![warn(clippy::pedantic)]
+#![warn(clippy::indexing_slicing)]
+#![warn(clippy::arithmetic_side_effects)]
 
 mod app_state;
 mod config;
@@ -32,7 +35,7 @@ fn default_gst_plugin_dir() -> Option<std::path::PathBuf> {
 
     #[cfg(target_os = "linux")]
     {
-        return None;
+        None
     }
 }
 
@@ -63,7 +66,10 @@ fn configure_gst_plugin_path() {
         return;
     };
     let Some(dir_str) = dir.to_str() else {
-        eprintln!("[NeoUtl] GST_PLUGIN_PATHの解決に失敗（非UTF-8パス）: {dir:?}");
+        eprintln!(
+            "[NeoUtl] GST_PLUGIN_PATHの解決に失敗（非UTF-8パス）: {}",
+            dir.display()
+        );
         return;
     };
     unsafe {

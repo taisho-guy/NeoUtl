@@ -46,7 +46,6 @@ impl TextureLru {
 
 /// UIスレッド側テクスチャLRUの容量。worker側リング(worker::RING_CAPACITY)と共有し、
 /// config::DECODE_RING_CAPACITYを唯一の定義元とする。
-
 struct VideoInstance {
     pending_decoder: Option<Box<dyn VideoSource>>,
     worker: Option<DecodeWorker>,
@@ -300,7 +299,7 @@ impl MediaCache {
         self.handle_prefetch_failure_with_reason(path, "prefetch連続失敗".to_string());
     }
 
-    pub fn schedule_prefetch_failure_with_reason(&self, path: PathBuf, reason: String) {
+    pub fn schedule_prefetch_failure_with_reason(path: PathBuf, reason: String) {
         eprintln!(
             "[media-cache] schedule prefetch failure path={} reason={}",
             path.display(),
@@ -424,13 +423,17 @@ impl MediaCache {
                 };
                 if worker_needs_refresh {
                     instance.worker = None;
-                    let decoder = match spare_decoder.or_else(|| instance.pending_decoder.take()) {
-                        Some(d) => d,
-                        None => {
-                            let (d, _) = open_video_excluding(path, &failed_plugins)
-                                .map_err(|e| format!("追加インスタンス用デコーダを開けません: {e} / plugin={plugin_id}"))?;
-                            d
-                        }
+                    let decoder = if let Some(d) =
+                        spare_decoder.or_else(|| instance.pending_decoder.take())
+                    {
+                        d
+                    } else {
+                        let (d, _) = open_video_excluding(path, &failed_plugins).map_err(|e| {
+                            format!(
+                                "追加インスタンス用デコーダを開けません: {e} / plugin={plugin_id}"
+                            )
+                        })?;
+                        d
                     };
                     let fail_path = path.to_path_buf();
                     let generation = current_gen;
@@ -438,7 +441,6 @@ impl MediaCache {
                     let redraw = self.redraw_handle();
                     let on_fail = Arc::new(move |reason: String| {
                         crate::media::cache::MediaCache::schedule_prefetch_failure_with_reason(
-                            &crate::media::cache::global(),
                             fail_path.clone(),
                             reason,
                         );
@@ -482,7 +484,7 @@ impl MediaCache {
 
                 if let Some(err) = worker.take_last_error() {
                     instance.last_worker_error = Some(err.clone());
-                    return Err(format!("{} / plugin={}", err, plugin_id));
+                    return Err(format!("{err} / plugin={plugin_id}"));
                 }
 
                 Err("デコード中".to_string())

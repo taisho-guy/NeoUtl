@@ -148,7 +148,7 @@ impl DecodeThreadHandle {
                     DecodeRequest::Full(index) => {
                         let result = decoder
                             .prefetch(index)
-                            .and_then(|_| decoder.frame_gpu(index, &device, &queue));
+                            .and_then(|()| decoder.frame_gpu(index, &device, &queue));
                         if resp_tx
                             .send(DecodeResponse::FrameDone(index, result))
                             .is_err()
@@ -198,8 +198,7 @@ impl DecodeThreadHandle {
             Err(RecvTimeoutError::Timeout) => {
                 self.hung = true;
                 Err(format!(
-                    "prefetch watchdog timeout (frame={frame_index}, timeout={:?})",
-                    DECODE_WATCHDOG_TIMEOUT
+                    "prefetch watchdog timeout (frame={frame_index}, timeout={DECODE_WATCHDOG_TIMEOUT:?})"
                 ))
             }
             Err(RecvTimeoutError::Disconnected) => {
@@ -233,8 +232,7 @@ impl DecodeThreadHandle {
             Err(RecvTimeoutError::Timeout) => {
                 self.hung = true;
                 Err(format!(
-                    "decode watchdog timeout (frame={frame_index}, timeout={:?})",
-                    DECODE_WATCHDOG_TIMEOUT
+                    "decode watchdog timeout (frame={frame_index}, timeout={DECODE_WATCHDOG_TIMEOUT:?})"
                 ))
             }
             Err(RecvTimeoutError::Disconnected) => {
@@ -301,10 +299,6 @@ impl DecodeWorker {
 
             let mut served = NONE_SENTINEL;
             let mut direction: i64 = 1;
-            /// 実際にUIから要求された「target」フレームの失敗のみを数える。
-            /// 投機的先読み(ahead)の失敗はここへ加算しない。動画境界付近での
-            /// 正常なEOF等により、本来正常に再生できるはずのワーカーが
-            /// 誤ってon_fail経由で強制終了することを防ぐ。
             let mut consecutive_target_fails: i64 = 0;
 
             macro_rules! produce {
@@ -385,17 +379,14 @@ impl DecodeWorker {
                         farthest_ahead = Some(ahead);
                     }
                 }
-                if let Some(far) = farthest_ahead {
-                    if requested_t.load(Ordering::Acquire) == target {
-                        if let Err(e) = decode_thread.prefetch_only(far) {
-                            eprintln!(
-                                "[decode-worker] speculative prefetch(frame={far}) failed: {e}"
-                            );
-                            if decode_thread.hung {
-                                on_fail_t(e);
-                                return;
-                            }
-                        }
+                if let Some(far) = farthest_ahead
+                    && requested_t.load(Ordering::Acquire) == target
+                    && let Err(e) = decode_thread.prefetch_only(far)
+                {
+                    eprintln!("[decode-worker] speculative prefetch(frame={far}) failed: {e}");
+                    if decode_thread.hung {
+                        on_fail_t(e);
+                        return;
                     }
                 }
 

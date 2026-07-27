@@ -55,7 +55,7 @@ pub fn load_all(objects_dir: &Path) {
 }
 
 pub fn registry() -> &'static [ObjectPlugin] {
-    REGISTRY.get().map(Vec::as_slice).unwrap_or(&[])
+    REGISTRY.get().map_or(&[][..], Vec::as_slice)
 }
 
 pub fn by_kind_id(kind_id: u32) -> Option<&'static ObjectPlugin> {

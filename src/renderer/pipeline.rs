@@ -177,7 +177,7 @@ fn build_pipeline(
                 module: &shader,
                 entry_point: Some("vs_main"),
                 buffers: &[],
-                compilation_options: Default::default(),
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
             },
             fragment: Some(wgpu::FragmentState {
                 module: &shader,
@@ -187,7 +187,7 @@ fn build_pipeline(
                     blend: Some(wgpu::BlendState::ALPHA_BLENDING),
                     write_mask: wgpu::ColorWrites::ALL,
                 })],
-                compilation_options: Default::default(),
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
             }),
             primitive: wgpu::PrimitiveState {
                 topology: wgpu::PrimitiveTopology::TriangleList,
@@ -275,7 +275,7 @@ fn build_effect_pipeline(
                 module: &shader,
                 entry_point: Some("vs_main"),
                 buffers: &[],
-                compilation_options: Default::default(),
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
             },
             fragment: Some(wgpu::FragmentState {
                 module: &shader,
@@ -285,7 +285,7 @@ fn build_effect_pipeline(
                     blend: None,
                     write_mask: wgpu::ColorWrites::ALL,
                 })],
-                compilation_options: Default::default(),
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
             }),
             primitive: wgpu::PrimitiveState {
                 topology: wgpu::PrimitiveTopology::TriangleList,
@@ -460,7 +460,7 @@ fn build_media_pipeline(
             module: &shader,
             entry_point: Some("vs_main"),
             buffers: &[],
-            compilation_options: Default::default(),
+            compilation_options: wgpu::PipelineCompilationOptions::default(),
         },
         fragment: Some(wgpu::FragmentState {
             module: &shader,
@@ -470,7 +470,7 @@ fn build_media_pipeline(
                 blend: Some(wgpu::BlendState::ALPHA_BLENDING),
                 write_mask: wgpu::ColorWrites::ALL,
             })],
-            compilation_options: Default::default(),
+            compilation_options: wgpu::PipelineCompilationOptions::default(),
         }),
         primitive: wgpu::PrimitiveState {
             topology: wgpu::PrimitiveTopology::TriangleList,
@@ -660,8 +660,9 @@ impl RenderEngine {
 
         let (sides, extrude_depth, fill_color) = obj
             .shape_params
-            .map(|s| (s.sides as f32, s.extrude_depth, s.fill_color))
-            .unwrap_or((4.0, 0.0, [1.0, 1.0, 1.0, 1.0]));
+            .map_or((4.0, 0.0, [1.0, 1.0, 1.0, 1.0]), |s| {
+                (s.sides as f32, s.extrude_depth, s.fill_color)
+            });
         data[68..72].copy_from_slice(&sides.to_le_bytes());
         data[72..76].copy_from_slice(&extrude_depth.to_le_bytes());
         data[80..96].copy_from_slice(bytemuck::cast_slice(&fill_color));
@@ -724,20 +725,17 @@ impl RenderEngine {
                 .iter()
                 .map(|s| {
                     let key = unsafe { s.key.as_str() };
-                    params
-                        .get(key)
-                        .map(|v| match v {
-                            Value::Number(n) => *n,
-                            Value::Bool(b) => {
-                                if *b {
-                                    1.0
-                                } else {
-                                    0.0
-                                }
+                    params.get(key).map_or(s.default_float, |v| match v {
+                        Value::Number(n) => *n,
+                        Value::Bool(b) => {
+                            if *b {
+                                1.0
+                            } else {
+                                0.0
                             }
-                            Value::Text(_) => s.default_float,
-                        })
-                        .unwrap_or(s.default_float)
+                        }
+                        Value::Text(_) => s.default_float,
+                    })
                 })
                 .collect();
 
@@ -748,8 +746,8 @@ impl RenderEngine {
                     values.as_ptr(),
                     values.len() as u32,
                     bytes.as_mut_ptr(),
-                )
-            };
+                );
+            }
             self.queue
                 .write_buffer(&self.effect_uniform_buffer, 0, &bytes);
 
@@ -838,11 +836,11 @@ impl RenderEngine {
             for obj in active_objects {
                 let is_visual = matches!(
                     stable_id_of(obj.kind_id),
-                    Some(VIDEO_STABLE_ID) | Some(IMAGE_STABLE_ID)
+                    Some(VIDEO_STABLE_ID | IMAGE_STABLE_ID)
                 );
                 let tex = if is_visual {
-                    match &obj.media_source {
-                        Some(src) => match cache.frame_at(
+                    if let Some(src) = &obj.media_source {
+                        match cache.frame_at(
                             &src.path,
                             obj.clip_instance,
                             obj.source_frame,
@@ -859,14 +857,13 @@ impl RenderEngine {
                                 );
                                 None
                             }
-                        },
-                        None => {
-                            eprintln!(
-                                "[NeoUtl] MediaSource未設定 kind_id={}: 映像/画像オブジェクトにパスが割当てられていません",
-                                obj.kind_id
-                            );
-                            None
                         }
+                    } else {
+                        eprintln!(
+                            "[NeoUtl] MediaSource未設定 kind_id={}: 映像/画像オブジェクトにパスが割当てられていません",
+                            obj.kind_id
+                        );
+                        None
                     }
                 } else {
                     None
