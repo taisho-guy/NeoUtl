@@ -4,6 +4,8 @@ use std::{
     process::Command,
 };
 
+mod slang;
+
 struct DiscoveredCrate {
     package_name: String,
     lib_name: String,
@@ -105,6 +107,7 @@ fn build_crates(
     workspace_root: &Path,
     profile: &str,
     target: Option<&str>,
+    offline: bool,
     label: &str,
     crates: &[DiscoveredCrate],
 ) {
@@ -118,12 +121,16 @@ fn build_crates(
     if profile == "release" {
         cmd.arg("--release");
     }
+    if offline {
+        cmd.arg("--offline");
+    }
     if let Some(triple) = target {
         cmd.arg("--target").arg(triple);
     }
     for c in crates {
         cmd.arg("-p").arg(&c.package_name);
     }
+    slang::apply_build_env(&mut cmd, workspace_root);
 
     let status = cmd.status().expect("cargo build 起動失敗");
     if !status.success() {
@@ -164,6 +171,7 @@ fn workspace_root() -> PathBuf {
 fn main() {
     let args: Vec<String> = env::args().skip(1).collect();
     let mut release = false;
+    let mut offline = false;
     let mut task = "run".to_string();
     let mut target: Option<String> = None;
 
@@ -171,6 +179,7 @@ fn main() {
     while i < args.len() {
         match args[i].as_str() {
             "--release" => release = true,
+            "--offline" => offline = true,
             "build" | "run" => task = args[i].clone(),
             "--target" => {
                 i += 1;
@@ -185,20 +194,22 @@ fn main() {
 
     let root = workspace_root();
 
+    slang::ensure_installed(&root, offline);
+
     let objects = discover_crates(&root, "crates/objects");
-    build_crates(&root, profile, target, "objects", &objects);
+    build_crates(&root, profile, target, offline, "objects", &objects);
     stage_crates(&root, profile, target, "objects", &objects);
 
     let effects = discover_crates(&root, "crates/effects");
-    build_crates(&root, profile, target, "effects", &effects);
+    build_crates(&root, profile, target, offline, "effects", &effects);
     stage_crates(&root, profile, target, "effects", &effects);
 
     let decoders = discover_crates(&root, "crates/media");
-    build_crates(&root, profile, target, "decoders", &decoders);
+    build_crates(&root, profile, target, offline, "decoders", &decoders);
     stage_crates(&root, profile, target, "decoders", &decoders);
 
     let themes = discover_crates(&root, "crates/themes");
-    build_crates(&root, profile, target, "themes", &themes);
+    build_crates(&root, profile, target, offline, "themes", &themes);
     stage_crates(&root, profile, target, "themes", &themes);
 
     let mut cmd = Command::new("cargo");
@@ -210,9 +221,13 @@ fn main() {
     if release {
         cmd.arg("--release");
     }
+    if offline {
+        cmd.arg("--offline");
+    }
     if let Some(triple) = target {
         cmd.arg("--target").arg(triple);
     }
+    slang::apply_build_env(&mut cmd, &root);
     let status = cmd.status().expect("cargo build/run 起動失敗");
     if !status.success() {
         std::process::exit(status.code().unwrap_or(1));
