@@ -9,8 +9,6 @@ use crate::ecs::transform::{
 };
 use crate::ecs::types::Value;
 use crate::media::MediaKind;
-use crate::objects;
-use neoutl_object_api::Dimensionality;
 use shipyard::{Get, IntoIter, UniqueView, View};
 use std::collections::HashMap;
 
@@ -31,14 +29,23 @@ pub struct ActiveObject {
     pub effects: Vec<(String, HashMap<String, Value>)>,
 }
 
-/// kind_idのdimensionalityからOrtho/Perspectiveを選択する。
-/// プラグイン未登録（kind_id不明）時は2D既定のOrthoにフォールバックする。
-fn projection_for(kind_id: u32) -> Projection {
-    match objects::by_kind_id(kind_id).map(|p| unsafe { &*((p.vtable.meta)()) }.dimensionality) {
-        Some(Dimensionality::ThreeD | Dimensionality::Both) => Projection::Perspective {
-            fov_deg: DEFAULT_FOV_DEG,
-        },
-        _ => Projection::Ortho,
+/// シーン内の全オブジェクトへ適用する射影方式。常にPerspectiveを返す。
+///
+/// 過去の実装はkind_idのDimensionality（2D/3D/Both）によりOrtho/Perspectiveを
+/// オブジェクトごとに切り替えていたが、これは誤りだった。奥行き0の平面（Text/Image/
+/// Video等のTwoDオブジェクト）をOrtho射影下でX軸・Y軸回転させると、遠近法的な
+/// 奥行き手がかりが一切生じないまま幅または高さがcos(角度)倍で線形に0へ収束するだけになり、
+/// 「回転しているように見えず、ただ描画範囲が狭まって消える」という誤動作を引き起こす
+/// （Z軸回転はOrtho/Perspective双方で平面内回転として同一に見えるため、この問題は
+/// X軸・Y軸回転でのみ顕在化する）。Dimensionality::Both指定のShapeのみPerspectiveと
+/// なるため、Shapeだけが正しく回転して見える非対称な挙動が生じていた。
+///
+/// Camera::for_resolutionは非回転時にPerspectiveでもOrtho同等（z=0平面がproject_height
+/// 一杯に一致）となるよう設計されているため、全オブジェクトをPerspectiveへ統一しても
+/// 静止表示（回転なし）への影響はない。
+fn projection_for(_kind_id: u32) -> Projection {
+    Projection::Perspective {
+        fov_deg: DEFAULT_FOV_DEG,
     }
 }
 
