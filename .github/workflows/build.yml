@@ -9,6 +9,9 @@ on:
 permissions:
   contents: read
 
+env:
+  VCPKG_BINARY_SOURCES: "clear;nuget,GitHub,readwrite"
+
 jobs:
   build:
     name: ${{ matrix.os_name }}
@@ -40,18 +43,14 @@ jobs:
             os_name: Windows (x86_64)
             artifact_name: neoutl-windows-x86_64
             binary_name: NeoUtl.exe
-            msystem: CLANG64
-            mingw_pkg_prefix: mingw-w64-clang-x86_64
-            clang_dir: /clang64
-            rust_target: x86_64-pc-windows-gnullvm
+            rust_target: x86_64-pc-windows-msvc
+            vcpkg_triplet: x64-windows
           - os: windows-11-arm
             os_name: Windows (ARM64)
             artifact_name: neoutl-windows-arm64
             binary_name: NeoUtl.exe
-            msystem: CLANGARM64
-            mingw_pkg_prefix: mingw-w64-clang-aarch64
-            clang_dir: /clangarm64
-            rust_target: aarch64-pc-windows-gnullvm
+            rust_target: aarch64-pc-windows-msvc
+            vcpkg_triplet: arm64-windows
     runs-on: ${{ matrix.os }}
 
     steps:
@@ -62,20 +61,21 @@ jobs:
         shell: bash
         run: ${{ matrix.install_cmd }}
 
-      - name: Setup MSYS2 (Windows)
+      - name: Setup vcpkg (Windows)
         if: runner.os == 'Windows'
-        uses: msys2/setup-msys2@v2
+        uses: lukka/run-vcpkg@v11
         with:
-          msystem: ${{ matrix.msystem }}
-          path-type: inherit
-          update: true
-          cache: false
-          install: ${{ format('{0}-toolchain {0}-gstreamer {0}-gst-plugins-base {0}-gst-plugins-good {0}-gst-plugins-bad {0}-gst-plugins-ugly {0}-gst-libav {0}-pkgconf {0}-ntldd zip', matrix.mingw_pkg_prefix) }}
+          vcpkgJsonGlob: "vcpkg.json"
+
+      - name: Install GStreamer via vcpkg (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          ${{ github.workspace }}/vcpkg/vcpkg install --triplet ${{ matrix.vcpkg_triplet }}
+          echo "VCPKG_INSTALLED=${{ github.workspace }}/vcpkg_installed/${{ matrix.vcpkg_triplet }}" >> $env:GITHUB_ENV
 
       - name: Setup Rust toolchain
         uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: ${{ runner.os == 'Windows' && matrix.rust_target || '' }}
 
       - name: Build (Unix)
         if: runner.os != 'Windows'
@@ -84,29 +84,12 @@ jobs:
           PKG_CONFIG: pkg-config
         run: cargo xtask build --release
 
-      - name: Build (Windows / MSYS2)
+      - name: Build (Windows / MSVC)
         if: runner.os == 'Windows'
-        shell: msys2 {0}
-        run: |
-          export PKG_CONFIG_PATH="${{ matrix.clang_dir }}/lib/pkgconfig"
-          export PKG_CONFIG_ALLOW_CROSS=1
-          # ring-0.17のcc crateはgnullvmターゲットを認識できず、ホストのMSVCターゲットで
-          # clangを呼び出してしまう。そのためCFLAGSで直接--targetとインクルードパスを指定し、
-          # CRATE_CC_NO_DEFAULTSでcc crateの自動ターゲット追加を無効化する。
-          export CRATE_CC_NO_DEFAULTS=1
-          export CC="${{ matrix.clang_dir }}/bin/clang.exe"
-          export AR="${{ matrix.clang_dir }}/bin/llvm-ar.exe"
-          if [ "${{ matrix.rust_target }}" = "aarch64-pc-windows-gnullvm" ]; then
-            export CFLAGS_aarch64_pc_windows_gnullvm="--target=aarch64-w64-windows-gnu -I${{ matrix.clang_dir }}/lib/clang/18/include -I${{ matrix.clang_dir }}/include -I${{ matrix.clang_dir }}/aarch64-w64-mingw32/include"
-            export CFLAGS="--target=aarch64-w64-windows-gnu -I${{ matrix.clang_dir }}/lib/clang/18/include -I${{ matrix.clang_dir }}/include -I${{ matrix.clang_dir }}/aarch64-w64-mingw32/include"
-          elif [ "${{ matrix.rust_target }}" = "x86_64-pc-windows-gnullvm" ]; then
-            export CFLAGS_x86_64_pc_windows_gnullvm="--target=x86_64-w64-windows-gnu -I${{ matrix.clang_dir }}/lib/clang/18/include -I${{ matrix.clang_dir }}/include -I${{ matrix.clang_dir }}/x86_64-w64-mingw32/include"
-            export CFLAGS="--target=x86_64-w64-windows-gnu -I${{ matrix.clang_dir }}/lib/clang/18/include -I${{ matrix.clang_dir }}/include -I${{ matrix.clang_dir }}/x86_64-w64-mingw32/include"
-          fi
-          export CC_aarch64_pc_windows_gnullvm="$CC"
-          export CC_x86_64_pc_windows_gnullvm="$CC"
-          cargo clean
-          cargo xtask build --release --target ${{ matrix.rust_target }}
+        shell: pwsh
+        env:
+          PKG_CONFIG_PATH: ${{ env.VCPKG_INSTALLED }}/lib/pkgconfig
+        run: cargo xtask build --release
 
       - name: Collect artifact (Linux)
         if: runner.os == 'Linux'
@@ -214,40 +197,34 @@ jobs:
 
       - name: Collect & Package GStreamer (Windows)
         if: runner.os == 'Windows'
-        shell: msys2 {0}
+        shell: pwsh
         run: |
-          set -uo pipefail
-          mkdir -p dist/package/bin
-          mkdir -p dist/package/lib/gstreamer-1.0
+          New-Item -ItemType Directory -Force -Path dist/package | Out-Null
+          New-Item -ItemType Directory -Force -Path dist/package/gstreamer-1.0 | Out-Null
 
-          cp target/${{ matrix.rust_target }}/release/${{ matrix.binary_name }} dist/package/
-          [ -d "target/${{ matrix.rust_target }}/release/objects" ] && cp -r target/${{ matrix.rust_target }}/release/objects dist/package/
-          [ -d "target/${{ matrix.rust_target }}/release/effects" ] && cp -r target/${{ matrix.rust_target }}/release/effects dist/package/
+          Copy-Item "target/release/${{ matrix.binary_name }}" dist/package/
+          if (Test-Path "target/release/objects") { Copy-Item -Recurse "target/release/objects" dist/package/ }
+          if (Test-Path "target/release/effects") { Copy-Item -Recurse "target/release/effects" dist/package/ }
 
-          CLANG_PATH="${{ matrix.clang_dir }}"
-          find "$CLANG_PATH/lib/gstreamer-1.0" -name "*.dll" -exec cp {} dist/package/lib/gstreamer-1.0/ \;
-          find "$CLANG_PATH/bin" -name "libgst*.dll" -exec cp {} dist/package/bin/ \;
-          find "$CLANG_PATH/bin" -name "libgstreamer*.dll" -exec cp {} dist/package/bin/ \;
+          $vcpkgBin = "${{ env.VCPKG_INSTALLED }}/bin"
+          $gstPluginDir = "${{ env.VCPKG_INSTALLED }}/lib/gstreamer-1.0"
 
-          EXCLUDE_PLUGINS="libgstdecklink.dll libgstrtmp.dll libgstrtmp2.dll libgstrtsp.dll libgstsrt.dll libgstsctp.dll libgstdtls.dll libgstsrtp.dll libgstrist.dll libgstwebrtc.dll libgstwebrtcdsp.dll libgsthls.dll libgstsoup.dll libgstrfbsrc.dll libgstvmnc.dll libgstshout2.dll"
-          for name in $EXCLUDE_PLUGINS; do
-            rm -f "dist/package/lib/gstreamer-1.0/$name"
-          done
+          Get-ChildItem -Path $gstPluginDir -Filter "*.dll" -ErrorAction SilentlyContinue |
+            Copy-Item -Destination dist/package/gstreamer-1.0/
 
-          ( find dist/package/ \( -name "*.dll" -o -name "${{ matrix.binary_name }}" \) -print0 \
-              | xargs -0 -r ntldd -R 2>/dev/null \
-              | grep -iE 'clang(64|arm64)[/\\]bin' \
-              | awk '{print $3}' \
-              | sort -u ) > /tmp/neoutl_deps.txt || true
+          $excludePlugins = @(
+            "gstdecklink.dll","gstrtmp.dll","gstrtmp2.dll","gstrtsp.dll","gstsrt.dll",
+            "gstsctp.dll","gstdtls.dll","gstsrtp.dll","gstrist.dll","gstwebrtc.dll",
+            "gstwebrtcdsp.dll","gsthls.dll","gstsoup.dll","gstrfbsrc.dll","gstvmnc.dll","gstshout2.dll"
+          )
+          foreach ($name in $excludePlugins) {
+            Remove-Item -Force -ErrorAction SilentlyContinue "dist/package/gstreamer-1.0/$name"
+          }
 
-          if [ -s /tmp/neoutl_deps.txt ]; then
-            while IFS= read -r dep; do
-              [ -f "$dep" ] && cp "$dep" dist/package/bin/
-            done < /tmp/neoutl_deps.txt
-          fi
+          Get-ChildItem -Path $vcpkgBin -Filter "*.dll" |
+            Copy-Item -Destination dist/package/
 
-          cd dist/package
-          zip -r ../${{ matrix.artifact_name }}.zip .
+          Compress-Archive -Path dist/package/* -DestinationPath "dist/${{ matrix.artifact_name }}.zip"
 
       - name: Upload artifact
         uses: actions/upload-artifact@v6
