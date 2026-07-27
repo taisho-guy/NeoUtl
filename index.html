@@ -141,6 +141,29 @@
             </details>
           </div>
         </div>
+        <table class="data-table" id="commit-table">
+          <tbody id="commit-tbody">
+            <tr class="row-accent">
+              <th colspan="2"><span class=
+              "text-link"><b>最近のコミット</b></span></th>
+            </tr>
+            <tr class="row-accent text-center">
+              <th>日時</th>
+              <th>コミットメッセージ</th>
+            </tr>
+            <tr id="commit-loading-row">
+              <td colspan="2" class="text-small">コミット履歴を取得中...</td>
+            </tr>
+            <tr>
+              <td colspan="2">
+                <a href=
+                "https://codeberg.org/taisho-guy/NeoUtl/commits/branch/main"
+                class="float-right" target="_blank" rel=
+                "noopener">全てのコミット履歴を見る</a>
+              </td>
+            </tr>
+          </tbody>
+        </table>
       </div>
     </section>
     <hr class="section-hr gap-before">
@@ -672,6 +695,87 @@ python3 BUILD.py</code></pre>実行可能ファイルは <code>build</code>
   };
 
   renderCounter();
+
+  // 最近のコミット取得
+  const CACHE_KEY_COMMITS = "neoutl_commits_main";
+
+  const renderCommits = (commits) => {
+    const tbody = document.getElementById("commit-tbody");
+    if (!tbody) return;
+
+    const loadingRow = document.getElementById("commit-loading-row");
+    if (loadingRow) loadingRow.remove();
+
+    if (!commits || commits.length === 0) {
+      const tr = document.createElement("tr");
+      tr.innerHTML = '<td colspan="2" class="text-small">コミット履歴がありません。</td>';
+      tbody.insertBefore(tr, tbody.lastElementChild);
+      return;
+    }
+
+    const lastRow = tbody.lastElementChild;
+
+    commits.forEach((item) => {
+      const message = item.commit.message.split("\n")[0];
+      const date = new Date(item.commit.author.date).toLocaleDateString("ja-JP", {
+        year: "numeric", month: "2-digit", day: "2-digit"
+      });
+      const url = `https://codeberg.org/taisho-guy/NeoUtl/commit/${item.sha}`;
+
+      const tr = document.createElement("tr");
+      tr.style.cursor = "pointer";
+      tr.addEventListener("click", () => { window.open(url, "_blank"); });
+      tr.innerHTML = `
+        <td class="text-center text-small">${date}</td>
+        <td><a href="${url}" target="_blank" rel="noopener">${message}</a></td>
+      `;
+      tbody.insertBefore(tr, lastRow);
+    });
+  };
+
+  const fetchLatestCommits = async () => {
+    try {
+      const res = await fetch("https://codeberg.org/api/v1/repos/taisho-guy/NeoUtl/commits?sha=main&limit=3");
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const commits = await res.json();
+      localStorage.setItem(CACHE_KEY_COMMITS, JSON.stringify({ commits, timestamp: Date.now() }));
+      renderCommits(commits);
+    } catch {
+      const loadingRow = document.getElementById("commit-loading-row");
+      if (loadingRow) {
+        loadingRow.innerHTML = '<td colspan="2" class="text-small">コミット履歴の取得に失敗しました。</td>';
+      }
+    }
+  };
+
+  // Lazy-load commits with IntersectionObserver (cached)
+  const initCommits = () => {
+    const table = document.getElementById("commit-table");
+    if (!table) return;
+
+    const cached = localStorage.getItem(CACHE_KEY_COMMITS);
+    if (cached) {
+      const { commits, timestamp } = JSON.parse(cached);
+      if (Date.now() - timestamp < CACHE_TTL) {
+        renderCommits(commits);
+        return;
+      }
+    }
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          observer.disconnect();
+          fetchLatestCommits();
+        }
+      },
+      { rootMargin: "100px" },
+    );
+    observer.observe(table);
+  };
+
+  if ("requestIdleCallback" in window) requestIdleCallback(initCommits);
+  else setTimeout(initCommits, 1);
   </script>
 </body>
 </html>
