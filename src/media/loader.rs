@@ -13,7 +13,6 @@ pub struct MediaPlugin {
     pub extensions: Vec<String>,
     pub vtable: &'static MediaVTable,
     /// dylibロードで得たプラグインのみSome。ネイティブリンクプラグイン（gpuvideo/gstreamer）は
-    /// 本体と同一コンパイル単位のためLibraryを持たない。
     _lib: Option<Library>,
 }
 

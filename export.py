@@ -21,6 +21,7 @@ EXCLUDE_DIRS = {
     "assets",
     "i18n",
     "target",
+    "slang",
 }
 
 EXCLUDE_FILES = {

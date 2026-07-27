@@ -88,13 +88,11 @@ impl AppState {
     }
 }
 
-/// アクティブセッションのEcsWorldを取得する。
 pub fn active_world(state: &SharedAppState) -> Arc<Mutex<EcsWorld>> {
     let s = state.lock().unwrap();
     s.sessions[s.active].world.clone()
 }
 
-/// アクティブセッションのRenderEngine枠を取得する。
 pub fn active_engine(state: &SharedAppState) -> Arc<Mutex<Option<RenderEngine>>> {
     let s = state.lock().unwrap();
     s.sessions[s.active].engine.clone()

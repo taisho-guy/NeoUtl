@@ -83,8 +83,6 @@ pub enum TextAlign {
 #[derive(Clone, Debug, Component, Serialize, Deserialize)]
 pub struct TextContent {
     pub text: String,
-    pub x: f32,
-    pub y: f32,
     pub font_size: f32,
     pub color: [f32; 4],
     pub font_family: String,
@@ -100,8 +98,6 @@ impl Default for TextContent {
     fn default() -> Self {
         Self {
             text: "New Text".to_owned(),
-            x: 0.05,
-            y: 0.05,
             font_size: 48.0,
             color: [1.0, 1.0, 1.0, 1.0],
             font_family: String::new(),
@@ -115,20 +111,17 @@ impl Default for TextContent {
     }
 }
 
-/// スキーマキー(text_x/text_y/font_size)とフィールド名(x/y/font_size)の対応はここのみが持つ。
+/// 位置(X/Y/Z)はTransform（object_schema::TRANSFORM_SCHEMA）へ一本化する。
+/// TextContentはテキスト固有パラメータ(font_size等)のみを保持する。
 impl ParamAccess for TextContent {
     fn get_param(&self, key: &str) -> Option<f32> {
         Some(match key {
-            "text_x" => self.x,
-            "text_y" => self.y,
             "font_size" => self.font_size,
             _ => return None,
         })
     }
     fn set_param(&mut self, key: &str, value: f32) -> bool {
         match key {
-            "text_x" => self.x = value,
-            "text_y" => self.y = value,
             "font_size" => self.font_size = value,
             _ => return false,
         }

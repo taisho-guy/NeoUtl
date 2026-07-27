@@ -88,8 +88,6 @@ pub const TRANSFORM_SCHEMA: &[ParamSchema] = &[
 
 pub const TEXT_SCHEMA: &[ParamSchema] = &[
     text_field(TEXT_GROUP, "text", "本文"),
-    float_stage(TEXT_GROUP, "text_x", "X", Range::StageWidth),
-    float_stage(TEXT_GROUP, "text_y", "Y", Range::StageHeight),
     float_fixed(TEXT_GROUP, "font_size", "フォントサイズ", 1.0, 500.0),
 ];
 

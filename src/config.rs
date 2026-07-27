@@ -24,7 +24,6 @@ pub const SYSTEM_DEFAULT_THEME_DARK: bool = true;
 /// 未選択時は内蔵の明暗2値（theme_dark）へフォールバックする
 pub const SYSTEM_DEFAULT_THEME_ID: &str = "";
 pub const SYSTEM_DEFAULT_UI_SCALE_PERCENT: i32 = 100;
-/// 0 = 自動（論理コア数に追従）
 pub const SYSTEM_DEFAULT_WORKER_THREADS: i32 = 0;
 pub const SYSTEM_DEFAULT_AUDIO_MAX_BLOCK_SIZE: i32 = 4096;
 pub const SYSTEM_DEFAULT_DECODE_BACKEND: i32 = DECODE_BACKEND_AUTO;
