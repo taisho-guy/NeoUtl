@@ -26,6 +26,34 @@ mod imp {
 
     const START_CODE: &[u8] = &[0, 0, 0, 1];
 
+    /// H.264デコードサーフェスのアライメント単位（マクロブロック一辺のピクセル数）。
+    const H264_MACROBLOCK_SIZE: u32 = 16;
+
+    /// coded_width x coded_height（マクロブロック境界に切り上げたサイズ）のRGBA変換先を確保する。
+    /// NV12→RGBA変換の出力先をこのサイズに合わせることで、変換シェーダーによる
+    /// パディング領域の引き伸ばしを避ける（有効領域のcropはこの後の
+    /// copy_texture_to_textureで行う）。
+    fn create_crop_scratch_texture(
+        device: &wgpu::Device,
+        coded_width: u32,
+        coded_height: u32,
+    ) -> wgpu::Texture {
+        device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("gpuvideo-decoder crop scratch (coded size)"),
+            size: wgpu::Extent3d {
+                width: coded_width,
+                height: coded_height,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::Rgba8Unorm,
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
+            view_formats: &[],
+        })
+    }
+
     /// decoder内部バッファリングにより「packet Nをfeedしても即座にframe Nが
     /// 出力されるとは限らない」ため、対象frame_indexより先読みしてpendingへ
     /// 積んでおく必要のあるフレーム数。値はgpu-video側の内部バッファ段数に
@@ -237,7 +265,8 @@ mod imp {
                         dimension: wgpu::TextureDimension::D2,
                         format: wgpu::TextureFormat::Rgba8Unorm,
                         usage: wgpu::TextureUsages::RENDER_ATTACHMENT
-                            | wgpu::TextureUsages::TEXTURE_BINDING,
+                            | wgpu::TextureUsages::TEXTURE_BINDING
+                            | wgpu::TextureUsages::COPY_DST,
                         view_formats: &[],
                     })
                 })
@@ -436,6 +465,21 @@ mod imp {
         converter: WgpuNv12ToRgbaConverter,
         width: u32,
         height: u32,
+
+        /// H.264マクロブロック境界（16px）へ切り上げたVulkanデコードサーフェス実寸。
+        /// widthまたはheightが16の倍数でない場合、decoderはこのサイズでNV12テクスチャを
+        /// 確保し、はみ出す右端・下端は未定義（実装依存）のパディング画素で埋める。
+        /// display側(width/height)と一致しない場合、NV12→RGBA変換をcoded_width x
+        /// coded_heightのscratchテクスチャへ行い、有効領域のみをcropしてcacheへ複製する
+        /// （変換先を直接display解像度にすると、変換シェーダーがソース全体を0..1で
+        /// サンプルするためパディング領域ごと引き伸ばされ、右端・下端に緑色の帯が生じる）。
+        coded_width: u32,
+        coded_height: u32,
+
+        /// coded_width!=width または coded_height!=height の場合にのみ確保する
+        /// crop前RGBA変換先。等しい場合はNone（変換先を直接cacheへ書き込みcropを省略）。
+        crop_scratch: Option<wgpu::Texture>,
+
         fps: f64,
         total_frames: i64,
 
@@ -503,8 +547,8 @@ mod imp {
                 .and_then(|cp| cp.video())
                 .ok_or("codec_params未定義")?;
 
-            let width = video_cp.width.ok_or("width未定義")?.into();
-            let height = video_cp.height.ok_or("height未定義")?.into();
+            let width: u32 = video_cp.width.ok_or("width未定義")?.into();
+            let height: u32 = video_cp.height.ok_or("height未定義")?.into();
 
             let tb = track.time_base.ok_or("time_base未定義")?;
             let tb_numer = tb.numer.get() as f64;
@@ -588,11 +632,25 @@ mod imp {
                 thread::current().id()
             );
 
+            let coded_width = width.next_multiple_of(H264_MACROBLOCK_SIZE);
+            let coded_height = height.next_multiple_of(H264_MACROBLOCK_SIZE);
+            let crop_scratch = if coded_width != width || coded_height != height {
+                Some(create_crop_scratch_texture(
+                    &device.wgpu_device(),
+                    coded_width,
+                    coded_height,
+                ))
+            } else {
+                None
+            };
+
             eprintln!(
-                "[gpuvideo] open_video ok path={} codec=h264 {}x{} fps={} frames={}",
+                "[gpuvideo] open_video ok path={} codec=h264 {}x{} coded={}x{} fps={} frames={}",
                 path.display(),
                 width,
                 height,
+                coded_width,
+                coded_height,
                 fps,
                 total_frames
             );
@@ -603,6 +661,9 @@ mod imp {
                 converter,
                 width,
                 height,
+                coded_width,
+                coded_height,
+                crop_scratch,
                 fps,
                 total_frames,
                 packets,
@@ -832,7 +893,6 @@ mod imp {
                     );
 
                     let rgba = self.cache.acquire_for_write(display_index);
-                    let rgba_view = rgba.create_view(&wgpu::TextureViewDescriptor::default());
 
                     let bind_group =
                         self.converter
@@ -848,8 +908,41 @@ mod imp {
                     let convert_started = Instant::now();
                     let mut encoder =
                         device.create_command_encoder(&wgpu::CommandEncoderDescriptor::default());
-                    self.converter
-                        .convert(&mut encoder, &bind_group, &rgba_view);
+
+                    match &self.crop_scratch {
+                        Some(scratch) => {
+                            let scratch_view =
+                                scratch.create_view(&wgpu::TextureViewDescriptor::default());
+                            self.converter
+                                .convert(&mut encoder, &bind_group, &scratch_view);
+                            encoder.copy_texture_to_texture(
+                                wgpu::TexelCopyTextureInfo {
+                                    texture: scratch,
+                                    mip_level: 0,
+                                    origin: wgpu::Origin3d::ZERO,
+                                    aspect: wgpu::TextureAspect::All,
+                                },
+                                wgpu::TexelCopyTextureInfo {
+                                    texture: &rgba,
+                                    mip_level: 0,
+                                    origin: wgpu::Origin3d::ZERO,
+                                    aspect: wgpu::TextureAspect::All,
+                                },
+                                wgpu::Extent3d {
+                                    width: self.width,
+                                    height: self.height,
+                                    depth_or_array_layers: 1,
+                                },
+                            );
+                        }
+                        None => {
+                            let rgba_view =
+                                rgba.create_view(&wgpu::TextureViewDescriptor::default());
+                            self.converter
+                                .convert(&mut encoder, &bind_group, &rgba_view);
+                        }
+                    }
+
                     queue.submit(Some(encoder.finish()));
                     eprintln!(
                         "[gpuvideo][convert] display_index={} frame_index={} elapsed_ms={} thread={:?}",
