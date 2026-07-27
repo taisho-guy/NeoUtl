@@ -6,6 +6,11 @@ fn main() {
     let config = slint_build::CompilerConfiguration::new().with_library_paths(library);
     slint_build::compile_with_config("src/app.slint", config).expect("Slint build failed");
     copy_data_themes();
+    neoutl_object_shader_build::compile_object_shader("media", "src/renderer/slang/media.slang");
+    neoutl_object_shader_build::compile_object_shader(
+        "media_video",
+        "src/renderer/slang/media_video.slang",
+    );
 }
 
 /// assets/themes/*.json,*.toml をビルド不要のままtarget/{profile}/themes/へコピーする。

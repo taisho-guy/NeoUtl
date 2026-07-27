@@ -4,8 +4,7 @@ use neoutl_effect_api::{
 };
 use std::sync::OnceLock;
 
-static FRAGMENT_SRC: &str = include_str!("../pixel_sorter.wgsl");
-static FRAGMENT_WGSL: OnceLock<String> = OnceLock::new();
+static FRAGMENT_SPV: &[u8] = slank::include_slang!("pixel_sorter");
 
 static PARAM_SCHEMA: &[EffectParamSchema] = &[
     EffectParamSchema {
@@ -41,11 +40,9 @@ unsafe extern "C" fn meta() -> *const EffectMeta {
     &raw const META
 }
 unsafe extern "C" fn wgsl() -> WgslSource {
-    let s = FRAGMENT_WGSL
-        .get_or_init(|| format!("{}{}", neoutl_effect_api::VERTEX_PRELUDE_WGSL, FRAGMENT_SRC));
     WgslSource {
-        ptr: s.as_ptr(),
-        len: s.len(),
+        ptr: FRAGMENT_SPV.as_ptr(),
+        len: FRAGMENT_SPV.len(),
     }
 }
 unsafe extern "C" fn uniform_size() -> u32 {

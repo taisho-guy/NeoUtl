@@ -40,7 +40,6 @@ INCLUDE_EXTENSIONS = {
     ".h",
     # Rust
     ".rs",
-    ".wgsl",
     ".toml",
     ".slint",
     # Qt/QML
@@ -75,10 +74,12 @@ INCLUDE_EXTENSIONS = {
     ".md",
     ".txt",
     ".rst",
-    # GLSL
+    # Shaders
     ".glsl",
     ".frag",
     ".vert",
+    ".slang",
+    ".wgsl",
 }
 
 INCLUDE_FILENAMES = {

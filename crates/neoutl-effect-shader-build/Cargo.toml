@@ -1,0 +1,10 @@
+[package]
+name    = "neoutl-effect-shader-build"
+version = "0.0.0"
+edition = "2024"
+
+[lib]
+name = "neoutl_effect_shader_build"
+
+[dependencies]
+slank.workspace = true

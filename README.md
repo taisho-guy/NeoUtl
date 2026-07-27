@@ -99,7 +99,7 @@ cd NeoUtl
 <details>
 <summary>NeoUtlの場合</summary>
   
-予めRust、Clang、Mold（Linuxの場合）、gstreamerをインストールしてください。
+予めRust、Clang、Mold（Linuxの場合）、gstreamer、Slangをインストールしてください。
 
 ```fish
 git switch main
@@ -138,6 +138,7 @@ NeoUtlはRust言語で実装されています。
 |---|---|
 |GUI|[Slint](https://slint.dev/)|
 |プレビュー|[wgpu](https://wgpu.rs/)|
+|シェーダ|[Slang](https://shader-slang.org/)（[slank](https://lib.rs/crates/slank)でビルド時にSPIR-Vへコンパイル、`crates/effects/*/slang/`・`crates/objects/shape/slang/`・`src/renderer/slang/`）|
 |ECS|[Shipyard](https://github.com/leudz/shipyard)|
 |非同期処理|[tokio](https://tokio.rs/)|
 |動画デコード・エンコード|[gpu-video](https://crates.io/crates/gpu-video) + [symphonia](https://crates.io/crates/symphonia) / [gstreamer](https://gstreamer.freedesktop.org/)|
