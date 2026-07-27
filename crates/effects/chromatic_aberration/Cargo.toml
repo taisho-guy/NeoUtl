@@ -9,7 +9,6 @@ crate-type = ["cdylib"]
 
 [dependencies]
 neoutl-effect-api = { path = "../../neoutl-effect-api" }
-slank.workspace = true
 
 [build-dependencies]
 neoutl-effect-shader-build.workspace = true

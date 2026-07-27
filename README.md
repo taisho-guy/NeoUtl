@@ -99,17 +99,17 @@ cd NeoUtl
 <details>
 <summary>NeoUtlの場合</summary>
   
-予めRust、Clang、Mold（Linuxの場合）、gstreamer、Slangをインストールしてください。
+予めRust、Clang、Mold（Linuxの場合）、gstreamer、Slang（S-Langではありません）をインストールしてください。
 
 ```fish
 git switch main
 ```
 
 ```fish
-cargo xtask build
+cargo xtask build --release
 ```
 
-実行可能ファイルは`target/debug`あるいは`target/release`以下に生成されます。
+実行可能ファイルは`target/release`以下に生成されます。
 
 </details>
 

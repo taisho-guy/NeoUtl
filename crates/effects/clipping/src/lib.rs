@@ -4,7 +4,7 @@ use neoutl_effect_api::{
 };
 use std::sync::OnceLock;
 
-static FRAGMENT_SPV: &[u8] = slank::include_slang!("clipping");
+static FRAGMENT_SPV: &[u8] = include_str!(concat!(env!("OUT_DIR"), "/clipping.wgsl")).as_bytes();
 
 static PARAM_SCHEMA: &[EffectParamSchema] = &[
     EffectParamSchema {

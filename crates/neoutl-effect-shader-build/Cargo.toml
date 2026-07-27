@@ -5,6 +5,3 @@ edition = "2024"
 
 [lib]
 name = "neoutl_effect_shader_build"
-
-[dependencies]
-slank.workspace = true
