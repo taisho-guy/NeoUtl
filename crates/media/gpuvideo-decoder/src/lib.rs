@@ -408,12 +408,7 @@ mod imp {
         let mut packets = Vec::new();
         let mut display_index: i64 = 0;
 
-        loop {
-            let packet = match demux.next_packet().map_err(|e| e.to_string())? {
-                Some(p) => p,
-                None => break,
-            };
-
+        while let Some(packet) = demux.next_packet().map_err(|e| e.to_string())? {
             if packet.track_id != track_id {
                 continue;
             }

@@ -41,10 +41,7 @@ fn theme_ids_and_names() -> (Vec<String>, Vec<String>) {
 
 /// idが一覧中に存在しない場合（未選択・削除済み等）は先頭（0）にフォールバックする。
 fn theme_index_of(ids: &[String], id: &str) -> i32 {
-    ids.iter()
-        .position(|i| i == id)
-        .map(|i| i as i32)
-        .unwrap_or(0)
+    ids.iter().position(|i| i == id).map_or(0, |i| i as i32)
 }
 
 /// "#RRGGBB" / "RRGGBB" 形式のみ受理する。不正値はNoneを返し呼び出し側は変更を諦める。
@@ -70,8 +67,7 @@ fn apply_theme(window: &SystemSettingsWindow, id: &str) {
         wallpaper_path: wallpaper.as_ptr(),
         unix_time_sec: std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
-            .map(|d| d.as_secs() as i64)
-            .unwrap_or(0),
+            .map_or(0, |d| d.as_secs() as i64),
     };
     let colors = theme::resolve(entry, &ctx);
     drop(wallpaper);
@@ -134,7 +130,7 @@ pub fn setup(window: &SystemSettingsWindow, world_holder: Arc<Mutex<EcsWorld>>) 
             {
                 let mut world = wc.lock().unwrap();
                 let mut s = world.get_system_settings();
-                s.theme_id = id.clone();
+                s.theme_id.clone_from(&id);
                 world.set_system_settings(s);
             }
             if let Some(win) = weak.upgrade() {

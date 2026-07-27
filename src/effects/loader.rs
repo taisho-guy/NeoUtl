@@ -51,7 +51,7 @@ pub fn load_all(effects_dir: &Path) {
 }
 
 pub fn registry() -> &'static [EffectPlugin] {
-    REGISTRY.get().map(Vec::as_slice).unwrap_or(&[])
+    REGISTRY.get().map_or(&[][..], Vec::as_slice)
 }
 
 pub fn by_id(id: &str) -> Option<&'static EffectPlugin> {

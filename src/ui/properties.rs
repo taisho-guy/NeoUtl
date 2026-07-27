@@ -460,11 +460,10 @@ fn push_schema_rows(
                 get(s.key)
             },
             kind: match s.kind {
-                ParamKind::Float => 0,
+                ParamKind::Float | ParamKind::Enum => 0,
                 ParamKind::Bool => 1,
                 ParamKind::Color => 2,
                 ParamKind::Text => 3,
-                ParamKind::Enum => 0,
             },
             min,
             max,
@@ -495,10 +494,9 @@ fn push_c_abi_param_rows(
             group: SharedString::from(group),
             value,
             kind: match s.kind {
-                ParamKind::Float => 0,
+                ParamKind::Float | ParamKind::Enum => 0,
                 ParamKind::Bool => 1,
                 ParamKind::Color => 2,
-                ParamKind::Enum => 0,
                 ParamKind::Text => 3,
             },
             min: s.min,
@@ -540,8 +538,7 @@ fn push_plugin_rows(out: &mut Vec<ParamRow>, world: &EcsWorld, oid: usize) {
             schema
                 .iter()
                 .find(|s| unsafe { s.key.as_str() } == key)
-                .map(|s| s.default_float)
-                .unwrap_or(0.0)
+                .map_or(0.0, |s| s.default_float)
         })
     });
 }
@@ -678,8 +675,7 @@ fn refresh(props: &PropertiesWindow, world: &EcsWorld) {
         .map(|(i, e)| EffectRow {
             index: i as i32,
             name: find_effect(&e.effect_id)
-                .map(|m| m.name)
-                .unwrap_or(e.effect_id.as_str())
+                .map_or(e.effect_id.as_str(), |m| m.name)
                 .into(),
             enabled: e.enabled,
             dragging: false,
@@ -698,16 +694,20 @@ fn refresh(props: &PropertiesWindow, world: &EcsWorld) {
                 .get(key)
                 .map(|p| match &p.static_value {
                     crate::ecs::types::Value::Number(n) => *n,
-                    crate::ecs::types::Value::Bool(b) if *b => 1.0,
-                    crate::ecs::types::Value::Bool(_) => 0.0,
-                    _ => 0.0,
+                    crate::ecs::types::Value::Bool(b) => {
+                        if *b {
+                            1.0
+                        } else {
+                            0.0
+                        }
+                    }
+                    crate::ecs::types::Value::Text(_) => 0.0,
                 })
                 .unwrap_or_else(|| {
                     schema
                         .iter()
                         .find(|s| unsafe { s.key.as_str() } == key)
-                        .map(|s| s.default_float)
-                        .unwrap_or(0.0)
+                        .map_or(0.0, |s| s.default_float)
                 })
         });
     }

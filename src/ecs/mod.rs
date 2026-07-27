@@ -329,8 +329,7 @@ impl EcsWorld {
         self.world.run(|scenes: UniqueView<SceneResource>| {
             scenes
                 .find(scenes.active_scene)
-                .map(|s| s.snap_frame(frame))
-                .unwrap_or(frame)
+                .map_or(frame, |s| s.snap_frame(frame))
         })
     }
 
@@ -553,14 +552,12 @@ impl EcsWorld {
         })
     }
 
-    /// コピー用: 指定位置のEffectInstanceを複写取得する。
     pub fn get_effect_instance(&self, object_id: usize, index: usize) -> Option<EffectInstance> {
         let entity = self.find_entity(object_id)?;
         self.world
             .run(|stacks: View<EffectStack>| stacks.get(entity).ok()?.0.get(index).cloned())
     }
 
-    /// 貼り付け用: 指定位置へEffectInstanceを挿入する。
     pub fn insert_effect(&mut self, object_id: usize, index: usize, instance: EffectInstance) {
         let Some(entity) = self.find_entity(object_id) else {
             return;
@@ -572,7 +569,6 @@ impl EcsWorld {
         });
     }
 
-    /// 複製用: 指定位置のEffectInstanceを直後へ複製する。
     pub fn duplicate_effect(&mut self, object_id: usize, index: usize) {
         let Some(entity) = self.find_entity(object_id) else {
             return;
@@ -711,7 +707,7 @@ impl EcsWorld {
         self.world.run(|mut scenes: UniqueViewMut<SceneResource>| {
             scenes.scenes.retain(|s| s.id != scene_id);
             if scenes.active_scene == scene_id {
-                scenes.active_scene = scenes.scenes.first().map(|s| s.id).unwrap_or(0);
+                scenes.active_scene = scenes.scenes.first().map_or(0, |s| s.id);
             }
         });
     }
@@ -726,7 +722,7 @@ impl EcsWorld {
                 }
                 let active = scenes.active_scene;
                 if let Some(prev) = scenes.find_mut(active) {
-                    prev.layer_states = current_states.clone();
+                    prev.layer_states.clone_from(&current_states);
                 }
                 scenes.active_scene = scene_id;
                 true
@@ -777,7 +773,7 @@ impl EcsWorld {
                 let Some(meta) = scenes.find_mut(scene_id) else {
                     return false;
                 };
-                meta.name = s.name.clone();
+                meta.name.clone_from(&s.name);
                 meta.width = s.width;
                 meta.height = s.height;
                 meta.fps = s.fps;
@@ -874,13 +870,13 @@ impl EcsWorld {
 
         self.world
             .run(|mut project: UniqueViewMut<ProjectResource>| {
-                project.name = doc.project_name.clone();
+                project.name.clone_from(&doc.project_name);
                 project.audio_sample_rate = doc.audio_sample_rate;
                 project.audio_channels = doc.audio_channels;
             });
         self.world.run(|mut scenes: UniqueViewMut<SceneResource>| {
             let next_scene_id = doc.scenes.iter().map(|s| s.id).max().unwrap_or(0) + 1;
-            scenes.scenes = doc.scenes.clone();
+            scenes.scenes.clone_from(&doc.scenes);
             scenes.active_scene = doc.active_scene;
             scenes.next_scene_id = next_scene_id;
         });

@@ -26,9 +26,7 @@ fn effective_thread_count() -> usize {
     if configured > 0 {
         configured as usize
     } else {
-        std::thread::available_parallelism()
-            .map(std::num::NonZero::get)
-            .unwrap_or(4)
+        std::thread::available_parallelism().map_or(4, |n| n.get())
     }
 }
 

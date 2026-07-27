@@ -5,11 +5,9 @@ use shipyard::Unique;
 /// 動画プロジェクト全体の設定（FPS・解像度等）
 #[derive(Clone, Debug, Unique)]
 pub struct ProjectResource {
-    /// プロジェクト名
     pub name: String,
     /// プロジェクトディレクトリ（未保存時はNone）
     pub dir: Option<std::path::PathBuf>,
-    /// フレームレート（frames per second）
     pub fps: u32,
     /// 出力幅（ピクセル）
     pub width: u32,
@@ -82,11 +80,11 @@ impl LayerStates {
     }
 
     pub fn visible(&self, layer: usize) -> bool {
-        self.0.get(layer).map(|s| s.0).unwrap_or(true)
+        self.0.get(layer).map_or(true, |s| s.0)
     }
 
     pub fn locked(&self, layer: usize) -> bool {
-        self.0.get(layer).map(|s| s.1).unwrap_or(false)
+        self.0.get(layer).map_or(false, |s| s.1)
     }
 
     pub fn set_visible(&mut self, layer: usize, v: bool) {

@@ -24,15 +24,15 @@ pub fn load_all(themes_dir: &Path) {
 
         for path in dir.flatten().map(|e| e.path()) {
             match path.extension().and_then(OsStr::to_str) {
-                Some("json") | Some("toml") => match load_data_entry(&path) {
+                Some("json" | "toml") => match load_data_entry(&path) {
                     Ok(entry) => entries.push(entry),
                     Err(err) => eprintln!("[NeoUtl] テーマ読込失敗 {}: {err}", path.display()),
                 },
-                Some("so") | Some("dylib") | Some("dll") => match load_native_entry(&path) {
+                Some("so" | "dylib" | "dll") => match load_native_entry(&path) {
                     Ok(entry) => entries.push(entry),
                     Err(err) => eprintln!("[NeoUtl] テーマ読込失敗 {}: {err}", path.display()),
                 },
-                _ => continue,
+                _ => {}
             }
         }
 
@@ -101,7 +101,7 @@ fn load_native_entry(path: &Path) -> Result<ThemeEntry, String> {
 }
 
 pub fn registry() -> &'static [ThemeEntry] {
-    REGISTRY.get().map(Vec::as_slice).unwrap_or(&[])
+    REGISTRY.get().map_or(&[][..], Vec::as_slice)
 }
 
 pub fn by_stable_id(id: &str) -> Option<&'static ThemeEntry> {
@@ -123,7 +123,7 @@ pub fn resolve(entry: &ThemeEntry, ctx: &ThemeContext) -> ThemeColors {
             }
         }
         ThemeSource::Native { plugin } => {
-            let raw = (plugin.vtable.compute)(ctx as *const ThemeContext);
+            let raw = (plugin.vtable.compute)(std::ptr::from_ref(ctx));
             if raw.is_null() {
                 return ThemeColors::default();
             }

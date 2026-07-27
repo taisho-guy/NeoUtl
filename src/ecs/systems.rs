@@ -35,7 +35,7 @@ pub struct ActiveObject {
 /// プラグイン未登録（kind_id不明）時は2D既定のOrthoにフォールバックする。
 fn projection_for(kind_id: u32) -> Projection {
     match objects::by_kind_id(kind_id).map(|p| unsafe { &*((p.vtable.meta)()) }.dimensionality) {
-        Some(Dimensionality::ThreeD) | Some(Dimensionality::Both) => Projection::Perspective {
+        Some(Dimensionality::ThreeD | Dimensionality::Both) => Projection::Perspective {
             fov_deg: DEFAULT_FOV_DEG,
         },
         _ => Projection::Ortho,
@@ -96,21 +96,17 @@ pub fn get_active_objects_system(world: &EcsWorld) -> Vec<ActiveObject> {
                 let text_content = text_contents.get(id).ok().cloned();
                 let shape = shape_params.get(id).ok().copied();
                 let media_source = media_sources.get(id).ok().cloned();
-                let source_frame = media_source
-                    .as_ref()
-                    .map(|m| {
-                        let base = (current - range.start_frame) as f64;
-                        let ratio = if matches!(m.kind, MediaKind::Video) {
-                            crate::media::cache::global()
-                                .source_fps(&m.path)
-                                .map(|src_fps| src_fps / project.fps.max(1) as f64)
-                                .unwrap_or(1.0)
-                        } else {
-                            1.0
-                        };
-                        m.trim_in_frame + (base * ratio).round() as i64
-                    })
-                    .unwrap_or(0);
+                let source_frame = media_source.as_ref().map_or(0, |m| {
+                    let base = f64::from(current - range.start_frame);
+                    let ratio = if matches!(m.kind, MediaKind::Video) {
+                        crate::media::cache::global()
+                            .source_fps(&m.path)
+                            .map_or(1.0, |src_fps| src_fps / f64::from(project.fps.max(1)))
+                    } else {
+                        1.0
+                    };
+                    m.trim_in_frame + (base * ratio).round() as i64
+                });
                 let matrix = global_matrices.get(id).copied().unwrap_or_default();
                 let matrix = match &media_source {
                     Some(src) if matches!(src.kind, MediaKind::Video | MediaKind::Image) => {
@@ -128,7 +124,7 @@ pub fn get_active_objects_system(world: &EcsWorld) -> Vec<ActiveObject> {
                     project_height,
                     projection_for(kind.0),
                 );
-                let opacity = transforms.get(id).map(|t| t.opacity).unwrap_or(1.0);
+                let opacity = transforms.get(id).map_or(1.0, |t| t.opacity);
                 let audio = audio_params.get(id).copied().unwrap_or_default();
                 let effects = effect_stacks
                     .get(id)
@@ -138,7 +134,7 @@ pub fn get_active_objects_system(world: &EcsWorld) -> Vec<ActiveObject> {
                 active.push(ActiveObject {
                     kind_id: kind.0,
                     start_frame: range.start_frame,
-                    clip_instance: object_ids.get(id).map(|o| o.0 as u64).unwrap_or(0),
+                    clip_instance: object_ids.get(id).map_or(0, |o| o.0 as u64),
                     source_frame,
                     text_content,
                     shape_params: shape,

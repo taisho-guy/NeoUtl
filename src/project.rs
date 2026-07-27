@@ -168,9 +168,9 @@ pub fn save_document(dir: &Path, doc: &DocumentModel) -> std::io::Result<()> {
     let active_scene_meta = doc.scenes.iter().find(|s| s.id == doc.active_scene);
     let file = ProjectFile {
         name: doc.project_name.clone(),
-        fps: active_scene_meta.map(|s| s.fps).unwrap_or(30),
-        width: active_scene_meta.map(|s| s.width).unwrap_or(1920),
-        height: active_scene_meta.map(|s| s.height).unwrap_or(1080),
+        fps: active_scene_meta.map_or(30, |s| s.fps),
+        width: active_scene_meta.map_or(1920, |s| s.width),
+        height: active_scene_meta.map_or(1080, |s| s.height),
         audio_sample_rate: doc.audio_sample_rate,
         audio_channels: doc.audio_channels,
         active_scene: doc.active_scene,

@@ -1,11 +1,7 @@
 use crate::ecs::components::{TextAlign, TextContent};
 use wgpu_text::glyph_brush::{HorizontalAlign, Layout, Section, Text};
 
-pub fn build_section<'a>(
-    content: &'a TextContent,
-    render_width: u32,
-    render_height: u32,
-) -> Section<'a> {
+pub fn build_section(content: &TextContent, render_width: u32, render_height: u32) -> Section<'_> {
     let color = content.color;
     let position = (
         content.x * render_width as f32,

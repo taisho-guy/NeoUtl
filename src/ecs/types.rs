@@ -64,9 +64,9 @@ pub fn evaluate_keyframes_number(keyframes: &[Keyframe], frame: i32) -> Option<V
             let k0 = prev;
             let k1 = k;
             return match &k1.interpolation {
-                Interpolation::Linear => evaluate_linear_number(k0, k1, frame),
-                Interpolation::Bezier { .. } => evaluate_linear_number(k0, k1, frame),
-                Interpolation::Custom { .. } => evaluate_linear_number(k0, k1, frame),
+                Interpolation::Linear
+                | Interpolation::Bezier { .. }
+                | Interpolation::Custom { .. } => evaluate_linear_number(k0, k1, frame),
             };
         }
         prev = k;

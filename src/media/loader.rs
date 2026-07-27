@@ -100,7 +100,7 @@ fn build_native_plugin(vtable: &'static MediaVTable) -> Option<MediaPlugin> {
 }
 
 pub fn registry() -> &'static [MediaPlugin] {
-    REGISTRY.get().map(Vec::as_slice).unwrap_or(&[])
+    REGISTRY.get().map_or(&[][..], Vec::as_slice)
 }
 
 /// 拡張子（小文字・ドット無し）に対応する最初のプラグインを返す。

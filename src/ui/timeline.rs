@@ -251,7 +251,7 @@ pub fn setup(
                 let world_holder = app_state::active_world(&state);
                 let mut world = world_holder.lock().unwrap();
                 let current = world.layer_states();
-                let visible = current.get(layer as usize).map(|s| s.0).unwrap_or(true);
+                let visible = current.get(layer as usize).map_or(true, |s| s.0);
                 world.set_layer_visible(layer as usize, !visible);
                 sync(&t, pw.upgrade().as_ref(), &world);
             }
@@ -265,7 +265,7 @@ pub fn setup(
                 let world_holder = app_state::active_world(&state);
                 let mut world = world_holder.lock().unwrap();
                 let current = world.layer_states();
-                let locked = current.get(layer as usize).map(|s| s.1).unwrap_or(false);
+                let locked = current.get(layer as usize).map_or(false, |s| s.1);
                 world.set_layer_locked(layer as usize, !locked);
                 sync(&t, pw.upgrade().as_ref(), &world);
             }
@@ -346,7 +346,7 @@ fn to_slint(data: &crate::ecs::TimelineData) -> TimelineObject {
         kind: data.kind,
         kind_known: plugin.is_some(),
         layer: data.layer,
-        label: plugin.map(|p| p.name.as_str()).unwrap_or("Unknown").into(),
+        label: plugin.map_or("Unknown", |p| p.name.as_str()).into(),
         selected: false,
     }
 }
