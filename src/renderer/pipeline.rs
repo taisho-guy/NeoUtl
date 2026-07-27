@@ -6,6 +6,7 @@ use crate::effects;
 use crate::objects::{by_kind_id, registry};
 use neoutl_object_api::{IMAGE_STABLE_ID, VIDEO_STABLE_ID};
 use slint::wgpu_29::wgpu;
+use std::borrow::Cow;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -36,7 +37,7 @@ pub fn install_device_lost_watcher(device: &wgpu::Device) {
     });
 }
 
-/// 全ObjectVTable実装が共有する標準Uniform契約（shape.wgsl等のUniforms構造体と一致させること）。
+/// 全ObjectVTable実装が共有する標準Uniform契約（shape.slangのUniforms構造体と一致させること）。
 /// mat4x4<f32>(64) + opacity(4) + sides(4) + extrude_depth(4) + _pad0(4) + fill_color(16) = 96 bytes
 /// GPU側WGSL構造体レイアウトに直結するABI契約値のため config.rs へは移さない。
 const STANDARD_UNIFORM_SIZE: u64 = 96;
@@ -50,8 +51,8 @@ const MAX_EFFECT_UNIFORM_SIZE: u64 = config::MAX_EFFECT_UNIFORM_BYTES;
 /// mat4x4<f32>(64) + opacity(4)、mat4x4アライメント16の倍数へ切り上げ。
 /// GPU側WGSL構造体レイアウトに直結するABI契約値のため config.rs へは移さない。
 const MEDIA_UNIFORM_SIZE: u64 = 80;
-static MEDIA_WGSL: &str = include_str!("media.wgsl");
-static VIDEO_WGSL: &str = include_str!("media_video.wgsl");
+static MEDIA_WGSL_BYTES: &[u8] = slank::include_slang!("media");
+static VIDEO_WGSL_BYTES: &[u8] = slank::include_slang!("media_video");
 
 pub struct RenderEngine {
     pub device: Arc<wgpu::Device>,
@@ -146,6 +147,8 @@ fn create_depth_texture(device: &wgpu::Device, width: u32, height: u32) -> wgpu:
 /// RenderEngine::new()は同期関数のため、pop_error_scopeの返すFutureは
 /// pollster::block_onで即時解決する。生成時のみ発生する一度きりの処理であり、
 /// 描画フレーム毎の待機コストは発生しない。
+/// wgslはSlangコンパイル済みWGSLソース文字列。SPIR-V経由の場合に発生する
+/// create_shader_module内naga変換工程を排除する。
 fn try_create_shader_module(
     device: &wgpu::Device,
     wgsl: &str,
@@ -154,7 +157,7 @@ fn try_create_shader_module(
     let error_scope = device.push_error_scope(wgpu::ErrorFilter::Validation);
     let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
         label: Some(label),
-        source: wgpu::ShaderSource::Wgsl(wgsl.into()),
+        source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(wgsl)),
     });
     match pollster::block_on(error_scope.pop()) {
         Some(err) => Err(format!("{err}")),
@@ -223,8 +226,16 @@ fn build_pipelines_from_registry(
             if src.ptr.is_null() {
                 return None;
             }
-            let wgsl = unsafe {
-                std::str::from_utf8_unchecked(std::slice::from_raw_parts(src.ptr, src.len))
+            let bytes = unsafe { std::slice::from_raw_parts(src.ptr, src.len) };
+            let wgsl = match std::str::from_utf8(bytes) {
+                Ok(text) => text,
+                Err(err) => {
+                    eprintln!(
+                        "[NeoUtl] オブジェクトプラグインのWGSLが非UTF-8、除外して継続: kind_id={} name={} 理由={err}",
+                        plugin.kind_id, plugin.name
+                    );
+                    return None;
+                }
             };
             match build_pipeline(device, layout, wgsl, &plugin.name) {
                 Ok(pipeline) => Some((plugin.kind_id, (pipeline, vertex_count))),
@@ -316,8 +327,16 @@ fn build_effect_pipelines_from_registry(
             if src.ptr.is_null() {
                 return None;
             }
-            let wgsl = unsafe {
-                std::str::from_utf8_unchecked(std::slice::from_raw_parts(src.ptr, src.len))
+            let bytes = unsafe { std::slice::from_raw_parts(src.ptr, src.len) };
+            let wgsl = match std::str::from_utf8(bytes) {
+                Ok(text) => text,
+                Err(err) => {
+                    eprintln!(
+                        "[NeoUtl] エフェクトプラグインのWGSLが非UTF-8、除外して継続: id={} name={} 理由={err}",
+                        plugin.id, plugin.name
+                    );
+                    return None;
+                }
             };
             match build_effect_pipeline(device, layout, wgsl, &plugin.name) {
                 Ok(pipeline) => Some((plugin.id.clone(), pipeline)),
@@ -451,7 +470,7 @@ fn build_media_pipeline(
 ) -> wgpu::RenderPipeline {
     let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
         label: Some("Media Object"),
-        source: wgpu::ShaderSource::Wgsl(wgsl.into()),
+        source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(wgsl)),
     });
     device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
         label: Some("Media Object"),
@@ -572,7 +591,8 @@ impl RenderEngine {
                 bind_group_layouts: &[Some(&media_bind_group_layout)],
                 immediate_size: 0,
             });
-        let media_pipeline = build_media_pipeline(&device, &media_pipeline_layout, MEDIA_WGSL);
+        let media_wgsl = std::str::from_utf8(MEDIA_WGSL_BYTES).expect("media.wgslが非UTF-8");
+        let media_pipeline = build_media_pipeline(&device, &media_pipeline_layout, media_wgsl);
         let media_uniform_buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("Media Uniform Buffer"),
             size: UNIFORM_STRIDE * MAX_OBJECTS,
@@ -595,7 +615,8 @@ impl RenderEngine {
                 bind_group_layouts: &[Some(&video_bind_group_layout)],
                 immediate_size: 0,
             });
-        let video_pipeline = build_media_pipeline(&device, &video_pipeline_layout, VIDEO_WGSL);
+        let video_wgsl = std::str::from_utf8(VIDEO_WGSL_BYTES).expect("media_video.wgslが非UTF-8");
+        let video_pipeline = build_media_pipeline(&device, &video_pipeline_layout, video_wgsl);
 
         let text_brush = load_font().and_then(|f| {
             FontArc::try_from_vec(f).ok().map(|fa| {

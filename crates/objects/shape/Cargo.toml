@@ -9,3 +9,7 @@ crate-type = ["cdylib"]
 
 [dependencies]
 neoutl-object-api = { path = "../../neoutl-object-api" }
+slank.workspace = true
+
+[build-dependencies]
+neoutl-object-shader-build.workspace = true

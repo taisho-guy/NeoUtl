@@ -14,6 +14,8 @@ members = [
     "crates/media/gpuvideo-decoder",
     "crates/media/image-decoder",
     # "crates/media/ffmpeg-decoder",
+    "crates/neoutl-effect-shader-build",
+    "crates/neoutl-object-shader-build",
     "crates/xtask",
 ]
 resolver = "2"
@@ -24,8 +26,11 @@ neoutl-object-api = { path = "crates/neoutl-object-api" }
 neoutl-effect-api = { path = "crates/neoutl-effect-api" }
 neoutl-theme-api = { path = "crates/neoutl-theme-api" }
 neoutl-media-api = { path = "crates/neoutl-media-api" }
+neoutl-effect-shader-build = { path = "crates/neoutl-effect-shader-build" }
+neoutl-object-shader-build = { path = "crates/neoutl-object-shader-build" }
 toml = "1.1"
 serde_json = "1.0"
+slank = { version = "0.1", features = ["download-slang", "use-wgpu"] }
 
 [package]
 name = "NeoUtl"
@@ -40,6 +45,7 @@ neoutl-theme-api.workspace = true
 neoutl-media-api.workspace = true
 toml.workspace = true
 serde_json.workspace = true
+slank.workspace = true
 libloading = "0.9"
 neoutl-media-gpuvideo-decoder = { path = "crates/media/gpuvideo-decoder" }
 neoutl-media-gstreamer-decoder = { path = "crates/media/gstreamer-decoder" }
@@ -55,19 +61,19 @@ wgpu_text = "29"
 tokio = { version = "1.52", features = ["rt-multi-thread", "sync"] }
 bytemuck = { version = "1.25", features = ["derive"] }
 shipyard = "0.11"
-lucide-slint = "1.24"
+lucide-slint = "1.27"
 rust-yaml = { version = "1.1", features = ["serde"] }
 serde = { version = "1.0", features = ["derive"] }
 rfd = "0.17"
-# renderer/pipeline.rsのシェーダコンパイルエラースコープを同期関数内で解決するために使用。
-pollster = "0.4"
+pollster = "1.0"
 
 [dev-dependencies]
 tempfile = "3"
 
 [build-dependencies]
-lucide-slint = "1.24"
+lucide-slint = "1.27"
 slint-build = "1.17"
+neoutl-object-shader-build.workspace = true
 
 [target.'cfg(not(target_os = "macos"))'.dependencies]
 gpu-video = { version = "0.4", features = ["wgpu"] }

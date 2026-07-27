@@ -4,7 +4,7 @@ use neoutl_object_api::{
 };
 use std::sync::OnceLock;
 
-static WGSL: &str = include_str!("../shape.wgsl");
+static SHAPE_SPV: &[u8] = slank::include_slang!("shape");
 
 static PARAM_SCHEMA: &[ParamSchema] = &[
     ParamSchema {
@@ -62,8 +62,8 @@ unsafe extern "C" fn vertex_count() -> u32 {
 }
 unsafe extern "C" fn wgsl() -> WgslSource {
     WgslSource {
-        ptr: WGSL.as_ptr(),
-        len: WGSL.len(),
+        ptr: SHAPE_SPV.as_ptr(),
+        len: SHAPE_SPV.len(),
     }
 }
 unsafe extern "C" fn render(_ctx: *const RenderContext) {}

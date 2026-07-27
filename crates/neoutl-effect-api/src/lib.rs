@@ -15,28 +15,10 @@ pub struct EffectMeta {
 unsafe impl Send for EffectMeta {}
 unsafe impl Sync for EffectMeta {}
 
-/// エフェクトWGSLの頂点シェーダ契約。
-/// 全EffectVTable実装はフラグメントシェーダ（Uniforms構造体 + fs_main）のみを提供し、
-/// 頂点シェーダはホストがこの定数をエフェクトWGSLの前段に連結して補う
+/// エフェクトシェーダの頂点契約はslang/effect_prelude.slangへ一本化した
 /// （フルスクリーン三角形、@group(0)@binding(0)=入力テクスチャ、@binding(1)=サンプラーを固定契約とする）。
-pub const VERTEX_PRELUDE_WGSL: &str = r#"
-struct VertexOutput {
-    @builtin(position) position: vec4<f32>,
-    @location(0) uv: vec2<f32>,
-}
-@group(0) @binding(0) var input_tex: texture_2d<f32>;
-@group(0) @binding(1) var input_sampler: sampler;
-
-@vertex
-fn vs_main(@builtin(vertex_index) vertex_index: u32) -> VertexOutput {
-    var out: VertexOutput;
-    let x = f32((vertex_index << 1u) & 2u);
-    let y = f32(vertex_index & 2u);
-    out.position = vec4<f32>(x * 2.0 - 1.0, 1.0 - y * 2.0, 0.0, 1.0);
-    out.uv = vec2<f32>(x, y);
-    return out;
-}
-"#;
+/// 各エフェクトクレートのbuild.rsがneoutl-effect-shader-build経由でこのファイルを
+/// fs_main本体と連結しSPIR-Vへコンパイルするため、ランタイム側の文字列連結は不要になった。
 
 #[repr(C)]
 pub struct EffectVTable {
