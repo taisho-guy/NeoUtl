@@ -21,7 +21,13 @@ struct DiscoveredCrate {
 /// 存在していてもここに含まれるものはxtaskの検出対象から外す。
 /// ffmpeg-decoder: gstreamer/symphonia経路で代替、要件確定まで凍結（Cargo.toml側の
 /// [workspace].membersコメントアウトと対で管理する）。
-const WORKSPACE_EXCLUDED_DIRS: &[&str] = &["ffmpeg-decoder", "gstreamer-encoder"];
+/// gstreamer-encoder: エンコーダー要件確定まで凍結（同上）。
+const WORKSPACE_EXCLUDED_DIRS: &[&str] = &[
+    "ffmpeg-decoder",
+    "gstreamer-encoder",
+    "gpuvideo-decoder",
+    "gstreamer-decoder",
+];
 
 fn discover_crates(workspace_root: &Path, subdir: &str) -> Vec<DiscoveredCrate> {
     let scan_dir = workspace_root.join(subdir);
@@ -102,19 +108,29 @@ fn target_dir(workspace_root: &Path, profile: &str, target: Option<&str>) -> Pat
     }
 }
 
-fn build_crates(
+fn exe_filename(bin_name: &str) -> String {
+    if cfg!(target_os = "windows") {
+        format!("{bin_name}.exe")
+    } else {
+        bin_name.to_owned()
+    }
+}
+
+/// objects/effects/decoders/themes/NeoUtl本体を単一のcargo呼び出しへ集約してビルドする。
+/// 呼び出しを分割すると、cargoのfeature unification（resolver 2）が呼び出し単位で
+/// 独立に行われるため、要求パッケージ集合の違い（例: decoders単体呼び出しと
+/// NeoUtl本体呼び出しでwgpu等の要求feature集合が食い違う）により同一依存クレートが
+/// 呼び出しごとに異なるfingerprintで再ビルドされ、互いのキャッシュを破棄し合う。
+/// 全パッケージを1回のcargo build -pの列挙に含めることでfeature解決を1本化し、
+/// この相互キャッシュ破棄を排除する。
+fn build_all<'a>(
     workspace_root: &Path,
     profile: &str,
     target: Option<&str>,
     offline: bool,
-    label: &str,
-    crates: &[DiscoveredCrate],
+    groups: &[(&str, &'a [DiscoveredCrate])],
+    extra_packages: &[&str],
 ) {
-    if crates.is_empty() {
-        eprintln!("[xtask] {label}クレート0件");
-        return;
-    }
-
     let mut cmd = Command::new("cargo");
     cmd.current_dir(workspace_root).arg("build").arg("--locked");
     if profile == "release" {
@@ -126,14 +142,33 @@ fn build_crates(
     if let Some(triple) = target {
         cmd.arg("--target").arg(triple);
     }
-    for c in crates {
-        cmd.arg("-p").arg(&c.package_name);
+
+    let mut package_count = 0usize;
+    for (label, crates) in groups {
+        if crates.is_empty() {
+            eprintln!("[xtask] {label}クレート0件");
+            continue;
+        }
+        for c in *crates {
+            cmd.arg("-p").arg(&c.package_name);
+            package_count += 1;
+        }
     }
+    for pkg in extra_packages {
+        cmd.arg("-p").arg(pkg);
+        package_count += 1;
+    }
+
+    if package_count == 0 {
+        eprintln!("[xtask] ビルド対象パッケージ0件のためcargo呼び出しを省略");
+        return;
+    }
+
     slang::apply_build_env(&mut cmd, workspace_root);
 
     let status = cmd.status().expect("cargo build 起動失敗");
     if !status.success() {
-        panic!("[xtask] {label}ビルド失敗: exit={status}");
+        panic!("[xtask] 統合ビルド失敗: exit={status}");
     }
 }
 
@@ -196,38 +231,38 @@ fn main() {
     slang::ensure_installed(&root, offline);
 
     let objects = discover_crates(&root, "crates/objects");
-    build_crates(&root, profile, target, offline, "objects", &objects);
-    stage_crates(&root, profile, target, "objects", &objects);
-
     let effects = discover_crates(&root, "crates/effects");
-    build_crates(&root, profile, target, offline, "effects", &effects);
-    stage_crates(&root, profile, target, "effects", &effects);
-
     let decoders = discover_crates(&root, "crates/media");
-    build_crates(&root, profile, target, offline, "decoders", &decoders);
-    stage_crates(&root, profile, target, "decoders", &decoders);
-
     let themes = discover_crates(&root, "crates/themes");
-    build_crates(&root, profile, target, offline, "themes", &themes);
+
+    build_all(
+        &root,
+        profile,
+        target,
+        offline,
+        &[
+            ("objects", objects.as_slice()),
+            ("effects", effects.as_slice()),
+            ("decoders", decoders.as_slice()),
+            ("themes", themes.as_slice()),
+        ],
+        &["NeoUtl"],
+    );
+
+    stage_crates(&root, profile, target, "objects", &objects);
+    stage_crates(&root, profile, target, "effects", &effects);
+    stage_crates(&root, profile, target, "decoders", &decoders);
     stage_crates(&root, profile, target, "themes", &themes);
 
-    let mut cmd = Command::new("cargo");
-    cmd.current_dir(&root)
-        .arg(if task == "run" { "run" } else { "build" })
-        .arg("--locked")
-        .arg("-p")
-        .arg("NeoUtl");
-    if release {
-        cmd.arg("--release");
+    if task != "run" {
+        return;
     }
-    if offline {
-        cmd.arg("--offline");
-    }
-    if let Some(triple) = target {
-        cmd.arg("--target").arg(triple);
-    }
-    slang::apply_build_env(&mut cmd, &root);
-    let status = cmd.status().expect("cargo build/run 起動失敗");
+
+    let bin_path = target_dir(&root, profile, target).join(exe_filename("NeoUtl"));
+    let status = Command::new(&bin_path)
+        .current_dir(&root)
+        .status()
+        .unwrap_or_else(|e| panic!("[xtask] バイナリ起動失敗 ({}): {e}", bin_path.display()));
     if !status.success() {
         std::process::exit(status.code().unwrap_or(1));
     }
