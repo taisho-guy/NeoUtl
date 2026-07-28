@@ -1,4 +1,3 @@
-import { Slider } from "std-widgets.slint";
 import { EffectRow, ParamRow } from "types.slint";
 
 component PropertyRow inherits Rectangle {
@@ -8,6 +7,10 @@ component PropertyRow inherits Rectangle {
     in property <float> max: 1000;
     in property <float> drag-sensitivity: 1;
     callback changed(float);
+    // ドラッグ操作1回（press〜release）の先頭でのみ発火する。
+    // Undo履歴のスナップショット確定はこの1回のみに限定する。
+    callback commit-start();
+    callback release();
 
     height: 22px;
 
@@ -15,22 +18,64 @@ component PropertyRow inherits Rectangle {
         return v < min ? min : v > max ? max : v;
     }
 
-    // ドラッグ中の直前座標。press開始フレームはmoved内で初期化する
-    // （pressed変化を検知するための1フレーム目フラグ方式）。
+    // TouchArea内のmouse-xをスライダー可動域[0, track-width]へ丸める。
+    // Slintに組み込みのグローバルmin/max関数は存在しないため四項式で実装する。
+    function pointer-x-clamped(x: length, track-width: length) -> length {
+        return x < 0px ? 0px : x > track-width ? track-width : x;
+    }
+
+    // ドラッグ中の直前座標。press開始はpointer-eventのdownで確定するため
+    // moved側での1フレーム目判定は不要。
     property <length> anchor-x: 0;
     property <length> anchor-y: 0;
-    property <bool> was-pressed: false;
 
     HorizontalLayout {
         spacing: 4px;
 
-        // Slider・ボックスとも同一のroot.value/root.changedのみを介して読み書きする。
-        // 個々に内部stateを持たせない（＝リンク切れの原因を構造的に排除する）。
-        Slider {
-            minimum: root.min;
-            maximum: root.max;
-            value: root.value;
-            changed(v) => { root.changed(root.clamp(v)); }
+        // スライダー本体（自作）。std-widgets.Sliderはpress開始の遷移を
+        // 外部へ公開しないため、コミット単位検知に必要な自前TouchAreaへ置換する。
+        Rectangle {
+            border-radius: 3px;
+            background: #16161b;
+
+            track-fill := Rectangle {
+                x: 0;
+                y: parent.height / 2 - 2px;
+                width: (parent.width - handle.width) * ((root.clamp(root.value) - root.min) / (root.max - root.min)) + handle.width;
+                height: 4px;
+                border-radius: 2px;
+                background: #3a6df0;
+            }
+
+            handle := Rectangle {
+                width: 10px;
+                height: 10px;
+                border-radius: 5px;
+                background: #dde3ee;
+                y: parent.height / 2 - 5px;
+                x: (parent.width - self.width) * ((root.clamp(root.value) - root.min) / (root.max - root.min));
+            }
+
+            slider-touch := TouchArea {
+                pointer-event(event) => {
+                    if (event.button == PointerEventButton.left) {
+                        if (event.kind == PointerEventKind.down) {
+                            root.commit-start();
+                            root.changed(root.clamp(root.min
+                                + (root.pointer-x-clamped(self.mouse-x, self.width) / self.width) * (root.max - root.min)));
+                        }
+                        if (event.kind == PointerEventKind.up) {
+                            root.release();
+                        }
+                    }
+                }
+                moved => {
+                    if (self.pressed) {
+                        root.changed(root.clamp(root.min
+                            + (root.pointer-x-clamped(self.mouse-x, self.width) / self.width) * (root.max - root.min)));
+                    }
+                }
+            }
         }
 
         Rectangle {
@@ -58,21 +103,25 @@ component PropertyRow inherits Rectangle {
             drag-area := TouchArea {
                 mouse-cursor: self.pressed ? MouseCursor.none : MouseCursor.default;
                 clicked => { input.focus(); }
+                pointer-event(event) => {
+                    if (event.button == PointerEventButton.left) {
+                        if (event.kind == PointerEventKind.down) {
+                            root.anchor-x = self.mouse-x;
+                            root.anchor-y = self.mouse-y;
+                            root.commit-start();
+                        }
+                        if (event.kind == PointerEventKind.up) {
+                            root.release();
+                        }
+                    }
+                }
                 moved => {
                     if (self.pressed) {
-                        if (!root.was-pressed) {
-                            root.was-pressed = true;
-                            root.anchor-x = self.mouse-x;
-                            root.anchor-y = self.mouse-y;
-                        } else {
-                            root.changed(root.clamp(root.value
-                                + (self.mouse-x - root.anchor-x) / 1px * root.drag-sensitivity
-                                - (self.mouse-y - root.anchor-y) / 1px * root.drag-sensitivity));
-                            root.anchor-x = self.mouse-x;
-                            root.anchor-y = self.mouse-y;
-                        }
-                    } else {
-                        root.was-pressed = false;
+                        root.changed(root.clamp(root.value
+                            + (self.mouse-x - root.anchor-x) / 1px * root.drag-sensitivity
+                            - (self.mouse-y - root.anchor-y) / 1px * root.drag-sensitivity));
+                        root.anchor-x = self.mouse-x;
+                        root.anchor-y = self.mouse-y;
                     }
                 }
             }
@@ -169,6 +218,9 @@ component ParamField inherits Rectangle {
     callback changed-float(float);
     callback changed-bool(bool);
     callback changed-text(string);
+    // ドラッグ系操作（kind 0/2）1回の先頭・末尾のみ発火する。
+    callback commit();
+    callback release();
 
     height: data.kind == 3 ? 44px : 22px;
 
@@ -178,6 +230,8 @@ component ParamField inherits Rectangle {
         min: data.min;
         max: data.max;
         changed(v) => { root.changed-float(v); }
+        commit-start => { root.commit(); }
+        release => { root.release(); }
     }
 
     if data.kind == 1: ToggleField {
@@ -192,6 +246,8 @@ component ParamField inherits Rectangle {
         min: 0;
         max: 1;
         changed(v) => { root.changed-float(v); }
+        commit-start => { root.commit(); }
+        release => { root.release(); }
     }
 
     if data.kind == 3: Rectangle {
@@ -248,13 +304,20 @@ export component PropertiesWindow inherits Window {
     property <length> menu-x: 0;
     property <length> menu-y: 0;
 
+    // パラメータのスライダー/ドラッグボックス操作中フラグ。trueの間は右側Flickableの
+    // スクロールを禁止し、操作中に表示が上下へ動いてポインタがスライダーから
+    // 外れる現象を除去する。
+    property <bool> is-dragging-param: false;
+
     callback set-object-param(string, string, float);
     callback set-object-param-bool(string, string, bool);
     callback set-object-param-text(string, string, string);
+    callback commit-object-param(string, string);
     callback set-effect-enabled(int, bool);
     callback remove-effect(int);
     callback set-param(int, string, float);
     callback set-param-bool(int, string, bool);
+    callback commit-param(int, string);
     callback add-effect(string);
     callback move-effect(int, int);
     callback copy-effect(int);
@@ -401,6 +464,11 @@ export component PropertiesWindow inherits Window {
 
         // --- 右側: オブジェクト直下パラメータ + 選択中エフェクトのパラメータ ---
         Flickable {
+            // is-dragging-param中はスクロール操作を禁止する。
+            // スライダー/ドラッグボックス操作中に表示位置が動いてポインタが
+            // 操作対象から外れる現象の根絶。
+            interactive: !root.is-dragging-param;
+
             VerticalLayout {
                 padding: 10px;
                 spacing: 8px;
@@ -423,6 +491,11 @@ export component PropertiesWindow inherits Window {
                     if p.kind == 0: ParamField {
                         data: p;
                         changed-float(v) => { root.set-object-param(p.group, p.key, v); }
+                        commit => {
+                            root.is-dragging-param = true;
+                            root.commit-object-param(p.group, p.key);
+                        }
+                        release => { root.is-dragging-param = false; }
                     }
 
                     if p.kind == 1: ParamField {
@@ -433,6 +506,11 @@ export component PropertiesWindow inherits Window {
                     if p.kind == 2: ParamField {
                         data: p;
                         changed-float(v) => { root.set-object-param(p.group, p.key, v); }
+                        commit => {
+                            root.is-dragging-param = true;
+                            root.commit-object-param(p.group, p.key);
+                        }
+                        release => { root.is-dragging-param = false; }
                     }
 
                     if p.kind == 3: ParamField {
@@ -462,6 +540,11 @@ export component PropertiesWindow inherits Window {
                             data: p;
                             changed-float(v) => { root.set-param(eff.index, p.key, v); }
                             changed-bool(v) => { root.set-param-bool(eff.index, p.key, v); }
+                            commit => {
+                                root.is-dragging-param = true;
+                                root.commit-param(eff.index, p.key);
+                            }
+                            release => { root.is-dragging-param = false; }
                         }
                     }
                 }

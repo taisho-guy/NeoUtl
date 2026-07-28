@@ -188,6 +188,13 @@ pub fn setup(props: &PropertiesWindow, state: SharedAppState) {
 
     {
         let state = state.clone();
+        props.on_commit_object_param(move |_group, _key| {
+            app_state::snapshot_before_edit(&state);
+        });
+    }
+
+    {
+        let state = state.clone();
         let pw = props.as_weak();
         props.on_set_object_param_bool(move |group, key, value| {
             let Some(p) = pw.upgrade() else { return };
@@ -279,6 +286,13 @@ pub fn setup(props: &PropertiesWindow, state: SharedAppState) {
             world.set_effect_param(id as usize, index as usize, key.as_str(), value);
             drop(world);
             update_effect_param_value(&p, index, key.as_str(), value);
+        });
+    }
+
+    {
+        let state = state.clone();
+        props.on_commit_param(move |_index, _key| {
+            app_state::snapshot_before_edit(&state);
         });
     }
 
