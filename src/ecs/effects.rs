@@ -78,15 +78,43 @@ impl EffectStack {
         self.set_param_value(index, key, Value::Bool(value));
     }
 
+    /// 基準値のみを更新する。既存の中間点は保持する
+    /// （挿入で丸ごと置換すると編集のたびに中間点が消える欠陥になるため、
+    /// 既存エントリがあればEffectParam::set_staticへ委譲する）。
     pub fn set_param_value(&mut self, index: usize, key: &str, value: Value) {
         if let Some(e) = self.0.get_mut(index) {
-            e.params.insert(
-                key.to_owned(),
-                EffectParam {
-                    static_value: value,
-                    keyframes: Vec::new(),
-                },
-            );
+            match e.params.get_mut(key) {
+                Some(p) => p.set_static(value),
+                None => {
+                    e.params.insert(key.to_owned(), EffectParam::new(value));
+                }
+            }
+        }
+    }
+
+    /// 指定フレームへ中間点を1件設定する。パラメータ未初期化なら
+    /// valueを基準値として新規作成する。
+    pub fn set_keyframe(
+        &mut self,
+        index: usize,
+        key: &str,
+        frame: i32,
+        value: f32,
+        easing: crate::ecs::types::Easing,
+    ) {
+        if let Some(e) = self.0.get_mut(index) {
+            e.params
+                .entry(key.to_owned())
+                .or_insert_with(|| EffectParam::new(Value::Number(value)))
+                .set_keyframe(frame, value, easing);
+        }
+    }
+
+    pub fn remove_keyframe(&mut self, index: usize, key: &str, frame: i32) {
+        if let Some(e) = self.0.get_mut(index)
+            && let Some(p) = e.params.get_mut(key)
+        {
+            p.remove_keyframe(frame);
         }
     }
 }

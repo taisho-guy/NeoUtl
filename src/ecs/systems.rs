@@ -1,11 +1,13 @@
 use super::EcsWorld;
 use crate::ecs::components::{
-    AudioParams, KindId, MediaSource, ObjectId, SceneId, ShapeParams, TextContent, TimeRange,
+    AudioParams, KeyframeTracks, KindId, MediaSource, ObjectId, SceneId, ShapeParams, TextContent,
+    TimeRange,
 };
 use crate::ecs::effects::{EffectStack, compute_effect_params_at};
 use crate::ecs::resources::{ProjectResource, SceneResource, TimelineResource};
 use crate::ecs::transform::{
-    Camera, DEFAULT_FOV_DEG, GlobalMatrix, Projection, Transform, compute_mvp, rescale_for_source,
+    Camera, DEFAULT_FOV_DEG, Projection, Transform, compute_global_matrix, compute_mvp,
+    rescale_for_source,
 };
 use crate::ecs::types::Value;
 use crate::media::MediaKind;
@@ -68,7 +70,7 @@ type SelectorGroupViews<'v> = (
 );
 type PayloadGroupViews<'v> = (
     View<'v, Transform>,
-    View<'v, GlobalMatrix>,
+    View<'v, KeyframeTracks>,
     View<'v, AudioParams>,
     View<'v, EffectStack>,
 );
@@ -85,7 +87,7 @@ pub fn get_active_objects_system(world: &EcsWorld) -> Vec<ActiveObject> {
             media_sources,
             object_ids,
         ): SelectorGroupViews,
-         (transforms, global_matrices, audio_params, effect_stacks): PayloadGroupViews| {
+         (transforms, keyframe_tracks, audio_params, effect_stacks): PayloadGroupViews| {
             let current = timeline.current_frame;
             let active_scene = scenes.active_scene;
             let project_width = project.width.max(1) as f32;
@@ -100,8 +102,28 @@ pub fn get_active_objects_system(world: &EcsWorld) -> Vec<ActiveObject> {
                 if current < range.start_frame || current >= range.end_frame {
                     continue;
                 }
-                let text_content = text_contents.get(id).ok().cloned();
-                let shape = shape_params.get(id).ok().copied();
+                let keyframes = keyframe_tracks.get(id).ok();
+
+                let mut transform = transforms.get(id).copied().unwrap_or_default();
+                if let Some(kt) = keyframes {
+                    kt.apply(&mut transform, current);
+                }
+
+                let mut text_content = text_contents.get(id).ok().cloned();
+                if let (Some(tc), Some(kt)) = (text_content.as_mut(), keyframes) {
+                    kt.apply(tc, current);
+                }
+
+                let mut shape = shape_params.get(id).ok().copied();
+                if let (Some(sp), Some(kt)) = (shape.as_mut(), keyframes) {
+                    kt.apply(sp, current);
+                }
+
+                let mut audio = audio_params.get(id).copied().unwrap_or_default();
+                if let Some(kt) = keyframes {
+                    kt.apply(&mut audio, current);
+                }
+
                 let media_source = media_sources.get(id).ok().cloned();
                 let source_frame = media_source.as_ref().map_or(0, |m| {
                     let base = f64::from(current - range.start_frame);
@@ -114,7 +136,7 @@ pub fn get_active_objects_system(world: &EcsWorld) -> Vec<ActiveObject> {
                     };
                     m.trim_in_frame + (base * ratio).round() as i64
                 });
-                let matrix = global_matrices.get(id).copied().unwrap_or_default();
+                let matrix = compute_global_matrix(&transform);
                 let matrix = match &media_source {
                     Some(src) if matches!(src.kind, MediaKind::Video | MediaKind::Image) => {
                         match crate::media::cache::global().dimensions(&src.path) {
@@ -131,8 +153,7 @@ pub fn get_active_objects_system(world: &EcsWorld) -> Vec<ActiveObject> {
                     project_height,
                     projection_for(kind.0),
                 );
-                let opacity = transforms.get(id).map_or(1.0, |t| t.opacity);
-                let audio = audio_params.get(id).copied().unwrap_or_default();
+                let opacity = transform.opacity;
                 let effects = effect_stacks
                     .get(id)
                     .map(|stack| compute_effect_params_at(stack, current))

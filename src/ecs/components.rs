@@ -182,6 +182,65 @@ impl ParamAccess for ShapeParams {
 #[derive(Clone, Debug, Default, Component, Serialize, Deserialize)]
 pub struct PluginParams(pub HashMap<String, f32>);
 
+/// Transform/TextContent/ShapeParams/AudioParams等、ParamAccessを実装する
+/// ネイティブコンポーネント向けの中間点集合。keyはParamAccessのkeyと1:1対応する。
+/// エフェクトパラメータの中間点はEffectInstance::params側のEffectParam::keyframesが
+/// 個別に保持するため、ここには含めない（所有者・ライフタイムが異なる別データを
+/// 単一箇所へ無理に統合しない）。
+///
+/// エンティティに未付与＝中間点なし（静的値のみ）を意味する。1件でも中間点を打った
+/// 時点でShipyard側へadd_componentされる（EcsWorld::set_keyframe参照）。
+#[derive(Clone, Debug, Default, Component, Serialize, Deserialize)]
+pub struct KeyframeTracks(pub HashMap<String, Vec<neoutl_interp::Keyframe>>);
+
+impl KeyframeTracks {
+    pub fn set_keyframe(
+        &mut self,
+        key: &str,
+        frame: i32,
+        value: f32,
+        easing: neoutl_interp::Easing,
+    ) {
+        let track = self.0.entry(key.to_owned()).or_default();
+        match track.iter_mut().find(|k| k.frame == frame) {
+            Some(existing) => {
+                existing.value = value;
+                existing.easing = easing;
+            }
+            None => {
+                track.push(neoutl_interp::Keyframe {
+                    frame,
+                    value,
+                    easing,
+                });
+                track.sort_by_key(|k| k.frame);
+            }
+        }
+    }
+
+    /// 空になったトラックはキーごと削除し、以後の走査対象から外す。
+    pub fn remove_keyframe(&mut self, key: &str, frame: i32) {
+        if let Some(track) = self.0.get_mut(key) {
+            track.retain(|k| k.frame != frame);
+            if track.is_empty() {
+                self.0.remove(key);
+            }
+        }
+    }
+
+    /// 対象コンポーネントへ、指定フレームでの評価値を書き込む。
+    /// 中間点が無いキーはtargetの現在値をそのまま維持する（何もしない）。
+    pub fn apply(&self, target: &mut impl ParamAccess, frame: i32) {
+        for (key, track) in &self.0 {
+            let Some(fallback) = target.get_param(key) else {
+                continue;
+            };
+            let value = neoutl_interp::evaluate(track, frame, fallback);
+            target.set_param(key, value);
+        }
+    }
+}
+
 /// 動画・画像・音声オブジェクトが参照する外部メディアファイル。
 /// デコード自体はMediaCache（src/media/cache.rs）が担い、このコンポーネントは
 /// パス・種別・素材内トリム開始位置のみを保持する。
