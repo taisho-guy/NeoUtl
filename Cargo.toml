@@ -14,6 +14,7 @@ members = [
     "crates/media/gpuvideo-decoder",
     "crates/media/image-decoder",
     # "crates/media/ffmpeg-decoder",
+    # "crates/media/gstreamer-encoder",
     "crates/neoutl-effect-shader-build",
     "crates/neoutl-object-shader-build",
     "crates/xtask",

@@ -1,16 +1,10 @@
 [package]
-name = "neoutl-media-gstreamer-decoder"
+name = "neoutl-media-gstreamer-encoder"
 version = "0.0.0"
 edition = "2024"
-
-[lib]
-name       = "neoutl_media_gstreamer_decoder"
-crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 neoutl-media-api = { path = "../../neoutl-media-api" }
 gstreamer = "0.25"
 gstreamer-app = "0.25"
-gstreamer-video = "0.25"
 gstreamer-pbutils = "0.25"
-wgpu = "29"

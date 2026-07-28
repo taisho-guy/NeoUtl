@@ -14,6 +14,8 @@ use std::sync::mpsc;
 use std::thread::JoinHandle;
 use std::time::Duration;
 
+mod discoverer;
+
 /// 固定枚数のNV12テクスチャを解像度確定時に一括生成し、以後はwrite_textureのみで
 /// 内容を上書き（ローテーション）する。毎フレームのcreate_texture呼び出し
 /// （GPUアロケーションスパイクの発生源）を排除するための固定リソースプール。
@@ -218,6 +220,40 @@ const BUS_DRAIN_POLL: gst::ClockTime = gst::ClockTime::from_mseconds(200);
 /// Drop時、スタックしたスレッドの終了をポーリングで待つ上限（超過時は明示的にリークする）。
 const THREAD_JOIN_TIMEOUT: Duration = Duration::from_secs(5);
 
+/// decodebin3(uridecodebin3)が公開したパッド(音声・字幕・重複映像ストリーム等、
+/// このプラグインの責務外のもの)をfakesinkへ接続して消費する。sync/asyncを
+/// falseとし、パイプラインの状態遷移・クロック同期に一切関与させない。
+/// 未リンクのまま放置すると、decodebin3が「公開した全パッドが消費される」ことを
+/// 前提に内部キューを進行させるため、音声トラックを持つファイルで
+/// バックプレッシャが発生し映像側も巻き込んでブロックしうる。
+fn drain_to_fakesink(pipeline: &gst::Pipeline, pad: &gst::Pad) {
+    let fakesink = match gst::ElementFactory::make("fakesink")
+        .property("sync", false)
+        .property("async", false)
+        .build()
+    {
+        Ok(e) => e,
+        Err(e) => {
+            eprintln!("[gstreamer-decoder] fakesink生成失敗（未消費パッドが残留します）: {e}");
+            return;
+        }
+    };
+    if let Err(e) = pipeline.add(&fakesink) {
+        eprintln!("[gstreamer-decoder] fakesinkのパイプライン追加失敗: {e}");
+        return;
+    }
+    if let Err(e) = fakesink.sync_state_with_parent() {
+        eprintln!("[gstreamer-decoder] fakesinkの状態同期失敗: {e}");
+    }
+    let Some(sinkpad) = fakesink.static_pad("sink") else {
+        eprintln!("[gstreamer-decoder] fakesink sinkパッド未取得");
+        return;
+    };
+    if let Err(e) = pad.link(&sinkpad) {
+        eprintln!("[gstreamer-decoder] fakesinkへのリンク失敗: {e:?}");
+    }
+}
+
 fn duration_to_frames(duration_ns: u64, frame_duration_ns: u64) -> i64 {
     (duration_ns / frame_duration_ns.max(1)) as i64
 }
@@ -310,26 +346,93 @@ struct GstDecoderInner {
 
 impl GstDecoderInner {
     fn open(path: &Path) -> Result<Self, String> {
-        let uri = gst::glib::filename_to_uri(path, None).map_err(|e| e.to_string())?;
-        let pipeline_desc = format!(
-            "uridecodebin uri={uri} name=src caps=video/x-raw \
-             src. ! {DOWNLOAD_CHAIN}videoconvert ! \
-             queue leaky=downstream max-size-buffers=4 max-size-bytes=0 max-size-time=0 ! \
-             appsink name=sink sync=false"
-        );
-        let pipeline = gst::parse::launch(&pipeline_desc)
-            .map_err(|e| e.to_string())?
-            .downcast::<gst::Pipeline>()
-            .map_err(|_| "パイプライン構築失敗".to_owned())?;
+        let discovered = discoverer::discover(path)?;
+        if !discovered.seekable {
+            eprintln!(
+                "[gstreamer-decoder] 警告: このソースはシーク不可と報告されました。\
+                 ACCURATE seekが失敗する可能性があります: {}",
+                path.display()
+            );
+        }
 
-        let appsink = pipeline
-            .by_name("sink")
-            .ok_or("appsink未検出")?
-            .downcast::<AppSink>()
-            .map_err(|_| "appsinkキャスト失敗".to_owned())?;
-        appsink.set_caps(Some(
-            &gst::Caps::from_str(SYSMEM_CAPS).map_err(|e| e.to_string())?,
-        ));
+        let uri = gst::glib::filename_to_uri(path, None).map_err(|e| e.to_string())?;
+
+        let pipeline = gst::Pipeline::new();
+        let uridecodebin3 = gst::ElementFactory::make("uridecodebin3")
+            .property("uri", uri.as_str())
+            .build()
+            .map_err(|e| format!("uridecodebin3生成失敗: {e}"))?;
+
+        let download_elems: Vec<gst::Element> = DOWNLOAD_CHAIN
+            .split('!')
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .map(|desc| {
+                let name = desc.split_whitespace().next().unwrap_or(desc);
+                gst::ElementFactory::make(name)
+                    .build()
+                    .map_err(|e| format!("{name}生成失敗: {e}"))
+            })
+            .collect::<Result<_, _>>()?;
+        let videoconvert = gst::ElementFactory::make("videoconvert")
+            .build()
+            .map_err(|e| format!("videoconvert生成失敗: {e}"))?;
+        let queue = gst::ElementFactory::make("queue")
+            .property_from_str("leaky", "downstream")
+            .property("max-size-buffers", 4u32)
+            .property("max-size-bytes", 0u32)
+            .property("max-size-time", 0u64)
+            .build()
+            .map_err(|e| format!("queue生成失敗: {e}"))?;
+        let appsink = AppSink::builder()
+            .caps(&gst::Caps::from_str(SYSMEM_CAPS).map_err(|e| e.to_string())?)
+            .sync(false)
+            .name("sink")
+            .build();
+
+        pipeline.add(&uridecodebin3).map_err(|e| e.to_string())?;
+        for elem in &download_elems {
+            pipeline.add(elem).map_err(|e| e.to_string())?;
+        }
+        pipeline
+            .add_many([&videoconvert, &queue, appsink.upcast_ref::<gst::Element>()])
+            .map_err(|e| e.to_string())?;
+
+        let mut video_chain: Vec<gst::Element> = download_elems.clone();
+        video_chain.push(videoconvert.clone());
+        video_chain.push(queue.clone());
+        video_chain.push(appsink.clone().upcast::<gst::Element>());
+        gst::Element::link_many(video_chain.iter().collect::<Vec<_>>())
+            .map_err(|e| format!("映像チェーンのリンク失敗: {e}"))?;
+
+        let video_chain_head_sink = video_chain
+            .first()
+            .expect("video_chainは常に非空")
+            .static_pad("sink")
+            .ok_or("映像チェーン先頭のsinkパッド未取得")?;
+
+        let pipeline_weak = pipeline.downgrade();
+        uridecodebin3.connect_pad_added(move |_bin, pad| {
+            let Some(pipeline) = pipeline_weak.upgrade() else {
+                return;
+            };
+            let pad_name = pad.name();
+            if pad_name.starts_with("video_") {
+                if video_chain_head_sink.is_linked() {
+                    eprintln!(
+                        "[gstreamer-decoder] 追加の映像ストリーム{pad_name}を検出しましたが、\
+                         最初の映像ストリームのみ使用します（fakesinkへ排出）"
+                    );
+                    drain_to_fakesink(&pipeline, pad);
+                    return;
+                }
+                if let Err(e) = pad.link(&video_chain_head_sink) {
+                    eprintln!("[gstreamer-decoder] 映像パッド{pad_name}のリンク失敗: {e:?}");
+                }
+            } else {
+                drain_to_fakesink(&pipeline, pad);
+            }
+        });
 
         macro_rules! fail {
             ($err:expr) => {{
@@ -357,22 +460,13 @@ impl GstDecoderInner {
             Some(c) => c,
             None => fail!("caps未取得".to_owned()),
         };
-        let video_info = match gst_video::VideoInfo::from_caps(caps) {
-            Ok(v) => v,
-            Err(e) => fail!(e.to_string()),
-        };
-        let width = video_info.width();
-        let height = video_info.height();
-        let fps_frac = video_info.fps();
-        let fps = if fps_frac.denom() != 0 {
-            fps_frac.numer() as f64 / fps_frac.denom() as f64
-        } else {
-            eprintln!(
-                "[gstreamer-decoder] 警告: fps未申告のためフォールバック値30.0を使用（VFR疑い、seek精度が低下する可能性）: {}",
-                path.display()
-            );
-            30.0
-        };
+        if gst_video::VideoInfo::from_caps(caps).is_err() {
+            fail!("appsink caps解析失敗（videoconvert出力が不正）".to_owned());
+        }
+
+        let width = discovered.width;
+        let height = discovered.height;
+        let fps = discovered.fps;
         let frame_duration_ns = (1_000_000_000.0 / fps.max(1e-6)) as u64;
 
         if width % 2 != 0 || height % 2 != 0 {
@@ -382,15 +476,21 @@ impl GstDecoderInner {
             );
         }
 
-        let duration_ns = pipeline
-            .query_duration::<gst::ClockTime>()
-            .map(|d| d.nseconds())
-            .unwrap_or(0);
+        let duration_ns = if discovered.duration_ns > 0 {
+            discovered.duration_ns
+        } else {
+            pipeline
+                .query_duration::<gst::ClockTime>()
+                .map(|d| d.nseconds())
+                .unwrap_or(0)
+        };
         let total_frames = duration_to_frames(duration_ns, frame_duration_ns).max(1);
 
         eprintln!(
             "[gstreamer-decoder] open完了: caps={caps} width={width} height={height} \
-             fps={fps} total_frames={total_frames} duration_ns={duration_ns}"
+             fps={fps} total_frames={total_frames} duration_ns={duration_ns} \
+             has_audio={}",
+            discovered.has_audio
         );
 
         Ok(Self {
