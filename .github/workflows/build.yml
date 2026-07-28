@@ -1,4 +1,4 @@
-name: Build
+name: ビルド
 
 on:
   push:
@@ -20,33 +20,33 @@ jobs:
       matrix:
         include:
           - os: ubuntu-latest
-            os_name: Linux (x86_64)
+            os_name: Linux(x86_64)
             artifact_name: neoutl-linux-x86_64
             binary_name: NeoUtl
             install_cmd: sudo apt-get update && sudo apt-get install -y --no-install-recommends pkg-config clang cmake ninja-build mold libxkbcommon-dev libwayland-dev libegl1-mesa-dev libudev-dev libasound2-dev libfontconfig1-dev libfreetype6-dev libexpat1-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev gstreamer1.0-plugins-base gstreamer1.0-plugins-good gstreamer1.0-plugins-bad gstreamer1.0-plugins-ugly gstreamer1.0-libav
           - os: ubuntu-24.04-arm
-            os_name: Linux (ARM64)
+            os_name: Linux(ARM64)
             artifact_name: neoutl-linux-arm64
             binary_name: NeoUtl
             install_cmd: sudo apt-get update && sudo apt-get install -y --no-install-recommends pkg-config clang cmake ninja-build mold libxkbcommon-dev libwayland-dev libegl1-mesa-dev libudev-dev libasound2-dev libfontconfig1-dev libfreetype6-dev libexpat1-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev gstreamer1.0-plugins-base gstreamer1.0-plugins-good gstreamer1.0-plugins-bad gstreamer1.0-plugins-ugly gstreamer1.0-libav
           - os: macos-latest
-            os_name: macOS (Apple Silicon)
+            os_name: macOS(Apple Silicon)
             artifact_name: neoutl-macos-aarch64
             binary_name: NeoUtl
             install_cmd: brew update && brew install gstreamer
           - os: macos-26-intel
-            os_name: macOS (Intel)
+            os_name: macOS(Intel)
             artifact_name: neoutl-macos-x86_64
             binary_name: NeoUtl
             install_cmd: brew update && brew install gstreamer
           - os: windows-latest
-            os_name: Windows (x86_64)
+            os_name: Windows(x86_64)
             artifact_name: neoutl-windows-x86_64
             binary_name: NeoUtl.exe
             rust_target: x86_64-pc-windows-msvc
             vcpkg_triplet: x64-windows
           - os: windows-11-arm
-            os_name: Windows (ARM64)
+            os_name: Windows(ARM64)
             artifact_name: neoutl-windows-arm64
             binary_name: NeoUtl.exe
             rust_target: aarch64-pc-windows-msvc
@@ -56,42 +56,42 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - name: Install native dependencies (Unix)
+      - name: ネイティブ依存関係インストール(Unix)
         if: runner.os != 'Windows'
         shell: bash
         run: ${{ matrix.install_cmd }}
 
-      - name: Setup vcpkg (Windows)
+      - name: vcpkgセットアップ(Windows)
         if: runner.os == 'Windows'
         uses: lukka/run-vcpkg@v11
         with:
           vcpkgJsonGlob: "vcpkg.json"
 
-      - name: Install GStreamer via vcpkg (Windows)
+      - name: vcpkg経由GStreamerインストール(Windows)
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
           ${{ github.workspace }}/vcpkg/vcpkg install --triplet ${{ matrix.vcpkg_triplet }}
           echo "VCPKG_INSTALLED=${{ github.workspace }}/vcpkg_installed/${{ matrix.vcpkg_triplet }}" >> $env:GITHUB_ENV
 
-      - name: Setup Rust toolchain
+      - name: Rustツールチェーンセットアップ
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Build (Unix)
+      - name: ビルド(Unix)
         if: runner.os != 'Windows'
         shell: bash
         env:
           PKG_CONFIG: pkg-config
         run: cargo xtask build --release
 
-      - name: Build (Windows / MSVC)
+      - name: ビルド(Windows / MSVC)
         if: runner.os == 'Windows'
         shell: pwsh
         env:
           PKG_CONFIG_PATH: ${{ env.VCPKG_INSTALLED }}/lib/pkgconfig
         run: cargo xtask build --release
 
-      - name: Collect artifact (Linux)
+      - name: 成果物収集(Linux)
         if: runner.os == 'Linux'
         run: |
           mkdir -p dist/package
@@ -101,7 +101,7 @@ jobs:
           cd dist/package
           zip -r ../${{ matrix.artifact_name }}.zip .
 
-      - name: Create & Package .app Bundle (macOS Homebrew)
+      - name: .appバンドル作成・パッケージング(macOS Homebrew)
         if: runner.os == 'macOS'
         run: |
           set -euo pipefail
@@ -195,7 +195,7 @@ jobs:
           cd dist
           zip -r ${{ matrix.artifact_name }}.zip NeoUtl.app
 
-      - name: Collect & Package GStreamer (Windows)
+      - name: GStreamer収集・パッケージング(Windows)
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
@@ -226,7 +226,7 @@ jobs:
 
           Compress-Archive -Path dist/package/* -DestinationPath "dist/${{ matrix.artifact_name }}.zip"
 
-      - name: Upload artifact
+      - name: 成果物アップロード
         uses: actions/upload-artifact@v6
         with:
           name: ${{ matrix.artifact_name }}
@@ -235,7 +235,7 @@ jobs:
           retention-days: 7
 
   release:
-    name: Codeberg Release
+    name: Codebergリリース
     if: startsWith(github.ref, 'refs/tags/')
     needs: build
     runs-on: ubuntu-latest
@@ -247,7 +247,7 @@ jobs:
         with:
           path: dist
 
-      - name: Create Codeberg Release
+      - name: Codebergリリース作成
         uses: akkuman/gitea-release-action@v1
         env:
           GITEA_TOKEN: ${{ secrets.CODEBERG_TOKEN }}
