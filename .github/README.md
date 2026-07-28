@@ -1,4 +1,4 @@
-<p align="center"><img src= "assets/icon-shadowed.svg"/></p>
+<p align="center"><img src= "../assets/icon-shadowed.svg"/></p>
 <h1 align="center">NeoUtl</h1>
 <p align="center">
 <a href="https://neoutl.taisho-guy.org">公式サイト</a> /
@@ -9,6 +9,10 @@
 <p align="center">
     Video editing software aiming to replace and surpass AviUtl. Compatible with Windows, macOS, and Linux.
 </p>
+
+> [!IMPORTANT]
+> ### NeoUtlは[Codeberg](https://codeberg.org/taisho-guy/NeoUtl)で開発されています。GitHubはミラーです。
+> ### イシュー / プルリクエスト等はCodebergでのみお受けしております。
 
 ## 目的
 
