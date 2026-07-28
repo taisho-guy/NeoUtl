@@ -9,8 +9,8 @@ pub mod types;
 use crate::document::{DocumentModel, MediaSourceDoc, ObjectDoc, ObjectPayload};
 use crate::ecs::types::EffectInstance;
 use components::{
-    AudioParams, KindId, Layer, MediaSource, ObjectId, PluginParams, SceneId, ShapeParams,
-    TextContent, TimeRange,
+    AudioParams, KeyframeTracks, KindId, Layer, MediaSource, ObjectId, PluginParams, SceneId,
+    ShapeParams, TextContent, TimeRange,
 };
 use effects::EffectStack;
 use resources::{
@@ -42,6 +42,7 @@ struct ObjectQueryViews<'v> {
     shapes: View<'v, ShapeParams>,
     plugins: View<'v, PluginParams>,
     media: View<'v, MediaSource>,
+    keyframes: View<'v, KeyframeTracks>,
 }
 
 /// タイムラインUIに渡すオブジェクト情報（Slint型に非依存）
@@ -663,6 +664,89 @@ impl EcsWorld {
             .run(|params: View<PluginParams>| params.get(entity).ok().map(|p| p.0.clone()))
     }
 
+    /// ネイティブパラメータ（Transform/TextContent/ShapeParams/AudioParams）のkeyへ
+    /// 中間点を1件設定する。KeyframeTracks未付与のエンティティには新規付与する
+    /// （set_plugin_paramと同一方針: 都度読み出し→書き換え→add_component）。
+    /// 評価（描画時の実効値算出）はecs::systems側でのみ行い、ここでは行わない。
+    pub fn set_keyframe(
+        &mut self,
+        object_id: usize,
+        key: &str,
+        frame: i32,
+        value: f32,
+        easing: crate::ecs::types::Easing,
+    ) {
+        let Some(entity) = self.find_entity(object_id) else {
+            return;
+        };
+        let mut tracks = self
+            .world
+            .run(|t: View<KeyframeTracks>| t.get(entity).ok().cloned())
+            .unwrap_or_default();
+        tracks.set_keyframe(key, frame, value, easing);
+        self.world.add_component(entity, tracks);
+    }
+
+    pub fn remove_keyframe(&mut self, object_id: usize, key: &str, frame: i32) {
+        let Some(entity) = self.find_entity(object_id) else {
+            return;
+        };
+        self.world.run(|mut tracks: ViewMut<KeyframeTracks>| {
+            if let Ok(mut t) = (&mut tracks).get(entity) {
+                t.remove_keyframe(key, frame);
+            }
+        });
+    }
+
+    pub fn get_keyframes(&self, object_id: usize, key: &str) -> Vec<crate::ecs::types::Keyframe> {
+        let Some(entity) = self.find_entity(object_id) else {
+            return Vec::new();
+        };
+        self.world.run(|t: View<KeyframeTracks>| {
+            t.get(entity)
+                .ok()
+                .and_then(|tracks| tracks.0.get(key).cloned())
+                .unwrap_or_default()
+        })
+    }
+
+    /// エフェクトパラメータへの中間点設定。EffectStack::set_keyframeへ委譲する。
+    pub fn set_effect_keyframe(
+        &mut self,
+        object_id: usize,
+        index: usize,
+        key: &str,
+        frame: i32,
+        value: f32,
+        easing: crate::ecs::types::Easing,
+    ) {
+        let Some(entity) = self.find_entity(object_id) else {
+            return;
+        };
+        self.world.run(|mut stacks: ViewMut<EffectStack>| {
+            if let Ok(mut stack) = (&mut stacks).get(entity) {
+                stack.set_keyframe(index, key, frame, value, easing);
+            }
+        });
+    }
+
+    pub fn remove_effect_keyframe(
+        &mut self,
+        object_id: usize,
+        index: usize,
+        key: &str,
+        frame: i32,
+    ) {
+        let Some(entity) = self.find_entity(object_id) else {
+            return;
+        };
+        self.world.run(|mut stacks: ViewMut<EffectStack>| {
+            if let Ok(mut stack) = (&mut stacks).get(entity) {
+                stack.remove_keyframe(index, key, frame);
+            }
+        });
+    }
+
     pub fn set_plugin_param(&mut self, object_id: usize, key: &str, value: f32) {
         let Some(entity) = self.find_entity(object_id) else {
             return;
@@ -827,6 +911,11 @@ impl EcsWorld {
                     end_frame: range.end_frame,
                     transform: views.transforms.get(entity).copied().unwrap_or_default(),
                     audio: views.audio.get(entity).copied().unwrap_or_default(),
+                    keyframes: views
+                        .keyframes
+                        .get(entity)
+                        .map(|k| k.0.clone())
+                        .unwrap_or_default(),
                     effects: views
                         .stacks
                         .get(entity)
@@ -908,6 +997,10 @@ impl EcsWorld {
             }
             if let Some(m) = &o.payload.media {
                 self.world.add_component(entity, MediaSource::from(m));
+            }
+            if !o.keyframes.is_empty() {
+                self.world
+                    .add_component(entity, KeyframeTracks(o.keyframes.clone()));
             }
         }
 

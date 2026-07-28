@@ -1,7 +1,7 @@
 use crate::ecs::components::{AudioParams, MediaSource, ShapeParams, TextContent};
 use crate::ecs::resources::SceneMeta;
 use crate::ecs::transform::Transform;
-use crate::ecs::types::EffectInstance;
+use crate::ecs::types::{EffectInstance, Keyframe};
 use crate::media::MediaKind;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -57,6 +57,11 @@ pub struct ObjectDoc {
     pub audio: AudioParams,
     pub effects: Vec<EffectInstance>,
     pub payload: ObjectPayload,
+    /// Transform/TextContent/ShapeParams/AudioParamsの中間点。keyはParamAccessのkeyと
+    /// 1:1対応する（KeyframeTracksコンポーネントの永続化形）。エフェクト側の中間点は
+    /// effects: Vec<EffectInstance>内のEffectParam::keyframesが個別に保持する。
+    #[serde(default)]
+    pub keyframes: HashMap<String, Vec<Keyframe>>,
 }
 
 /// プロジェクト全体の正本データ（AviQtl::Core::DocumentModel相当）。

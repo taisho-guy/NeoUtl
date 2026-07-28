@@ -5,6 +5,7 @@ members = [
     "crates/neoutl-object-api",
     "crates/neoutl-effect-api",
     "crates/neoutl-theme-api",
+    "crates/neoutl-interp",
     "crates/objects/*",
     "crates/effects/*",
     "crates/themes/*",
@@ -27,6 +28,7 @@ neoutl-object-api = { path = "crates/neoutl-object-api" }
 neoutl-effect-api = { path = "crates/neoutl-effect-api" }
 neoutl-theme-api = { path = "crates/neoutl-theme-api" }
 neoutl-media-api = { path = "crates/neoutl-media-api" }
+neoutl-interp = { path = "crates/neoutl-interp", features = ["serde"] }
 neoutl-effect-shader-build = { path = "crates/neoutl-effect-shader-build" }
 neoutl-object-shader-build = { path = "crates/neoutl-object-shader-build" }
 toml = "1.1"
@@ -43,6 +45,7 @@ neoutl-object-api.workspace = true
 neoutl-effect-api.workspace = true
 neoutl-theme-api.workspace = true
 neoutl-media-api.workspace = true
+neoutl-interp.workspace = true
 toml.workspace = true
 serde_json.workspace = true
 libloading = "0.9"
