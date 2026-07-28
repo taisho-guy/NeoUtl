@@ -220,17 +220,17 @@ jobs:
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path dist/package | Out-Null
-          New-Item -ItemType Directory -Force -Path dist/package/gstreamer-1.0 | Out-Null
+          New-Item -ItemType Directory -Force -Path dist/package/lib/gstreamer-1.0 | Out-Null
 
           Copy-Item "target/release/${{ matrix.binary_name }}" dist/package/
           if (Test-Path "target/release/objects") { Copy-Item -Recurse "target/release/objects" dist/package/ }
           if (Test-Path "target/release/effects") { Copy-Item -Recurse "target/release/effects" dist/package/ }
 
           $vcpkgBin = "${{ env.VCPKG_INSTALLED }}/bin"
-          $gstPluginDir = "${{ env.VCPKG_INSTALLED }}/lib/gstreamer-1.0"
+          $gstPluginDir = "${{ env.VCPKG_INSTALLED }}/bin/gstreamer-1.0"
 
           Get-ChildItem -Path $gstPluginDir -Filter "*.dll" -ErrorAction SilentlyContinue |
-            Copy-Item -Destination dist/package/gstreamer-1.0/
+            Copy-Item -Destination dist/package/lib/gstreamer-1.0/
 
           $excludePlugins = @(
             "gstdecklink.dll","gstrtmp.dll","gstrtmp2.dll","gstrtsp.dll","gstsrt.dll",
@@ -238,7 +238,7 @@ jobs:
             "gstwebrtcdsp.dll","gsthls.dll","gstsoup.dll","gstrfbsrc.dll","gstvmnc.dll","gstshout2.dll"
           )
           foreach ($name in $excludePlugins) {
-            Remove-Item -Force -ErrorAction SilentlyContinue "dist/package/gstreamer-1.0/$name"
+            Remove-Item -Force -ErrorAction SilentlyContinue "dist/package/lib/gstreamer-1.0/$name"
           }
 
           Get-ChildItem -Path $vcpkgBin -Filter "*.dll" |
