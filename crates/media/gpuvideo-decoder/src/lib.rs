@@ -26,12 +26,9 @@ mod imp {
 
     const START_CODE: &[u8] = &[0, 0, 0, 1];
 
-    /// H.264デコードサーフェスのアライメント単位（マクロブロック一辺のピクセル数）。
-    const H264_MACROBLOCK_SIZE: u32 = 16;
-
-    /// coded_width x coded_height（マクロブロック境界に切り上げたサイズ）のRGBA変換先を確保する。
-    /// NV12→RGBA変換の出力先をこのサイズに合わせることで、変換シェーダーによる
-    /// パディング領域の引き伸ばしを避ける（有効領域のcropはこの後の
+    /// coded_width x coded_height（decoderが実際にVulkanドライバへ確保させた物理サイズ）
+    /// のRGBA変換先を確保する。NV12→RGBA変換の出力先をこのサイズに合わせることで、
+    /// 変換シェーダーによるパディング領域の引き伸ばしを避ける（有効領域のcropはこの後の
     /// copy_texture_to_textureで行う）。
     fn create_crop_scratch_texture(
         device: &wgpu::Device,
@@ -466,19 +463,18 @@ mod imp {
         width: u32,
         height: u32,
 
-        /// H.264マクロブロック境界（16px）へ切り上げたVulkanデコードサーフェス実寸。
-        /// widthまたはheightが16の倍数でない場合、decoderはこのサイズでNV12テクスチャを
-        /// 確保し、はみ出す右端・下端は未定義（実装依存）のパディング画素で埋める。
-        /// display側(width/height)と一致しない場合、NV12→RGBA変換をcoded_width x
-        /// coded_heightのscratchテクスチャへ行い、有効領域のみをcropしてcacheへ複製する
+        /// decoder実装がVulkanドライバから受け取る実テクスチャの物理サイズ
+        /// （frame.data.size()、フレーム毎に問い合わせる）と、そのサイズで
+        /// 確保したcrop前RGBA変換先のキャッシュ。物理サイズはマクロブロック(16px)
+        /// 単位とは限らず、ドライバ・GPU依存のタイル境界で確保される場合がある
+        /// ため、次の16倍数への切り上げ等では推測しない。
+        /// display側(width/height)と物理サイズが一致しない場合、NV12→RGBA変換を
+        /// 物理サイズのscratchテクスチャへ行い、有効領域のみをcropしてcacheへ複製する
         /// （変換先を直接display解像度にすると、変換シェーダーがソース全体を0..1で
         /// サンプルするためパディング領域ごと引き伸ばされ、右端・下端に緑色の帯が生じる）。
-        coded_width: u32,
-        coded_height: u32,
-
-        /// coded_width!=width または coded_height!=height の場合にのみ確保する
-        /// crop前RGBA変換先。等しい場合はNone（変換先を直接cacheへ書き込みcropを省略）。
-        crop_scratch: Option<wgpu::Texture>,
+        /// (physical_width, physical_height, scratch_texture)。物理サイズが変化した
+        /// 場合のみ再確保する。
+        crop_scratch: Option<(u32, u32, wgpu::Texture)>,
 
         fps: f64,
         total_frames: i64,
@@ -632,25 +628,11 @@ mod imp {
                 thread::current().id()
             );
 
-            let coded_width = width.next_multiple_of(H264_MACROBLOCK_SIZE);
-            let coded_height = height.next_multiple_of(H264_MACROBLOCK_SIZE);
-            let crop_scratch = if coded_width != width || coded_height != height {
-                Some(create_crop_scratch_texture(
-                    &device.wgpu_device(),
-                    coded_width,
-                    coded_height,
-                ))
-            } else {
-                None
-            };
-
             eprintln!(
-                "[gpuvideo] open_video ok path={} codec=h264 {}x{} coded={}x{} fps={} frames={}",
+                "[gpuvideo] open_video ok path={} codec=h264 {}x{} fps={} frames={}",
                 path.display(),
                 width,
                 height,
-                coded_width,
-                coded_height,
                 fps,
                 total_frames
             );
@@ -661,9 +643,7 @@ mod imp {
                 converter,
                 width,
                 height,
-                coded_width,
-                coded_height,
-                crop_scratch,
+                crop_scratch: None,
                 fps,
                 total_frames,
                 packets,
@@ -905,42 +885,70 @@ mod imp {
                                 msg
                             })?;
 
+                    let physical_size = frame.data.size();
+                    let physical_width = physical_size.width;
+                    let physical_height = physical_size.height;
+
                     let convert_started = Instant::now();
                     let mut encoder =
                         device.create_command_encoder(&wgpu::CommandEncoderDescriptor::default());
 
-                    match &self.crop_scratch {
-                        Some(scratch) => {
-                            let scratch_view =
-                                scratch.create_view(&wgpu::TextureViewDescriptor::default());
-                            self.converter
-                                .convert(&mut encoder, &bind_group, &scratch_view);
-                            encoder.copy_texture_to_texture(
-                                wgpu::TexelCopyTextureInfo {
-                                    texture: scratch,
-                                    mip_level: 0,
-                                    origin: wgpu::Origin3d::ZERO,
-                                    aspect: wgpu::TextureAspect::All,
-                                },
-                                wgpu::TexelCopyTextureInfo {
-                                    texture: &rgba,
-                                    mip_level: 0,
-                                    origin: wgpu::Origin3d::ZERO,
-                                    aspect: wgpu::TextureAspect::All,
-                                },
-                                wgpu::Extent3d {
-                                    width: self.width,
-                                    height: self.height,
-                                    depth_or_array_layers: 1,
-                                },
+                    if physical_width == self.width && physical_height == self.height {
+                        let rgba_view = rgba.create_view(&wgpu::TextureViewDescriptor::default());
+                        self.converter
+                            .convert(&mut encoder, &bind_group, &rgba_view);
+                    } else {
+                        let needs_realloc = !matches!(
+                            &self.crop_scratch,
+                            Some((w, h, _)) if *w == physical_width && *h == physical_height
+                        );
+                        if needs_realloc {
+                            eprintln!(
+                                "[gpuvideo] crop scratch (re)allocate physical={}x{} display={}x{} frame_index={}",
+                                physical_width,
+                                physical_height,
+                                self.width,
+                                self.height,
+                                frame_index
                             );
+                            self.crop_scratch = Some((
+                                physical_width,
+                                physical_height,
+                                create_crop_scratch_texture(
+                                    device,
+                                    physical_width,
+                                    physical_height,
+                                ),
+                            ));
                         }
-                        None => {
-                            let rgba_view =
-                                rgba.create_view(&wgpu::TextureViewDescriptor::default());
-                            self.converter
-                                .convert(&mut encoder, &bind_group, &rgba_view);
-                        }
+                        let scratch = &self
+                            .crop_scratch
+                            .as_ref()
+                            .expect("crop_scratchは直前に確保済み")
+                            .2;
+                        let scratch_view =
+                            scratch.create_view(&wgpu::TextureViewDescriptor::default());
+                        self.converter
+                            .convert(&mut encoder, &bind_group, &scratch_view);
+                        encoder.copy_texture_to_texture(
+                            wgpu::TexelCopyTextureInfo {
+                                texture: scratch,
+                                mip_level: 0,
+                                origin: wgpu::Origin3d::ZERO,
+                                aspect: wgpu::TextureAspect::All,
+                            },
+                            wgpu::TexelCopyTextureInfo {
+                                texture: &rgba,
+                                mip_level: 0,
+                                origin: wgpu::Origin3d::ZERO,
+                                aspect: wgpu::TextureAspect::All,
+                            },
+                            wgpu::Extent3d {
+                                width: self.width,
+                                height: self.height,
+                                depth_or_array_layers: 1,
+                            },
+                        );
                     }
 
                     queue.submit(Some(encoder.finish()));
