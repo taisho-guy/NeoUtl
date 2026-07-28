@@ -33,7 +33,10 @@
   .section-title { background-color: #009fff; color: #ffffbf; font-size: large; padding: 2px; text-align: center; }
   .accent { color: #dfffaf; }
   .info-box { border-width: 4px; border-style: solid; border-top-color: #1f5f1f; border-left-color: #1f5f1f; border-bottom-color: #143f14; border-right-color: #143f14; padding: 2px; background-color: #fdffff; margin-bottom: 12px; }
-  .info-box-inner { border-width: 1px; border-style: solid; border-top-color: #143f14; border-left-color: #143f14; border-bottom-color: #1f5f1f; border-right-color: #1f5f1f; padding: 12px; }
+  .info-box-inner { border-width: 1px; border-style: solid; border-top-color: #143f14; border-left-color: #143f14; border-bottom-color: #1f5f1f; border-right-color: #1f5f1f; padding: 0; }
+  .info-box-inner details summary { list-style: none; cursor: pointer; display: flex; align-items: center; gap: 8px; padding: 12px; -webkit-tap-highlight-color: transparent; }
+  .info-box-inner details summary::-webkit-details-marker { display: none; }
+  .info-box-inner details > p { margin: 0; padding: 0 12px 12px; }
   .data-table { width: 100%; border-collapse: separate; border-spacing: 2px; border-width: 2px; border-style: solid; border-top-color: #1f5f1f; border-left-color: #1f5f1f; border-bottom-color: #143f14; border-right-color: #143f14; background-color: #fdffff; }
   .data-table th, .data-table td { border-width: 1px; border-style: solid; border-top-color: #143f14; border-left-color: #143f14; border-bottom-color: #1f5f1f; border-right-color: #1f5f1f; padding: 3px; }
   .data-table caption { text-align: left; font-size: small; padding: 4px 0; caption-side: top; }
@@ -53,7 +56,6 @@
     header nav { white-space: normal !important; display: flex; flex-wrap: wrap; gap: 4px 10px; justify-content: center; }
     .header-bar { flex-direction: column; text-align: center; }
     h1 { font-size: 1.2rem !important; }
-    .info-box { padding: 8px !important; }
 
     .table-scroll .data-table { width: auto; min-width: 480px; }
   }
@@ -183,7 +185,7 @@
               <tr>
                 <td colspan="4"><span class="text-small">AviUtl
                 1.10 & ExEdit 0.92の操作感を踏襲する、次世代動画編集ソフトウェアです。<br>
-                Rust、Slint、wgpu、Shipyard、Tokio、ffmpegで構成されています。Windows、macOS、Linuxに対応。</span></td>
+                Rust、Slint、wgpu、Slang、Shipyard、Tokio、gpu-video、symphonia、GStreamerで構成されています。Windows、macOS、Linuxに対応。</span></td>
               </tr>
               <tr class="row-accent text-center">
                 <th></th>
@@ -460,6 +462,16 @@ python3 BUILD.py</code></pre>実行可能ファイルは <code>build</code>
               </tr>
               <tr>
                 <td>
+                  <a href="https://shader-slang.org/" target=
+                  "_blank" rel="noopener">Slang</a>
+                </td>
+                <td colspan="2"><span class=
+                "text-small">エフェクト等のシェーダ記述に採用されている、Khronosが管理するシェーディング言語・コンパイラです。<br>
+
+                <span class="text-xsmall">MIT</span></span></td>
+              </tr>
+              <tr>
+                <td>
                   <a href="https://github.com/leudz/shipyard"
                   target="_blank" rel="noopener">Shipyard</a>
                 </td>
@@ -480,14 +492,35 @@ python3 BUILD.py</code></pre>実行可能ファイルは <code>build</code>
               </tr>
               <tr>
                 <td>
-                  <a href="https://github.com/zmwangx/rust-ffmpeg"
-                  target="_blank" rel="noopener">ffmpeg-next</a>
+                  <a href="https://github.com/AdrianEddy/gpu-video"
+                  target="_blank" rel="noopener">gpu-video</a>
                 </td>
                 <td colspan="2"><span class=
-                "text-small">動画・音声の高度なデコード、エンコード、変換処理を受け持つ映像処理の要です。<br>
+                "text-small">GPUを直接使用した動画のデコード・エンコードを受け持つ映像処理の要です。<br>
 
-                <span class="text-xsmall">LGPLv2.1+ /
-                GPLv2+</span></span></td>
+                <span class="text-xsmall">MIT /
+                Apache-2.0</span></span></td>
+              </tr>
+              <tr>
+                <td>
+                  <a href="https://github.com/pdeljanov/Symphonia"
+                  target="_blank" rel="noopener">symphonia</a>
+                </td>
+                <td colspan="2"><span class=
+                "text-small">純Rust実装の音声デコードを担い、gpu-videoを補完します。<br>
+                <span class=
+                "text-xsmall">MPL-2.0</span></span></td>
+              </tr>
+              <tr>
+                <td>
+                  <a href="https://gstreamer.freedesktop.org/"
+                  target="_blank" rel="noopener">GStreamer</a>
+                </td>
+                <td colspan="2"><span class=
+                "text-small">gpu-video未対応のコーデック・コンテナ処理を代替するマルチメディアフレームワークです。<br>
+
+                <span class=
+                "text-xsmall">LGPLv2.1+</span></span></td>
               </tr>
             </tbody>
           </table><br>
