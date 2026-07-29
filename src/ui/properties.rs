@@ -1,4 +1,5 @@
 use crate::app_state::{self, SharedAppState};
+use crate::ecs::types::{Easing, Keyframe};
 use crate::ecs::{
     EcsWorld,
     components::{ParamAccess, ShapeParams},
@@ -190,6 +191,7 @@ pub fn setup(
             }
             drop(world);
             let _ = kf.show();
+            kf.window().request_redraw();
         });
     }
 
@@ -223,9 +225,19 @@ pub fn setup(
             }
             let world_holder = app_state::active_world(&state);
             let mut world = world_holder.lock().unwrap();
-            apply_object_param(&mut world, id as usize, group.as_str(), key.as_str(), value);
+            let oid = id as usize;
+            let existing = world.get_keyframes(oid, key.as_str());
+            let display_value = if existing.is_empty() {
+                apply_object_param(&mut world, oid, group.as_str(), key.as_str(), value);
+                value
+            } else {
+                let frame = world.current_frame();
+                let easing = easing_for_write(&existing, frame);
+                world.set_keyframe(oid, key.as_str(), frame, value, easing);
+                resolve_display_value(value, &world.get_keyframes(oid, key.as_str()), frame)
+            };
             drop(world);
-            update_object_param_value(&p, group.as_str(), key.as_str(), value);
+            update_object_param_value(&p, group.as_str(), key.as_str(), display_value);
         });
     }
 
@@ -326,9 +338,24 @@ pub fn setup(
             }
             let world_holder = app_state::active_world(&state);
             let mut world = world_holder.lock().unwrap();
-            world.set_effect_param(id as usize, index as usize, key.as_str(), value);
+            let oid = id as usize;
+            let eidx = index as usize;
+            let existing = world.get_effect_keyframes(oid, eidx, key.as_str());
+            let display_value = if existing.is_empty() {
+                world.set_effect_param(oid, eidx, key.as_str(), value);
+                value
+            } else {
+                let frame = world.current_frame();
+                let easing = easing_for_write(&existing, frame);
+                world.set_effect_keyframe(oid, eidx, key.as_str(), frame, value, easing);
+                resolve_display_value(
+                    value,
+                    &world.get_effect_keyframes(oid, eidx, key.as_str()),
+                    frame,
+                )
+            };
             drop(world);
-            update_effect_param_value(&p, index, key.as_str(), value);
+            update_effect_param_value(&p, index, key.as_str(), display_value);
         });
     }
 
@@ -450,6 +477,26 @@ pub fn select_object(props: &PropertiesWindow, world: &EcsWorld, object_id: i32)
     refresh(props, world);
 }
 
+/// 中間点列が空ならbaseをそのまま、非空ならframe時点の補間値を返す。
+/// プロパティパネル表示・スライダー描画は必ずこの関数を経由し、静的値の直接表示を禁止する
+/// （静的値表示は中間点追加後もスライダーへ反映されず「常に左右同期」して見える不具合の原因だった）。
+fn resolve_display_value(base: f32, keyframes: &[Keyframe], frame: i32) -> f32 {
+    if keyframes.is_empty() {
+        base
+    } else {
+        neoutl_interp::evaluate(keyframes, frame, base)
+    }
+}
+
+/// frameに一致する既存中間点があればそのeasingを継承し、無ければLinearで新規点を作る。
+fn easing_for_write(keyframes: &[Keyframe], frame: i32) -> Easing {
+    keyframes
+        .iter()
+        .find(|k| k.frame == frame)
+        .map(|k| k.easing.clone())
+        .unwrap_or(Easing::Linear)
+}
+
 /// object-params一行分の書き込みを、スキーマのgroup/keyから該当コンポーネントへ振り分ける。
 /// key単位のフィールド選択はParamAccess::set_param（各コンポーネント定義側）に委譲する。
 /// ここではgroup名から対象コンポーネントを選び、読み出し→trait経由の書き込み→保存のみを行う。
@@ -533,23 +580,26 @@ fn push_schema_rows(
     schema: &'static [crate::ecs::object_schema::ParamSchema],
     stage_w: f32,
     stage_h: f32,
+    current_frame: i32,
     get: impl Fn(&str) -> f32,
     get_text: impl Fn(&str) -> Option<String>,
-    keyframes: impl Fn(&str) -> Vec<i32>,
+    keyframes: impl Fn(&str) -> Vec<Keyframe>,
 ) {
     for s in schema {
         let (min, max) = resolve_range(s.range, stage_w, stage_h);
-        let frames = keyframes(s.key);
+        let track = keyframes(s.key);
+        let base = if s.kind == ParamKind::Text {
+            0.0
+        } else {
+            get(s.key)
+        };
+        let frames: Vec<i32> = track.iter().map(|k| k.frame).collect();
         out.push(ParamRow {
             effect_index: -1,
             key: SharedString::from(s.key),
             label: SharedString::from(s.label),
             group: SharedString::from(s.group),
-            value: if s.kind == ParamKind::Text {
-                0.0
-            } else {
-                get(s.key)
-            },
+            value: resolve_display_value(base, &track, current_frame),
             kind: match s.kind {
                 ParamKind::Float | ParamKind::Enum => 0,
                 ParamKind::Bool => 1,
@@ -574,20 +624,22 @@ fn push_c_abi_param_rows(
     schema: &[neoutl_shared_abi::ParamSchema],
     group: &str,
     effect_index: i32,
+    current_frame: i32,
     current: impl Fn(&str) -> f32,
-    keyframes: impl Fn(&str) -> Vec<i32>,
+    keyframes: impl Fn(&str) -> Vec<Keyframe>,
 ) {
     for s in schema {
         let key = unsafe { s.key.as_str() };
         let label = unsafe { s.label.as_str() };
-        let value = current(key);
-        let frames = keyframes(key);
+        let base = current(key);
+        let track = keyframes(key);
+        let frames: Vec<i32> = track.iter().map(|k| k.frame).collect();
         out.push(ParamRow {
             effect_index,
             key: SharedString::from(key),
             label: SharedString::from(label),
             group: SharedString::from(group),
-            value,
+            value: resolve_display_value(base, &track, current_frame),
             kind: match s.kind {
                 ParamKind::Float | ParamKind::Enum => 0,
                 ParamKind::Bool => 1,
@@ -615,7 +667,7 @@ fn push_c_abi_param_rows(
 /// すなわちネイティブスキーマの行が既に同じ内容をカバーしている場合はここでの
 /// 重複行生成をスキップし、「操作してもガン無視される」編集不能な行をUI上に
 /// 出さないようにする。
-fn push_plugin_rows(out: &mut Vec<ParamRow>, world: &EcsWorld, oid: usize) {
+fn push_plugin_rows(out: &mut Vec<ParamRow>, world: &EcsWorld, oid: usize, current_frame: i32) {
     if world.get_shape(oid).is_some() {
         return;
     }
@@ -640,6 +692,7 @@ fn push_plugin_rows(out: &mut Vec<ParamRow>, world: &EcsWorld, oid: usize) {
         schema,
         &plugin.name,
         -1,
+        current_frame,
         |key| {
             current.get(key).copied().unwrap_or_else(|| {
                 schema
@@ -714,6 +767,7 @@ fn refresh(props: &PropertiesWindow, world: &EcsWorld) {
     props.set_stage_width(stage_w);
     props.set_stage_height(stage_h);
     props.set_total_frames(world.total_frames().max(1));
+    let current_frame = world.current_frame();
 
     let mut object_params: Vec<ParamRow> = Vec::new();
 
@@ -724,15 +778,10 @@ fn refresh(props: &PropertiesWindow, world: &EcsWorld) {
             TRANSFORM_SCHEMA,
             stage_w,
             stage_h,
+            current_frame,
             |k| t.get_param(k).unwrap_or(0.0),
             |_| None,
-            |k| {
-                world
-                    .get_keyframes(oid, k)
-                    .iter()
-                    .map(|kf| kf.frame)
-                    .collect()
-            },
+            |k| world.get_keyframes(oid, k),
         );
     } else {
         props.set_has_transform(false);
@@ -746,15 +795,10 @@ fn refresh(props: &PropertiesWindow, world: &EcsWorld) {
             TEXT_SCHEMA,
             stage_w,
             stage_h,
+            current_frame,
             |k| text.get_param(k).unwrap_or(0.0),
             |k| (k == "text").then(|| body.clone()),
-            |k| {
-                world
-                    .get_keyframes(oid, k)
-                    .iter()
-                    .map(|kf| kf.frame)
-                    .collect()
-            },
+            |k| world.get_keyframes(oid, k),
         );
     } else {
         props.set_has_text(false);
@@ -767,15 +811,10 @@ fn refresh(props: &PropertiesWindow, world: &EcsWorld) {
             SHAPE_SCHEMA,
             stage_w,
             stage_h,
+            current_frame,
             |k| shape.get_param(k).unwrap_or(0.0),
             |_| None,
-            |k| {
-                world
-                    .get_keyframes(oid, k)
-                    .iter()
-                    .map(|kf| kf.frame)
-                    .collect()
-            },
+            |k| world.get_keyframes(oid, k),
         );
     } else {
         props.set_has_shape(false);
@@ -788,21 +827,16 @@ fn refresh(props: &PropertiesWindow, world: &EcsWorld) {
             AUDIO_SCHEMA,
             stage_w,
             stage_h,
+            current_frame,
             |k| audio.get_param(k).unwrap_or(0.0),
             |_| None,
-            |k| {
-                world
-                    .get_keyframes(oid, k)
-                    .iter()
-                    .map(|kf| kf.frame)
-                    .collect()
-            },
+            |k| world.get_keyframes(oid, k),
         );
     } else {
         props.set_has_audio(false);
     }
 
-    push_plugin_rows(&mut object_params, world, oid);
+    push_plugin_rows(&mut object_params, world, oid, current_frame);
 
     props.set_object_params(ModelRc::new(VecModel::from(object_params)));
 
@@ -832,6 +866,7 @@ fn refresh(props: &PropertiesWindow, world: &EcsWorld) {
             schema,
             meta.name,
             i as i32,
+            current_frame,
             |key| {
                 e.params
                     .get(key)
@@ -856,7 +891,7 @@ fn refresh(props: &PropertiesWindow, world: &EcsWorld) {
             |key| {
                 e.params
                     .get(key)
-                    .map(|p| p.keyframes.iter().map(|k| k.frame).collect())
+                    .map(|p| p.keyframes.clone())
                     .unwrap_or_default()
             },
         );

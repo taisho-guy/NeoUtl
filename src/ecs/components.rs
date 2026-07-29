@@ -247,6 +247,33 @@ impl KeyframeTracks {
         true
     }
 
+    /// リサイズ時の境界クランプ則。EffectParam::clamp_keyframes_to_rangeと同一規則を
+    /// 全key横断で適用する（規則の詳細はecs/types.rsのコメント参照）。
+    pub fn clamp_to_range(&mut self, start: i32, end: i32) {
+        for track in self.0.values_mut() {
+            if track.is_empty() {
+                continue;
+            }
+            for k in track.iter_mut() {
+                k.frame = k.frame.clamp(start, end);
+            }
+            track.sort_by_key(|k| k.frame);
+            track.retain(|k| k.frame != start && k.frame != end);
+            let mut deduped: Vec<neoutl_interp::Keyframe> = Vec::with_capacity(track.len());
+            for k in track.drain(..) {
+                if deduped
+                    .last()
+                    .is_some_and(|last: &neoutl_interp::Keyframe| last.frame == k.frame)
+                {
+                    continue;
+                }
+                deduped.push(k);
+            }
+            *track = deduped;
+        }
+        self.0.retain(|_, track| !track.is_empty());
+    }
+
     /// split_frame（絶対フレーム）でクリップを分割する。呼び出し元自身は前半
     /// （frame < split_frame）のみを残し、返り値のタプルが (後半用KeyframeTracks,
     /// 分割点での評価値マップ) となる。評価値マップは、後半エンティティに複製する
