@@ -228,6 +228,63 @@ impl KeyframeTracks {
         }
     }
 
+    /// 指定keyの中間点をold_frameからnew_frameへ移動する。new_frameに既存点があれば失敗する。
+    pub fn move_keyframe(&mut self, key: &str, old_frame: i32, new_frame: i32) -> bool {
+        let Some(track) = self.0.get_mut(key) else {
+            return false;
+        };
+        if old_frame == new_frame {
+            return true;
+        }
+        if track.iter().any(|k| k.frame == new_frame) {
+            return false;
+        }
+        let Some(k) = track.iter_mut().find(|k| k.frame == old_frame) else {
+            return false;
+        };
+        k.frame = new_frame;
+        track.sort_by_key(|k| k.frame);
+        true
+    }
+
+    /// split_frame（絶対フレーム）でクリップを分割する。呼び出し元自身は前半
+    /// （frame < split_frame）のみを残し、返り値のタプルが (後半用KeyframeTracks,
+    /// 分割点での評価値マップ) となる。評価値マップは、後半エンティティに複製する
+    /// ネイティブコンポーネント（Transform等）のフィールドへ`ParamAccess::set_param`
+    /// で書き戻すためのもの（分割点をまたいで値が飛ばないようにする、AviQtl
+    /// splitTracksの「後半start値を分割点評価値にする」と同じ役割）。
+    /// `fallback_for`は各keyの基準値（分割対象コンポーネントのParamAccess::get_param）
+    /// を返すクロージャ。取得できないkeyは0.0を基準値とみなす。
+    pub fn split_at(
+        &mut self,
+        split_frame: i32,
+        fallback_for: impl Fn(&str) -> Option<f32>,
+    ) -> (KeyframeTracks, HashMap<String, f32>) {
+        let mut second = HashMap::new();
+        let mut evaluated = HashMap::new();
+
+        for (key, track) in self.0.iter_mut() {
+            let fallback = fallback_for(key).unwrap_or(0.0);
+            evaluated.insert(
+                key.clone(),
+                neoutl_interp::evaluate(track, split_frame, fallback),
+            );
+
+            let second_track: Vec<_> = track
+                .iter()
+                .filter(|k| k.frame > split_frame)
+                .cloned()
+                .collect();
+            track.retain(|k| k.frame < split_frame);
+            if !second_track.is_empty() {
+                second.insert(key.clone(), second_track);
+            }
+        }
+        self.0.retain(|_, track| !track.is_empty());
+
+        (KeyframeTracks(second), evaluated)
+    }
+
     /// 対象コンポーネントへ、指定フレームでの評価値を書き込む。
     pub fn apply(&self, target: &mut impl ParamAccess, frame: i32) {
         for (key, track) in &self.0 {

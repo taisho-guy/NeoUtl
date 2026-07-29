@@ -129,14 +129,15 @@ fn build_main_windows(
         state.clone(),
         gpu_slot,
     );
+    let active_param = keyframe_editor::new_active_param_slot();
     timeline::setup(
         &timeline,
         preview.as_weak(),
         props.as_weak(),
         scene_settings_win.as_weak(),
         state.clone(),
+        active_param.clone(),
     );
-    let active_param = keyframe_editor::new_active_param_slot();
     keyframe_editor::setup(
         &kf_editor,
         state.clone(),

@@ -9,8 +9,8 @@ pub mod types;
 use crate::document::{DocumentModel, MediaSourceDoc, ObjectDoc, ObjectPayload};
 use crate::ecs::types::EffectInstance;
 use components::{
-    AudioParams, KeyframeTracks, KindId, Layer, MediaSource, ObjectId, PluginParams, SceneId,
-    ShapeParams, TextContent, TimeRange,
+    AudioParams, KeyframeTracks, KindId, Layer, MediaSource, ObjectId, ParamAccess, PluginParams,
+    SceneId, ShapeParams, TextContent, TimeRange,
 };
 use effects::EffectStack;
 use resources::{
@@ -421,6 +421,151 @@ impl EcsWorld {
         })
     }
 
+    /// object_idを絶対フレームsplit_frameで2分割する。前半（元エンティティ）は
+    /// [start_frame, split_frame)、後半（新規エンティティ）は[split_frame, end_frame)
+    /// を保持する。中間点はAviQtl EffectModel::splitTracks相当のロジックで追従する:
+    /// - フレーム番号は絶対値のまま変更しない（apply/evaluateが絶対フレーム基準のため）
+    /// - 分割点をまたぐ区間は、分割点での評価値を後半側の基準値（フィールド初期値）へ
+    ///   複製し、値が瞬断しないようにする
+    /// - 分割点より前の中間点は前半へ、後の中間点は後半へ、それぞれ絶対フレームのまま残す
+    /// PluginParams（プラグイン固有パラメータ）はParamAccess非対応のため中間点追従の
+    /// 対象外（そのまま複製のみ）。split_frameが区間内部でない場合はNoneを返す。
+    /// 戻り値は新規生成したオブジェクトのid。
+    pub fn split_object(&mut self, object_id: usize, split_frame: i32) -> Option<usize> {
+        let entity = self.find_entity(object_id)?;
+
+        let snapshot = self.world.run(|v: ObjectQueryViews| {
+            let range = v.time_ranges.get(entity).ok().copied()?;
+            if split_frame <= range.start_frame || split_frame >= range.end_frame {
+                return None;
+            }
+            Some((
+                range,
+                v.kind_ids.get(entity).ok().copied()?,
+                v.layers.get(entity).ok().copied()?,
+                v.scene_ids.get(entity).ok().copied()?,
+                v.transforms.get(entity).ok().copied().unwrap_or_default(),
+                v.audio.get(entity).ok().copied().unwrap_or_default(),
+                v.stacks.get(entity).ok().cloned().unwrap_or_default(),
+                v.texts.get(entity).ok().cloned(),
+                v.shapes.get(entity).ok().copied(),
+                v.plugins.get(entity).ok().cloned(),
+                v.media.get(entity).ok().cloned(),
+                v.keyframes.get(entity).ok().cloned(),
+            ))
+        })?;
+
+        let (
+            range,
+            kind,
+            layer,
+            scene,
+            transform,
+            audio,
+            mut stack_first,
+            text,
+            shape,
+            plugins,
+            media,
+            keyframes,
+        ) = snapshot;
+
+        let stack_second = stack_first.split_at(split_frame);
+
+        let (keyframes_first, keyframes_second, evaluated) = match keyframes {
+            Some(mut kt) => {
+                let fallback_for = |key: &str| -> Option<f32> {
+                    transform
+                        .get_param(key)
+                        .or_else(|| audio.get_param(key))
+                        .or_else(|| text.as_ref().and_then(|t| t.get_param(key)))
+                        .or_else(|| shape.and_then(|s| s.get_param(key)))
+                };
+                let (second, evaluated) = kt.split_at(split_frame, fallback_for);
+                (Some(kt), Some(second), evaluated)
+            }
+            None => (None, None, HashMap::new()),
+        };
+
+        let mut transform2 = transform;
+        let mut audio2 = audio;
+        let mut text2 = text;
+        let mut shape2 = shape;
+        for (key, value) in &evaluated {
+            if transform2.set_param(key, *value) {
+                continue;
+            }
+            if audio2.set_param(key, *value) {
+                continue;
+            }
+            if let Some(t) = text2.as_mut() {
+                if t.set_param(key, *value) {
+                    continue;
+                }
+            }
+            if let Some(s) = shape2.as_mut() {
+                s.set_param(key, *value);
+            }
+        }
+
+        self.world.run(
+            |mut time_ranges: ViewMut<TimeRange>, mut stacks: ViewMut<EffectStack>| {
+                if let Ok(mut r) = (&mut time_ranges).get(entity) {
+                    r.end_frame = split_frame;
+                }
+                if let Ok(mut s) = (&mut stacks).get(entity) {
+                    *s = stack_first;
+                }
+            },
+        );
+        if let Some(kf) = keyframes_first {
+            self.world.add_component(entity, kf);
+        }
+
+        let new_id = self
+            .world
+            .run(|mut timeline: UniqueViewMut<TimelineResource>| {
+                let id = timeline.next_id;
+                timeline.next_id += 1;
+                id
+            });
+
+        let new_entity = self.world.add_entity((
+            ObjectId(new_id),
+            TimeRange {
+                start_frame: split_frame,
+                end_frame: range.end_frame,
+            },
+            kind,
+            layer,
+            scene,
+            transform2,
+            GlobalMatrix::default(),
+            audio2,
+            stack_second,
+        ));
+
+        if let Some(t) = text2 {
+            self.world.add_component(new_entity, t);
+        }
+        if let Some(s) = shape2 {
+            self.world.add_component(new_entity, s);
+        }
+        if let Some(p) = plugins {
+            self.world.add_component(new_entity, p);
+        }
+        if let Some(mut m) = media {
+            m.trim_in_frame += (split_frame - range.start_frame) as i64;
+            self.world.add_component(new_entity, m);
+        }
+        if let Some(kf) = keyframes_second.filter(|kt| !kt.0.is_empty()) {
+            self.world.add_component(new_entity, kf);
+        }
+
+        self.update_total_frames();
+        Some(new_id)
+    }
+
     pub fn get_transform(&self, object_id: usize) -> Option<Transform> {
         let entity = self.find_entity(object_id)?;
         self.world
@@ -703,6 +848,26 @@ impl EcsWorld {
         });
     }
 
+    /// ネイティブパラメータの中間点をドラッグ移動する。移動先に既存点がある場合は失敗する。
+    pub fn move_keyframe(
+        &mut self,
+        object_id: usize,
+        key: &str,
+        old_frame: i32,
+        new_frame: i32,
+    ) -> bool {
+        let Some(entity) = self.find_entity(object_id) else {
+            return false;
+        };
+        self.world.run(|mut tracks: ViewMut<KeyframeTracks>| {
+            (&mut tracks)
+                .get(entity)
+                .ok()
+                .map(|mut t| t.move_keyframe(key, old_frame, new_frame))
+                .unwrap_or(false)
+        })
+    }
+
     pub fn get_keyframes(&self, object_id: usize, key: &str) -> Vec<crate::ecs::types::Keyframe> {
         let Some(entity) = self.find_entity(object_id) else {
             return Vec::new();
@@ -750,6 +915,27 @@ impl EcsWorld {
                 stack.remove_keyframe(index, key, frame);
             }
         });
+    }
+
+    /// エフェクトパラメータの中間点をドラッグ移動する。移動先に既存点がある場合は失敗する。
+    pub fn move_effect_keyframe(
+        &mut self,
+        object_id: usize,
+        index: usize,
+        key: &str,
+        old_frame: i32,
+        new_frame: i32,
+    ) -> bool {
+        let Some(entity) = self.find_entity(object_id) else {
+            return false;
+        };
+        self.world.run(|mut stacks: ViewMut<EffectStack>| {
+            (&mut stacks)
+                .get(entity)
+                .ok()
+                .map(|mut s| s.move_keyframe(index, key, old_frame, new_frame))
+                .unwrap_or(false)
+        })
     }
 
     pub fn get_effect_keyframes(

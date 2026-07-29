@@ -117,6 +117,43 @@ impl EffectStack {
             p.remove_keyframe(frame);
         }
     }
+
+    /// 指定エフェクト・パラメータの中間点をold_frameからnew_frameへ移動する。
+    /// 対象が存在しない、または移動先に既存点がある場合はfalseを返す。
+    pub fn move_keyframe(
+        &mut self,
+        index: usize,
+        key: &str,
+        old_frame: i32,
+        new_frame: i32,
+    ) -> bool {
+        match self.0.get_mut(index).and_then(|e| e.params.get_mut(key)) {
+            Some(p) => p.move_keyframe(old_frame, new_frame),
+            None => false,
+        }
+    }
+
+    /// split_frame（絶対フレーム）でクリップを分割する。呼び出し元自身は各エフェクト・
+    /// 各パラメータの前半のみを残し、返り値が後半用のEffectStack（エフェクト構成・
+    /// enabled状態は同一のまま複製、パラメータのみEffectParam::split_atへ委譲）となる。
+    pub fn split_at(&mut self, split_frame: i32) -> EffectStack {
+        let second: Vec<EffectInstance> = self
+            .0
+            .iter_mut()
+            .map(|e| {
+                let mut second_params = std::collections::HashMap::new();
+                for (key, param) in e.params.iter_mut() {
+                    second_params.insert(key.clone(), param.split_at(split_frame));
+                }
+                EffectInstance {
+                    effect_id: e.effect_id.clone(),
+                    enabled: e.enabled,
+                    params: second_params,
+                }
+            })
+            .collect();
+        EffectStack(second)
+    }
 }
 
 /// 有効エフェクトのパラメータを「指定フレームで評価した値」で列挙。

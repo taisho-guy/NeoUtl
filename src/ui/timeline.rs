@@ -16,6 +16,7 @@ pub fn setup(
     props_weak: Weak<PropertiesWindow>,
     scene_settings_weak: Weak<SceneSettingsWindow>,
     state: SharedAppState,
+    active_param: crate::ui::keyframe_editor::ActiveParamSlot,
 ) {
     let kinds: Vec<ObjectKindItem> = registry()
         .iter()
@@ -111,6 +112,59 @@ pub fn setup(
                 let mut world = world_holder.lock().unwrap();
                 world.delete_object(id as usize);
                 sync(&t, pw.upgrade().as_ref(), &world);
+            }
+        });
+    }
+
+    {
+        let (state, tw, pw) = (state.clone(), timeline.as_weak(), preview_weak.clone());
+        timeline.on_split_object_at(move |id, frame| {
+            if id < 0 {
+                return;
+            }
+            let Some(t) = tw.upgrade() else { return };
+            app_state::snapshot_before_edit(&state);
+            let world_holder = app_state::active_world(&state);
+            let mut world = world_holder.lock().unwrap();
+            world.split_object(id as usize, frame);
+            sync(&t, pw.upgrade().as_ref(), &world);
+        });
+    }
+
+    {
+        let (state, tw, pw, active) = (
+            state.clone(),
+            timeline.as_weak(),
+            props_weak.clone(),
+            active_param.clone(),
+        );
+        timeline.on_keyframe_moved(move |id, old_frame, new_frame| {
+            let Some(a) = active.borrow().clone() else {
+                return;
+            };
+            if a.object_id != id {
+                return;
+            }
+            let Some(t) = tw.upgrade() else { return };
+            app_state::snapshot_before_edit(&state);
+            let world_holder = app_state::active_world(&state);
+            let mut world = world_holder.lock().unwrap();
+            let moved = if a.effect_index < 0 {
+                world.move_keyframe(id as usize, &a.key, old_frame, new_frame)
+            } else {
+                world.move_effect_keyframe(
+                    id as usize,
+                    a.effect_index as usize,
+                    &a.key,
+                    old_frame,
+                    new_frame,
+                )
+            };
+            if moved {
+                crate::ui::timeline::refresh_keyframe_markers(&t, &world, &active);
+            }
+            if let Some(p) = pw.upgrade() {
+                crate::ui::properties::select_object(&p, &world, id);
             }
         });
     }

@@ -67,6 +67,55 @@ impl EffectParam {
     pub fn remove_keyframe(&mut self, frame: i32) {
         self.keyframes.retain(|k| k.frame != frame);
     }
+
+    /// 中間点をold_frameからnew_frameへ移動する。new_frameに既存点がある場合は失敗する
+    /// （上書き移動を許すと編集操作を伴わない値消失が起きるため）。old_frame==new_frameは
+    /// 何もせず成功扱い。対象点が存在しない場合は失敗する。
+    pub fn move_keyframe(&mut self, old_frame: i32, new_frame: i32) -> bool {
+        if old_frame == new_frame {
+            return true;
+        }
+        if self.keyframes.iter().any(|k| k.frame == new_frame) {
+            return false;
+        }
+        let Some(k) = self.keyframes.iter_mut().find(|k| k.frame == old_frame) else {
+            return false;
+        };
+        k.frame = new_frame;
+        self.keyframes.sort_by_key(|k| k.frame);
+        true
+    }
+
+    /// split_frame（絶対フレーム）でクリップを分割する際、この呼び出し元自身は
+    /// 前半（frame < split_frame の中間点のみ）として残り、返り値が後半用の
+    /// （KeyframeTracks::apply / EffectStack評価がともに絶対フレームで参照するため）。
+    /// 後半のstatic_valueは分割点での評価値を継承する（AviQtl splitTracksの
+    /// 「後半トラックのstartに分割点評価値を複製する」方針と同一）。
+    /// Bool/Textはそもそも中間点非対応のため、static_valueをそのまま複製するのみ。
+    pub fn split_at(&mut self, split_frame: i32) -> EffectParam {
+        let second_value = match &self.static_value {
+            Value::Number(base) => {
+                let v = if self.keyframes.is_empty() {
+                    *base
+                } else {
+                    neoutl_interp::evaluate(&self.keyframes, split_frame, *base)
+                };
+                Value::Number(v)
+            }
+            other => other.clone(),
+        };
+        let second_keyframes: Vec<Keyframe> = self
+            .keyframes
+            .iter()
+            .filter(|k| k.frame > split_frame)
+            .cloned()
+            .collect();
+        self.keyframes.retain(|k| k.frame < split_frame);
+        EffectParam {
+            static_value: second_value,
+            keyframes: second_keyframes,
+        }
+    }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
