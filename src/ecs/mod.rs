@@ -367,16 +367,37 @@ impl EcsWorld {
         self.update_total_frames();
     }
 
+    /// クリップ伸縮。中間点の境界クランプ則（不動端点則・絶対時間則・衝突解決則、
+    /// ecs/types.rs::EffectParam::clamp_keyframes_to_range参照）をネイティブ
+    /// パラメータ（KeyframeTracks）・エフェクトパラメータ（EffectStack）双方へ
+    /// 適用する。1フレーム未満へ縮む要求はrange.end_frameの下限クランプで
+    /// 最小幅1フレームへ丸められ、破綻（0/負幅）を構造的に排除する。
     pub fn resize_object(&mut self, object_id: usize, new_start: i32, new_end: i32) {
         let new_start = self.snap_to_active_scene(new_start);
         let new_end = self.snap_to_active_scene(new_end);
         self.world.run(
-            |object_ids: View<ObjectId>, mut time_ranges: ViewMut<TimeRange>| {
+            |object_ids: View<ObjectId>,
+             mut time_ranges: ViewMut<TimeRange>,
+             mut keyframe_tracks: ViewMut<KeyframeTracks>,
+             mut effect_stacks: ViewMut<EffectStack>| {
                 for (entity, id) in object_ids.iter().with_id() {
                     if id.0 == object_id {
-                        if let Ok(mut range) = (&mut time_ranges).get(entity) {
+                        let (start, end) = if let Ok(mut range) = (&mut time_ranges).get(entity) {
                             range.start_frame = new_start.max(0);
                             range.end_frame = new_end.max(range.start_frame + 1);
+                            (range.start_frame, range.end_frame)
+                        } else {
+                            break;
+                        };
+                        if let Ok(mut tracks) = (&mut keyframe_tracks).get(entity) {
+                            tracks.clamp_to_range(start, end);
+                        }
+                        if let Ok(mut stack) = (&mut effect_stacks).get(entity) {
+                            for instance in stack.0.iter_mut() {
+                                for param in instance.params.values_mut() {
+                                    param.clamp_keyframes_to_range(start, end);
+                                }
+                            }
                         }
                         break;
                     }

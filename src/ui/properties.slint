@@ -1,4 +1,5 @@
 import { EffectRow, ParamRow } from "types.slint";
+import { Slider } from "std-widgets.slint";
 
 // AviQtl(ParamControl.qml)準拠: スライダー→開始値→LABEL→終了値→スライダーの左右対称構成。
 // 両端のスライダー・数値ボックスは同一valueへ書き込む（可動域を左右へ拡張するための重複操作面）。
@@ -26,52 +27,37 @@ component PropertyRow inherits Rectangle {
 
     property <length> anchor-x: 0;
     property <length> anchor-y: 0;
+    // Sliderはpointer-eventを公開しないため、changed連続発火の間隔でドラッグ
+    // セッションを判定する。最後のchangedから150ms無操作でreleaseとみなす。
+    property <bool> slider-active: false;
+    session-timeout := Timer {
+        interval: 150ms;
+        running: false;
+        triggered => {
+            root.slider-active = false;
+            self.running = false;
+            root.release();
+        }
+    }
+
+    function slider-changed(v: float) {
+        if (!root.slider-active) {
+            root.slider-active = true;
+            root.commit-start();
+        }
+        session-timeout.running = false;
+        session-timeout.running = true;
+        root.changed(root.clamp(v));
+    }
 
     HorizontalLayout {
         spacing: 4px;
 
-        slider-l := Rectangle {
-            border-radius: 3px;
-            background: #16161b;
-
-            fill-l := Rectangle {
-                x: 0;
-                y: parent.height / 2 - 2px;
-                width: (parent.width - handle-l.width) * ((root.clamp(root.value) - root.min) / (root.max - root.min)) + handle-l.width;
-                height: 4px;
-                border-radius: 2px;
-                background: #3a6df0;
-            }
-
-            handle-l := Rectangle {
-                width: 10px;
-                height: 10px;
-                border-radius: 5px;
-                background: #dde3ee;
-                y: parent.height / 2 - 5px;
-                x: (parent.width - self.width) * ((root.clamp(root.value) - root.min) / (root.max - root.min));
-            }
-
-            TouchArea {
-                pointer-event(event) => {
-                    if (event.button == PointerEventButton.left) {
-                        if (event.kind == PointerEventKind.down) {
-                            root.commit-start();
-                            root.changed(root.clamp(root.min
-                                + (root.pointer-x-clamped(self.mouse-x, self.width) / self.width) * (root.max - root.min)));
-                        }
-                        if (event.kind == PointerEventKind.up) {
-                            root.release();
-                        }
-                    }
-                }
-                moved => {
-                    if (self.pressed) {
-                        root.changed(root.clamp(root.min
-                            + (root.pointer-x-clamped(self.mouse-x, self.width) / self.width) * (root.max - root.min)));
-                    }
-                }
-            }
+        slider-l := Slider {
+            minimum: root.min;
+            maximum: root.max;
+            value: root.clamp(root.value);
+            changed(v) => { root.slider-changed(v); }
         }
 
         value-l := Rectangle {
@@ -192,48 +178,11 @@ component PropertyRow inherits Rectangle {
             }
         }
 
-        slider-r := Rectangle {
-            border-radius: 3px;
-            background: #16161b;
-
-            fill-r := Rectangle {
-                x: 0;
-                y: parent.height / 2 - 2px;
-                width: (parent.width - handle-r.width) * ((root.clamp(root.value) - root.min) / (root.max - root.min)) + handle-r.width;
-                height: 4px;
-                border-radius: 2px;
-                background: #3a6df0;
-            }
-
-            handle-r := Rectangle {
-                width: 10px;
-                height: 10px;
-                border-radius: 5px;
-                background: #dde3ee;
-                y: parent.height / 2 - 5px;
-                x: (parent.width - self.width) * ((root.clamp(root.value) - root.min) / (root.max - root.min));
-            }
-
-            TouchArea {
-                pointer-event(event) => {
-                    if (event.button == PointerEventButton.left) {
-                        if (event.kind == PointerEventKind.down) {
-                            root.commit-start();
-                            root.changed(root.clamp(root.min
-                                + (root.pointer-x-clamped(self.mouse-x, self.width) / self.width) * (root.max - root.min)));
-                        }
-                        if (event.kind == PointerEventKind.up) {
-                            root.release();
-                        }
-                    }
-                }
-                moved => {
-                    if (self.pressed) {
-                        root.changed(root.clamp(root.min
-                            + (root.pointer-x-clamped(self.mouse-x, self.width) / self.width) * (root.max - root.min)));
-                    }
-                }
-            }
+        slider-r := Slider {
+            minimum: root.min;
+            maximum: root.max;
+            value: root.clamp(root.value);
+            changed(v) => { root.slider-changed(v); }
         }
     }
 }
@@ -513,6 +462,10 @@ export component PropertiesWindow inherits Window {
                 }
 
                 Flickable {
+                    // ビュー全体を指で掴んでパンする挙動を禁止する。ホイール操作のみ
+                    // スクロールを許可し、クリックドラッグはeff行の並び替え専用にする。
+                    interactive: false;
+
                     VerticalLayout {
                         spacing: 2px;
 
@@ -589,7 +542,9 @@ export component PropertiesWindow inherits Window {
         }
 
         Flickable {
-            interactive: !root.is-dragging-param;
+            // ビュー全体を指で掴んでパンする挙動を禁止する。ホイール操作のみ
+            // スクロールを許可する（is-dragging-param判定は不要になったため削除）。
+            interactive: false;
 
             VerticalLayout {
                 padding: 10px;
