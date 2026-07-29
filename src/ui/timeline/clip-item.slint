@@ -71,6 +71,20 @@ export component ClipItem inherits Rectangle {
         x: 6px;
     }
 
+    // プロパティパネルで選択中のパラメータの中間点位置のみ表示する。
+    // 位置決定はRust側(timeline::refresh_keyframe_markers)が担い、ここでは
+    // 正規化済みフレーム値をピクセル座標へ写像する描画のみを行う。
+    for f in obj.keyframe-frames: Path {
+        width: 6px;
+        height: 6px;
+        commands: "M 3 0 L 6 3 L 3 6 L 0 3 Z";
+        fill: #ffd23a;
+        stroke: #8a6a10;
+        stroke-width: 1px;
+        x: (f - obj.start-frame) * parent.width / max(1, obj.end-frame - obj.start-frame) - 3px;
+        y: parent.height / 2 - 3px;
+    }
+
     body-touch := TouchArea {
         mouse-cursor: root.locked ? MouseCursor.not-allowed : (root.dragging ? MouseCursor.grabbing : MouseCursor.grab);
         property <length> cur-abs-x: self.absolute-position.x + self.mouse-x;

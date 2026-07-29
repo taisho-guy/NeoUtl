@@ -41,6 +41,14 @@ pub enum Easing {
         cp1: (f32, f32),
         cp2: (f32, f32),
     },
+    /// 疑似乱数補間。同一`seed`・同一区間内位置は常に同一値を返す（再生毎に値が
+    /// 変わる真の乱数は不採用、Undo再生・レンダリング再現性を破壊するため）。
+    /// `step`は区間内を何分割の階段として量子化するかを表す（AviUtl系の
+    /// 「ランダム移動」のコマ送り幅に相当）。1未満は1へ丸める。
+    Random {
+        seed: u32,
+        step: i32,
+    },
 }
 
 impl Default for Easing {
@@ -92,6 +100,22 @@ fn bezier_ease(t: f32, cp1: (f32, f32), cp2: (f32, f32)) -> f32 {
         u -= err / dx;
     }
     sample_y(u.clamp(0.0, 1.0))
+}
+
+/// 32bit整数から32bit整数への決定論的拡散関数（splitmix32）。
+/// 同一入力は常に同一出力を返す（システム時刻・スレッド状態等の外部要因に非依存）。
+fn splitmix32(seed: u32) -> u32 {
+    let mut z = seed.wrapping_add(0x9E3779B9);
+    z = (z ^ (z >> 16)).wrapping_mul(0x85EBCA6B);
+    z = (z ^ (z >> 13)).wrapping_mul(0xC2B2AE35);
+    z ^ (z >> 16)
+}
+
+/// `seed`と区間内の量子化インデックス`idx`から[0, 1)の値を1個決定論的に導く。
+fn random_unit(seed: u32, idx: i64) -> f32 {
+    let idx_bits = (idx as i64 as u64 as u32).wrapping_mul(0x27D4_EB2F);
+    let combined = seed ^ idx_bits;
+    (splitmix32(combined) as f64 / (u32::MAX as f64 + 1.0)) as f32
 }
 
 /// t(区間内進捗, 0..1)を補間種別に応じたイージング後の進捗へ変換する。
@@ -185,6 +209,11 @@ pub fn ease(kind: Easing, t: f32) -> f32 {
             }
         }
         Easing::Bezier { cp1, cp2 } => bezier_ease(t, cp1, cp2),
+        Easing::Random { seed, step } => {
+            let step = step.max(1) as f32;
+            let idx = (t * 16.0 / step).floor() as i64;
+            random_unit(seed, idx)
+        }
     }
 }
 
@@ -266,6 +295,23 @@ mod tests {
         assert_eq!(evaluate(&kf, 5, 0.0), 50.0);
         assert_eq!(evaluate(&kf, -5, 0.0), 0.0);
         assert_eq!(evaluate(&kf, 15, 0.0), 100.0);
+    }
+
+    #[test]
+    fn random_seed_determinism() {
+        let kind = Easing::Random { seed: 1, step: 1 };
+        let a = ease(kind, 0.37);
+        let b = ease(kind, 0.37);
+        assert_eq!(a, b);
+        assert!((0.0..1.0).contains(&a));
+    }
+
+    #[test]
+    fn random_seed_changes_output() {
+        let t = 0.37;
+        let a = ease(Easing::Random { seed: 1, step: 1 }, t);
+        let b = ease(Easing::Random { seed: 2, step: 1 }, t);
+        assert_ne!(a, b);
     }
 
     #[test]

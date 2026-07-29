@@ -1,5 +1,7 @@
 import { EffectRow, ParamRow } from "types.slint";
 
+// AviQtl(ParamControl.qml)準拠: スライダー→開始値→LABEL→終了値→スライダーの左右対称構成。
+// 両端のスライダー・数値ボックスは同一valueへ書き込む（可動域を左右へ拡張するための重複操作面）。
 component PropertyRow inherits Rectangle {
     in property <string> label;
     in property <float> value;
@@ -7,10 +9,10 @@ component PropertyRow inherits Rectangle {
     in property <float> max: 1000;
     in property <float> drag-sensitivity: 1;
     callback changed(float);
-    // ドラッグ操作1回（press〜release）の先頭でのみ発火する。
-    // Undo履歴のスナップショット確定はこの1回のみに限定する。
     callback commit-start();
     callback release();
+    // ラベルクリックでイージングウィンドウを要求する。
+    callback label-clicked();
 
     height: 22px;
 
@@ -18,36 +20,30 @@ component PropertyRow inherits Rectangle {
         return v < min ? min : v > max ? max : v;
     }
 
-    // TouchArea内のmouse-xをスライダー可動域[0, track-width]へ丸める。
-    // Slintに組み込みのグローバルmin/max関数は存在しないため四項式で実装する。
     function pointer-x-clamped(x: length, track-width: length) -> length {
         return x < 0px ? 0px : x > track-width ? track-width : x;
     }
 
-    // ドラッグ中の直前座標。press開始はpointer-eventのdownで確定するため
-    // moved側での1フレーム目判定は不要。
     property <length> anchor-x: 0;
     property <length> anchor-y: 0;
 
     HorizontalLayout {
         spacing: 4px;
 
-        // スライダー本体（自作）。std-widgets.Sliderはpress開始の遷移を
-        // 外部へ公開しないため、コミット単位検知に必要な自前TouchAreaへ置換する。
-        Rectangle {
+        slider-l := Rectangle {
             border-radius: 3px;
             background: #16161b;
 
-            track-fill := Rectangle {
+            fill-l := Rectangle {
                 x: 0;
                 y: parent.height / 2 - 2px;
-                width: (parent.width - handle.width) * ((root.clamp(root.value) - root.min) / (root.max - root.min)) + handle.width;
+                width: (parent.width - handle-l.width) * ((root.clamp(root.value) - root.min) / (root.max - root.min)) + handle-l.width;
                 height: 4px;
                 border-radius: 2px;
                 background: #3a6df0;
             }
 
-            handle := Rectangle {
+            handle-l := Rectangle {
                 width: 10px;
                 height: 10px;
                 border-radius: 5px;
@@ -56,7 +52,7 @@ component PropertyRow inherits Rectangle {
                 x: (parent.width - self.width) * ((root.clamp(root.value) - root.min) / (root.max - root.min));
             }
 
-            slider-touch := TouchArea {
+            TouchArea {
                 pointer-event(event) => {
                     if (event.button == PointerEventButton.left) {
                         if (event.kind == PointerEventKind.down) {
@@ -78,14 +74,14 @@ component PropertyRow inherits Rectangle {
             }
         }
 
-        Rectangle {
-            width: 64px;
+        value-l := Rectangle {
+            width: 56px;
             border-radius: 3px;
-            background: drag-area.pressed ? #22222a : #16161b;
+            background: drag-l.pressed ? #22222a : #16161b;
             border-width: 1px;
             border-color: #303038;
 
-            input := TextInput {
+            input-l := TextInput {
                 x: 4px;
                 width: parent.width - 8px;
                 height: 100%;
@@ -98,11 +94,9 @@ component PropertyRow inherits Rectangle {
                 accepted => { root.changed(root.clamp(self.text.to-float())); }
             }
 
-            // ドラッグ量=移動量そのもの。画面端到達でそれ以上は追従不能
-            // （Slintにポインタロック/warp APIが無いための既知の制約）。
-            drag-area := TouchArea {
+            drag-l := TouchArea {
                 mouse-cursor: self.pressed ? MouseCursor.none : MouseCursor.default;
-                clicked => { input.focus(); }
+                clicked => { input-l.focus(); }
                 pointer-event(event) => {
                     if (event.button == PointerEventButton.left) {
                         if (event.kind == PointerEventKind.down) {
@@ -127,13 +121,13 @@ component PropertyRow inherits Rectangle {
             }
         }
 
-        // AviQtl(ParamControl.qml)のトラックバー行はラベルを中央のボタンとして配置し、
-        // 数値・スライダー操作を左側（主操作領域）へ寄せる。NeoUtlも同じ視覚的重み付けへ揃える。
-        Rectangle {
+        label-cell := Rectangle {
             width: 74px;
-            background: #202026;
+            border-radius: 3px;
+            background: label-touch.pressed ? #1c1c22 : label-touch.has-hover ? #262630 : #202026;
+
             Text {
-                text: label;
+                text: root.label;
                 color: #b0b0ba;
                 font-size: 11px;
                 horizontal-alignment: center;
@@ -141,6 +135,148 @@ component PropertyRow inherits Rectangle {
                 width: 100%;
                 height: 100%;
             }
+
+            label-touch := TouchArea {
+                pointer-event(event) => {
+                    if (event.button == PointerEventButton.left && event.kind == PointerEventKind.up) {
+                        root.label-clicked();
+                    }
+                }
+            }
+        }
+
+        value-r := Rectangle {
+            width: 56px;
+            border-radius: 3px;
+            background: drag-r.pressed ? #22222a : #16161b;
+            border-width: 1px;
+            border-color: #303038;
+
+            input-r := TextInput {
+                x: 4px;
+                width: parent.width - 8px;
+                height: 100%;
+                text: root.value;
+                color: #dde3ee;
+                font-size: 11px;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+                input-type: InputType.decimal;
+                accepted => { root.changed(root.clamp(self.text.to-float())); }
+            }
+
+            drag-r := TouchArea {
+                mouse-cursor: self.pressed ? MouseCursor.none : MouseCursor.default;
+                clicked => { input-r.focus(); }
+                pointer-event(event) => {
+                    if (event.button == PointerEventButton.left) {
+                        if (event.kind == PointerEventKind.down) {
+                            root.anchor-x = self.mouse-x;
+                            root.anchor-y = self.mouse-y;
+                            root.commit-start();
+                        }
+                        if (event.kind == PointerEventKind.up) {
+                            root.release();
+                        }
+                    }
+                }
+                moved => {
+                    if (self.pressed) {
+                        root.changed(root.clamp(root.value
+                            + (self.mouse-x - root.anchor-x) / 1px * root.drag-sensitivity
+                            - (self.mouse-y - root.anchor-y) / 1px * root.drag-sensitivity));
+                        root.anchor-x = self.mouse-x;
+                        root.anchor-y = self.mouse-y;
+                    }
+                }
+            }
+        }
+
+        slider-r := Rectangle {
+            border-radius: 3px;
+            background: #16161b;
+
+            fill-r := Rectangle {
+                x: 0;
+                y: parent.height / 2 - 2px;
+                width: (parent.width - handle-r.width) * ((root.clamp(root.value) - root.min) / (root.max - root.min)) + handle-r.width;
+                height: 4px;
+                border-radius: 2px;
+                background: #3a6df0;
+            }
+
+            handle-r := Rectangle {
+                width: 10px;
+                height: 10px;
+                border-radius: 5px;
+                background: #dde3ee;
+                y: parent.height / 2 - 5px;
+                x: (parent.width - self.width) * ((root.clamp(root.value) - root.min) / (root.max - root.min));
+            }
+
+            TouchArea {
+                pointer-event(event) => {
+                    if (event.button == PointerEventButton.left) {
+                        if (event.kind == PointerEventKind.down) {
+                            root.commit-start();
+                            root.changed(root.clamp(root.min
+                                + (root.pointer-x-clamped(self.mouse-x, self.width) / self.width) * (root.max - root.min)));
+                        }
+                        if (event.kind == PointerEventKind.up) {
+                            root.release();
+                        }
+                    }
+                }
+                moved => {
+                    if (self.pressed) {
+                        root.changed(root.clamp(root.min
+                            + (root.pointer-x-clamped(self.mouse-x, self.width) / self.width) * (root.max - root.min)));
+                    }
+                }
+            }
+        }
+    }
+}
+
+// AviQtl準拠: 各パラメータ行の直下に置く中間点トラック。
+// 空白部クリックでその位置のフレームへ中間点追加ウィンドウを要求し、
+// 既存の中間点(◇)クリックでその点の編集ウィンドウを要求する。
+component KeyframeTrack inherits Rectangle {
+    in property <[int]> frames;
+    in property <int> total-frames: 1;
+    // 引数: クリック位置から算出したフレーム番号。
+    callback point-clicked(int);
+
+    height: 12px;
+    border-radius: 2px;
+    background: #131318;
+    border-width: 1px;
+    border-color: #24242c;
+
+    function frame-at(x: length) -> int {
+        return max(0, min(root.total-frames,
+            (x / root.width * root.total-frames + 0.5)));
+    }
+
+    TouchArea {
+        clicked => { root.point-clicked(root.frame-at(self.mouse-x)); }
+    }
+
+    for f in root.frames: Rectangle {
+        x: (root.width - self.width) * (root.total-frames > 0 ? f / root.total-frames : 0);
+        y: parent.height / 2 - 4px;
+        width: 8px;
+        height: 8px;
+
+        Path {
+            width: 100%;
+            height: 100%;
+            commands: "M 4 0 L 8 4 L 4 8 L 0 4 Z";
+            fill: #3a6df0;
+        }
+
+        TouchArea {
+            clicked => { root.point-clicked(f); }
         }
     }
 }
@@ -186,6 +322,8 @@ component SectionHeader inherits Text {
     color: #55555e;
     font-size: 10px;
     font-weight: 700;
+    height: 18px;
+    vertical-alignment: center;
 }
 
 component MenuItem inherits Rectangle {
@@ -209,45 +347,44 @@ component MenuItem inherits Rectangle {
     }
 }
 
-// ParamRow.kindに応じた描画を一本化する標準コンポーネント。
-// object-params/エフェクトパラメータの両呼び出し元がこれのみを使う。
-// kind: 0=Float(スライダー+数値ボックス), 1=Bool(トグル), 2=Color(0..1スライダー)。
-// 新規kindの追加時はここに分岐を1件足すだけで全呼び出し元に反映される。
+// kind: 0=Float, 1=Bool, 2=Color, 3=Text
 component ParamField inherits Rectangle {
     in property <ParamRow> data;
+    in property <int> total-frames: 1;
     callback changed-float(float);
     callback changed-bool(bool);
     callback changed-text(string);
-    // ドラッグ系操作（kind 0/2）1回の先頭・末尾のみ発火する。
     callback commit();
     callback release();
+    // 引数: 対象フレーム。-1の場合は呼び出し側が現在の再生位置を用いる。
+    callback edit-keyframes(int);
 
-    height: data.kind == 3 ? 44px : 22px;
+    height: data.kind == 3 ? 44px : (data.kind == 0 || data.kind == 2) ? 34px : 22px;
 
-    if data.kind == 0: PropertyRow {
-        label: data.label;
-        value: data.value;
-        min: data.min;
-        max: data.max;
-        changed(v) => { root.changed-float(v); }
-        commit-start => { root.commit(); }
-        release => { root.release(); }
+    if data.kind == 0 || data.kind == 2: VerticalLayout {
+        spacing: 2px;
+        PropertyRow {
+            label: data.label;
+            value: data.value;
+            min: data.kind == 2 ? 0 : data.min;
+            max: data.kind == 2 ? 1 : data.max;
+            changed(v) => { root.changed-float(v); }
+            commit-start => { root.commit(); }
+            release => { root.release(); }
+            label-clicked => { root.edit-keyframes(-1); }
+        }
+
+        KeyframeTrack {
+            frames: data.keyframe-frames;
+            total-frames: root.total-frames;
+            point-clicked(frame) => { root.edit-keyframes(frame); }
+        }
     }
 
     if data.kind == 1: ToggleField {
         label: data.label;
         checked: data.value > 0.5;
         toggled => { root.changed-bool(data.value <= 0.5); }
-    }
-
-    if data.kind == 2: PropertyRow {
-        label: data.label;
-        value: data.value;
-        min: 0;
-        max: 1;
-        changed(v) => { root.changed-float(v); }
-        commit-start => { root.commit(); }
-        release => { root.release(); }
     }
 
     if data.kind == 3: Rectangle {
@@ -273,40 +410,32 @@ component ParamField inherits Rectangle {
 
 export component PropertiesWindow inherits Window {
     title: "NeoUtl - オブジェクト設定";
-    preferred-width: 780px;
+    preferred-width: 900px;
     preferred-height: 640px;
     background: #0e0e12;
 
     in-out property <int> object-id: -1;
     in-out property <float> stage-width: 1920;
     in-out property <float> stage-height: 1080;
+    in-out property <int> total-frames: 300;
 
     in-out property <bool> has-transform: false;
     in-out property <bool> has-text: false;
     in-out property <bool> has-shape: false;
     in-out property <bool> has-audio: false;
 
-    // Transform/Text/Shape/Audioの数値・真偽値・文字列項目はすべてこの一本のリストに統一する。
-    // 並び順・ラベル・レンジ・種別はRust側object_schema.rsのみが決定し、ここでは
-    // kind別（0=Float,1=Bool,2=Color,3=Text）の描画分岐のみを行う（型別ハードコード撤廃）。
     in-out property <[ParamRow]> object-params: [];
-
     in-out property <[EffectRow]> effects: [];
     in-out property <[ParamRow]> params: [];
 
-    // サイドバー: ドラッグ並べ替え用の一時状態。press中のみ非-1。
     property <int> drag-source-index: -1;
     property <int> drag-target-index: -1;
 
-    // サイドバー: 右クリックメニューの一時状態。
     property <int> menu-index: -1;
     property <bool> menu-visible: false;
     property <length> menu-x: 0;
     property <length> menu-y: 0;
 
-    // パラメータのスライダー/ドラッグボックス操作中フラグ。trueの間は右側Flickableの
-    // スクロールを禁止し、操作中に表示が上下へ動いてポインタがスライダーから
-    // 外れる現象を除去する。
     property <bool> is-dragging-param: false;
 
     callback set-object-param(string, string, float);
@@ -323,9 +452,9 @@ export component PropertiesWindow inherits Window {
     callback copy-effect(int);
     callback paste-effect(int);
     callback duplicate-effect(int);
-    // 一覧・検索・ソートはEffectAddDialog（独立ウィンドウ）側で完結する。
-    // このウィンドウはダイアログの起動要求のみを発行する。
     callback open-effect-add-dialog();
+    // 引数: (group, key, effect-index, frame)。frame=-1は現在の再生位置を意味する。
+    callback open-keyframe-editor(string, string, int, int);
 
     if object-id < 0: Text {
         text: "オブジェクトが選択されていません";
@@ -338,7 +467,6 @@ export component PropertiesWindow inherits Window {
     }
 
     if object-id >= 0: HorizontalLayout {
-        // --- 左サイドバー: エフェクト一覧（有効無効・ドラッグ並べ替え・右クリック操作） ---
         Rectangle {
             width: 180px;
             background: #131318;
@@ -419,8 +547,6 @@ export component PropertiesWindow inherits Window {
                             }
 
                             row-touch := TouchArea {
-                                // 左ボタン押下でドラッグ開始。press継続中の行を随時target登録し、
-                                // release時にsource!=targetならmove-effectを一度だけ発行する。
                                 pointer-event(event) => {
                                     if (event.button == PointerEventButton.left) {
                                         if (event.kind == PointerEventKind.down) {
@@ -462,60 +588,38 @@ export component PropertiesWindow inherits Window {
             background: #24242c;
         }
 
-        // --- 右側: オブジェクト直下パラメータ + 選択中エフェクトのパラメータ ---
         Flickable {
-            // is-dragging-param中はスクロール操作を禁止する。
-            // スライダー/ドラッグボックス操作中に表示位置が動いてポインタが
-            // 操作対象から外れる現象の根絶。
             interactive: !root.is-dragging-param;
 
             VerticalLayout {
                 padding: 10px;
-                spacing: 8px;
+                spacing: 4px;
 
-                for p[j] in root.object-params: VerticalLayout {
-                    spacing: 4px;
+                for p[j] in root.object-params: Rectangle {
+                    height: (j == 0 || p.group != root.object-params[j - 1].group ? 26px : 0px)
+                        + (p.kind == 3 ? 44px : (p.kind == 0 || p.kind == 2) ? 34px : 22px);
+                    clip: true;
 
-                    if j == 0 || p.group != root.object-params[j - 1].group: VerticalLayout {
+                    VerticalLayout {
                         spacing: 4px;
-                        Rectangle {
-                            height: 1px;
-                            background: #24242c;
-                        }
 
-                        SectionHeader {
+                        if j == 0 || p.group != root.object-params[j - 1].group: SectionHeader {
                             text: p.group;
                         }
-                    }
 
-                    if p.kind == 0: ParamField {
-                        data: p;
-                        changed-float(v) => { root.set-object-param(p.group, p.key, v); }
-                        commit => {
-                            root.is-dragging-param = true;
-                            root.commit-object-param(p.group, p.key);
+                        ParamField {
+                            data: p;
+                            total-frames: root.total-frames;
+                            changed-float(v) => { root.set-object-param(p.group, p.key, v); }
+                            changed-bool(v) => { root.set-object-param-bool(p.group, p.key, v); }
+                            changed-text(v) => { root.set-object-param-text(p.group, p.key, v); }
+                            commit => {
+                                root.is-dragging-param = true;
+                                root.commit-object-param(p.group, p.key);
+                            }
+                            release => { root.is-dragging-param = false; }
+                            edit-keyframes(frame) => { root.open-keyframe-editor(p.group, p.key, -1, frame); }
                         }
-                        release => { root.is-dragging-param = false; }
-                    }
-
-                    if p.kind == 1: ParamField {
-                        data: p;
-                        changed-bool(v) => { root.set-object-param-bool(p.group, p.key, v); }
-                    }
-
-                    if p.kind == 2: ParamField {
-                        data: p;
-                        changed-float(v) => { root.set-object-param(p.group, p.key, v); }
-                        commit => {
-                            root.is-dragging-param = true;
-                            root.commit-object-param(p.group, p.key);
-                        }
-                        release => { root.is-dragging-param = false; }
-                    }
-
-                    if p.kind == 3: ParamField {
-                        data: p;
-                        changed-text(v) => { root.set-object-param-text(p.group, p.key, v); }
                     }
                 }
 
@@ -531,13 +635,14 @@ export component PropertiesWindow inherits Window {
                         text: eff.name;
                     }
 
-                    // paramsはParamRow.kindに応じ、ParamFieldが標準描画へ振り分ける。
                     for p[j] in root.params: Rectangle {
-                        height: p.effect-index == eff.index ? 22px : 0px;
+                        height: p.effect-index != eff.index ? 0px
+                            : p.kind == 3 ? 44px : (p.kind == 0 || p.kind == 2) ? 34px : 22px;
                         clip: true;
 
                         if p.effect-index == eff.index: ParamField {
                             data: p;
+                            total-frames: root.total-frames;
                             changed-float(v) => { root.set-param(eff.index, p.key, v); }
                             changed-bool(v) => { root.set-param-bool(eff.index, p.key, v); }
                             commit => {
@@ -545,6 +650,7 @@ export component PropertiesWindow inherits Window {
                                 root.commit-param(eff.index, p.key);
                             }
                             release => { root.is-dragging-param = false; }
+                            edit-keyframes(frame) => { root.open-keyframe-editor(p.group, p.key, eff.index, frame); }
                         }
                     }
                 }
@@ -552,8 +658,6 @@ export component PropertiesWindow inherits Window {
         }
     }
 
-    // --- 右クリックコンテキストメニュー: コピー/貼り付け/複製/削除 ---
-    // 背後の透明TouchAreaは全面を覆い、メニュー外クリックで閉じる役目のみを持つ。
     if root.menu-visible: TouchArea {
         clicked => { root.menu-visible = false; }
     }

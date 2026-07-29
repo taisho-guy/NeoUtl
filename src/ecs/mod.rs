@@ -209,6 +209,11 @@ impl EcsWorld {
             });
     }
 
+    pub fn current_frame(&self) -> i32 {
+        self.world
+            .run(|timeline: UniqueView<TimelineResource>| timeline.current_frame)
+    }
+
     pub fn total_frames(&self) -> i32 {
         self.world
             .run(|timeline: UniqueView<TimelineResource>| timeline.total_frames)
@@ -745,6 +750,26 @@ impl EcsWorld {
                 stack.remove_keyframe(index, key, frame);
             }
         });
+    }
+
+    pub fn get_effect_keyframes(
+        &self,
+        object_id: usize,
+        index: usize,
+        key: &str,
+    ) -> Vec<crate::ecs::types::Keyframe> {
+        let Some(entity) = self.find_entity(object_id) else {
+            return Vec::new();
+        };
+        self.world.run(|stacks: View<EffectStack>| {
+            stacks
+                .get(entity)
+                .ok()
+                .and_then(|s| s.0.get(index))
+                .and_then(|e| e.params.get(key))
+                .map(|p| p.keyframes.clone())
+                .unwrap_or_default()
+        })
     }
 
     pub fn set_plugin_param(&mut self, object_id: usize, key: &str, value: f32) {

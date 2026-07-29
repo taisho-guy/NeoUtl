@@ -348,6 +348,7 @@ fn to_slint(data: &crate::ecs::TimelineData) -> TimelineObject {
         layer: data.layer,
         label: plugin.map_or("Unknown", |p| p.name.as_str()).into(),
         selected: false,
+        keyframe_frames: ModelRc::new(VecModel::from(Vec::<i32>::new())),
     }
 }
 
@@ -397,4 +398,42 @@ fn sync_scene_tabs(timeline: &TimelineWindow, world: &EcsWorld) {
         })
         .collect();
     timeline.set_scene_tabs(ModelRc::new(VecModel::from(tabs)));
+}
+
+/// プロパティパネルで選択中のパラメータ（中間点編集ボタンを押した対象）の
+/// 中間点フレーム位置を、対応するクリップの行にのみ反映する。他クリップは空へ戻す
+/// （選択切替時に前選択のマーカーが残留しないようにするため）。
+/// 補間計算・値評価は一切行わない（純粋にフレーム位置の表示用）。
+pub fn refresh_keyframe_markers(
+    timeline: &TimelineWindow,
+    world: &EcsWorld,
+    active: &crate::ui::keyframe_editor::ActiveParamSlot,
+) {
+    let active = active.borrow().clone();
+    let objs = timeline.get_objects();
+    for i in 0..objs.row_count() {
+        let Some(mut o) = objs.row_data(i) else {
+            continue;
+        };
+        let frames: Vec<i32> = match &active {
+            Some(a) if a.object_id == o.id => {
+                if a.effect_index < 0 {
+                    world
+                        .get_keyframes(o.id as usize, &a.key)
+                        .iter()
+                        .map(|k| k.frame)
+                        .collect()
+                } else {
+                    world
+                        .get_effect_keyframes(o.id as usize, a.effect_index as usize, &a.key)
+                        .iter()
+                        .map(|k| k.frame)
+                        .collect()
+                }
+            }
+            _ => Vec::new(),
+        };
+        o.keyframe_frames = ModelRc::new(VecModel::from(frames));
+        objs.set_row_data(i, o);
+    }
 }
