@@ -13,7 +13,21 @@
         "plugins-bad",
         "plugins-ugly",
         "libav",
-        "gpl"
+        "gpl",
+        "ogg",
+        "vorbis",
+        "flac",
+        "mpg123",
+        "speex",
+        "taglib",
+        "sndfile",
+        "opus-base",
+        "opus-bad",
+        "x264",
+        "x265",
+        "vpx",
+        "webp",
+        "openjpeg"
       ]
     }
   ]
