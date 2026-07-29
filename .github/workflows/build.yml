@@ -226,10 +226,25 @@ jobs:
           if (Test-Path "target/release/objects") { Copy-Item -Recurse "target/release/objects" dist/package/ }
           if (Test-Path "target/release/effects") { Copy-Item -Recurse "target/release/effects" dist/package/ }
 
-          $vcpkgBin = "${{ env.VCPKG_INSTALLED }}/bin"
-          $gstPluginDir = "${{ env.VCPKG_INSTALLED }}/bin/gstreamer-1.0"
+          $vcpkgRoot = "${{ env.VCPKG_INSTALLED }}"
+          $vcpkgBin = "$vcpkgRoot/bin"
 
-          Get-ChildItem -Path $gstPluginDir -Filter "*.dll" -ErrorAction SilentlyContinue |
+          # vcpkgのgstreamerポートはプラグインDLLの実出力先がビルド構成・ポートバージョンで
+          # 変動する（bin直下 / bin/gstreamer-1.0 / plugins/gstreamer-1.0 等）。単一パス
+          # 決め打ちは実際の出力先と食い違うと「0件コピー」のままErrorAction
+          # SilentlyContinueで握り潰され検出漏れとなる（実際に発生した不具合）。
+          # そのためvcpkgRoot配下をgst*.dllで再帰探索し、コア共有ライブラリ
+          # （gst<name>-1.0-0.dll形式）を除いたものをプラグインとして扱う。
+          $allGstDlls = Get-ChildItem -Path $vcpkgRoot -Recurse -Filter "gst*.dll" -ErrorAction SilentlyContinue
+          $pluginDlls = $allGstDlls | Where-Object { $_.Name -notmatch '-1\.0-0\.dll$' }
+
+          if ($pluginDlls.Count -eq 0) {
+            Write-Error "エラー: GStreamerプラグインDLLが0件です（探索対象: $vcpkgRoot）"
+            exit 1
+          }
+
+          $pluginDlls |
+            Sort-Object Name -Unique |
             Copy-Item -Destination dist/package/lib/gstreamer-1.0/
 
           $excludePlugins = @(
@@ -241,6 +256,14 @@ jobs:
             Remove-Item -Force -ErrorAction SilentlyContinue "dist/package/lib/gstreamer-1.0/$name"
           }
 
+          $copiedCount = (Get-ChildItem -Path dist/package/lib/gstreamer-1.0 -Filter "*.dll").Count
+          if ($copiedCount -eq 0) {
+            Write-Error "エラー: 除外リスト適用後、同梱プラグインDLLが0件です"
+            exit 1
+          }
+          Write-Host "GStreamerプラグイン同梱数: $copiedCount"
+
+          # 共有ライブラリ本体（gstreamer-1.0-0.dll等）と、gstreamer以外の依存DLL一式。
           Get-ChildItem -Path $vcpkgBin -Filter "*.dll" |
             Copy-Item -Destination dist/package/
 
