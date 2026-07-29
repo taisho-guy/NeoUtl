@@ -1,0 +1,305 @@
+import { LineEdit, ComboBox, Button } from "std-widgets.slint";
+
+// 中間点1件の編集を担う独立ウィンドウ。
+// プロパティパネル・タイムラインいずれからも同一ウィンドウを使い回す
+// （AviQtl系のEasingConfigWindowと異なり、状態はRust側のopen_forが都度確定するため
+// ウィンドウ自身は表示専用の薄いフォームに留める）。
+export component KeyframeEditorWindow inherits Window {
+    title: "NeoUtl - 中間点編集";
+    preferred-width: 360px;
+    preferred-height: 460px;
+    background: #0e0e12;
+
+    in-out property <int> object-id: -1;
+    in-out property <int> effect-index: -1;
+    in-out property <string> group: "";
+    in-out property <string> key: "";
+    in-out property <string> label: "";
+
+    in-out property <int> frame: 0;
+    in-out property <float> value: 0;
+    in-out property <bool> point-exists: false;
+
+    // easing-kind: EasingKindId(Rust側)と1:1対応する固定順のインデックス。
+    in-out property <int> easing-kind: 0;
+    in-out property <[string]> easing-names: [];
+
+    in-out property <float> bezier-cp1-x: 0.33;
+    in-out property <float> bezier-cp1-y: 0;
+    in-out property <float> bezier-cp2-x: 0.66;
+    in-out property <float> bezier-cp2-y: 1;
+
+    in-out property <int> random-seed: 1;
+    in-out property <int> random-step: 1;
+
+    // 補間曲線プレビュー。Rust側(neoutl_interp::ease()を32分割サンプリング)が
+    // SVGパスコマンド文字列を完成形で渡す。この文字列はviewbox 0..1空間の
+    // "M x y L x y L x y ..."系列で、t(区間内進捗)・v(イージング後の進捗)を直接埋め込む。
+    in-out property <string> preview-path-commands: "M 0 1";
+
+    callback frame-changed(int);
+    callback easing-changed(int);
+    callback bezier-changed();
+    callback random-changed();
+    callback apply();
+    callback delete();
+    callback cancel();
+
+    VerticalLayout {
+        padding: 10px;
+        spacing: 8px;
+
+        Text {
+            text: root.label;
+            color: #dde3ee;
+            font-size: 13px;
+        }
+
+        Text {
+            text: root.point-exists ? "既存の中間点を編集" : "新規中間点を作成";
+            color: #8a8a96;
+            font-size: 10px;
+        }
+
+        HorizontalLayout {
+            spacing: 6px;
+            Text {
+                text: "フレーム";
+                color: #8a8a96;
+                font-size: 10px;
+                vertical-alignment: center;
+                width: 60px;
+            }
+
+            frame-input := LineEdit {
+                text: root.frame;
+                input-type: number;
+                edited => {
+                    if self.text.to-float() >= 0 {
+                        root.frame = self.text.to-float();
+                        root.frame-changed(root.frame);
+                    }
+                }
+            }
+        }
+
+        HorizontalLayout {
+            spacing: 6px;
+            Text {
+                text: "値";
+                color: #8a8a96;
+                font-size: 10px;
+                vertical-alignment: center;
+                width: 60px;
+            }
+
+            value-input := LineEdit {
+                text: root.value;
+                input-type: decimal;
+                edited => { root.value = self.text.to-float(); }
+            }
+        }
+
+        HorizontalLayout {
+            spacing: 6px;
+            Text {
+                text: "補間種別";
+                color: #8a8a96;
+                font-size: 10px;
+                vertical-alignment: center;
+                width: 60px;
+            }
+
+            combo := ComboBox {
+                model: root.easing-names;
+                current-index: root.easing-kind;
+                selected(v) => {
+                    root.easing-kind = self.current-index;
+                    root.easing-changed(self.current-index);
+                }
+            }
+        }
+
+        // Bezier制御点。easing-kind==23(Bezier)選択時のみ表示。
+        if root.easing-kind == 23: VerticalLayout {
+            spacing: 4px;
+            HorizontalLayout {
+                spacing: 4px;
+                Text {
+                    text: "cp1";
+                    color: #55555e;
+                    font-size: 9px;
+                    width: 24px;
+                    vertical-alignment: center;
+                }
+
+                LineEdit {
+                    text: root.bezier-cp1-x;
+                    input-type: decimal;
+                    edited => { root.bezier-cp1-x = self.text.to-float(); root.bezier-changed(); }
+                }
+
+                LineEdit {
+                    text: root.bezier-cp1-y;
+                    input-type: decimal;
+                    edited => { root.bezier-cp1-y = self.text.to-float(); root.bezier-changed(); }
+                }
+            }
+
+            HorizontalLayout {
+                spacing: 4px;
+                Text {
+                    text: "cp2";
+                    color: #55555e;
+                    font-size: 9px;
+                    width: 24px;
+                    vertical-alignment: center;
+                }
+
+                LineEdit {
+                    text: root.bezier-cp2-x;
+                    input-type: decimal;
+                    edited => { root.bezier-cp2-x = self.text.to-float(); root.bezier-changed(); }
+                }
+
+                LineEdit {
+                    text: root.bezier-cp2-y;
+                    input-type: decimal;
+                    edited => { root.bezier-cp2-y = self.text.to-float(); root.bezier-changed(); }
+                }
+            }
+        }
+
+        // ランダム設定。easing-kind==24(Random)選択時のみ表示。
+        // seedは「絶対」（同一seed・同一区間位置は常に同一値）を保証する
+        // neoutl_interp::Easing::Random側の決定論的ハッシュにそのまま渡る。
+        if root.easing-kind == 24: HorizontalLayout {
+            spacing: 4px;
+            Text {
+                text: "seed";
+                color: #55555e;
+                font-size: 9px;
+                width: 24px;
+                vertical-alignment: center;
+            }
+
+            LineEdit {
+                text: root.random-seed;
+                input-type: number;
+                edited => { root.random-seed = self.text.to-float(); root.random-changed(); }
+            }
+
+            Text {
+                text: "step";
+                color: #55555e;
+                font-size: 9px;
+                width: 24px;
+                vertical-alignment: center;
+            }
+
+            LineEdit {
+                text: root.random-step;
+                input-type: number;
+                edited => { root.random-step = self.text.to-float(); root.random-changed(); }
+            }
+        }
+
+        // 補間曲線プレビュー。Rust側でneoutl_interp::ease()を32分割サンプリングした結果を描画するのみ
+        // （このウィンドウはプレビュー用の演算を一切持たない）。
+        Rectangle {
+            height: 140px;
+            border-radius: 3px;
+            background: #16161b;
+            border-width: 1px;
+            border-color: #303038;
+
+            Path {
+                x: 8px;
+                y: 8px;
+                width: parent.width - 16px;
+                height: parent.height - 16px;
+                stroke: #3a6df0;
+                stroke-width: 1.5px;
+                viewbox-x: 0;
+                viewbox-y: 0;
+                viewbox-width: 1;
+                viewbox-height: 1;
+                commands: root.preview-path-commands;
+            }
+        }
+
+        Rectangle { }
+
+        HorizontalLayout {
+            height: 26px;
+            spacing: 6px;
+
+            Rectangle {
+                width: 60px;
+                border-radius: 3px;
+                background: #3a1e1e;
+                border-width: 1px;
+                border-color: #5a2a2a;
+                visible: root.point-exists;
+
+                Text {
+                    text: "削除";
+                    color: #e08a8a;
+                    font-size: 10px;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                    width: 100%;
+                    height: 100%;
+                }
+
+                TouchArea {
+                    clicked => { root.delete(); }
+                }
+            }
+
+            Rectangle { }
+
+            Rectangle {
+                width: 60px;
+                border-radius: 3px;
+                background: #1e1e24;
+                border-width: 1px;
+                border-color: #303038;
+
+                Text {
+                    text: "閉じる";
+                    color: #8a8a96;
+                    font-size: 10px;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                    width: 100%;
+                    height: 100%;
+                }
+
+                TouchArea {
+                    clicked => { root.cancel(); }
+                }
+            }
+
+            Rectangle {
+                width: 60px;
+                border-radius: 3px;
+                background: #2a4db8;
+
+                Text {
+                    text: "適用";
+                    color: #ffffff;
+                    font-size: 10px;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                    width: 100%;
+                    height: 100%;
+                }
+
+                TouchArea {
+                    clicked => { root.apply(); }
+                }
+            }
+        }
+    }
+}

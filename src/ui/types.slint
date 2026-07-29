@@ -8,6 +8,7 @@ export struct TimelineObject {
     layer: int,
     label: string,
     selected: bool,
+    keyframe-frames: [int],
 }
 
 export struct ObjectKindItem {
@@ -41,6 +42,9 @@ export struct ParamRow {
     min: float,
     max: float,
     text: string,
+    has-keyframes: bool,
+    // 中間点トラック（AviQtl準拠）の描画用。フレーム番号の昇順配列。
+    keyframe-frames: [int],
 }
 
 // category: エフェクトプラグインのEffectMeta.categoryをそのまま転記する。

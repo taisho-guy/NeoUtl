@@ -229,7 +229,6 @@ impl KeyframeTracks {
     }
 
     /// 対象コンポーネントへ、指定フレームでの評価値を書き込む。
-    /// 中間点が無いキーはtargetの現在値をそのまま維持する（何もしない）。
     pub fn apply(&self, target: &mut impl ParamAccess, frame: i32) {
         for (key, track) in &self.0 {
             let Some(fallback) = target.get_param(key) else {

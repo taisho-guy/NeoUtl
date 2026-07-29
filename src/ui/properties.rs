@@ -149,7 +149,50 @@ fn wire_effect_add_dialog(
     }
 }
 
-pub fn setup(props: &PropertiesWindow, state: SharedAppState) {
+pub fn setup(
+    props: &PropertiesWindow,
+    state: SharedAppState,
+    kf_editor: slint::Weak<crate::KeyframeEditorWindow>,
+    timeline_weak: slint::Weak<crate::TimelineWindow>,
+    active_param: crate::ui::keyframe_editor::ActiveParamSlot,
+) {
+    {
+        let (state, tw) = (state.clone(), timeline_weak.clone());
+        let pw = props.as_weak();
+        props.on_open_keyframe_editor(move |group, key, effect_index, frame| {
+            let Some(p) = pw.upgrade() else { return };
+            let Some(kf) = kf_editor.upgrade() else {
+                return;
+            };
+            let id = p.get_object_id();
+            if id < 0 {
+                return;
+            }
+            let world_holder = app_state::active_world(&state);
+            let world = world_holder.lock().unwrap();
+            crate::ui::keyframe_editor::open_for(
+                &kf,
+                &world,
+                id,
+                effect_index,
+                group.to_string(),
+                key.to_string(),
+                frame,
+            );
+            *active_param.borrow_mut() = Some(crate::ui::keyframe_editor::ActiveParam {
+                object_id: id,
+                effect_index,
+                group: group.to_string(),
+                key: key.to_string(),
+            });
+            if let Some(t) = tw.upgrade() {
+                crate::ui::timeline::refresh_keyframe_markers(&t, &world, &active_param);
+            }
+            drop(world);
+            let _ = kf.show();
+        });
+    }
+
     {
         let catalog_state = Rc::new(EffectCatalogState::build());
         let dialog_slot: Rc<RefCell<Option<EffectAddDialog>>> = Rc::new(RefCell::new(None));
@@ -442,6 +485,38 @@ fn apply_object_param(world: &mut EcsWorld, oid: usize, group: &str, key: &str, 
     }
 }
 
+/// 中間点編集ウィンドウが「新規作成」時にvalue初期値として使う現在値を取得する。
+/// apply_object_paramと同一のgroup分岐だが、書き込みではなく読み出しのみを行う。
+pub(crate) fn current_object_param_value(
+    world: &EcsWorld,
+    oid: usize,
+    group: &str,
+    key: &str,
+) -> f32 {
+    match group {
+        TRANSFORM_GROUP => world
+            .get_transform(oid)
+            .and_then(|t| t.get_param(key))
+            .unwrap_or(0.0),
+        TEXT_GROUP => world
+            .get_text(oid)
+            .and_then(|t| t.get_param(key))
+            .unwrap_or(0.0),
+        SHAPE_GROUP => world
+            .get_shape(oid)
+            .and_then(|s: ShapeParams| s.get_param(key))
+            .unwrap_or(0.0),
+        AUDIO_GROUP => world
+            .get_audio_params(oid)
+            .and_then(|a| a.get_param(key))
+            .unwrap_or(0.0),
+        _ => world
+            .get_plugin_params(oid)
+            .and_then(|p| p.get(key).copied())
+            .unwrap_or(0.0),
+    }
+}
+
 /// ParamKind::Text専用の書き込み経路。現状ホスト内蔵ではTEXT_GROUPの"text"キーのみが対象。
 fn apply_object_param_text(world: &mut EcsWorld, oid: usize, group: &str, key: &str, text: &str) {
     if group == TEXT_GROUP && key == "text" {
@@ -460,9 +535,11 @@ fn push_schema_rows(
     stage_h: f32,
     get: impl Fn(&str) -> f32,
     get_text: impl Fn(&str) -> Option<String>,
+    keyframes: impl Fn(&str) -> Vec<i32>,
 ) {
     for s in schema {
         let (min, max) = resolve_range(s.range, stage_w, stage_h);
+        let frames = keyframes(s.key);
         out.push(ParamRow {
             effect_index: -1,
             key: SharedString::from(s.key),
@@ -482,6 +559,8 @@ fn push_schema_rows(
             min,
             max,
             text: SharedString::from(get_text(s.key).unwrap_or_default()),
+            has_keyframes: !frames.is_empty(),
+            keyframe_frames: ModelRc::new(VecModel::from(frames)),
         });
     }
 }
@@ -496,11 +575,13 @@ fn push_c_abi_param_rows(
     group: &str,
     effect_index: i32,
     current: impl Fn(&str) -> f32,
+    keyframes: impl Fn(&str) -> Vec<i32>,
 ) {
     for s in schema {
         let key = unsafe { s.key.as_str() };
         let label = unsafe { s.label.as_str() };
         let value = current(key);
+        let frames = keyframes(key);
         out.push(ParamRow {
             effect_index,
             key: SharedString::from(key),
@@ -516,6 +597,8 @@ fn push_c_abi_param_rows(
             min: s.min,
             max: s.max,
             text: SharedString::default(),
+            has_keyframes: !frames.is_empty(),
+            keyframe_frames: ModelRc::new(VecModel::from(frames)),
         });
     }
 }
@@ -552,14 +635,21 @@ fn push_plugin_rows(out: &mut Vec<ParamRow>, world: &EcsWorld, oid: usize) {
     let schema =
         unsafe { std::slice::from_raw_parts(meta.property_schema_ptr, meta.property_schema_len) };
     let current = world.get_plugin_params(oid).unwrap_or_default();
-    push_c_abi_param_rows(out, schema, &plugin.name, -1, |key| {
-        current.get(key).copied().unwrap_or_else(|| {
-            schema
-                .iter()
-                .find(|s| unsafe { s.key.as_str() } == key)
-                .map_or(0.0, |s| s.default_float)
-        })
-    });
+    push_c_abi_param_rows(
+        out,
+        schema,
+        &plugin.name,
+        -1,
+        |key| {
+            current.get(key).copied().unwrap_or_else(|| {
+                schema
+                    .iter()
+                    .find(|s| unsafe { s.key.as_str() } == key)
+                    .map_or(0.0, |s| s.default_float)
+            })
+        },
+        |_| Vec::new(),
+    );
 }
 
 /// object_paramsモデルの該当行(group/key一致)のみ値を書き換える。
@@ -623,6 +713,7 @@ fn refresh(props: &PropertiesWindow, world: &EcsWorld) {
     let stage_h = project.height as f32;
     props.set_stage_width(stage_w);
     props.set_stage_height(stage_h);
+    props.set_total_frames(world.total_frames().max(1));
 
     let mut object_params: Vec<ParamRow> = Vec::new();
 
@@ -635,6 +726,13 @@ fn refresh(props: &PropertiesWindow, world: &EcsWorld) {
             stage_h,
             |k| t.get_param(k).unwrap_or(0.0),
             |_| None,
+            |k| {
+                world
+                    .get_keyframes(oid, k)
+                    .iter()
+                    .map(|kf| kf.frame)
+                    .collect()
+            },
         );
     } else {
         props.set_has_transform(false);
@@ -650,6 +748,13 @@ fn refresh(props: &PropertiesWindow, world: &EcsWorld) {
             stage_h,
             |k| text.get_param(k).unwrap_or(0.0),
             |k| (k == "text").then(|| body.clone()),
+            |k| {
+                world
+                    .get_keyframes(oid, k)
+                    .iter()
+                    .map(|kf| kf.frame)
+                    .collect()
+            },
         );
     } else {
         props.set_has_text(false);
@@ -664,6 +769,13 @@ fn refresh(props: &PropertiesWindow, world: &EcsWorld) {
             stage_h,
             |k| shape.get_param(k).unwrap_or(0.0),
             |_| None,
+            |k| {
+                world
+                    .get_keyframes(oid, k)
+                    .iter()
+                    .map(|kf| kf.frame)
+                    .collect()
+            },
         );
     } else {
         props.set_has_shape(false);
@@ -678,6 +790,13 @@ fn refresh(props: &PropertiesWindow, world: &EcsWorld) {
             stage_h,
             |k| audio.get_param(k).unwrap_or(0.0),
             |_| None,
+            |k| {
+                world
+                    .get_keyframes(oid, k)
+                    .iter()
+                    .map(|kf| kf.frame)
+                    .collect()
+            },
         );
     } else {
         props.set_has_audio(false);
@@ -708,27 +827,39 @@ fn refresh(props: &PropertiesWindow, world: &EcsWorld) {
             continue;
         };
         let schema = param_schema(meta);
-        push_c_abi_param_rows(&mut params, schema, meta.name, i as i32, |key| {
-            e.params
-                .get(key)
-                .map(|p| match &p.static_value {
-                    crate::ecs::types::Value::Number(n) => *n,
-                    crate::ecs::types::Value::Bool(b) => {
-                        if *b {
-                            1.0
-                        } else {
-                            0.0
+        push_c_abi_param_rows(
+            &mut params,
+            schema,
+            meta.name,
+            i as i32,
+            |key| {
+                e.params
+                    .get(key)
+                    .map(|p| match &p.static_value {
+                        crate::ecs::types::Value::Number(n) => *n,
+                        crate::ecs::types::Value::Bool(b) => {
+                            if *b {
+                                1.0
+                            } else {
+                                0.0
+                            }
                         }
-                    }
-                    crate::ecs::types::Value::Text(_) => 0.0,
-                })
-                .unwrap_or_else(|| {
-                    schema
-                        .iter()
-                        .find(|s| unsafe { s.key.as_str() } == key)
-                        .map_or(0.0, |s| s.default_float)
-                })
-        });
+                        crate::ecs::types::Value::Text(_) => 0.0,
+                    })
+                    .unwrap_or_else(|| {
+                        schema
+                            .iter()
+                            .find(|s| unsafe { s.key.as_str() } == key)
+                            .map_or(0.0, |s| s.default_float)
+                    })
+            },
+            |key| {
+                e.params
+                    .get(key)
+                    .map(|p| p.keyframes.iter().map(|k| k.frame).collect())
+                    .unwrap_or_default()
+            },
+        );
     }
     props.set_params(ModelRc::new(VecModel::from(params)));
 }
