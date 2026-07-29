@@ -20,6 +20,7 @@ export component TimelineView inherits Rectangle {
     callback range-select(int /* start-frame */, int /* end-frame */, int /* start-layer */, int /* end-layer */);
     callback move-object(int, int, int);
     callback resize-object(int, int, int);
+    callback keyframe-moved(int /* id */, int /* old-frame */, int /* new-frame */);
     callback scroll-requested(length /* wheel delta-y, consumed as horizontal scroll */);
 
     property <bool> range-selecting: false;
@@ -113,6 +114,7 @@ export component TimelineView inherits Rectangle {
             moved(id, start, layer) => { root.move-object(id, start, layer); }
             resized(id, start, end) => { root.resize-object(id, start, end); }
             context-requested(id, x, y) => { root.context-menu(x, y, obj.start-frame, obj.layer, id); }
+            keyframe-moved(id, old-frame, new-frame) => { root.keyframe-moved(id, old-frame, new-frame); }
         }
 
         Rectangle {

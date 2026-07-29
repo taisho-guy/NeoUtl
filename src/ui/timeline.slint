@@ -33,6 +33,8 @@ export component TimelineWindow inherits Window {
     callback select-object(int);
     callback move-object(int /* id */, int /* start-frame */, int /* layer */);
     callback resize-object(int /* id */, int /* start-frame */, int /* end-frame */);
+    callback split-object-at(int /* id */, int /* frame */);
+    callback keyframe-moved(int /* id */, int /* old-frame */, int /* new-frame */);
     callback range-select(int /* start-frame */, int /* end-frame */, int /* start-layer */, int /* end-layer */);
     callback set-zoom(float);
     callback toggle-layer-visible(int);
@@ -192,6 +194,7 @@ export component TimelineWindow inherits Window {
                 range-select(sf, ef, sl, el) => { root.range-select(sf, ef, sl, el); }
                 move-object(id, start, layer) => { root.move-object(id, start, layer); }
                 resize-object(id, start, end) => { root.resize-object(id, start, end); }
+                keyframe-moved(id, old-frame, new-frame) => { root.keyframe-moved(id, old-frame, new-frame); }
                 scroll-requested(dx) => {
                     root.scroll-x = max(0px, min(root.scroll-x - dx, max(0px, root.content-width - max(1px, view.width))));
                 }
@@ -212,7 +215,7 @@ export component TimelineWindow inherits Window {
         x: root.menu-x;
         y: root.menu-y;
         width: 170px;
-        height: root.menu-is-delete ? 40px : (root.available-kinds.length * 31px + 8px);
+        height: root.menu-is-delete ? 74px : (root.available-kinds.length * 31px + 8px);
         background: #252528;
         border-width: 1px;
         border-color: #48484e;
@@ -224,6 +227,24 @@ export component TimelineWindow inherits Window {
 
         if (root.menu-is-delete): VerticalLayout {
             padding: 4px;
+            spacing: 1px;
+
+            Rectangle {
+                background: split-touch.has-hover ? #15304a : transparent;
+                height: 30px;
+                border-radius: 3px;
+                Text {
+                    text: "  ✂  Split at Playhead";
+                    color: #88c4ff;
+                    font-size: 12px;
+                    vertical-alignment: center;
+                }
+
+                split-touch := TouchArea {
+                    clicked() => { root.split-object-at(root.menu-target-id, root.current-frame); root.show-context-menu = false; }
+                }
+            }
+
             Rectangle {
                 background: del-touch.has-hover ? #4a1515 : transparent;
                 height: 30px;
