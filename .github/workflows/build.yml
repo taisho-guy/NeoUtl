@@ -101,6 +101,7 @@ jobs:
         shell: bash
         env:
           PKG_CONFIG: pkg-config
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: cargo xtask build --release
 
       - name: ビルド(Windows / MSVC)
@@ -109,6 +110,7 @@ jobs:
         env:
           PKG_CONFIG_PATH: ${{ env.VCPKG_INSTALLED }}/lib/pkgconfig
           PKG_CONFIG: pkg-config.exe
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: cargo xtask build --release
 
       - name: 成果物収集(Linux)

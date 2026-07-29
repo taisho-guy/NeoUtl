@@ -97,11 +97,25 @@ fn platform_tag() -> &'static str {
     }
 }
 
+/// CI環境変数GITHUB_TOKEN（またはGH_TOKEN）が設定されていればAuthorizationヘッダを付与する。
+/// 未認証リクエストはIP単位60回/時のためGitHub Actions共有ランナーでは容易に枯渇する
+/// （実際に403で発生）。認証済みリクエストは5000回/時まで緩和される。
+/// トークン未設定（ローカル開発環境等）では従来通り未認証で送信する。
+fn github_token() -> Option<String> {
+    std::env::var("GITHUB_TOKEN")
+        .or_else(|_| std::env::var("GH_TOKEN"))
+        .ok()
+        .filter(|t| !t.is_empty())
+}
+
 fn fetch_latest_release() -> Result<ReleaseInfo, String> {
-    ureq::get(RELEASES_API_URL)
+    let mut req = ureq::get(RELEASES_API_URL)
         .set("User-Agent", "NeoUtl-xtask")
-        .set("Accept", "application/vnd.github+json")
-        .call()
+        .set("Accept", "application/vnd.github+json");
+    if let Some(token) = github_token() {
+        req = req.set("Authorization", &format!("Bearer {token}"));
+    }
+    req.call()
         .map_err(|err| format!("GitHub Releases API取得失敗: {err}"))?
         .into_json::<ReleaseInfo>()
         .map_err(|err| format!("GitHub Releases APIレスポンス解析失敗: {err}"))
@@ -115,8 +129,11 @@ fn select_asset<'a>(assets: &'a [ReleaseAsset], platform_tag: &str) -> Option<&'
 }
 
 fn download_asset_bytes(url: &str) -> Result<Vec<u8>, String> {
-    let response = ureq::get(url)
-        .set("User-Agent", "NeoUtl-xtask")
+    let mut req = ureq::get(url).set("User-Agent", "NeoUtl-xtask");
+    if let Some(token) = github_token() {
+        req = req.set("Authorization", &format!("Bearer {token}"));
+    }
+    let response = req
         .call()
         .map_err(|err| format!("Slangアセットダウンロード失敗: {err}"))?;
     let mut bytes = Vec::new();
