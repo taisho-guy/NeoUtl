@@ -36,7 +36,7 @@ serde_json = "1.0"
 
 [package]
 name = "NeoUtl"
-version = "0.0.0"
+version = "0.1.0"
 edition = "2024"
 
 [dependencies]
@@ -85,6 +85,6 @@ opt-level = 3
 lto = "fat"
 codegen-units = 1
 panic = "abort"
-#strip = true
-strip = false
-debug = true
+strip = true
+#strip = false
+#debug = true
