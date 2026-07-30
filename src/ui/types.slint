@@ -11,6 +11,12 @@ export struct TimelineObject {
     keyframe-frames: [int],
 }
 
+// Trackパラメータ（他オブジェクト参照）の選択候補1件。idはobject_id。
+export struct TrackOption {
+    id: int,
+    name: string,
+}
+
 export struct ObjectKindItem {
     kind: int,
     name: string,
@@ -28,10 +34,13 @@ export struct EffectRow {
     dragging: bool,
 }
 
-// kind: 0=Float, 1=Bool, 2=Color, 3=Text
+// kind: 0=Float, 1=Bool, 2=Color, 3=Enum, 4=Text, 5=FilePath, 6=Track
+// （neoutl-shared-abi::ParamKindの数値と一致させること）
 // effect-index: -1=オブジェクト直下パラメータ, 0以上=エフェクトスタックのインデックス
 // group: セクション見出し（トランスフォーム/テキスト/図形/オーディオ/プラグイン名、エフェクトはエフェクト名）
-// text: kind==3のときのみ使用する文字列値。それ以外のkindでは空文字。
+// text: kind==4(Text)またはkind==5(FilePath)のときのみ使用する文字列値。それ以外は空文字。
+// enum-options: kind==3(Enum)のときのみ使用する選択肢表示名列。
+// enum-index: kind==3(Enum)のとき選択中の選択肢index。kind==6(Track)のときtrack-options内の選択index（未選択は-1）。
 export struct ParamRow {
     effect-index: int,
     key: string,
@@ -42,6 +51,13 @@ export struct ParamRow {
     min: float,
     max: float,
     text: string,
+    enum-options: [string],
+    enum-index: int,
+    track-options: [TrackOption],
+    // track-options[i].nameをRust側で事前展開した表示名列。Slintの[struct]は
+    // ComboBox.modelとして直接使えず、.map()による射影も式内では使用できないため、
+    // 表示専用の平坦な文字列配列をRust側で並行して用意する。
+    track-names: [string],
     has-keyframes: bool,
     // 中間点トラック（AviQtl準拠）の描画用。フレーム番号の昇順配列（境界を含まない内部点のみ）。
     keyframe-frames: [int],

@@ -391,6 +391,84 @@ pub fn setup(
     {
         let state = state.clone();
         let pw = props.as_weak();
+        props.on_set_param_enum(move |index, key, value| {
+            let Some(p) = pw.upgrade() else { return };
+            let id = p.get_object_id();
+            if id < 0 {
+                return;
+            }
+            let world_holder = app_state::active_world(&state);
+            let mut world = world_holder.lock().unwrap();
+            world.set_effect_param_enum(
+                id as usize,
+                index as usize,
+                key.as_str(),
+                value.max(0) as u32,
+            );
+            refresh(&p, &world);
+        });
+    }
+
+    {
+        let state = state.clone();
+        let pw = props.as_weak();
+        props.on_set_param_text(move |index, key, text| {
+            let Some(p) = pw.upgrade() else { return };
+            let id = p.get_object_id();
+            if id < 0 {
+                return;
+            }
+            let world_holder = app_state::active_world(&state);
+            let mut world = world_holder.lock().unwrap();
+            world.set_effect_param_path(
+                id as usize,
+                index as usize,
+                key.as_str(),
+                text.to_string(),
+            );
+            refresh(&p, &world);
+        });
+    }
+
+    {
+        let state = state.clone();
+        let pw = props.as_weak();
+        props.on_pick_param_file(move |index, key| {
+            let Some(p) = pw.upgrade() else { return };
+            let id = p.get_object_id();
+            if id < 0 {
+                return;
+            }
+            let Some(path) = rfd::FileDialog::new().pick_file() else {
+                return;
+            };
+            let path_str = path.to_string_lossy().into_owned();
+            let world_holder = app_state::active_world(&state);
+            let mut world = world_holder.lock().unwrap();
+            world.set_effect_param_path(id as usize, index as usize, key.as_str(), path_str);
+            refresh(&p, &world);
+        });
+    }
+
+    {
+        let state = state.clone();
+        let pw = props.as_weak();
+        props.on_set_param_track(move |index, key, value| {
+            let Some(p) = pw.upgrade() else { return };
+            let id = p.get_object_id();
+            if id < 0 {
+                return;
+            }
+            let world_holder = app_state::active_world(&state);
+            let mut world = world_holder.lock().unwrap();
+            world.set_effect_param_track_ref(id as usize, index as usize, key.as_str(), value);
+            refresh(&p, &world);
+        });
+    }
+
+    {
+        let state = state.clone();
+        let pw = props.as_weak();
         props.on_add_effect(move |effect_id| {
             let Some(p) = pw.upgrade() else { return };
             let id = p.get_object_id();
@@ -851,6 +929,41 @@ fn apply_object_param_text(world: &mut EcsWorld, oid: usize, group: &str, key: &
 /// スキーマ配列を現在値で解決し、ParamRow列へ展開する。
 /// stage-relativeレンジ（X/Y/Z）はここでピクセル値へ確定する。
 /// get_text: kind==Textの行にのみ使用。対象外keyにはNoneを返せばよい。
+/// kind==Track行の選択候補。自分自身(exclude_oid)を除くアクティブシーン内の全オブジェクトを
+/// 列挙する（ドキュメント記載の最小スコープ「他オブジェクト参照」に基づく）。
+/// kind==Track行の選択候補一式。TrackOption列と、ComboBox.model用に事前展開した
+/// 表示名平坦配列(names)を対で保持する（Slint側は式内で[struct]への.map()を書けないため）。
+struct TrackOptions {
+    options: ModelRc<crate::TrackOption>,
+    names: ModelRc<SharedString>,
+}
+
+/// kind==Track行の選択候補。自分自身(exclude_oid)を除くアクティブシーン内の全オブジェクトを
+/// 列挙する（ドキュメント記載の最小スコープ「他オブジェクト参照」に基づく）。
+fn build_track_options(world: &EcsWorld, exclude_oid: usize) -> TrackOptions {
+    let options: Vec<crate::TrackOption> = world
+        .get_timeline_objects()
+        .into_iter()
+        .filter(|o| o.id as usize != exclude_oid)
+        .map(|o| crate::TrackOption {
+            id: o.id,
+            name: SharedString::from(format!("#{} (layer{})", o.id, o.layer)),
+        })
+        .collect();
+    let names: Vec<SharedString> = options.iter().map(|o| o.name.clone()).collect();
+    TrackOptions {
+        options: ModelRc::new(VecModel::from(options)),
+        names: ModelRc::new(VecModel::from(names)),
+    }
+}
+
+fn empty_track_options() -> TrackOptions {
+    TrackOptions {
+        options: ModelRc::new(VecModel::from(Vec::<crate::TrackOption>::new())),
+        names: ModelRc::new(VecModel::from(Vec::<SharedString>::new())),
+    }
+}
+
 fn push_schema_rows(
     out: &mut Vec<ParamRow>,
     schema: &'static [crate::ecs::object_schema::ParamSchema],
@@ -862,17 +975,25 @@ fn push_schema_rows(
     get: impl Fn(&str) -> f32,
     get_text: impl Fn(&str) -> Option<String>,
     keyframes: impl Fn(&str) -> Vec<Keyframe>,
+    track_options: &TrackOptions,
 ) {
     for s in schema {
         let (min, max) = resolve_range(s.range, stage_w, stage_h);
         let track = keyframes(s.key);
-        let base = if s.kind == ParamKind::Text {
-            0.0
-        } else {
-            get(s.key)
-        };
+        let non_interpolable = matches!(
+            s.kind,
+            ParamKind::Text | ParamKind::Enum | ParamKind::FilePath | ParamKind::Track
+        );
+        let base = if non_interpolable { 0.0 } else { get(s.key) };
         let frames: Vec<i32> = track.iter().map(|k| k.frame).collect();
         let seg = resolve_segment(&track, clip_start, clip_end, current_frame, base);
+        let enum_index = if s.kind == ParamKind::Enum {
+            get(s.key) as i32
+        } else if s.kind == ParamKind::Track {
+            get(s.key) as i32
+        } else {
+            0
+        };
         out.push(ParamRow {
             effect_index: -1,
             key: SharedString::from(s.key),
@@ -880,14 +1001,26 @@ fn push_schema_rows(
             group: SharedString::from(s.group),
             value: seg.current_value,
             kind: match s.kind {
-                ParamKind::Float | ParamKind::Enum => 0,
+                ParamKind::Float => 0,
                 ParamKind::Bool => 1,
                 ParamKind::Color => 2,
-                ParamKind::Text => 3,
+                ParamKind::Enum => 3,
+                ParamKind::Text => 4,
+                ParamKind::FilePath => 5,
+                ParamKind::Track => 6,
             },
             min,
             max,
             text: SharedString::from(get_text(s.key).unwrap_or_default()),
+            enum_options: ModelRc::new(VecModel::from(
+                s.enum_options
+                    .iter()
+                    .map(|o| SharedString::from(*o))
+                    .collect::<Vec<_>>(),
+            )),
+            enum_index,
+            track_options: track_options.options.clone(),
+            track_names: track_options.names.clone(),
             has_keyframes: !frames.is_empty(),
             keyframe_frames: ModelRc::new(VecModel::from(frames)),
             boundary_frames: ModelRc::new(VecModel::from(seg.boundary_frames)),
@@ -903,6 +1036,8 @@ fn push_schema_rows(
 /// 現在値で解決しParamRow列へ展開する。両プラグイン種別はneoutl-shared-abi::ParamSchemaを
 /// 共有するため、この一関数で処理できる（Phase6: push_plugin_rowsとエフェクトパラメータ
 /// 生成ループの重複を解消）。
+/// current: Float/Bool/Color/Enum/Trackのf32表現（Enum/Trackはインデックス/object_idをf32化）。
+/// text: Text/FilePathの文字列値。対象外kindの行にはNoneを返せばよい。
 fn push_c_abi_param_rows(
     out: &mut Vec<ParamRow>,
     schema: &[neoutl_shared_abi::ParamSchema],
@@ -912,7 +1047,9 @@ fn push_c_abi_param_rows(
     clip_end: i32,
     current_frame: i32,
     current: impl Fn(&str) -> f32,
+    text: impl Fn(&str) -> Option<String>,
     keyframes: impl Fn(&str) -> Vec<Keyframe>,
+    track_options: &TrackOptions,
 ) {
     for s in schema {
         let key = unsafe { s.key.as_str() };
@@ -921,6 +1058,11 @@ fn push_c_abi_param_rows(
         let track = keyframes(key);
         let frames: Vec<i32> = track.iter().map(|k| k.frame).collect();
         let seg = resolve_segment(&track, clip_start, clip_end, current_frame, base);
+        let enum_options: Vec<SharedString> =
+            neoutl_shared_abi::split_enum_options(unsafe { s.enum_options.as_str() })
+                .into_iter()
+                .map(SharedString::from)
+                .collect();
         out.push(ParamRow {
             effect_index,
             key: SharedString::from(key),
@@ -928,14 +1070,21 @@ fn push_c_abi_param_rows(
             group: SharedString::from(group),
             value: seg.current_value,
             kind: match s.kind {
-                ParamKind::Float | ParamKind::Enum => 0,
+                ParamKind::Float => 0,
                 ParamKind::Bool => 1,
                 ParamKind::Color => 2,
-                ParamKind::Text => 3,
+                ParamKind::Enum => 3,
+                ParamKind::Text => 4,
+                ParamKind::FilePath => 5,
+                ParamKind::Track => 6,
             },
             min: s.min,
             max: s.max,
-            text: SharedString::default(),
+            text: SharedString::from(text(key).unwrap_or_default()),
+            enum_options: ModelRc::new(VecModel::from(enum_options)),
+            enum_index: base as i32,
+            track_options: track_options.options.clone(),
+            track_names: track_options.names.clone(),
             has_keyframes: !frames.is_empty(),
             keyframe_frames: ModelRc::new(VecModel::from(frames)),
             boundary_frames: ModelRc::new(VecModel::from(seg.boundary_frames)),
@@ -986,6 +1135,7 @@ fn push_plugin_rows(
     let schema =
         unsafe { std::slice::from_raw_parts(meta.property_schema_ptr, meta.property_schema_len) };
     let current = world.get_plugin_params(oid).unwrap_or_default();
+    let track_options = empty_track_options();
     push_c_abi_param_rows(
         out,
         schema,
@@ -1002,7 +1152,9 @@ fn push_plugin_rows(
                     .map_or(0.0, |s| s.default_float)
             })
         },
+        |_| None,
         |_| Vec::new(),
+        &track_options,
     );
 }
 
@@ -1047,7 +1199,7 @@ fn apply_segment_to_row(row: &mut ParamRow, seg: &SegmentInfo) {
 }
 
 /// object_paramsモデルの該当行(group/key一致)のtextフィールドのみ書き換える。
-/// kind==3(Text)行専用。update_object_param_segmentと同一方針。
+/// kind==4(Text)行専用。update_object_param_segmentと同一方針。
 fn update_object_param_text(props: &PropertiesWindow, group: &str, key: &str, text: &str) {
     let model = props.get_object_params();
     for i in 0..model.row_count() {
@@ -1147,6 +1299,7 @@ fn refresh(props: &PropertiesWindow, world: &EcsWorld) {
     let (clip_start, clip_end) = world.get_time_range(oid);
 
     let mut object_params: Vec<ParamRow> = Vec::new();
+    let track_options = build_track_options(world, oid);
 
     if let Some(t) = world.get_transform(oid) {
         props.set_has_transform(true);
@@ -1161,6 +1314,7 @@ fn refresh(props: &PropertiesWindow, world: &EcsWorld) {
             |k| t.get_param(k).unwrap_or(0.0),
             |_| None,
             |k| world.get_keyframes(oid, k),
+            &track_options,
         );
     } else {
         props.set_has_transform(false);
@@ -1180,6 +1334,7 @@ fn refresh(props: &PropertiesWindow, world: &EcsWorld) {
             |k| text.get_param(k).unwrap_or(0.0),
             |k| (k == "text").then(|| body.clone()),
             |k| world.get_keyframes(oid, k),
+            &track_options,
         );
     } else {
         props.set_has_text(false);
@@ -1198,6 +1353,7 @@ fn refresh(props: &PropertiesWindow, world: &EcsWorld) {
             |k| shape.get_param(k).unwrap_or(0.0),
             |_| None,
             |k| world.get_keyframes(oid, k),
+            &track_options,
         );
     } else {
         props.set_has_shape(false);
@@ -1216,6 +1372,7 @@ fn refresh(props: &PropertiesWindow, world: &EcsWorld) {
             |k| audio.get_param(k).unwrap_or(0.0),
             |_| None,
             |k| world.get_keyframes(oid, k),
+            &track_options,
         );
     } else {
         props.set_has_audio(false);
@@ -1273,7 +1430,10 @@ fn refresh(props: &PropertiesWindow, world: &EcsWorld) {
                                 0.0
                             }
                         }
-                        crate::ecs::types::Value::Text(_) => 0.0,
+                        crate::ecs::types::Value::Enum(idx) => *idx as f32,
+                        crate::ecs::types::Value::TrackRef(oid) => *oid as f32,
+                        crate::ecs::types::Value::Text(_)
+                        | crate::ecs::types::Value::FilePath(_) => 0.0,
                     })
                     .unwrap_or_else(|| {
                         schema
@@ -1283,11 +1443,20 @@ fn refresh(props: &PropertiesWindow, world: &EcsWorld) {
                     })
             },
             |key| {
+                e.params.get(key).and_then(|p| match &p.static_value {
+                    crate::ecs::types::Value::Text(s) | crate::ecs::types::Value::FilePath(s) => {
+                        Some(s.clone())
+                    }
+                    _ => None,
+                })
+            },
+            |key| {
                 e.params
                     .get(key)
                     .map(|p| p.keyframes.clone())
                     .unwrap_or_default()
             },
+            &track_options,
         );
     }
     props.set_params(ModelRc::new(VecModel::from(params)));

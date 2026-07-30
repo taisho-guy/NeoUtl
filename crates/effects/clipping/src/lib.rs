@@ -15,6 +15,7 @@ static PARAM_SCHEMA: &[EffectParamSchema] = &[
         max: 1.0,
         step: 0.01,
         default_float: 0.0,
+        enum_options: StrRef::from_str(""),
     },
     EffectParamSchema {
         key: StrRef::from_str("top"),
@@ -24,6 +25,7 @@ static PARAM_SCHEMA: &[EffectParamSchema] = &[
         max: 1.0,
         step: 0.01,
         default_float: 0.0,
+        enum_options: StrRef::from_str(""),
     },
     EffectParamSchema {
         key: StrRef::from_str("right"),
@@ -33,6 +35,7 @@ static PARAM_SCHEMA: &[EffectParamSchema] = &[
         max: 1.0,
         step: 0.01,
         default_float: 1.0,
+        enum_options: StrRef::from_str(""),
     },
     EffectParamSchema {
         key: StrRef::from_str("bottom"),
@@ -42,6 +45,7 @@ static PARAM_SCHEMA: &[EffectParamSchema] = &[
         max: 1.0,
         step: 0.01,
         default_float: 1.0,
+        enum_options: StrRef::from_str(""),
     },
     EffectParamSchema {
         key: StrRef::from_str("invert"),
@@ -51,6 +55,7 @@ static PARAM_SCHEMA: &[EffectParamSchema] = &[
         max: 1.0,
         step: 1.0,
         default_float: 0.0,
+        enum_options: StrRef::from_str(""),
     },
 ];
 

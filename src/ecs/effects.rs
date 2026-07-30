@@ -37,7 +37,11 @@ impl EffectStack {
                 let key = unsafe { p.key.as_str() }.to_owned();
                 let value = match p.kind {
                     ParamKind::Bool => Value::Bool(p.default_float != 0.0),
-                    _ => Value::Number(p.default_float),
+                    ParamKind::Enum => Value::Enum(p.default_float as u32),
+                    ParamKind::Text => Value::Text(String::new()),
+                    ParamKind::FilePath => Value::FilePath(String::new()),
+                    ParamKind::Track => Value::TrackRef(-1),
+                    ParamKind::Float | ParamKind::Color => Value::Number(p.default_float),
                 };
                 instance.params.insert(key, EffectParam::new(value));
             }
@@ -76,6 +80,22 @@ impl EffectStack {
 
     pub fn set_param_bool(&mut self, index: usize, key: &str, value: bool) {
         self.set_param_value(index, key, Value::Bool(value));
+    }
+
+    pub fn set_param_text(&mut self, index: usize, key: &str, value: String) {
+        self.set_param_value(index, key, Value::Text(value));
+    }
+
+    pub fn set_param_path(&mut self, index: usize, key: &str, value: String) {
+        self.set_param_value(index, key, Value::FilePath(value));
+    }
+
+    pub fn set_param_enum(&mut self, index: usize, key: &str, value: u32) {
+        self.set_param_value(index, key, Value::Enum(value));
+    }
+
+    pub fn set_param_track_ref(&mut self, index: usize, key: &str, value: i32) {
+        self.set_param_value(index, key, Value::TrackRef(value));
     }
 
     /// 基準値のみを更新する。既存の中間点は保持する

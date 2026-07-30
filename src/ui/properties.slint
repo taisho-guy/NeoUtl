@@ -1,5 +1,5 @@
-import { EffectRow, ParamRow } from "types.slint";
-import { Slider } from "std-widgets.slint";
+import { EffectRow, ParamRow, TrackOption } from "types.slint";
+import { Slider, ComboBox } from "std-widgets.slint";
 
 // AviQtl(ParamControl.qml)の左右対称構成を踏襲するが、左右の意味は
 // 「現在ハイライトされている区間の開始値・終了値」を独立して編集する方式へ変更する。
@@ -411,7 +411,7 @@ component MenuItem inherits Rectangle {
     }
 }
 
-// kind: 0=Float, 1=Bool, 2=Color, 3=Text
+// kind: 0=Float, 1=Bool, 2=Color, 3=Enum, 4=Text, 5=FilePath, 6=Track
 component ParamField inherits Rectangle {
     in property <ParamRow> data;
     in property <int> current-frame: 0;
@@ -421,6 +421,10 @@ component ParamField inherits Rectangle {
     callback changed-segment-end(float);
     callback changed-bool(bool);
     callback changed-text(string);
+    callback changed-enum(int);
+    callback changed-path(string);
+    callback pick-path();
+    callback changed-track(int);
     callback commit();
     callback release();
     // 引数: 対象フレーム。常に実在する境界点（KeyframeTrack.boundary-framesの要素、
@@ -434,7 +438,7 @@ component ParamField inherits Rectangle {
     callback keyframe-drag(int, int);
     callback keyframe-context-menu(bool, int, length, length);
 
-    height: data.kind == 3 ? 44px : (data.kind == 0 || data.kind == 2) ? 34px : 22px;
+    height: (data.kind == 4 || data.kind == 5) ? 44px : (data.kind == 0 || data.kind == 2) ? 34px : 22px;
 
     if data.kind == 0 || data.kind == 2: VerticalLayout {
         spacing: 2px;
@@ -476,7 +480,21 @@ component ParamField inherits Rectangle {
         toggled => { root.changed-bool(data.value <= 0.5); }
     }
 
-    if data.kind == 3: Rectangle {
+    if data.kind == 3: VerticalLayout {
+        spacing: 2px;
+        Text {
+            text: data.label;
+            color: #c8c8d2;
+            font-size: 11px;
+        }
+        ComboBox {
+            model: data.enum-options;
+            current-index: data.enum-index;
+            selected(value) => { root.changed-enum(self.current-index); }
+        }
+    }
+
+    if data.kind == 4: Rectangle {
         height: 44px;
         border-radius: 3px;
         background: #1e1e24;
@@ -493,6 +511,64 @@ component ParamField inherits Rectangle {
             font-size: 11px;
             wrap: word-wrap;
             accepted => { root.changed-text(self.text); }
+        }
+    }
+
+    if data.kind == 5: HorizontalLayout {
+        height: 44px;
+        spacing: 4px;
+        Rectangle {
+            border-radius: 3px;
+            background: #1e1e24;
+            border-width: 1px;
+            border-color: #303038;
+
+            TextInput {
+                x: 6px;
+                y: 4px;
+                width: parent.width - 12px;
+                height: parent.height - 8px;
+                text: data.text;
+                color: #dde3ee;
+                font-size: 11px;
+                wrap: no-wrap;
+                accepted => { root.changed-path(self.text); }
+            }
+        }
+        Rectangle {
+            width: 64px;
+            border-radius: 3px;
+            background: #2a2a32;
+            border-width: 1px;
+            border-color: #383840;
+            Text {
+                text: "参照...";
+                color: #dde3ee;
+                font-size: 11px;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+            }
+            TouchArea {
+                clicked => { root.pick-path(); }
+            }
+        }
+    }
+
+    if data.kind == 6: VerticalLayout {
+        spacing: 2px;
+        Text {
+            text: data.label;
+            color: #c8c8d2;
+            font-size: 11px;
+        }
+        ComboBox {
+            model: data.track-names;
+            current-index: data.enum-index;
+            selected(value) => {
+                root.changed-track(self.current-index >= 0 && self.current-index < data.track-options.length
+                    ? data.track-options[self.current-index].id
+                    : -1);
+            }
         }
     }
 }
@@ -558,6 +634,14 @@ export component PropertiesWindow inherits Window {
     // 引数: (effect-index, key, frame, value)。
     callback set-param-segment(int, string, int, float);
     callback set-param-bool(int, string, bool);
+    // 引数: (effect-index, key, selected-index)。kind==Enumの選択確定。
+    callback set-param-enum(int, string, int);
+    // 引数: (effect-index, key, text)。kind==FilePathのテキスト欄直接編集確定。
+    callback set-param-text(int, string, string);
+    // 引数: (effect-index, key)。「参照...」ボタン押下、ネイティブファイルダイアログをRust側で開く。
+    callback pick-param-file(int, string);
+    // 引数: (effect-index, key, selected-object-id)。kind==Trackの選択確定。
+    callback set-param-track(int, string, int);
     callback commit-param(int, string);
     callback add-effect(string);
     callback move-effect(int, int);
@@ -716,7 +800,7 @@ export component PropertiesWindow inherits Window {
 
                 for p[j] in root.object-params: Rectangle {
                     height: (j == 0 || p.group != root.object-params[j - 1].group ? 26px : 0px)
-                        + (p.kind == 3 ? 44px : (p.kind == 0 || p.kind == 2) ? 34px : 22px);
+                        + ((p.kind == 4 || p.kind == 5) ? 44px : (p.kind == 0 || p.kind == 2) ? 34px : 22px);
                     clip: true;
 
                     VerticalLayout {
@@ -771,7 +855,7 @@ export component PropertiesWindow inherits Window {
 
                     for p[j] in root.params: Rectangle {
                         height: p.effect-index != eff.index ? 0px
-                            : p.kind == 3 ? 44px : (p.kind == 0 || p.kind == 2) ? 34px : 22px;
+                            : (p.kind == 4 || p.kind == 5) ? 44px : (p.kind == 0 || p.kind == 2) ? 34px : 22px;
                         clip: true;
 
                         if p.effect-index == eff.index: ParamField {
@@ -780,6 +864,10 @@ export component PropertiesWindow inherits Window {
                             changed-segment-start(v) => { root.set-param-segment(eff.index, p.key, p.segment-start-frame, v); }
                             changed-segment-end(v) => { root.set-param-segment(eff.index, p.key, p.segment-end-frame, v); }
                             changed-bool(v) => { root.set-param-bool(eff.index, p.key, v); }
+                            changed-enum(v) => { root.set-param-enum(eff.index, p.key, v); }
+                            changed-path(v) => { root.set-param-text(eff.index, p.key, v); }
+                            pick-path => { root.pick-param-file(eff.index, p.key); }
+                            changed-track(v) => { root.set-param-track(eff.index, p.key, v); }
                             commit => {
                                 root.is-dragging-param = true;
                                 root.commit-param(eff.index, p.key);

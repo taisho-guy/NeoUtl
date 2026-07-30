@@ -16,6 +16,7 @@ static PARAM_SCHEMA: &[EffectParamSchema] = &[
         max: 1.0,
         step: 0.02,
         default_float: 0.0,
+        enum_options: StrRef::from_str(""),
     },
     EffectParamSchema {
         key: StrRef::from_str("contrast"),
@@ -25,6 +26,7 @@ static PARAM_SCHEMA: &[EffectParamSchema] = &[
         max: 1.0,
         step: 0.02,
         default_float: 0.0,
+        enum_options: StrRef::from_str(""),
     },
     EffectParamSchema {
         key: StrRef::from_str("saturation"),
@@ -34,6 +36,7 @@ static PARAM_SCHEMA: &[EffectParamSchema] = &[
         max: 1.0,
         step: 0.02,
         default_float: 0.0,
+        enum_options: StrRef::from_str(""),
     },
     EffectParamSchema {
         key: StrRef::from_str("hue"),
@@ -43,6 +46,7 @@ static PARAM_SCHEMA: &[EffectParamSchema] = &[
         max: 180.0,
         step: 3.6,
         default_float: 0.0,
+        enum_options: StrRef::from_str(""),
     },
 ];
 

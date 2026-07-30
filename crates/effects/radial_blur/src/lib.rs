@@ -15,6 +15,7 @@ static PARAM_SCHEMA: &[EffectParamSchema] = &[
         max: 1.0,
         step: 0.01,
         default_float: 0.5,
+        enum_options: StrRef::from_str(""),
     },
     EffectParamSchema {
         key: StrRef::from_str("center_y"),
@@ -24,6 +25,7 @@ static PARAM_SCHEMA: &[EffectParamSchema] = &[
         max: 1.0,
         step: 0.01,
         default_float: 0.5,
+        enum_options: StrRef::from_str(""),
     },
     EffectParamSchema {
         key: StrRef::from_str("strength"),
@@ -33,6 +35,7 @@ static PARAM_SCHEMA: &[EffectParamSchema] = &[
         max: 100.0,
         step: 1.0,
         default_float: 10.0,
+        enum_options: StrRef::from_str(""),
     },
 ];
 

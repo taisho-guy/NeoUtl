@@ -22,6 +22,8 @@ pub enum ParamKind {
     Color = 2,
     Enum = 3,
     Text = 4,
+    FilePath = 5,
+    Track = 6,
 }
 
 /// C ABI越しに渡す固定長文字列参照。
@@ -49,8 +51,21 @@ impl StrRef {
 unsafe impl Send for StrRef {}
 unsafe impl Sync for StrRef {}
 
+/// enum_optionsのNUL区切り結合文字列を選択肢列へ分解する。空文字列は空Vecとする。
+pub fn split_enum_options(joined: &str) -> Vec<&str> {
+    if joined.is_empty() {
+        Vec::new()
+    } else {
+        joined.split('\0').collect()
+    }
+}
+
 /// float既定値のみ格納。Bool/Enumはdefault_floatを0/1として解釈する。
-/// Textはdefault_floatを不使用（0.0固定）としホスト側の初期文字列は空文字とする。
+/// Text/FilePath/Trackはdefault_floatを不使用（0.0固定）とし、ホスト側の初期値は
+/// それぞれ空文字列/空文字列/未選択(-1)とする。
+/// enum_optionsはkind==EnumのときのみNUL区切り文字列（例"A\0B\0C"）として解釈する
+/// （'static配列参照をC ABI越しに渡す手段がないため、単一StrRefへ結合する）。
+/// kind!=Enumのenum_optionsは空StrRefとする。
 #[repr(C)]
 #[derive(Clone, Copy)]
 pub struct ParamSchema {
@@ -61,6 +76,7 @@ pub struct ParamSchema {
     pub max: f32,
     pub step: f32,
     pub default_float: f32,
+    pub enum_options: StrRef,
 }
 
 #[repr(C)]

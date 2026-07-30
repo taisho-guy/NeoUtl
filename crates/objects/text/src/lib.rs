@@ -13,6 +13,7 @@ static PARAM_SCHEMA: &[ParamSchema] = &[
         max: 500.0,
         step: 1.0,
         default_float: 48.0,
+        enum_options: StrRef::from_str(""),
     },
     ParamSchema {
         key: StrRef::from_str("bold"),
@@ -22,6 +23,7 @@ static PARAM_SCHEMA: &[ParamSchema] = &[
         max: 1.0,
         step: 1.0,
         default_float: 0.0,
+        enum_options: StrRef::from_str(""),
     },
     ParamSchema {
         key: StrRef::from_str("italic"),
@@ -31,6 +33,7 @@ static PARAM_SCHEMA: &[ParamSchema] = &[
         max: 1.0,
         step: 1.0,
         default_float: 0.0,
+        enum_options: StrRef::from_str(""),
     },
 ];
 

@@ -15,6 +15,7 @@ static PARAM_SCHEMA: &[ParamSchema] = &[
         max: 32.0,
         step: 1.0,
         default_float: 4.0,
+        enum_options: StrRef::from_str(""),
     },
     ParamSchema {
         key: StrRef::from_str("extrude_depth"),
@@ -24,6 +25,7 @@ static PARAM_SCHEMA: &[ParamSchema] = &[
         max: 5.0,
         step: 0.01,
         default_float: 0.0,
+        enum_options: StrRef::from_str(""),
     },
     ParamSchema {
         key: StrRef::from_str("stroke_width"),
@@ -33,6 +35,7 @@ static PARAM_SCHEMA: &[ParamSchema] = &[
         max: 50.0,
         step: 0.5,
         default_float: 0.0,
+        enum_options: StrRef::from_str(""),
     },
     ParamSchema {
         key: StrRef::from_str("fill_color"),
@@ -42,6 +45,7 @@ static PARAM_SCHEMA: &[ParamSchema] = &[
         max: 1.0,
         step: 0.0,
         default_float: 1.0,
+        enum_options: StrRef::from_str(""),
     },
 ];
 

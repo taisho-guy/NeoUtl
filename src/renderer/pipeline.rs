@@ -763,7 +763,8 @@ impl RenderEngine {
                                 0.0
                             }
                         }
-                        Value::Text(_) => s.default_float,
+                        Value::Enum(idx) => *idx as f32,
+                        Value::Text(_) | Value::FilePath(_) | Value::TrackRef(_) => s.default_float,
                     })
                 })
                 .collect();
