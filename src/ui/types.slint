@@ -43,8 +43,19 @@ export struct ParamRow {
     max: float,
     text: string,
     has-keyframes: bool,
-    // 中間点トラック（AviQtl準拠）の描画用。フレーム番号の昇順配列。
+    // 中間点トラック（AviQtl準拠）の描画用。フレーム番号の昇順配列（境界を含まない内部点のみ）。
     keyframe-frames: [int],
+    // 境界フレーム列（昇順・重複無し）。先頭=clip-start、末尾=clip-end、
+    // 中間=既存中間点。要素数は常に2以上。区間トラック描画・区間ハイライトの
+    // 両方が参照する唯一の点集合（Slint側は探索を行わず、この配列と
+    // segment-start-frame/segment-end-frameのみで描画を完結させる）。
+    boundary-frames: [int],
+    // 現在フレームを内包する区間の両端（絶対フレーム）。
+    segment-start-frame: int,
+    segment-end-frame: int,
+    // 上記区間の両端実効値（neoutl_interp::evaluate結果）。
+    segment-start-value: float,
+    segment-end-value: float,
 }
 
 // category: エフェクトプラグインのEffectMeta.categoryをそのまま転記する。
