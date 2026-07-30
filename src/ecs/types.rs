@@ -48,19 +48,30 @@ impl EffectParam {
 
     /// frame位置へ中間点を1件設定する。同一frameが既にあれば上書きする。
     pub fn set_keyframe(&mut self, frame: i32, value: f32, easing: Easing) {
+        let edit_seq = neoutl_interp::next_edit_seq();
         match self.keyframes.iter_mut().find(|k| k.frame == frame) {
             Some(existing) => {
                 existing.value = value;
                 existing.easing = easing;
+                existing.edit_seq = edit_seq;
             }
             None => {
                 self.keyframes.push(Keyframe {
                     frame,
                     value,
                     easing,
+                    edit_seq,
                 });
                 self.keyframes.sort_by_key(|k| k.frame);
             }
+        }
+    }
+
+    /// move_objectでの平行移動用。全中間点をdeltaだけシフトする
+    /// （KeyframeTracks::shiftとの対称実装）。
+    pub fn shift_keyframes(&mut self, delta: i32) {
+        for k in self.keyframes.iter_mut() {
+            k.frame += delta;
         }
     }
 
@@ -117,33 +128,36 @@ impl EffectParam {
         }
     }
 
-    /// リサイズ時の境界クランプ則を適用する。
-    /// 1) [start,end) 範囲外の中間点は境界フレームへクランプする（削除しない）。
-    /// 2) クランプ結果、境界フレームと同一frameになった内部点は境界点優先で破棄する。
-    /// 3) クランプ結果、複数の内部点が同一frameへ集まった場合はフレーム昇順で
-    ///    最初の点を残し以降を破棄する（衝突解決則）。
-    /// 呼び出し前提: end > start + 0（1フレーム未満の幅は呼び出し元が拒否する）。
-    pub fn clamp_keyframes_to_range(&mut self, start: i32, end: i32) {
+    /// リサイズ時の境界クランプ則を適用する。実体はneoutl_interp::clamp_and_reseedへ
+    /// 委譲する（KeyframeTracks::clamp_to_rangeと単一実装を共有し、コピペ実装の
+    /// 分岐リスクを排除する）。
+    /// 1) 新境界(new_start/new_end)は旧境界における実効値を必ず継承する（削除のみで
+    ///    終わらない）。
+    /// 2) 内部点は旧範囲から新範囲への長さ比でスケールし、クリップ内相対位置を保存する。
+    /// 3) スケール後に複数点が同一frameへ集約した場合はedit_seq最大（直近の書き込み）
+    ///    が残る。
+    pub fn clamp_keyframes_to_range(
+        &mut self,
+        old_start: i32,
+        old_end: i32,
+        new_start: i32,
+        new_end: i32,
+    ) {
         if self.keyframes.is_empty() {
             return;
         }
-        for k in self.keyframes.iter_mut() {
-            k.frame = k.frame.clamp(start, end);
-        }
-        self.keyframes.sort_by_key(|k| k.frame);
-        self.keyframes
-            .retain(|k| k.frame != start && k.frame != end);
-        let mut deduped: Vec<Keyframe> = Vec::with_capacity(self.keyframes.len());
-        for k in self.keyframes.drain(..) {
-            if deduped
-                .last()
-                .is_some_and(|last: &Keyframe| last.frame == k.frame)
-            {
-                continue;
-            }
-            deduped.push(k);
-        }
-        self.keyframes = deduped;
+        let base = match &self.static_value {
+            Value::Number(b) => *b,
+            _ => 0.0,
+        };
+        neoutl_interp::clamp_and_reseed(
+            &mut self.keyframes,
+            old_start,
+            old_end,
+            new_start,
+            new_end,
+            base,
+        );
     }
 }
 
@@ -173,31 +187,37 @@ mod clamp_tests {
     }
 
     #[test]
-    fn interior_points_survive_within_range() {
+    fn interior_points_survive_resize() {
         let mut p = EffectParam::new(Value::Number(0.0));
         p.set_keyframe(10, 1.0, ez());
         p.set_keyframe(20, 2.0, ez());
-        p.clamp_keyframes_to_range(0, 30);
-        assert_eq!(p.keyframes.len(), 2);
+        p.clamp_keyframes_to_range(0, 30, 0, 30);
+        assert_eq!(p.keyframes.len(), 4);
     }
 
     #[test]
-    fn out_of_range_points_clamp_then_absorb_into_boundary() {
+    fn untouched_boundary_keeps_its_value_on_one_sided_resize() {
         let mut p = EffectParam::new(Value::Number(0.0));
-        p.set_keyframe(-5, 1.0, ez());
-        p.set_keyframe(50, 2.0, ez());
-        p.clamp_keyframes_to_range(0, 30);
-        assert!(p.keyframes.is_empty());
+        p.set_keyframe(0, 1.0, ez());
+        p.set_keyframe(30, 2.0, ez());
+        p.clamp_keyframes_to_range(0, 30, 0, 60);
+        assert_eq!(p.keyframes.first().unwrap().frame, 0);
+        assert_eq!(p.keyframes.first().unwrap().value, 1.0);
     }
 
     #[test]
-    fn collided_interior_points_keep_first_only() {
+    fn shrink_collision_keeps_latest_write() {
         let mut p = EffectParam::new(Value::Number(0.0));
-        p.set_keyframe(-5, 1.0, ez());
-        p.set_keyframe(-3, 2.0, ez());
-        p.set_keyframe(10, 3.0, ez());
-        p.clamp_keyframes_to_range(0, 30);
-        assert_eq!(p.keyframes.len(), 1);
-        assert_eq!(p.keyframes[0].frame, 10);
+        p.set_keyframe(0, 0.0, ez());
+        p.set_keyframe(10, 1.0, ez());
+        p.set_keyframe(11, 3.0, ez());
+        p.set_keyframe(30, 0.0, ez());
+        p.clamp_keyframes_to_range(0, 30, 0, 3);
+        let interior_value = p
+            .keyframes
+            .iter()
+            .find(|k| k.frame != 0 && k.frame != 3)
+            .map(|k| k.value);
+        assert_eq!(interior_value, Some(3.0));
     }
 }

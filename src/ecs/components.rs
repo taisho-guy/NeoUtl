@@ -202,16 +202,19 @@ impl KeyframeTracks {
         easing: neoutl_interp::Easing,
     ) {
         let track = self.0.entry(key.to_owned()).or_default();
+        let edit_seq = neoutl_interp::next_edit_seq();
         match track.iter_mut().find(|k| k.frame == frame) {
             Some(existing) => {
                 existing.value = value;
                 existing.easing = easing;
+                existing.edit_seq = edit_seq;
             }
             None => {
                 track.push(neoutl_interp::Keyframe {
                     frame,
                     value,
                     easing,
+                    edit_seq,
                 });
                 track.sort_by_key(|k| k.frame);
             }
@@ -247,31 +250,42 @@ impl KeyframeTracks {
         true
     }
 
-    /// リサイズ時の境界クランプ則。EffectParam::clamp_keyframes_to_rangeと同一規則を
-    /// 全key横断で適用する（規則の詳細はecs/types.rsのコメント参照）。
-    pub fn clamp_to_range(&mut self, start: i32, end: i32) {
-        for track in self.0.values_mut() {
+    /// リサイズ時の境界クランプ則。実体はneoutl_interp::clamp_and_reseedへ委譲する
+    /// （EffectParam::clamp_keyframes_to_rangeと重複実装しない、単一の実装を共有する）。
+    /// フォールバック値はtrack非空時には評価上使用されない（neoutl_interp::evaluateの
+    /// フォールバック分岐は空配列専用）ため、0.0固定で渡す。
+    /// 戻り値は key -> ClampReport のマップ。衝突が発生したkeyのみ含む。
+    pub fn clamp_to_range(
+        &mut self,
+        old_start: i32,
+        old_end: i32,
+        new_start: i32,
+        new_end: i32,
+    ) -> HashMap<String, neoutl_interp::ClampReport> {
+        let mut reports = HashMap::new();
+        for (key, track) in self.0.iter_mut() {
             if track.is_empty() {
                 continue;
             }
-            for k in track.iter_mut() {
-                k.frame = k.frame.clamp(start, end);
+            let report =
+                neoutl_interp::clamp_and_reseed(track, old_start, old_end, new_start, new_end, 0.0);
+            if report.collisions_resolved > 0 {
+                reports.insert(key.clone(), report);
             }
-            track.sort_by_key(|k| k.frame);
-            track.retain(|k| k.frame != start && k.frame != end);
-            let mut deduped: Vec<neoutl_interp::Keyframe> = Vec::with_capacity(track.len());
-            for k in track.drain(..) {
-                if deduped
-                    .last()
-                    .is_some_and(|last: &neoutl_interp::Keyframe| last.frame == k.frame)
-                {
-                    continue;
-                }
-                deduped.push(k);
-            }
-            *track = deduped;
         }
         self.0.retain(|_, track| !track.is_empty());
+        reports
+    }
+
+    /// move_object（単純平行移動）で使う。全keyの全中間点をdeltaだけシフトする。
+    /// resize_objectのクランプ処理と対称にし、「移動は無視・伸縮はクランプ」という
+    /// 非対称設計を解消する。
+    pub fn shift(&mut self, delta: i32) {
+        for track in self.0.values_mut() {
+            for k in track.iter_mut() {
+                k.frame += delta;
+            }
+        }
     }
 
     /// split_frame（絶対フレーム）でクリップを分割する。呼び出し元自身は前半
