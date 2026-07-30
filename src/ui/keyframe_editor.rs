@@ -7,7 +7,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 /// プロパティパネル・タイムライン双方が「今どのパラメータを編集対象としているか」を
-/// 共有するための状態。中間点の追加・削除でクリップ側マーカーを即時再描画するために使う。
+/// 共有するための状態。区間境界点マーカーをクリップ側で即時再描画するために使う。
 #[derive(Clone)]
 pub struct ActiveParam {
     pub object_id: i32,
@@ -153,46 +153,29 @@ fn keyframes_for(
     }
 }
 
-/// 指定frameの中間点をウィンドウへ反映する。既存点があればその値・補間種別を、
-/// 無ければ現在の基準値をvalueの初期値として表示する（新規作成モード）。
-fn load_point(
-    win: &KeyframeEditorWindow,
-    world: &EcsWorld,
-    object_id: i32,
-    effect_index: i32,
-    key: &str,
-    frame: i32,
-    fallback_value: f32,
-) {
-    let track = keyframes_for(world, object_id, effect_index, key);
-    match track.iter().find(|k| k.frame == frame) {
-        Some(k) => {
-            win.set_point_exists(true);
-            win.set_value(k.value);
-            win.set_easing_kind(easing_index(&k.easing));
-            if let Easing::Bezier { cp1, cp2 } = k.easing {
-                win.set_bezier_cp1_x(cp1.0);
-                win.set_bezier_cp1_y(cp1.1);
-                win.set_bezier_cp2_x(cp2.0);
-                win.set_bezier_cp2_y(cp2.1);
-            }
-            if let Easing::Random { seed, step } = k.easing {
-                win.set_random_seed(seed as i32);
-                win.set_random_step(step);
-            }
-        }
-        None => {
-            win.set_point_exists(false);
-            win.set_value(fallback_value);
-            win.set_easing_kind(0);
-        }
-    }
-    refresh_preview(win);
+/// clip_start/clip_end・既存中間点から、start_frameを起点とする区間の終端フレームを
+/// 確定する。境界点は常にclip_start/clip_endを含むため、戻り値は必ず存在する。
+fn segment_end_frame(
+    track: &[crate::ecs::types::Keyframe],
+    clip_start: i32,
+    clip_end: i32,
+    start_frame: i32,
+) -> i32 {
+    let mut boundary: Vec<i32> = std::iter::once(clip_start)
+        .chain(track.iter().map(|k| k.frame))
+        .chain(std::iter::once(clip_end))
+        .collect();
+    boundary.sort_unstable();
+    boundary.dedup();
+    boundary
+        .into_iter()
+        .find(|&f| f > start_frame)
+        .unwrap_or(clip_end)
 }
 
 /// 現在値の取得。ネイティブパラメータはParamAccess経由、エフェクトパラメータは
-/// EffectParam::static_valueをNumber前提で読む（Bool/Textは中間点非対応のため
-/// このウィンドウ自体を開くボタンがproperties側でkind==0/2のみに限定されている）。
+/// EffectParam::static_valueをNumber前提で読む（Bool/Textは区間編集非対応のため
+/// このパネルを開くボタンがproperties側でkind==0/2のみに限定されている）。
 fn current_value(
     world: &EcsWorld,
     object_id: i32,
@@ -214,8 +197,45 @@ fn current_value(
     }
 }
 
-/// プロパティパネル側のボタンクリックから呼ばれる。ウィンドウ内容を対象パラメータ・
-/// 現在フレームで初期化する。
+/// segment_start_frameに実在する点があればその補間種別を、無ければ既定(Linear)を表示する。
+fn load_segment(
+    win: &KeyframeEditorWindow,
+    world: &EcsWorld,
+    object_id: i32,
+    effect_index: i32,
+    key: &str,
+    segment_start_frame: i32,
+    clip_start: i32,
+    clip_end: i32,
+) {
+    let track = keyframes_for(world, object_id, effect_index, key);
+    let end_frame = segment_end_frame(&track, clip_start, clip_end, segment_start_frame);
+    win.set_segment_start_frame(segment_start_frame);
+    win.set_segment_end_frame(end_frame);
+
+    match track.iter().find(|k| k.frame == segment_start_frame) {
+        Some(k) => {
+            win.set_easing_kind(easing_index(&k.easing));
+            if let Easing::Bezier { cp1, cp2 } = k.easing {
+                win.set_bezier_cp1_x(cp1.0);
+                win.set_bezier_cp1_y(cp1.1);
+                win.set_bezier_cp2_x(cp2.0);
+                win.set_bezier_cp2_y(cp2.1);
+            }
+            if let Easing::Random { seed, step } = k.easing {
+                win.set_random_seed(seed as i32);
+                win.set_random_step(step);
+            }
+        }
+        None => win.set_easing_kind(0),
+    }
+    refresh_preview(win);
+}
+
+/// プロパティパネルのラベルクリック、またはクリップ上の境界点クリックから呼ばれる。
+/// segment_start_frameは常に実在する境界点（clip_start・clip_end・既存中間点のいずれか）で、
+/// 「任意のフレーム」は受け付けない。呼び出しごとにパネルの表示内容を丸ごと差し替えるため、
+/// パネルは開いたまま選択対象の切り替えに追従する。
 pub fn open_for(
     win: &KeyframeEditorWindow,
     world: &EcsWorld,
@@ -223,22 +243,26 @@ pub fn open_for(
     effect_index: i32,
     group: String,
     key: String,
-    frame_hint: i32,
+    segment_start_frame: i32,
 ) {
-    let frame = if frame_hint >= 0 {
-        frame_hint
-    } else {
-        world.current_frame()
-    };
+    let (clip_start, clip_end) = world.get_time_range(object_id as usize);
+    let segment_start_frame = segment_start_frame.clamp(clip_start, clip_end);
     let label = format!("{group} / {key}");
     win.set_object_id(object_id);
     win.set_effect_index(effect_index);
-    win.set_group(SharedString::from(group.clone()));
+    win.set_group(SharedString::from(group));
     win.set_key(SharedString::from(key.clone()));
     win.set_label(SharedString::from(label));
-    win.set_frame(frame);
-    let fallback = current_value(world, object_id, effect_index, &group, &key);
-    load_point(win, world, object_id, effect_index, &key, frame, fallback);
+    load_segment(
+        win,
+        world,
+        object_id,
+        effect_index,
+        &key,
+        segment_start_frame,
+        clip_start,
+        clip_end,
+    );
 }
 
 pub fn setup(
@@ -254,21 +278,6 @@ pub fn setup(
             .map(|s| SharedString::from(*s))
             .collect::<Vec<_>>(),
     )));
-
-    {
-        let (state, ww) = (state.clone(), win.as_weak());
-        win.on_frame_changed(move |frame| {
-            let Some(w) = ww.upgrade() else { return };
-            let world_holder = app_state::active_world(&state);
-            let world = world_holder.lock().unwrap();
-            let object_id = w.get_object_id();
-            let effect_index = w.get_effect_index();
-            let key = w.get_key().to_string();
-            let group = w.get_group().to_string();
-            let fallback = current_value(&world, object_id, effect_index, &group, &key);
-            load_point(&w, &world, object_id, effect_index, &key, frame, fallback);
-        });
-    }
 
     {
         let ww = win.as_weak();
@@ -312,13 +321,19 @@ pub fn setup(
             let effect_index = w.get_effect_index();
             let group = w.get_group().to_string();
             let key = w.get_key().to_string();
-            let frame = w.get_frame();
-            let value = w.get_value();
+            let frame = w.get_segment_start_frame();
             let easing = easing_from_ui(&w);
 
             app_state::snapshot_before_edit(&state);
             let world_holder = app_state::active_world(&state);
             let mut world = world_holder.lock().unwrap();
+
+            let value = keyframes_for(&world, object_id, effect_index, &key)
+                .into_iter()
+                .find(|k| k.frame == frame)
+                .map(|k| k.value)
+                .unwrap_or_else(|| current_value(&world, object_id, effect_index, &group, &key));
+
             if effect_index < 0 {
                 world.set_keyframe(object_id as usize, &key, frame, value, easing);
             } else {
@@ -337,55 +352,12 @@ pub fn setup(
                 group: group.clone(),
                 key: key.clone(),
             });
-            w.set_point_exists(true);
             if let Some(p) = pw.upgrade() {
                 crate::ui::properties::select_object(&p, &world, object_id);
             }
             if let Some(t) = tw.upgrade() {
                 crate::ui::timeline::refresh_keyframe_markers(&t, &world, &active);
             }
-        });
-    }
-
-    {
-        let (state, ww, pw, tw, active) = (
-            state.clone(),
-            win.as_weak(),
-            props_weak.clone(),
-            timeline_weak.clone(),
-            active_param.clone(),
-        );
-        win.on_delete(move || {
-            let Some(w) = ww.upgrade() else { return };
-            let object_id = w.get_object_id();
-            if object_id < 0 {
-                return;
-            }
-            let effect_index = w.get_effect_index();
-            let key = w.get_key().to_string();
-            let frame = w.get_frame();
-
-            app_state::snapshot_before_edit(&state);
-            let world_holder = app_state::active_world(&state);
-            let mut world = world_holder.lock().unwrap();
-            if effect_index < 0 {
-                world.remove_keyframe(object_id as usize, &key, frame);
-            } else {
-                world.remove_effect_keyframe(
-                    object_id as usize,
-                    effect_index as usize,
-                    &key,
-                    frame,
-                );
-            }
-            w.set_point_exists(false);
-            if let Some(p) = pw.upgrade() {
-                crate::ui::properties::select_object(&p, &world, object_id);
-            }
-            if let Some(t) = tw.upgrade() {
-                crate::ui::timeline::refresh_keyframe_markers(&t, &world, &active);
-            }
-            let _ = w.hide();
         });
     }
 

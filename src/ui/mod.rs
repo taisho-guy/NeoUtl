@@ -135,6 +135,7 @@ fn build_main_windows(
         preview.as_weak(),
         props.as_weak(),
         scene_settings_win.as_weak(),
+        kf_editor.as_weak(),
         state.clone(),
         active_param.clone(),
     );

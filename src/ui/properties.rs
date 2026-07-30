@@ -349,10 +349,12 @@ pub fn setup(
             let base = world
                 .get_effect_instance(oid, eidx)
                 .and_then(|inst| {
-                    inst.params.get(key.as_str()).map(|p| match &p.static_value {
-                        crate::ecs::types::Value::Number(n) => *n,
-                        _ => 0.0,
-                    })
+                    inst.params
+                        .get(key.as_str())
+                        .map(|p| match &p.static_value {
+                            crate::ecs::types::Value::Number(n) => *n,
+                            _ => 0.0,
+                        })
                 })
                 .unwrap_or(0.0);
             write_segment_value(
@@ -824,7 +826,12 @@ fn push_plugin_rows(
 /// object_paramsモデルの該当行(group/key一致)のみ区間フィールドを書き換える。
 /// ModelRcの同一性を保つため、Slint側のコンポーネント再構築(=ドラッグ状態/
 /// テキスト選択状態の喪失)を発生させない。構造変化を伴わない値更新はこの経路を使う。
-fn update_object_param_segment(props: &PropertiesWindow, group: &str, key: &str, seg: &SegmentInfo) {
+fn update_object_param_segment(
+    props: &PropertiesWindow,
+    group: &str,
+    key: &str,
+    seg: &SegmentInfo,
+) {
     let model = props.get_object_params();
     for i in 0..model.row_count() {
         let Some(mut row) = model.row_data(i) else {
@@ -979,7 +986,14 @@ fn refresh(props: &PropertiesWindow, world: &EcsWorld) {
         props.set_has_audio(false);
     }
 
-    push_plugin_rows(&mut object_params, world, oid, clip_start, clip_end, current_frame);
+    push_plugin_rows(
+        &mut object_params,
+        world,
+        oid,
+        clip_start,
+        clip_end,
+        current_frame,
+    );
 
     props.set_object_params(ModelRc::new(VecModel::from(object_params)));
 

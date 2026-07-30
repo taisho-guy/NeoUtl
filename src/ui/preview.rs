@@ -51,6 +51,7 @@ fn apply_frame(
     state: &SharedAppState,
     preview_weak: &Weak<PreviewWindow>,
     timeline_weak: &Weak<TimelineWindow>,
+    props_weak: &Weak<PropertiesWindow>,
 ) {
     let world_holder = app_state::active_world(state);
     let mut world = world_holder.lock().unwrap();
@@ -62,6 +63,9 @@ fn apply_frame(
     }
     if let Some(t) = timeline_weak.upgrade() {
         t.set_current_frame(clamped);
+    }
+    if let Some(props) = props_weak.upgrade() {
+        props.set_current_frame(clamped);
     }
 }
 
@@ -163,6 +167,7 @@ pub fn setup(
         {
             let preview_weak = preview_weak.clone();
             let timeline_weak = timeline_weak.clone();
+            let props_weak = props_weak.clone();
             let state = state.clone();
             let playback_anchor = playback_anchor.clone();
             move || {
@@ -185,9 +190,9 @@ pub fn setup(
                 if next >= total {
                     p.set_is_playing(false);
                     *playback_anchor.borrow_mut() = None;
-                    apply_frame(total, &state, &preview_weak, &timeline_weak);
+                    apply_frame(total, &state, &preview_weak, &timeline_weak, &props_weak);
                 } else if next != p.get_current_frame() {
-                    apply_frame(next, &state, &preview_weak, &timeline_weak);
+                    apply_frame(next, &state, &preview_weak, &timeline_weak, &props_weak);
                 }
                 p.window().request_redraw();
             }
@@ -247,10 +252,11 @@ pub fn setup(
     preview.on_seek({
         let preview_weak = preview_weak.clone();
         let timeline_weak = timeline_weak.clone();
+        let props_weak = props_weak.clone();
         let state = state.clone();
         let playback_anchor = playback_anchor.clone();
         move |frame| {
-            apply_frame(frame, &state, &preview_weak, &timeline_weak);
+            apply_frame(frame, &state, &preview_weak, &timeline_weak, &props_weak);
             if let Some(p) = preview_weak.upgrade()
                 && p.get_is_playing()
             {
@@ -262,12 +268,13 @@ pub fn setup(
     preview.on_step_frame({
         let preview_weak = preview_weak.clone();
         let timeline_weak = timeline_weak.clone();
+        let props_weak = props_weak.clone();
         let state = state.clone();
         let playback_anchor = playback_anchor.clone();
         move |delta| {
             if let Some(p) = preview_weak.upgrade() {
                 let next = p.get_current_frame() + delta;
-                apply_frame(next, &state, &preview_weak, &timeline_weak);
+                apply_frame(next, &state, &preview_weak, &timeline_weak, &props_weak);
                 if p.get_is_playing() {
                     *playback_anchor.borrow_mut() = Some((Instant::now(), p.get_current_frame()));
                 }
