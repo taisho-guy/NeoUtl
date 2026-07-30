@@ -219,7 +219,10 @@ component PropertyRow inherits Rectangle {
 // 確定済みの値をそのまま使うため、このコンポーネントは純粋な描画専用に留める。
 component KeyframeTrack inherits Rectangle {
     in property <[int]> boundary-frames;
-    in property <int> total-frames: 1;
+    // 数直線が表す絶対範囲。boundary-frames[0]/[last]と常に一致する
+    // （オブジェクト固有のclip_start/clip_end。プロジェクト全体のフレーム数ではない）。
+    in property <int> clip-start-frame: 0;
+    in property <int> clip-end-frame: 1;
     in property <int> current-frame: 0;
     in property <int> segment-start-frame: 0;
     in property <int> segment-end-frame: 1;
@@ -233,13 +236,17 @@ component KeyframeTrack inherits Rectangle {
     border-color: #24242c;
     clip: true;
 
+    // 0%=clip-start-frame、100%=clip-end-frameとなる区間ローカル座標系。
     function frac(f: int) -> float {
-        return root.total-frames > 0 ? f / root.total-frames : 0;
+        return root.clip-end-frame > root.clip-start-frame
+            ? (f - root.clip-start-frame) / (root.clip-end-frame - root.clip-start-frame)
+            : 0;
     }
 
     function frame-at(x: length) -> int {
-        return max(0, min(root.total-frames,
-            (x / root.width * root.total-frames + 0.5)));
+        return max(root.clip-start-frame, min(root.clip-end-frame,
+            root.clip-start-frame
+                + (x / root.width * (root.clip-end-frame - root.clip-start-frame) + 0.5)));
     }
 
     TouchArea {
@@ -354,7 +361,6 @@ component MenuItem inherits Rectangle {
 // kind: 0=Float, 1=Bool, 2=Color, 3=Text
 component ParamField inherits Rectangle {
     in property <ParamRow> data;
-    in property <int> total-frames: 1;
     in property <int> current-frame: 0;
     // 引数: 区間開始フレームへ書き込む値、区間終了フレームへ書き込む値。
     // 対象フレームはdata.segment-start-frame/segment-end-frameへ呼び出し側が付与する。
@@ -364,7 +370,8 @@ component ParamField inherits Rectangle {
     callback changed-text(string);
     callback commit();
     callback release();
-    // 引数: 対象フレーム。-1の場合は呼び出し側が現在の再生位置を用いる。
+    // 引数: 対象フレーム。常に実在する境界点（KeyframeTrack.boundary-framesの要素、
+    // またはラベルクリック時のdata.segment-start-frame）のみが渡る。
     callback edit-keyframes(int);
 
     height: data.kind == 3 ? 44px : (data.kind == 0 || data.kind == 2) ? 34px : 22px;
@@ -382,12 +389,15 @@ component ParamField inherits Rectangle {
             commit-start => { root.commit(); }
             commit-end => { root.commit(); }
             release => { root.release(); }
-            label-clicked => { root.edit-keyframes(-1); }
+            // ラベルクリックは「現在ハイライト中の区間」の開始点（＝実在する境界点）を
+            // 対象に区間編集パネルを開く。-1（＝任意の再生位置）は使わない。
+            label-clicked => { root.edit-keyframes(data.segment-start-frame); }
         }
 
         KeyframeTrack {
             boundary-frames: data.boundary-frames;
-            total-frames: root.total-frames;
+            clip-start-frame: data.boundary-frames[0];
+            clip-end-frame: data.boundary-frames[data.boundary-frames.length - 1];
             current-frame: root.current-frame;
             segment-start-frame: data.segment-start-frame;
             segment-end-frame: data.segment-end-frame;
@@ -471,7 +481,8 @@ export component PropertiesWindow inherits Window {
     callback paste-effect(int);
     callback duplicate-effect(int);
     callback open-effect-add-dialog();
-    // 引数: (group, key, effect-index, frame)。frame=-1は現在の再生位置を意味する。
+    // 引数: (group, key, effect-index, frame)。frameは常に実在する境界点
+    // （clip-start・clip-end・既存中間点のいずれか）であり、任意のフレームは渡らない。
     callback open-keyframe-editor(string, string, int, int);
 
     if object-id < 0: Text {
@@ -633,7 +644,6 @@ export component PropertiesWindow inherits Window {
 
                         ParamField {
                             data: p;
-                            total-frames: root.total-frames;
                             current-frame: root.current-frame;
                             changed-segment-start(v) => { root.set-object-param-segment(p.group, p.key, p.segment-start-frame, v); }
                             changed-segment-end(v) => { root.set-object-param-segment(p.group, p.key, p.segment-end-frame, v); }
@@ -668,7 +678,6 @@ export component PropertiesWindow inherits Window {
 
                         if p.effect-index == eff.index: ParamField {
                             data: p;
-                            total-frames: root.total-frames;
                             current-frame: root.current-frame;
                             changed-segment-start(v) => { root.set-param-segment(eff.index, p.key, p.segment-start-frame, v); }
                             changed-segment-end(v) => { root.set-param-segment(eff.index, p.key, p.segment-end-frame, v); }

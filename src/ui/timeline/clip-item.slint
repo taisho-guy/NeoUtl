@@ -11,6 +11,9 @@ export component ClipItem inherits Rectangle {
     callback resized(int /* id */, int /* new-start-frame */, int /* new-end-frame */);
     callback context-requested(int /* id */, length /* x */, length /* y */);
     callback keyframe-moved(int /* id */, int /* old-frame */, int /* new-frame */);
+    // クリップ上の境界点を（ドラッグ移動ではなく）クリックした際に発火する。
+    // 区間イージング編集パネルをその点から始まる区間へ切り替えて開く。
+    callback keyframe-clicked(int /* id */, int /* frame */);
 
     property <[color]> kind-palette: [#2a4db8, #256e3c, #6a2db8, #b8862a, #2ab8a8, #b82a5f];
     property <color> base-color: !obj.kind-known ? #5a5a5a : root.kind-palette[mod(obj.kind, root.kind-palette.length)];
@@ -114,6 +117,8 @@ export component ClipItem inherits Rectangle {
                         parent.dragging = false;
                         if (parent.drag-delta != 0) {
                             root.keyframe-moved(obj.id, f, max(obj.start-frame, min(obj.end-frame, f + parent.drag-delta)));
+                        } else {
+                            root.keyframe-clicked(obj.id, f);
                         }
                     }
                 }

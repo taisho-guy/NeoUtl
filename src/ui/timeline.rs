@@ -5,8 +5,8 @@ use crate::ecs::{
 };
 use crate::objects::registry;
 use crate::{
-    LayerState, ObjectKindItem, PreviewWindow, PropertiesWindow, SceneSettingsWindow, SceneTabItem,
-    TimelineObject, TimelineWindow,
+    KeyframeEditorWindow, LayerState, ObjectKindItem, PreviewWindow, PropertiesWindow,
+    SceneSettingsWindow, SceneTabItem, TimelineObject, TimelineWindow,
 };
 use slint::{ComponentHandle, Model, ModelRc, VecModel, Weak};
 
@@ -15,6 +15,7 @@ pub fn setup(
     preview_weak: Weak<PreviewWindow>,
     props_weak: Weak<PropertiesWindow>,
     scene_settings_weak: Weak<SceneSettingsWindow>,
+    kf_editor_weak: Weak<KeyframeEditorWindow>,
     state: SharedAppState,
     active_param: crate::ui::keyframe_editor::ActiveParamSlot,
 ) {
@@ -29,7 +30,12 @@ pub fn setup(
     timeline.set_available_kinds(ModelRc::new(VecModel::from(kinds)));
 
     {
-        let (state, tw, pw) = (state.clone(), timeline.as_weak(), preview_weak.clone());
+        let (state, tw, preview_w, props_w) = (
+            state.clone(),
+            timeline.as_weak(),
+            preview_weak.clone(),
+            props_weak.clone(),
+        );
         timeline.on_seek_timeline(move |frame| {
             let world_holder = app_state::active_world(&state);
             let mut world = world_holder.lock().unwrap();
@@ -39,8 +45,48 @@ pub fn setup(
             if let Some(t) = tw.upgrade() {
                 t.set_current_frame(clamped);
             }
-            if let Some(p) = pw.upgrade() {
+            if let Some(p) = preview_w.upgrade() {
                 p.set_current_frame(clamped);
+            }
+            if let Some(props) = props_w.upgrade() {
+                props.set_current_frame(clamped);
+            }
+        });
+    }
+
+    {
+        let (state, pw, kw, active) = (
+            state.clone(),
+            props_weak.clone(),
+            kf_editor_weak.clone(),
+            active_param.clone(),
+        );
+        timeline.on_keyframe_clicked(move |id, frame| {
+            let Some(a) = active.borrow().clone() else {
+                return;
+            };
+            if a.object_id != id {
+                return;
+            }
+            let Some(kf) = kw.upgrade() else { return };
+            let world_holder = app_state::active_world(&state);
+            let world = world_holder.lock().unwrap();
+            crate::ui::keyframe_editor::open_for(
+                &kf,
+                &world,
+                id,
+                a.effect_index,
+                a.group.clone(),
+                a.key.clone(),
+                frame,
+            );
+            drop(world);
+            let _ = kf.show();
+            kf.window().request_redraw();
+            if let Some(p) = pw.upgrade() {
+                let world_holder = app_state::active_world(&state);
+                let world = world_holder.lock().unwrap();
+                crate::ui::properties::select_object(&p, &world, id);
             }
         });
     }

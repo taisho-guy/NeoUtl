@@ -35,6 +35,8 @@ export component TimelineWindow inherits Window {
     callback resize-object(int /* id */, int /* start-frame */, int /* end-frame */);
     callback split-object-at(int /* id */, int /* frame */);
     callback keyframe-moved(int /* id */, int /* old-frame */, int /* new-frame */);
+    // クリップ上の境界点クリックで区間イージング編集パネルを開く（値・フレームは指定しない）。
+    callback keyframe-clicked(int /* id */, int /* frame */);
     callback range-select(int /* start-frame */, int /* end-frame */, int /* start-layer */, int /* end-layer */);
     callback set-zoom(float);
     callback toggle-layer-visible(int);
@@ -195,6 +197,7 @@ export component TimelineWindow inherits Window {
                 move-object(id, start, layer) => { root.move-object(id, start, layer); }
                 resize-object(id, start, end) => { root.resize-object(id, start, end); }
                 keyframe-moved(id, old-frame, new-frame) => { root.keyframe-moved(id, old-frame, new-frame); }
+                keyframe-clicked(id, frame) => { root.keyframe-clicked(id, frame); }
                 scroll-requested(dx) => {
                     root.scroll-x = max(0px, min(root.scroll-x - dx, max(0px, root.content-width - max(1px, view.width))));
                 }
