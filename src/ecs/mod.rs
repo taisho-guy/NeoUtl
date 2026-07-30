@@ -343,18 +343,41 @@ impl EcsWorld {
         self.find_entity(object_id).is_some()
     }
 
+    /// クリップの単純平行移動。TimeRangeの変更に合わせて、ネイティブパラメータ
+    /// （KeyframeTracks）・エフェクトパラメータ（EffectStack）双方の中間点も
+    /// deltaだけシフトする。resize_objectがクランプ・再構築を行うのと対称に、
+    /// move_objectは中間点の絶対フレーム位置をクリップ本体と同じ量だけ動かす
+    /// （移動は中間点へ影響しない、という非対称設計を解消する）。
     pub fn move_object(&mut self, object_id: usize, new_start: i32, new_layer: i32) {
         let new_start = self.snap_to_active_scene(new_start);
         self.world.run(
             |object_ids: View<ObjectId>,
              mut time_ranges: ViewMut<TimeRange>,
-             mut layers: ViewMut<Layer>| {
+             mut layers: ViewMut<Layer>,
+             mut keyframe_tracks: ViewMut<KeyframeTracks>,
+             mut effect_stacks: ViewMut<EffectStack>| {
                 for (entity, id) in object_ids.iter().with_id() {
                     if id.0 == object_id {
-                        if let Ok(mut range) = (&mut time_ranges).get(entity) {
+                        let delta = if let Ok(mut range) = (&mut time_ranges).get(entity) {
                             let dur = range.end_frame - range.start_frame;
+                            let delta = new_start - range.start_frame;
                             range.start_frame = new_start;
                             range.end_frame = new_start + dur;
+                            delta
+                        } else {
+                            break;
+                        };
+                        if delta != 0 {
+                            if let Ok(mut tracks) = (&mut keyframe_tracks).get(entity) {
+                                tracks.shift(delta);
+                            }
+                            if let Ok(mut stack) = (&mut effect_stacks).get(entity) {
+                                for instance in stack.0.iter_mut() {
+                                    for param in instance.params.values_mut() {
+                                        param.shift_keyframes(delta);
+                                    }
+                                }
+                            }
                         }
                         if let Ok(mut layer) = (&mut layers).get(entity) {
                             layer.0 = new_layer.max(0);
@@ -367,11 +390,13 @@ impl EcsWorld {
         self.update_total_frames();
     }
 
-    /// クリップ伸縮。中間点の境界クランプ則（不動端点則・絶対時間則・衝突解決則、
-    /// ecs/types.rs::EffectParam::clamp_keyframes_to_range参照）をネイティブ
-    /// パラメータ（KeyframeTracks）・エフェクトパラメータ（EffectStack）双方へ
-    /// 適用する。1フレーム未満へ縮む要求はrange.end_frameの下限クランプで
-    /// 最小幅1フレームへ丸められ、破綻（0/負幅）を構造的に排除する。
+    /// クリップ伸縮。中間点の境界クランプ則（neoutl_interp::clamp_and_reseed、
+    /// 詳細はそのドキュメントコメント参照）をネイティブパラメータ（KeyframeTracks）・
+    /// エフェクトパラメータ（EffectStack）双方へ適用する。旧範囲(old_start/old_end)を
+    /// TimeRange上書き前に確保してからクランプへ渡すため、内部点は「絶対フレーム
+    /// 不変」ではなく「クリップ内相対位置不変」でスケールされる。
+    /// 1フレーム未満へ縮む要求はrange.end_frameの下限クランプで最小幅1フレームへ
+    /// 丸められ、破綻（0/負幅）を構造的に排除する。
     pub fn resize_object(&mut self, object_id: usize, new_start: i32, new_end: i32) {
         let new_start = self.snap_to_active_scene(new_start);
         let new_end = self.snap_to_active_scene(new_end);
@@ -382,20 +407,23 @@ impl EcsWorld {
              mut effect_stacks: ViewMut<EffectStack>| {
                 for (entity, id) in object_ids.iter().with_id() {
                     if id.0 == object_id {
-                        let (start, end) = if let Ok(mut range) = (&mut time_ranges).get(entity) {
-                            range.start_frame = new_start.max(0);
-                            range.end_frame = new_end.max(range.start_frame + 1);
-                            (range.start_frame, range.end_frame)
-                        } else {
-                            break;
-                        };
+                        let (old_start, old_end, start, end) =
+                            if let Ok(mut range) = (&mut time_ranges).get(entity) {
+                                let old_start = range.start_frame;
+                                let old_end = range.end_frame;
+                                range.start_frame = new_start.max(0);
+                                range.end_frame = new_end.max(range.start_frame + 1);
+                                (old_start, old_end, range.start_frame, range.end_frame)
+                            } else {
+                                break;
+                            };
                         if let Ok(mut tracks) = (&mut keyframe_tracks).get(entity) {
-                            tracks.clamp_to_range(start, end);
+                            tracks.clamp_to_range(old_start, old_end, start, end);
                         }
                         if let Ok(mut stack) = (&mut effect_stacks).get(entity) {
                             for instance in stack.0.iter_mut() {
                                 for param in instance.params.values_mut() {
-                                    param.clamp_keyframes_to_range(start, end);
+                                    param.clamp_keyframes_to_range(old_start, old_end, start, end);
                                 }
                             }
                         }
