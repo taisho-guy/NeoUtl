@@ -16,6 +16,7 @@ static PARAM_SCHEMA: &[EffectParamSchema] = &[
         max: 5.0,
         step: 0.05,
         default_float: 1.0,
+        enum_options: StrRef::from_str(""),
     },
     EffectParamSchema {
         key: StrRef::from_str("angle"),
@@ -25,6 +26,7 @@ static PARAM_SCHEMA: &[EffectParamSchema] = &[
         max: 180.0,
         step: 3.6,
         default_float: 45.0,
+        enum_options: StrRef::from_str(""),
     },
 ];
 

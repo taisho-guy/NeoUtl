@@ -10,6 +10,9 @@ pub enum Value {
     Number(f32),
     Bool(bool),
     Text(String),
+    FilePath(String),
+    Enum(u32),
+    TrackRef(i32),
 }
 
 /// エフェクトの1パラメータ。`static_value`はframe=0相当の基準値、
@@ -203,6 +206,33 @@ mod clamp_tests {
         p.clamp_keyframes_to_range(0, 30, 0, 60);
         assert_eq!(p.keyframes.first().unwrap().frame, 0);
         assert_eq!(p.keyframes.first().unwrap().value, 1.0);
+    }
+
+    #[test]
+    fn non_interpolable_kinds_ignore_keyframes_on_evaluate() {
+        let path = EffectParam::new(Value::FilePath("a.png".into()));
+        assert_eq!(path.evaluate(10), Value::FilePath("a.png".into()));
+        let en = EffectParam::new(Value::Enum(2));
+        assert_eq!(en.evaluate(10), Value::Enum(2));
+        let track = EffectParam::new(Value::TrackRef(5));
+        assert_eq!(track.evaluate(10), Value::TrackRef(5));
+    }
+
+    #[test]
+    fn non_interpolable_kinds_split_by_static_value_only() {
+        let mut path = EffectParam::new(Value::FilePath("a.png".into()));
+        let second = path.split_at(15);
+        assert_eq!(path.static_value, Value::FilePath("a.png".into()));
+        assert_eq!(second.static_value, Value::FilePath("a.png".into()));
+        assert!(second.keyframes.is_empty());
+    }
+
+    #[test]
+    fn non_interpolable_kinds_ignore_clamp_to_range() {
+        let mut en = EffectParam::new(Value::Enum(1));
+        en.clamp_keyframes_to_range(0, 30, 0, 60);
+        assert_eq!(en.static_value, Value::Enum(1));
+        assert!(en.keyframes.is_empty());
     }
 
     #[test]

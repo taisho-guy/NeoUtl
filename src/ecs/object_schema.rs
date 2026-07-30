@@ -15,6 +15,8 @@ pub struct ParamSchema {
     pub label: &'static str,
     pub kind: ParamKind,
     pub range: Range,
+    /// kind==Enumのときのみ選択肢を保持する。それ以外のkindでは空スライス。
+    pub enum_options: &'static [&'static str],
 }
 
 const fn float_fixed(
@@ -30,6 +32,7 @@ const fn float_fixed(
         label,
         kind: ParamKind::Float,
         range: Range::Fixed(min, max),
+        enum_options: &[],
     }
 }
 
@@ -45,6 +48,7 @@ const fn float_stage(
         label,
         kind: ParamKind::Float,
         range,
+        enum_options: &[],
     }
 }
 
@@ -55,6 +59,7 @@ const fn bool_field(group: &'static str, key: &'static str, label: &'static str)
         label,
         kind: ParamKind::Bool,
         range: Range::Fixed(0.0, 1.0),
+        enum_options: &[],
     }
 }
 
@@ -66,6 +71,49 @@ const fn text_field(group: &'static str, key: &'static str, label: &'static str)
         label,
         kind: ParamKind::Text,
         range: Range::Fixed(0.0, 0.0),
+        enum_options: &[],
+    }
+}
+
+/// ファイルパス選択フィールド。数値min/max/stepは不使用（Range::Fixed(0.0, 0.0)はダミー値）。
+const fn file_field(group: &'static str, key: &'static str, label: &'static str) -> ParamSchema {
+    ParamSchema {
+        group,
+        key,
+        label,
+        kind: ParamKind::FilePath,
+        range: Range::Fixed(0.0, 0.0),
+        enum_options: &[],
+    }
+}
+
+/// 列挙選択フィールド。optionsの並び順がComboBoxの表示順・格納インデックスと一致する。
+const fn enum_field(
+    group: &'static str,
+    key: &'static str,
+    label: &'static str,
+    options: &'static [&'static str],
+) -> ParamSchema {
+    ParamSchema {
+        group,
+        key,
+        label,
+        kind: ParamKind::Enum,
+        range: Range::Fixed(0.0, 0.0),
+        enum_options: options,
+    }
+}
+
+/// 他オブジェクト参照フィールド（object_id保持のみ）。候補一覧はタイムライン状態から
+/// 都度構築するため、静的スキーマ側は選択肢を持たない。
+const fn track_field(group: &'static str, key: &'static str, label: &'static str) -> ParamSchema {
+    ParamSchema {
+        group,
+        key,
+        label,
+        kind: ParamKind::Track,
+        range: Range::Fixed(0.0, 0.0),
+        enum_options: &[],
     }
 }
 

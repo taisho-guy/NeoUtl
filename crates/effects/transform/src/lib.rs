@@ -15,6 +15,7 @@ static PARAM_SCHEMA: &[EffectParamSchema] = &[
         max: 10.0,
         step: 0.1,
         default_float: 1.0,
+        enum_options: StrRef::from_str(""),
     },
     EffectParamSchema {
         key: StrRef::from_str("rotation"),
@@ -24,6 +25,7 @@ static PARAM_SCHEMA: &[EffectParamSchema] = &[
         max: 360.0,
         step: 7.2,
         default_float: 0.0,
+        enum_options: StrRef::from_str(""),
     },
 ];
 

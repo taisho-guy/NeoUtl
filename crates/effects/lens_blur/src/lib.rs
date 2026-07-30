@@ -14,6 +14,7 @@ static PARAM_SCHEMA: &[EffectParamSchema] = &[EffectParamSchema {
     max: 100.0,
     step: 1.0,
     default_float: 10.0,
+    enum_options: StrRef::from_str(""),
 }];
 
 static META: EffectMeta = EffectMeta {

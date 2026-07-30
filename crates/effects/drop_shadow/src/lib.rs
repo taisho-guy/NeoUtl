@@ -15,6 +15,7 @@ static PARAM_SCHEMA: &[EffectParamSchema] = &[
         max: 100.0,
         step: 2.0,
         default_float: 8.0,
+        enum_options: StrRef::from_str(""),
     },
     EffectParamSchema {
         key: StrRef::from_str("offset_y"),
@@ -24,6 +25,7 @@ static PARAM_SCHEMA: &[EffectParamSchema] = &[
         max: 100.0,
         step: 2.0,
         default_float: 8.0,
+        enum_options: StrRef::from_str(""),
     },
     EffectParamSchema {
         key: StrRef::from_str("blur"),
@@ -33,6 +35,7 @@ static PARAM_SCHEMA: &[EffectParamSchema] = &[
         max: 100.0,
         step: 1.0,
         default_float: 6.0,
+        enum_options: StrRef::from_str(""),
     },
     EffectParamSchema {
         key: StrRef::from_str("opacity"),
@@ -42,6 +45,7 @@ static PARAM_SCHEMA: &[EffectParamSchema] = &[
         max: 1.0,
         step: 0.01,
         default_float: 0.6,
+        enum_options: StrRef::from_str(""),
     },
 ];
 

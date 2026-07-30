@@ -743,6 +743,68 @@ impl EcsWorld {
         });
     }
 
+    pub fn set_effect_param_text(
+        &mut self,
+        object_id: usize,
+        index: usize,
+        key: &str,
+        value: String,
+    ) {
+        let Some(entity) = self.find_entity(object_id) else {
+            return;
+        };
+        self.world.run(|mut stacks: ViewMut<EffectStack>| {
+            if let Ok(mut stack) = (&mut stacks).get(entity) {
+                stack.set_param_text(index, key, value);
+            }
+        });
+    }
+
+    pub fn set_effect_param_path(
+        &mut self,
+        object_id: usize,
+        index: usize,
+        key: &str,
+        value: String,
+    ) {
+        let Some(entity) = self.find_entity(object_id) else {
+            return;
+        };
+        self.world.run(|mut stacks: ViewMut<EffectStack>| {
+            if let Ok(mut stack) = (&mut stacks).get(entity) {
+                stack.set_param_path(index, key, value);
+            }
+        });
+    }
+
+    pub fn set_effect_param_enum(&mut self, object_id: usize, index: usize, key: &str, value: u32) {
+        let Some(entity) = self.find_entity(object_id) else {
+            return;
+        };
+        self.world.run(|mut stacks: ViewMut<EffectStack>| {
+            if let Ok(mut stack) = (&mut stacks).get(entity) {
+                stack.set_param_enum(index, key, value);
+            }
+        });
+    }
+
+    pub fn set_effect_param_track_ref(
+        &mut self,
+        object_id: usize,
+        index: usize,
+        key: &str,
+        value: i32,
+    ) {
+        let Some(entity) = self.find_entity(object_id) else {
+            return;
+        };
+        self.world.run(|mut stacks: ViewMut<EffectStack>| {
+            if let Ok(mut stack) = (&mut stacks).get(entity) {
+                stack.set_param_track_ref(index, key, value);
+            }
+        });
+    }
+
     pub fn get_effects(&self, object_id: usize) -> Vec<EffectInstance> {
         let Some(entity) = self.find_entity(object_id) else {
             return Vec::new();

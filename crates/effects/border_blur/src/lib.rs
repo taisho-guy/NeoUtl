@@ -15,6 +15,7 @@ static PARAM_SCHEMA: &[EffectParamSchema] = &[
         max: 100.0,
         step: 1.0,
         default_float: 8.0,
+        enum_options: StrRef::from_str(""),
     },
     EffectParamSchema {
         key: StrRef::from_str("border_width"),
@@ -24,6 +25,7 @@ static PARAM_SCHEMA: &[EffectParamSchema] = &[
         max: 200.0,
         step: 2.0,
         default_float: 20.0,
+        enum_options: StrRef::from_str(""),
     },
 ];
 

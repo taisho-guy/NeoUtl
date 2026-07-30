@@ -15,6 +15,7 @@ static PARAM_SCHEMA: &[EffectParamSchema] = &[
         max: 100.0,
         step: 1.0,
         default_float: 4.0,
+        enum_options: StrRef::from_str(""),
     },
     EffectParamSchema {
         key: StrRef::from_str("frequency"),
@@ -24,6 +25,7 @@ static PARAM_SCHEMA: &[EffectParamSchema] = &[
         max: 60.0,
         step: 0.6,
         default_float: 10.0,
+        enum_options: StrRef::from_str(""),
     },
 ];
 
