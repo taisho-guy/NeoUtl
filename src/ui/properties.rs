@@ -346,17 +346,7 @@ pub fn setup(
             let oid = id as usize;
             let eidx = index as usize;
             let (clip_start, clip_end) = world.get_time_range(oid);
-            let base = world
-                .get_effect_instance(oid, eidx)
-                .and_then(|inst| {
-                    inst.params
-                        .get(key.as_str())
-                        .map(|p| match &p.static_value {
-                            crate::ecs::types::Value::Number(n) => *n,
-                            _ => 0.0,
-                        })
-                })
-                .unwrap_or(0.0);
+            let base = current_effect_param_value(&world, oid, eidx, key.as_str());
             write_segment_value(
                 |w| w.get_effect_keyframes(oid, eidx, key.as_str()),
                 |w, f, v, e| w.set_effect_keyframe(oid, eidx, key.as_str(), f, v, e),
@@ -486,6 +476,161 @@ pub fn setup(
             refresh(&p, &world);
         });
     }
+
+    {
+        let state = state.clone();
+        let pw = props.as_weak();
+        props.on_add_midpoint(move |group, key, effect_index, frame| {
+            let Some(p) = pw.upgrade() else { return };
+            let id = p.get_object_id();
+            if id < 0 {
+                return;
+            }
+            app_state::snapshot_before_edit(&state);
+            let world_holder = app_state::active_world(&state);
+            let mut world = world_holder.lock().unwrap();
+            let oid = id as usize;
+            let (clip_start, clip_end) = world.get_time_range(oid);
+            let frame = frame.clamp(clip_start, clip_end);
+            if effect_index < 0 {
+                let base = current_object_param_value(&world, oid, group.as_str(), key.as_str());
+                let existing = world.get_keyframes(oid, key.as_str());
+                let value = resolve_display_value(base, &existing, frame);
+                write_segment_value(
+                    |w| w.get_keyframes(oid, key.as_str()),
+                    |w, f, v, e| w.set_keyframe(oid, key.as_str(), f, v, e),
+                    &mut world,
+                    clip_start,
+                    clip_end,
+                    base,
+                    frame,
+                    value,
+                );
+                let track = world.get_keyframes(oid, key.as_str());
+                let current_frame = world.current_frame();
+                drop(world);
+                let seg = resolve_segment(&track, clip_start, clip_end, current_frame, base);
+                update_object_param_segment(&p, group.as_str(), key.as_str(), &seg);
+            } else {
+                let eidx = effect_index as usize;
+                let base = current_effect_param_value(&world, oid, eidx, key.as_str());
+                let existing = world.get_effect_keyframes(oid, eidx, key.as_str());
+                let value = resolve_display_value(base, &existing, frame);
+                write_segment_value(
+                    |w| w.get_effect_keyframes(oid, eidx, key.as_str()),
+                    |w, f, v, e| w.set_effect_keyframe(oid, eidx, key.as_str(), f, v, e),
+                    &mut world,
+                    clip_start,
+                    clip_end,
+                    base,
+                    frame,
+                    value,
+                );
+                let track = world.get_effect_keyframes(oid, eidx, key.as_str());
+                let current_frame = world.current_frame();
+                drop(world);
+                let seg = resolve_segment(&track, clip_start, clip_end, current_frame, base);
+                update_effect_param_segment(&p, effect_index, key.as_str(), &seg);
+            }
+        });
+    }
+
+    {
+        let state = state.clone();
+        let pw = props.as_weak();
+        props.on_remove_midpoint(move |group, key, effect_index, frame| {
+            let Some(p) = pw.upgrade() else { return };
+            let id = p.get_object_id();
+            if id < 0 {
+                return;
+            }
+            let oid = id as usize;
+            let world_holder = app_state::active_world(&state);
+            let (clip_start, clip_end) = {
+                let world = world_holder.lock().unwrap();
+                world.get_time_range(oid)
+            };
+            if frame == clip_start || frame == clip_end {
+                return;
+            }
+            app_state::snapshot_before_edit(&state);
+            let mut world = world_holder.lock().unwrap();
+            if effect_index < 0 {
+                let base = current_object_param_value(&world, oid, group.as_str(), key.as_str());
+                world.remove_keyframe(oid, key.as_str(), frame);
+                let track = world.get_keyframes(oid, key.as_str());
+                let current_frame = world.current_frame();
+                drop(world);
+                let seg = resolve_segment(&track, clip_start, clip_end, current_frame, base);
+                update_object_param_segment(&p, group.as_str(), key.as_str(), &seg);
+            } else {
+                let eidx = effect_index as usize;
+                let base = current_effect_param_value(&world, oid, eidx, key.as_str());
+                world.remove_effect_keyframe(oid, eidx, key.as_str(), frame);
+                let track = world.get_effect_keyframes(oid, eidx, key.as_str());
+                let current_frame = world.current_frame();
+                drop(world);
+                let seg = resolve_segment(&track, clip_start, clip_end, current_frame, base);
+                update_effect_param_segment(&p, effect_index, key.as_str(), &seg);
+            }
+        });
+    }
+
+    {
+        let state = state.clone();
+        props.on_commit_midpoint_drag(move |_group, _key, _effect_index| {
+            app_state::snapshot_before_edit(&state);
+        });
+    }
+
+    {
+        let state = state.clone();
+        let pw = props.as_weak();
+        props.on_move_midpoint(move |group, key, effect_index, old_frame, new_frame| {
+            let Some(p) = pw.upgrade() else { return };
+            let id = p.get_object_id();
+            if id < 0 {
+                return;
+            }
+            let world_holder = app_state::active_world(&state);
+            let mut world = world_holder.lock().unwrap();
+            let oid = id as usize;
+            let (clip_start, clip_end) = world.get_time_range(oid);
+            if old_frame == clip_start || old_frame == clip_end {
+                return;
+            }
+            if effect_index < 0 {
+                let existing = world.get_keyframes(oid, key.as_str());
+                let (lo, hi) = clamp_to_neighbors(&existing, clip_start, clip_end, old_frame);
+                if lo > hi {
+                    return;
+                }
+                let new_frame = new_frame.clamp(lo, hi);
+                world.move_keyframe(oid, key.as_str(), old_frame, new_frame);
+                let base = current_object_param_value(&world, oid, group.as_str(), key.as_str());
+                let track = world.get_keyframes(oid, key.as_str());
+                let current_frame = world.current_frame();
+                drop(world);
+                let seg = resolve_segment(&track, clip_start, clip_end, current_frame, base);
+                update_object_param_segment(&p, group.as_str(), key.as_str(), &seg);
+            } else {
+                let eidx = effect_index as usize;
+                let existing = world.get_effect_keyframes(oid, eidx, key.as_str());
+                let (lo, hi) = clamp_to_neighbors(&existing, clip_start, clip_end, old_frame);
+                if lo > hi {
+                    return;
+                }
+                let new_frame = new_frame.clamp(lo, hi);
+                world.move_effect_keyframe(oid, eidx, key.as_str(), old_frame, new_frame);
+                let base = current_effect_param_value(&world, oid, eidx, key.as_str());
+                let track = world.get_effect_keyframes(oid, eidx, key.as_str());
+                let current_frame = world.current_frame();
+                drop(world);
+                let seg = resolve_segment(&track, clip_start, clip_end, current_frame, base);
+                update_effect_param_segment(&p, effect_index, key.as_str(), &seg);
+            }
+        });
+    }
 }
 
 pub fn select_object(props: &PropertiesWindow, world: &EcsWorld, object_id: i32) {
@@ -511,6 +656,44 @@ fn easing_for_write(keyframes: &[Keyframe], frame: i32) -> Easing {
         .find(|k| k.frame == frame)
         .map(|k| k.easing.clone())
         .unwrap_or(Easing::Linear)
+}
+
+/// old_frameの左右に隣接する境界点を探し、new_frameの許容範囲(lo, hi)を返す。
+/// 中間点ドラッグが隣接点を追い越して並び順を破壊しないよう、機械的に範囲制限する。
+fn clamp_to_neighbors(
+    keyframes: &[Keyframe],
+    clip_start: i32,
+    clip_end: i32,
+    old_frame: i32,
+) -> (i32, i32) {
+    let mut boundary: Vec<i32> = std::iter::once(clip_start)
+        .chain(keyframes.iter().map(|k| k.frame))
+        .chain(std::iter::once(clip_end))
+        .collect();
+    boundary.sort_unstable();
+    boundary.dedup();
+    let pos = boundary.iter().position(|&f| f == old_frame).unwrap_or(0);
+    let lo = boundary
+        .get(pos.wrapping_sub(1))
+        .copied()
+        .unwrap_or(clip_start)
+        + 1;
+    let hi = boundary.get(pos + 1).copied().unwrap_or(clip_end) - 1;
+    (lo, hi)
+}
+
+/// エフェクトパラメータ(key)の基準値(static_value)を読み出す。区間書き込み時の
+/// シード値・中間点追加時の補間基準に使う。on_set_param_segmentと同一ロジック。
+fn current_effect_param_value(world: &EcsWorld, oid: usize, eidx: usize, key: &str) -> f32 {
+    world
+        .get_effect_instance(oid, eidx)
+        .and_then(|inst| {
+            inst.params.get(key).map(|p| match &p.static_value {
+                crate::ecs::types::Value::Number(n) => *n,
+                _ => 0.0,
+            })
+        })
+        .unwrap_or(0.0)
 }
 
 /// 中間点区間の解決結果。boundary_framesは常に2要素以上（clip_start, clip_end含む）。
@@ -850,11 +1033,17 @@ fn update_object_param_segment(
 fn apply_segment_to_row(row: &mut ParamRow, seg: &SegmentInfo) {
     row.value = seg.current_value;
     row.has_keyframes = seg.boundary_frames.len() > 2;
-    row.boundary_frames = ModelRc::new(VecModel::from(seg.boundary_frames.clone()));
     row.segment_start_frame = seg.start_frame;
     row.segment_end_frame = seg.end_frame;
     row.segment_start_value = seg.start_value;
     row.segment_end_value = seg.end_value;
+    if row.boundary_frames.row_count() == seg.boundary_frames.len() {
+        for (i, &f) in seg.boundary_frames.iter().enumerate() {
+            row.boundary_frames.set_row_data(i, f);
+        }
+    } else {
+        row.boundary_frames = ModelRc::new(VecModel::from(seg.boundary_frames.clone()));
+    }
 }
 
 /// object_paramsモデルの該当行(group/key一致)のtextフィールドのみ書き換える。
@@ -891,6 +1080,52 @@ fn update_effect_param_segment(
             model.set_row_data(i, row);
             return;
         }
+    }
+}
+
+/// 再生・シークでcurrent_frameのみ変化した際に呼ぶ軽量パス。区間ハイライト
+/// （segment-start/end-frame）と表示値のみを全行再計算する。boundary-frames自体は
+/// 変化しないためモデル差し替えは行わない（フルrefresh()よりはるかに軽い）。
+/// これを呼ばないと、中間点を直接操作しない限りハイライト区間が再生位置に追従しない。
+pub fn refresh_current_frame(props: &PropertiesWindow, world: &EcsWorld) {
+    let id = props.get_object_id();
+    let current_frame = world.current_frame();
+    props.set_current_frame(current_frame);
+    if id < 0 {
+        return;
+    }
+    let oid = id as usize;
+    let (clip_start, clip_end) = world.get_time_range(oid);
+
+    let object_model = props.get_object_params();
+    for i in 0..object_model.row_count() {
+        let Some(mut row) = object_model.row_data(i) else {
+            continue;
+        };
+        if row.kind != 0 && row.kind != 2 {
+            continue;
+        }
+        let keyframes = world.get_keyframes(oid, row.key.as_str());
+        let base = current_object_param_value(world, oid, row.group.as_str(), row.key.as_str());
+        let seg = resolve_segment(&keyframes, clip_start, clip_end, current_frame, base);
+        apply_segment_to_row(&mut row, &seg);
+        object_model.set_row_data(i, row);
+    }
+
+    let params_model = props.get_params();
+    for i in 0..params_model.row_count() {
+        let Some(mut row) = params_model.row_data(i) else {
+            continue;
+        };
+        if row.effect_index < 0 || (row.kind != 0 && row.kind != 2) {
+            continue;
+        }
+        let eidx = row.effect_index as usize;
+        let keyframes = world.get_effect_keyframes(oid, eidx, row.key.as_str());
+        let base = current_effect_param_value(world, oid, eidx, row.key.as_str());
+        let seg = resolve_segment(&keyframes, clip_start, clip_end, current_frame, base);
+        apply_segment_to_row(&mut row, &seg);
+        params_model.set_row_data(i, row);
     }
 }
 
