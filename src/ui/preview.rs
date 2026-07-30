@@ -57,7 +57,6 @@ fn apply_frame(
     let mut world = world_holder.lock().unwrap();
     let clamped = frame.clamp(0, world.total_frames());
     world.set_current_frame(clamped);
-    drop(world);
     if let Some(p) = preview_weak.upgrade() {
         p.set_current_frame(clamped);
     }
@@ -65,7 +64,7 @@ fn apply_frame(
         t.set_current_frame(clamped);
     }
     if let Some(props) = props_weak.upgrade() {
-        props.set_current_frame(clamped);
+        crate::ui::properties::refresh_current_frame(&props, &world);
     }
 }
 

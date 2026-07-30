@@ -41,7 +41,6 @@ pub fn setup(
             let mut world = world_holder.lock().unwrap();
             let clamped = frame.clamp(0, world.total_frames());
             world.set_current_frame(clamped);
-            drop(world);
             if let Some(t) = tw.upgrade() {
                 t.set_current_frame(clamped);
             }
@@ -49,7 +48,7 @@ pub fn setup(
                 p.set_current_frame(clamped);
             }
             if let Some(props) = props_w.upgrade() {
-                props.set_current_frame(clamped);
+                crate::ui::properties::refresh_current_frame(&props, &world);
             }
         });
     }

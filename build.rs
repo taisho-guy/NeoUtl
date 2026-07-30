@@ -13,8 +13,6 @@ fn main() {
     );
 }
 
-/// assets/themes/*.json,*.toml をビルド不要のままtarget/{profile}/themes/へコピーする。
-/// ネイティブテーマクレートはcrates/themes配下からxtask側でステージングされる。
 fn copy_data_themes() {
     let out_dir = std::env::var("OUT_DIR").expect("OUT_DIR未設定");
     let profile_dir = PathBuf::from(&out_dir)
