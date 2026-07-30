@@ -1,16 +1,21 @@
 import { EffectRow, ParamRow } from "types.slint";
 import { Slider } from "std-widgets.slint";
 
-// AviQtl(ParamControl.qml)準拠: スライダー→開始値→LABEL→終了値→スライダーの左右対称構成。
-// 両端のスライダー・数値ボックスは同一valueへ書き込む（可動域を左右へ拡張するための重複操作面）。
+// AviQtl(ParamControl.qml)の左右対称構成を踏襲するが、左右の意味は
+// 「現在ハイライトされている区間の開始値・終了値」を独立して編集する方式へ変更する。
+// 左右は同一valueの重複操作面ではなく、別々の絶対フレームへの書き込みとなる
+// （書き込み先フレームはRust側resolve_segment()が確定したsegment-start/end-frame）。
 component PropertyRow inherits Rectangle {
     in property <string> label;
-    in property <float> value;
+    in property <float> segment-start-value;
+    in property <float> segment-end-value;
     in property <float> min: -1000;
     in property <float> max: 1000;
     in property <float> drag-sensitivity: 1;
-    callback changed(float);
+    callback start-changed(float);
+    callback end-changed(float);
     callback commit-start();
+    callback commit-end();
     callback release();
     // ラベルクリックでイージングウィンドウを要求する。
     callback label-clicked();
@@ -21,33 +26,52 @@ component PropertyRow inherits Rectangle {
         return v < min ? min : v > max ? max : v;
     }
 
-    function pointer-x-clamped(x: length, track-width: length) -> length {
-        return x < 0px ? 0px : x > track-width ? track-width : x;
-    }
-
     property <length> anchor-x: 0;
     property <length> anchor-y: 0;
     // Sliderはpointer-eventを公開しないため、changed連続発火の間隔でドラッグ
     // セッションを判定する。最後のchangedから150ms無操作でreleaseとみなす。
-    property <bool> slider-active: false;
-    session-timeout := Timer {
+    // 左右セッションは独立フレームへの書き込みのため、タイマーも左右別個に持つ。
+    property <bool> left-active: false;
+    property <bool> right-active: false;
+
+    left-timeout := Timer {
         interval: 150ms;
         running: false;
         triggered => {
-            root.slider-active = false;
+            root.left-active = false;
             self.running = false;
             root.release();
         }
     }
 
-    function slider-changed(v: float) {
-        if (!root.slider-active) {
-            root.slider-active = true;
+    right-timeout := Timer {
+        interval: 150ms;
+        running: false;
+        triggered => {
+            root.right-active = false;
+            self.running = false;
+            root.release();
+        }
+    }
+
+    function push-start(v: float) {
+        if (!root.left-active) {
+            root.left-active = true;
             root.commit-start();
         }
-        session-timeout.running = false;
-        session-timeout.running = true;
-        root.changed(root.clamp(v));
+        left-timeout.running = false;
+        left-timeout.running = true;
+        root.start-changed(root.clamp(v));
+    }
+
+    function push-end(v: float) {
+        if (!root.right-active) {
+            root.right-active = true;
+            root.commit-end();
+        }
+        right-timeout.running = false;
+        right-timeout.running = true;
+        root.end-changed(root.clamp(v));
     }
 
     HorizontalLayout {
@@ -56,8 +80,8 @@ component PropertyRow inherits Rectangle {
         slider-l := Slider {
             minimum: root.min;
             maximum: root.max;
-            value: root.clamp(root.value);
-            changed(v) => { root.slider-changed(v); }
+            value: root.clamp(root.segment-start-value);
+            changed(v) => { root.push-start(v); }
         }
 
         value-l := Rectangle {
@@ -71,13 +95,13 @@ component PropertyRow inherits Rectangle {
                 x: 4px;
                 width: parent.width - 8px;
                 height: 100%;
-                text: root.value;
+                text: root.segment-start-value;
                 color: #dde3ee;
                 font-size: 11px;
                 horizontal-alignment: center;
                 vertical-alignment: center;
                 input-type: InputType.decimal;
-                accepted => { root.changed(root.clamp(self.text.to-float())); }
+                accepted => { root.push-start(self.text.to-float()); }
             }
 
             drag-l := TouchArea {
@@ -97,9 +121,9 @@ component PropertyRow inherits Rectangle {
                 }
                 moved => {
                     if (self.pressed) {
-                        root.changed(root.clamp(root.value
+                        root.push-start(root.segment-start-value
                             + (self.mouse-x - root.anchor-x) / 1px * root.drag-sensitivity
-                            - (self.mouse-y - root.anchor-y) / 1px * root.drag-sensitivity));
+                            - (self.mouse-y - root.anchor-y) / 1px * root.drag-sensitivity);
                         root.anchor-x = self.mouse-x;
                         root.anchor-y = self.mouse-y;
                     }
@@ -142,13 +166,13 @@ component PropertyRow inherits Rectangle {
                 x: 4px;
                 width: parent.width - 8px;
                 height: 100%;
-                text: root.value;
+                text: root.segment-end-value;
                 color: #dde3ee;
                 font-size: 11px;
                 horizontal-alignment: center;
                 vertical-alignment: center;
                 input-type: InputType.decimal;
-                accepted => { root.changed(root.clamp(self.text.to-float())); }
+                accepted => { root.push-end(self.text.to-float()); }
             }
 
             drag-r := TouchArea {
@@ -159,7 +183,7 @@ component PropertyRow inherits Rectangle {
                         if (event.kind == PointerEventKind.down) {
                             root.anchor-x = self.mouse-x;
                             root.anchor-y = self.mouse-y;
-                            root.commit-start();
+                            root.commit-end();
                         }
                         if (event.kind == PointerEventKind.up) {
                             root.release();
@@ -168,9 +192,9 @@ component PropertyRow inherits Rectangle {
                 }
                 moved => {
                     if (self.pressed) {
-                        root.changed(root.clamp(root.value
+                        root.push-end(root.segment-end-value
                             + (self.mouse-x - root.anchor-x) / 1px * root.drag-sensitivity
-                            - (self.mouse-y - root.anchor-y) / 1px * root.drag-sensitivity));
+                            - (self.mouse-y - root.anchor-y) / 1px * root.drag-sensitivity);
                         root.anchor-x = self.mouse-x;
                         root.anchor-y = self.mouse-y;
                     }
@@ -181,19 +205,25 @@ component PropertyRow inherits Rectangle {
         slider-r := Slider {
             minimum: root.min;
             maximum: root.max;
-            value: root.clamp(root.value);
-            changed(v) => { root.slider-changed(v); }
+            value: root.clamp(root.segment-end-value);
+            changed(v) => { root.push-end(v); }
         }
     }
 }
 
-// AviQtl準拠: 各パラメータ行の直下に置く中間点トラック。
-// 空白部クリックでその位置のフレームへ中間点追加ウィンドウを要求し、
-// 既存の中間点(◇)クリックでその点の編集ウィンドウを要求する。
+// 全パラメータ共通の中間点区間トラック。boundary-framesは常に2要素以上
+// （先頭=clip-start、末尾=clip-end）で、その全点を常時描画する
+// （両端は中間点が0件の状態でも「実在する境界点」として常に可視化する）。
+// segment-start-frame/segment-end-frameで指定された区間だけを照明表示し、
+// current-frameの位置へ縦線を引く。区間探索はRust側resolve_segment()が
+// 確定済みの値をそのまま使うため、このコンポーネントは純粋な描画専用に留める。
 component KeyframeTrack inherits Rectangle {
-    in property <[int]> frames;
+    in property <[int]> boundary-frames;
     in property <int> total-frames: 1;
-    // 引数: クリック位置から算出したフレーム番号。
+    in property <int> current-frame: 0;
+    in property <int> segment-start-frame: 0;
+    in property <int> segment-end-frame: 1;
+    // 引数: クリック位置から算出したフレーム番号、または既存境界点のフレーム。
     callback point-clicked(int);
 
     height: 12px;
@@ -201,6 +231,11 @@ component KeyframeTrack inherits Rectangle {
     background: #131318;
     border-width: 1px;
     border-color: #24242c;
+    clip: true;
+
+    function frac(f: int) -> float {
+        return root.total-frames > 0 ? f / root.total-frames : 0;
+    }
 
     function frame-at(x: length) -> int {
         return max(0, min(root.total-frames,
@@ -211,8 +246,26 @@ component KeyframeTrack inherits Rectangle {
         clicked => { root.point-clicked(root.frame-at(self.mouse-x)); }
     }
 
-    for f in root.frames: Rectangle {
-        x: (root.width - self.width) * (root.total-frames > 0 ? f / root.total-frames : 0);
+    // 現在区間のハイライト（照明表示）
+    Rectangle {
+        x: root.width * root.frac(root.segment-start-frame);
+        width: root.width * (root.frac(root.segment-end-frame) - root.frac(root.segment-start-frame));
+        height: 100%;
+        background: #2a4db8;
+        opacity: 0.35;
+    }
+
+    // 現在フレーム位置の縦線（タイムライン上の再生位置プレビューと同期）
+    Rectangle {
+        x: root.width * root.frac(root.current-frame) - 0.5px;
+        width: 1px;
+        height: 100%;
+        background: #e8e8ee;
+    }
+
+    // 境界点。両端（配列の先頭・末尾）は常時可視、中間は登録済みの中間点のみ。
+    for f in root.boundary-frames: Rectangle {
+        x: root.width * root.frac(f) - 4px;
         y: parent.height / 2 - 4px;
         width: 8px;
         height: 8px;
@@ -221,7 +274,9 @@ component KeyframeTrack inherits Rectangle {
             width: 100%;
             height: 100%;
             commands: "M 4 0 L 8 4 L 4 8 L 0 4 Z";
-            fill: #3a6df0;
+            fill: (f == root.boundary-frames[0] || f == root.boundary-frames[root.boundary-frames.length - 1])
+                ? #6a6a76
+                : #3a6df0;
         }
 
         TouchArea {
@@ -300,7 +355,11 @@ component MenuItem inherits Rectangle {
 component ParamField inherits Rectangle {
     in property <ParamRow> data;
     in property <int> total-frames: 1;
-    callback changed-float(float);
+    in property <int> current-frame: 0;
+    // 引数: 区間開始フレームへ書き込む値、区間終了フレームへ書き込む値。
+    // 対象フレームはdata.segment-start-frame/segment-end-frameへ呼び出し側が付与する。
+    callback changed-segment-start(float);
+    callback changed-segment-end(float);
     callback changed-bool(bool);
     callback changed-text(string);
     callback commit();
@@ -314,18 +373,24 @@ component ParamField inherits Rectangle {
         spacing: 2px;
         PropertyRow {
             label: data.label;
-            value: data.value;
+            segment-start-value: data.segment-start-value;
+            segment-end-value: data.segment-end-value;
             min: data.kind == 2 ? 0 : data.min;
             max: data.kind == 2 ? 1 : data.max;
-            changed(v) => { root.changed-float(v); }
+            start-changed(v) => { root.changed-segment-start(v); }
+            end-changed(v) => { root.changed-segment-end(v); }
             commit-start => { root.commit(); }
+            commit-end => { root.commit(); }
             release => { root.release(); }
             label-clicked => { root.edit-keyframes(-1); }
         }
 
         KeyframeTrack {
-            frames: data.keyframe-frames;
+            boundary-frames: data.boundary-frames;
             total-frames: root.total-frames;
+            current-frame: root.current-frame;
+            segment-start-frame: data.segment-start-frame;
+            segment-end-frame: data.segment-end-frame;
             point-clicked(frame) => { root.edit-keyframes(frame); }
         }
     }
@@ -372,6 +437,8 @@ export component PropertiesWindow inherits Window {
     in-out property <bool> has-text: false;
     in-out property <bool> has-shape: false;
     in-out property <bool> has-audio: false;
+    // タイムラインのプレビュー再生位置（絶対フレーム）。KeyframeTrackの縦線描画に使う。
+    in-out property <int> current-frame: 0;
 
     in-out property <[ParamRow]> object-params: [];
     in-out property <[EffectRow]> effects: [];
@@ -387,13 +454,15 @@ export component PropertiesWindow inherits Window {
 
     property <bool> is-dragging-param: false;
 
-    callback set-object-param(string, string, float);
+    // 引数: (group, key, frame, value)。frameはdata.segment-start-frame/segment-end-frameのいずれか。
+    callback set-object-param-segment(string, string, int, float);
     callback set-object-param-bool(string, string, bool);
     callback set-object-param-text(string, string, string);
     callback commit-object-param(string, string);
     callback set-effect-enabled(int, bool);
     callback remove-effect(int);
-    callback set-param(int, string, float);
+    // 引数: (effect-index, key, frame, value)。
+    callback set-param-segment(int, string, int, float);
     callback set-param-bool(int, string, bool);
     callback commit-param(int, string);
     callback add-effect(string);
@@ -565,7 +634,9 @@ export component PropertiesWindow inherits Window {
                         ParamField {
                             data: p;
                             total-frames: root.total-frames;
-                            changed-float(v) => { root.set-object-param(p.group, p.key, v); }
+                            current-frame: root.current-frame;
+                            changed-segment-start(v) => { root.set-object-param-segment(p.group, p.key, p.segment-start-frame, v); }
+                            changed-segment-end(v) => { root.set-object-param-segment(p.group, p.key, p.segment-end-frame, v); }
                             changed-bool(v) => { root.set-object-param-bool(p.group, p.key, v); }
                             changed-text(v) => { root.set-object-param-text(p.group, p.key, v); }
                             commit => {
@@ -598,7 +669,9 @@ export component PropertiesWindow inherits Window {
                         if p.effect-index == eff.index: ParamField {
                             data: p;
                             total-frames: root.total-frames;
-                            changed-float(v) => { root.set-param(eff.index, p.key, v); }
+                            current-frame: root.current-frame;
+                            changed-segment-start(v) => { root.set-param-segment(eff.index, p.key, p.segment-start-frame, v); }
+                            changed-segment-end(v) => { root.set-param-segment(eff.index, p.key, p.segment-end-frame, v); }
                             changed-bool(v) => { root.set-param-bool(eff.index, p.key, v); }
                             commit => {
                                 root.is-dragging-param = true;

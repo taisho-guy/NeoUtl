@@ -217,7 +217,7 @@ pub fn setup(
     {
         let state = state.clone();
         let pw = props.as_weak();
-        props.on_set_object_param(move |group, key, value| {
+        props.on_set_object_param_segment(move |group, key, frame, value| {
             let Some(p) = pw.upgrade() else { return };
             let id = p.get_object_id();
             if id < 0 {
@@ -226,18 +226,23 @@ pub fn setup(
             let world_holder = app_state::active_world(&state);
             let mut world = world_holder.lock().unwrap();
             let oid = id as usize;
-            let existing = world.get_keyframes(oid, key.as_str());
-            let display_value = if existing.is_empty() {
-                apply_object_param(&mut world, oid, group.as_str(), key.as_str(), value);
-                value
-            } else {
-                let frame = world.current_frame();
-                let easing = easing_for_write(&existing, frame);
-                world.set_keyframe(oid, key.as_str(), frame, value, easing);
-                resolve_display_value(value, &world.get_keyframes(oid, key.as_str()), frame)
-            };
+            let (clip_start, clip_end) = world.get_time_range(oid);
+            let base = current_object_param_value(&world, oid, group.as_str(), key.as_str());
+            write_segment_value(
+                |w| w.get_keyframes(oid, key.as_str()),
+                |w, f, v, e| w.set_keyframe(oid, key.as_str(), f, v, e),
+                &mut world,
+                clip_start,
+                clip_end,
+                base,
+                frame,
+                value,
+            );
+            let track = world.get_keyframes(oid, key.as_str());
+            let current_frame = world.current_frame();
             drop(world);
-            update_object_param_value(&p, group.as_str(), key.as_str(), display_value);
+            let seg = resolve_segment(&track, clip_start, clip_end, current_frame, base);
+            update_object_param_segment(&p, group.as_str(), key.as_str(), &seg);
         });
     }
 
@@ -330,7 +335,7 @@ pub fn setup(
     {
         let state = state.clone();
         let pw = props.as_weak();
-        props.on_set_param(move |index, key, value| {
+        props.on_set_param_segment(move |index, key, frame, value| {
             let Some(p) = pw.upgrade() else { return };
             let id = p.get_object_id();
             if id < 0 {
@@ -340,22 +345,31 @@ pub fn setup(
             let mut world = world_holder.lock().unwrap();
             let oid = id as usize;
             let eidx = index as usize;
-            let existing = world.get_effect_keyframes(oid, eidx, key.as_str());
-            let display_value = if existing.is_empty() {
-                world.set_effect_param(oid, eidx, key.as_str(), value);
-                value
-            } else {
-                let frame = world.current_frame();
-                let easing = easing_for_write(&existing, frame);
-                world.set_effect_keyframe(oid, eidx, key.as_str(), frame, value, easing);
-                resolve_display_value(
-                    value,
-                    &world.get_effect_keyframes(oid, eidx, key.as_str()),
-                    frame,
-                )
-            };
+            let (clip_start, clip_end) = world.get_time_range(oid);
+            let base = world
+                .get_effect_instance(oid, eidx)
+                .and_then(|inst| {
+                    inst.params.get(key.as_str()).map(|p| match &p.static_value {
+                        crate::ecs::types::Value::Number(n) => *n,
+                        _ => 0.0,
+                    })
+                })
+                .unwrap_or(0.0);
+            write_segment_value(
+                |w| w.get_effect_keyframes(oid, eidx, key.as_str()),
+                |w, f, v, e| w.set_effect_keyframe(oid, eidx, key.as_str(), f, v, e),
+                &mut world,
+                clip_start,
+                clip_end,
+                base,
+                frame,
+                value,
+            );
+            let track = world.get_effect_keyframes(oid, eidx, key.as_str());
+            let current_frame = world.current_frame();
             drop(world);
-            update_effect_param_value(&p, index, key.as_str(), display_value);
+            let seg = resolve_segment(&track, clip_start, clip_end, current_frame, base);
+            update_effect_param_segment(&p, index, key.as_str(), &seg);
         });
     }
 
@@ -497,6 +511,83 @@ fn easing_for_write(keyframes: &[Keyframe], frame: i32) -> Easing {
         .unwrap_or(Easing::Linear)
 }
 
+/// 中間点区間の解決結果。boundary_framesは常に2要素以上（clip_start, clip_end含む）。
+struct SegmentInfo {
+    boundary_frames: Vec<i32>,
+    start_frame: i32,
+    end_frame: i32,
+    start_value: f32,
+    end_value: f32,
+    /// クランプ前の現在フレームにおける実効値。ParamRow.valueの表示に使う
+    /// （区間の両端値とは別に、現在の再生位置そのものの値を保持する）。
+    current_value: f32,
+}
+
+/// clip範囲・既存中間点・現在フレームから、現在フレームを内包する区間を確定する。
+/// frameがclip範囲外の場合はclip_start/clip_endへクランプしてから探索する。
+/// 中間点0件時はboundary_framesが[clip_start, clip_end]の2点のみとなり、
+/// 区間全体が単一区間として扱われる（両端点は常に実在する境界として提示する）。
+fn resolve_segment(
+    keyframes: &[Keyframe],
+    clip_start: i32,
+    clip_end: i32,
+    frame: i32,
+    base: f32,
+) -> SegmentInfo {
+    let frame = frame.clamp(clip_start, clip_end);
+    let mut boundary_frames: Vec<i32> = std::iter::once(clip_start)
+        .chain(keyframes.iter().map(|k| k.frame))
+        .chain(std::iter::once(clip_end))
+        .collect();
+    boundary_frames.sort_unstable();
+    boundary_frames.dedup();
+
+    let start_frame = boundary_frames
+        .iter()
+        .rev()
+        .find(|&&f| f <= frame)
+        .copied()
+        .unwrap_or(clip_start);
+    let end_frame = boundary_frames
+        .iter()
+        .find(|&&f| f > start_frame)
+        .copied()
+        .unwrap_or(clip_end);
+
+    SegmentInfo {
+        start_value: resolve_display_value(base, keyframes, start_frame),
+        end_value: resolve_display_value(base, keyframes, end_frame),
+        current_value: resolve_display_value(base, keyframes, frame),
+        boundary_frames,
+        start_frame,
+        end_frame,
+    }
+}
+
+/// 中間点0件時に片側だけ編集された場合、両端点(clip_start, clip_end)をbase値で
+/// 先に実点化してから、対象frameのみ新しい値へ上書きする。この関数を経由しない
+/// 直接set_keyframe呼び出しは、区間モデルの「両端が常に実在する」前提を破壊するため禁止する。
+/// clip_start == clip_endの縮退区間（幅0のクリップ）ではシードを行わずframeのみ書き込む。
+fn write_segment_value(
+    keyframes_of: impl Fn(&EcsWorld) -> Vec<Keyframe>,
+    mut set_kf: impl FnMut(&mut EcsWorld, i32, f32, Easing),
+    world: &mut EcsWorld,
+    clip_start: i32,
+    clip_end: i32,
+    base: f32,
+    frame: i32,
+    value: f32,
+) {
+    let existing = keyframes_of(world);
+    if existing.is_empty() && clip_start != clip_end {
+        set_kf(world, clip_start, base, Easing::Linear);
+        set_kf(world, clip_end, base, Easing::Linear);
+    }
+    let existing = keyframes_of(world);
+    let easing = easing_for_write(&existing, frame);
+    set_kf(world, frame, value, easing);
+}
+
 /// object-params一行分の書き込みを、スキーマのgroup/keyから該当コンポーネントへ振り分ける。
 /// key単位のフィールド選択はParamAccess::set_param（各コンポーネント定義側）に委譲する。
 /// ここではgroup名から対象コンポーネントを選び、読み出し→trait経由の書き込み→保存のみを行う。
@@ -580,6 +671,8 @@ fn push_schema_rows(
     schema: &'static [crate::ecs::object_schema::ParamSchema],
     stage_w: f32,
     stage_h: f32,
+    clip_start: i32,
+    clip_end: i32,
     current_frame: i32,
     get: impl Fn(&str) -> f32,
     get_text: impl Fn(&str) -> Option<String>,
@@ -594,12 +687,13 @@ fn push_schema_rows(
             get(s.key)
         };
         let frames: Vec<i32> = track.iter().map(|k| k.frame).collect();
+        let seg = resolve_segment(&track, clip_start, clip_end, current_frame, base);
         out.push(ParamRow {
             effect_index: -1,
             key: SharedString::from(s.key),
             label: SharedString::from(s.label),
             group: SharedString::from(s.group),
-            value: resolve_display_value(base, &track, current_frame),
+            value: seg.current_value,
             kind: match s.kind {
                 ParamKind::Float | ParamKind::Enum => 0,
                 ParamKind::Bool => 1,
@@ -611,6 +705,11 @@ fn push_schema_rows(
             text: SharedString::from(get_text(s.key).unwrap_or_default()),
             has_keyframes: !frames.is_empty(),
             keyframe_frames: ModelRc::new(VecModel::from(frames)),
+            boundary_frames: ModelRc::new(VecModel::from(seg.boundary_frames)),
+            segment_start_frame: seg.start_frame,
+            segment_end_frame: seg.end_frame,
+            segment_start_value: seg.start_value,
+            segment_end_value: seg.end_value,
         });
     }
 }
@@ -624,6 +723,8 @@ fn push_c_abi_param_rows(
     schema: &[neoutl_shared_abi::ParamSchema],
     group: &str,
     effect_index: i32,
+    clip_start: i32,
+    clip_end: i32,
     current_frame: i32,
     current: impl Fn(&str) -> f32,
     keyframes: impl Fn(&str) -> Vec<Keyframe>,
@@ -634,12 +735,13 @@ fn push_c_abi_param_rows(
         let base = current(key);
         let track = keyframes(key);
         let frames: Vec<i32> = track.iter().map(|k| k.frame).collect();
+        let seg = resolve_segment(&track, clip_start, clip_end, current_frame, base);
         out.push(ParamRow {
             effect_index,
             key: SharedString::from(key),
             label: SharedString::from(label),
             group: SharedString::from(group),
-            value: resolve_display_value(base, &track, current_frame),
+            value: seg.current_value,
             kind: match s.kind {
                 ParamKind::Float | ParamKind::Enum => 0,
                 ParamKind::Bool => 1,
@@ -651,6 +753,11 @@ fn push_c_abi_param_rows(
             text: SharedString::default(),
             has_keyframes: !frames.is_empty(),
             keyframe_frames: ModelRc::new(VecModel::from(frames)),
+            boundary_frames: ModelRc::new(VecModel::from(seg.boundary_frames)),
+            segment_start_frame: seg.start_frame,
+            segment_end_frame: seg.end_frame,
+            segment_start_value: seg.start_value,
+            segment_end_value: seg.end_value,
         });
     }
 }
@@ -667,7 +774,14 @@ fn push_c_abi_param_rows(
 /// すなわちネイティブスキーマの行が既に同じ内容をカバーしている場合はここでの
 /// 重複行生成をスキップし、「操作してもガン無視される」編集不能な行をUI上に
 /// 出さないようにする。
-fn push_plugin_rows(out: &mut Vec<ParamRow>, world: &EcsWorld, oid: usize, current_frame: i32) {
+fn push_plugin_rows(
+    out: &mut Vec<ParamRow>,
+    world: &EcsWorld,
+    oid: usize,
+    clip_start: i32,
+    clip_end: i32,
+    current_frame: i32,
+) {
     if world.get_shape(oid).is_some() {
         return;
     }
@@ -692,6 +806,8 @@ fn push_plugin_rows(out: &mut Vec<ParamRow>, world: &EcsWorld, oid: usize, curre
         schema,
         &plugin.name,
         -1,
+        clip_start,
+        clip_end,
         current_frame,
         |key| {
             current.get(key).copied().unwrap_or_else(|| {
@@ -705,25 +821,37 @@ fn push_plugin_rows(out: &mut Vec<ParamRow>, world: &EcsWorld, oid: usize, curre
     );
 }
 
-/// object_paramsモデルの該当行(group/key一致)のみ値を書き換える。
+/// object_paramsモデルの該当行(group/key一致)のみ区間フィールドを書き換える。
 /// ModelRcの同一性を保つため、Slint側のコンポーネント再構築(=ドラッグ状態/
 /// テキスト選択状態の喪失)を発生させない。構造変化を伴わない値更新はこの経路を使う。
-fn update_object_param_value(props: &PropertiesWindow, group: &str, key: &str, value: f32) {
+fn update_object_param_segment(props: &PropertiesWindow, group: &str, key: &str, seg: &SegmentInfo) {
     let model = props.get_object_params();
     for i in 0..model.row_count() {
         let Some(mut row) = model.row_data(i) else {
             continue;
         };
         if row.group.as_str() == group && row.key.as_str() == key {
-            row.value = value;
+            apply_segment_to_row(&mut row, seg);
             model.set_row_data(i, row);
             return;
         }
     }
 }
 
+/// ParamRow一行へSegmentInfoの内容を書き込む。row.valueは区間開始値をそのまま用いる
+/// （タイムライン先頭からの通し値表示としては区間開始側が現在フレームの実効値に一致する）。
+fn apply_segment_to_row(row: &mut ParamRow, seg: &SegmentInfo) {
+    row.value = seg.current_value;
+    row.has_keyframes = seg.boundary_frames.len() > 2;
+    row.boundary_frames = ModelRc::new(VecModel::from(seg.boundary_frames.clone()));
+    row.segment_start_frame = seg.start_frame;
+    row.segment_end_frame = seg.end_frame;
+    row.segment_start_value = seg.start_value;
+    row.segment_end_value = seg.end_value;
+}
+
 /// object_paramsモデルの該当行(group/key一致)のtextフィールドのみ書き換える。
-/// kind==3(Text)行専用。update_object_param_valueと同一方針。
+/// kind==3(Text)行専用。update_object_param_segmentと同一方針。
 fn update_object_param_text(props: &PropertiesWindow, group: &str, key: &str, text: &str) {
     let model = props.get_object_params();
     for i in 0..model.row_count() {
@@ -738,16 +866,21 @@ fn update_object_param_text(props: &PropertiesWindow, group: &str, key: &str, te
     }
 }
 
-/// paramsモデル(エフェクトパラメータ)の該当行(effect_index/key一致)のみ値を書き換える。
-/// update_object_param_valueと同一方針。
-fn update_effect_param_value(props: &PropertiesWindow, effect_index: i32, key: &str, value: f32) {
+/// paramsモデル(エフェクトパラメータ)の該当行(effect_index/key一致)のみ区間フィールドを
+/// 書き換える。update_object_param_segmentと同一方針。
+fn update_effect_param_segment(
+    props: &PropertiesWindow,
+    effect_index: i32,
+    key: &str,
+    seg: &SegmentInfo,
+) {
     let model = props.get_params();
     for i in 0..model.row_count() {
         let Some(mut row) = model.row_data(i) else {
             continue;
         };
         if row.effect_index == effect_index && row.key.as_str() == key {
-            row.value = value;
+            apply_segment_to_row(&mut row, seg);
             model.set_row_data(i, row);
             return;
         }
@@ -768,6 +901,8 @@ fn refresh(props: &PropertiesWindow, world: &EcsWorld) {
     props.set_stage_height(stage_h);
     props.set_total_frames(world.total_frames().max(1));
     let current_frame = world.current_frame();
+    props.set_current_frame(current_frame);
+    let (clip_start, clip_end) = world.get_time_range(oid);
 
     let mut object_params: Vec<ParamRow> = Vec::new();
 
@@ -778,6 +913,8 @@ fn refresh(props: &PropertiesWindow, world: &EcsWorld) {
             TRANSFORM_SCHEMA,
             stage_w,
             stage_h,
+            clip_start,
+            clip_end,
             current_frame,
             |k| t.get_param(k).unwrap_or(0.0),
             |_| None,
@@ -795,6 +932,8 @@ fn refresh(props: &PropertiesWindow, world: &EcsWorld) {
             TEXT_SCHEMA,
             stage_w,
             stage_h,
+            clip_start,
+            clip_end,
             current_frame,
             |k| text.get_param(k).unwrap_or(0.0),
             |k| (k == "text").then(|| body.clone()),
@@ -811,6 +950,8 @@ fn refresh(props: &PropertiesWindow, world: &EcsWorld) {
             SHAPE_SCHEMA,
             stage_w,
             stage_h,
+            clip_start,
+            clip_end,
             current_frame,
             |k| shape.get_param(k).unwrap_or(0.0),
             |_| None,
@@ -827,6 +968,8 @@ fn refresh(props: &PropertiesWindow, world: &EcsWorld) {
             AUDIO_SCHEMA,
             stage_w,
             stage_h,
+            clip_start,
+            clip_end,
             current_frame,
             |k| audio.get_param(k).unwrap_or(0.0),
             |_| None,
@@ -836,7 +979,7 @@ fn refresh(props: &PropertiesWindow, world: &EcsWorld) {
         props.set_has_audio(false);
     }
 
-    push_plugin_rows(&mut object_params, world, oid, current_frame);
+    push_plugin_rows(&mut object_params, world, oid, clip_start, clip_end, current_frame);
 
     props.set_object_params(ModelRc::new(VecModel::from(object_params)));
 
@@ -866,6 +1009,8 @@ fn refresh(props: &PropertiesWindow, world: &EcsWorld) {
             schema,
             meta.name,
             i as i32,
+            clip_start,
+            clip_end,
             current_frame,
             |key| {
                 e.params

@@ -889,6 +889,17 @@ impl EcsWorld {
         })
     }
 
+    /// オブジェクトの絶対フレーム範囲 (start_frame, end_frame) を返す。
+    /// 中間点区間UIの両端境界として使う。エンティティ不在時は(0,1)。
+    pub fn get_time_range(&self, object_id: usize) -> (i32, i32) {
+        let Some(entity) = self.find_entity(object_id) else {
+            return (0, 1);
+        };
+        self.world
+            .run(|t: View<TimeRange>| t.get(entity).ok().map(|r| (r.start_frame, r.end_frame)))
+            .unwrap_or((0, 1))
+    }
+
     pub fn get_keyframes(&self, object_id: usize, key: &str) -> Vec<crate::ecs::types::Keyframe> {
         let Some(entity) = self.find_entity(object_id) else {
             return Vec::new();
