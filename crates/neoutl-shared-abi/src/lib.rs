@@ -24,6 +24,15 @@ pub enum ParamKind {
     Text = 4,
     FilePath = 5,
     Track = 6,
+    /// 区切り線。表示専用でvalueを保持しない（FILTER_ITEM_SEPARATOR相当）。
+    Separator = 7,
+    /// 折り畳み可能な見出し。default_floatを初期開閉状態(0=閉/1=開)に転用する
+    /// （FILTER_ITEM_GROUP相当）。開閉状態自体はホストUI側のローカル状態として保持し、
+    /// プロジェクトファイルへは保存しない。
+    Group = 8,
+    /// フォルダ選択。FilePathと同じ文字列値・ダイアログ種別のみ異なる
+    /// （FILTER_ITEM_FOLDER相当）。
+    Folder = 9,
 }
 
 /// C ABI越しに渡す固定長文字列参照。

@@ -256,7 +256,7 @@ component KeyframeTrack inherits Rectangle {
     function frame-at(x: length) -> int {
         return max(root.clip-start-frame, min(root.clip-end-frame,
             root.clip-start-frame
-                + (x / root.width * (root.clip-end-frame - root.clip-start-frame) + 0.5)));
+            + (x / root.width * (root.clip-end-frame - root.clip-start-frame) + 0.5)));
     }
 
     TouchArea {
@@ -425,6 +425,8 @@ component ParamField inherits Rectangle {
     callback changed-path(string);
     callback pick-path();
     callback changed-track(int);
+    callback pick-folder();
+    callback toggle-group();
     callback commit();
     callback release();
     // 引数: 対象フレーム。常に実在する境界点（KeyframeTrack.boundary-framesの要素、
@@ -438,7 +440,7 @@ component ParamField inherits Rectangle {
     callback keyframe-drag(int, int);
     callback keyframe-context-menu(bool, int, length, length);
 
-    height: (data.kind == 4 || data.kind == 5) ? 44px : (data.kind == 0 || data.kind == 2) ? 34px : 22px;
+    height: (data.kind == 4 || data.kind == 5 || data.kind == 9) ? 44px : (data.kind == 0 || data.kind == 2) ? 34px : (data.kind == 7 || data.kind == 8) ? 26px : 22px;
 
     if data.kind == 0 || data.kind == 2: VerticalLayout {
         spacing: 2px;
@@ -487,6 +489,7 @@ component ParamField inherits Rectangle {
             color: #c8c8d2;
             font-size: 11px;
         }
+
         ComboBox {
             model: data.enum-options;
             current-index: data.enum-index;
@@ -535,6 +538,7 @@ component ParamField inherits Rectangle {
                 accepted => { root.changed-path(self.text); }
             }
         }
+
         Rectangle {
             width: 64px;
             border-radius: 3px;
@@ -548,6 +552,7 @@ component ParamField inherits Rectangle {
                 horizontal-alignment: center;
                 vertical-alignment: center;
             }
+
             TouchArea {
                 clicked => { root.pick-path(); }
             }
@@ -561,6 +566,7 @@ component ParamField inherits Rectangle {
             color: #c8c8d2;
             font-size: 11px;
         }
+
         ComboBox {
             model: data.track-names;
             current-index: data.enum-index;
@@ -568,6 +574,95 @@ component ParamField inherits Rectangle {
                 root.changed-track(self.current-index >= 0 && self.current-index < data.track-options.length
                     ? data.track-options[self.current-index].id
                     : -1);
+            }
+        }
+    }
+
+    // 区切り線（FILTER_ITEM_SEPARATOR相当。値を持たず表示専用）。
+    if data.kind == 7: Rectangle {
+        height: 26px;
+        VerticalLayout {
+            alignment: end;
+            Text {
+                text: data.label;
+                color: #8a8a96;
+                font-size: 10px;
+            }
+
+            Rectangle {
+                height: 1px;
+                background: #303038;
+            }
+        }
+    }
+
+    // 折り畳み見出し（FILTER_ITEM_GROUP相当）。開閉状態はdata.enum-index(0=閉/1=開)で表す
+    // （ホスト側ローカル状態、プロジェクトファイルへは非保存）。
+    if data.kind == 8: Rectangle {
+        height: 26px;
+        background: #202028;
+        border-radius: 3px;
+        HorizontalLayout {
+            padding: 4px;
+            spacing: 6px;
+            Text {
+                text: data.enum-index > 0 ? "▾" : "▸";
+                color: #c8c8d2;
+                font-size: 11px;
+            }
+
+            Text {
+                text: data.label;
+                color: #c8c8d2;
+                font-size: 11px;
+                vertical-alignment: center;
+            }
+        }
+
+        TouchArea {
+            clicked => { root.toggle-group(); }
+        }
+    }
+
+    // フォルダ選択（FILTER_ITEM_FOLDER相当）。値の保持形式はFilePath(kind==5)と同一。
+    if data.kind == 9: HorizontalLayout {
+        height: 44px;
+        spacing: 4px;
+        Rectangle {
+            border-radius: 3px;
+            background: #1e1e24;
+            border-width: 1px;
+            border-color: #303038;
+
+            TextInput {
+                x: 6px;
+                y: 4px;
+                width: parent.width - 12px;
+                height: parent.height - 8px;
+                text: data.text;
+                color: #dde3ee;
+                font-size: 11px;
+                wrap: no-wrap;
+                accepted => { root.changed-path(self.text); }
+            }
+        }
+
+        Rectangle {
+            width: 64px;
+            border-radius: 3px;
+            background: #2a2a32;
+            border-width: 1px;
+            border-color: #383840;
+            Text {
+                text: "参照...";
+                color: #dde3ee;
+                font-size: 11px;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+            }
+
+            TouchArea {
+                clicked => { root.pick-folder(); }
             }
         }
     }
@@ -629,6 +724,10 @@ export component PropertiesWindow inherits Window {
     callback set-object-param-bool(string, string, bool);
     callback set-object-param-text(string, string, string);
     callback commit-object-param(string, string);
+    // 引数: (group, key)。ネイティブオブジェクト設定のフォルダ選択ダイアログ要求。
+    callback pick-object-folder(string, string);
+    // 引数: (group, label)。折り畳み見出し(kind==Group)のクリック、開閉状態を反転する。
+    callback toggle-object-settings-group(string, string);
     callback set-effect-enabled(int, bool);
     callback remove-effect(int);
     // 引数: (effect-index, key, frame, value)。
@@ -641,6 +740,10 @@ export component PropertiesWindow inherits Window {
     // 引数: (effect-index, key)。「参照...」ボタン押下、ネイティブファイルダイアログをRust側で開く。
     callback pick-param-file(int, string);
     // 引数: (effect-index, key, selected-object-id)。kind==Trackの選択確定。
+    // 引数: (effect-index, key)。kind==Folderの「参照...」ボタン押下。
+    callback pick-param-folder(int, string);
+    // 引数: (effect-index, label)。折り畳み見出し(kind==Group)のクリック、開閉状態を反転する。
+    callback toggle-param-settings-group(int, string);
     callback set-param-track(int, string, int);
     callback commit-param(int, string);
     callback add-effect(string);
@@ -800,7 +903,7 @@ export component PropertiesWindow inherits Window {
 
                 for p[j] in root.object-params: Rectangle {
                     height: (j == 0 || p.group != root.object-params[j - 1].group ? 26px : 0px)
-                        + ((p.kind == 4 || p.kind == 5) ? 44px : (p.kind == 0 || p.kind == 2) ? 34px : 22px);
+                        + ((p.kind == 4 || p.kind == 5 || p.kind == 9) ? 44px : (p.kind == 0 || p.kind == 2) ? 34px : (p.kind == 7 || p.kind == 8) ? 26px : 22px);
                     clip: true;
 
                     VerticalLayout {
@@ -817,6 +920,9 @@ export component PropertiesWindow inherits Window {
                             changed-segment-end(v) => { root.set-object-param-segment(p.group, p.key, p.segment-end-frame, v); }
                             changed-bool(v) => { root.set-object-param-bool(p.group, p.key, v); }
                             changed-text(v) => { root.set-object-param-text(p.group, p.key, v); }
+                            changed-path(v) => { root.set-object-param-text(p.group, p.key, v); }
+                            pick-folder => { root.pick-object-folder(p.group, p.key); }
+                            toggle-group => { root.toggle-object-settings-group(p.group, p.key); }
                             commit => {
                                 root.is-dragging-param = true;
                                 root.commit-object-param(p.group, p.key);
@@ -855,7 +961,7 @@ export component PropertiesWindow inherits Window {
 
                     for p[j] in root.params: Rectangle {
                         height: p.effect-index != eff.index ? 0px
-                            : (p.kind == 4 || p.kind == 5) ? 44px : (p.kind == 0 || p.kind == 2) ? 34px : 22px;
+                            : (p.kind == 4 || p.kind == 5 || p.kind == 9) ? 44px : (p.kind == 0 || p.kind == 2) ? 34px : (p.kind == 7 || p.kind == 8) ? 26px : 22px;
                         clip: true;
 
                         if p.effect-index == eff.index: ParamField {
@@ -867,6 +973,8 @@ export component PropertiesWindow inherits Window {
                             changed-enum(v) => { root.set-param-enum(eff.index, p.key, v); }
                             changed-path(v) => { root.set-param-text(eff.index, p.key, v); }
                             pick-path => { root.pick-param-file(eff.index, p.key); }
+                            pick-folder => { root.pick-param-folder(eff.index, p.key); }
+                            toggle-group => { root.toggle-param-settings-group(eff.index, p.key); }
                             changed-track(v) => { root.set-param-track(eff.index, p.key, v); }
                             commit => {
                                 root.is-dragging-param = true;

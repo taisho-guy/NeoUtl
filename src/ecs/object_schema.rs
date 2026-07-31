@@ -153,6 +153,49 @@ const fn track_field(group: &'static str, key: &'static str, label: &'static str
     }
 }
 
+/// 区切り線。表示専用（FILTER_ITEM_SEPARATOR相当）。
+const fn separator_field(group: &'static str, label: &'static str) -> ParamSchema {
+    ParamSchema {
+        group,
+        key: "",
+        label,
+        kind: ParamKind::Separator,
+        range: Range::Fixed(0.0, 0.0),
+        enum_options: &[],
+        depends_on: None,
+        depends_eq: 0.0,
+    }
+}
+
+/// フォルダ選択フィールド（FILTER_ITEM_FOLDER相当）。値の保持形式はfile_fieldと同一。
+const fn folder_field(group: &'static str, key: &'static str, label: &'static str) -> ParamSchema {
+    ParamSchema {
+        group,
+        key,
+        label,
+        kind: ParamKind::Folder,
+        range: Range::Fixed(0.0, 0.0),
+        enum_options: &[],
+        depends_on: None,
+        depends_eq: 0.0,
+    }
+}
+
+/// 折り畳み可能な見出し（FILTER_ITEM_GROUP相当）。initial_openは初期開閉状態のみを与え、
+/// 実行時の開閉はホストUI側ローカル状態（properties.rs）が管理する。
+const fn group_field(group: &'static str, label: &'static str, initial_open: bool) -> ParamSchema {
+    ParamSchema {
+        group,
+        key: label,
+        label,
+        kind: ParamKind::Group,
+        range: Range::Fixed(0.0, if initial_open { 1.0 } else { 0.0 }),
+        enum_options: &[],
+        depends_on: None,
+        depends_eq: 0.0,
+    }
+}
+
 pub const TRANSFORM_GROUP: &str = "トランスフォーム";
 pub const TEXT_GROUP: &str = "テキスト";
 pub const SHAPE_GROUP: &str = "図形";
