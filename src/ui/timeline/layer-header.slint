@@ -1,4 +1,5 @@
 import { LayerState } from "../types.slint";
+import { IconDisplay, IconSet } from "@lucide";
 
 export component LayerHeader inherits Rectangle {
     in property <length> header-width: 60px;
@@ -71,11 +72,12 @@ export component LayerHeader inherits Rectangle {
                 }
             }
 
-            if (state.locked): Text {
+            if (state.locked): IconDisplay {
                 x: 2px;
                 y: 2px;
-                text: "🔒";
-                font-size: 8px;
+                icon: IconSet.Lock;
+                stroke: #ffb0b0;
+                size: 9px;
             }
             if (!state.visible): Text {
                 x: 2px;

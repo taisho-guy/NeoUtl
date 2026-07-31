@@ -1,5 +1,5 @@
-import { IconSet } from "@lucide";
-import { IconButton } from "common.slint";
+import { IconDisplay, IconSet } from "@lucide";
+import { IconButton, KeyUtil, IconLookup } from "common.slint";
 import {
     TimelineObject,
     LayerState,
@@ -52,6 +52,7 @@ export component TimelineWindow inherits Window {
     callback cut-requested(int /* hit-id */);
     callback copy-requested(int /* hit-id */);
     callback paste-requested();
+    callback raw-key-event(bool /* ctrl */, bool /* shift */, bool /* alt */, string /* key */);
 
     property <int> header-width: 60;
     property <int> layer-height: 24;
@@ -70,7 +71,7 @@ export component TimelineWindow inherits Window {
     in-out property <bool> ripple-mode: false;
 
     property <bool> show-context-menu: false;
-    property <int> menu-target-id: -1;
+    in-out property <int> menu-target-id: -1;
     property <int> menu-frame: 0;
     property <int> menu-layer: 0;
     property <length> menu-x: 0px;
@@ -81,25 +82,12 @@ export component TimelineWindow inherits Window {
     in-out property <[ContextMenuItem]> menu-items: [];
     callback context-menu-requested(int /* hit-id */, int /* frame */, int /* layer */);
 
-    FocusScope {
+    key-focus := FocusScope {
+        width: 100%;
+        height: 100%;
         key-pressed(event) => {
-            if (event.text == Key.Delete && root.menu-target-id >= 0) {
-                root.delete-object(root.menu-target-id);
-            }
-            if (event.modifiers.control && !event.modifiers.shift && event.text == "z") {
-                root.undo-requested();
-            }
-            if (event.modifiers.control && (event.text == "y" || (event.modifiers.shift && event.text == "z"))) {
-                root.redo-requested();
-            }
+            root.raw-key-event(event.modifiers.control, event.modifiers.shift, event.modifiers.alt, KeyUtil.normalize-key(event));
             accept
-        }
-        TouchArea {
-            pointer-event(e) => {
-                if (e.button == PointerEventButton.left && e.kind == PointerEventKind.down) {
-                    root.show-context-menu = false;
-                }
-            }
         }
     }
 
@@ -228,6 +216,12 @@ export component TimelineWindow inherits Window {
 
     // メニュー項目集合はRust側(timeline.rs::build_context_menu)のみが生成する。
     // （区切り線=action4はクリック不可・背景色のみ変えた薄い罫線として描画）。
+    if root.show-context-menu: TouchArea {
+        width: 100%;
+        height: 100%;
+        clicked() => { root.show-context-menu = false; }
+    }
+
     if (root.show-context-menu): Rectangle {
         x: root.menu-x;
         y: root.menu-y;
@@ -258,11 +252,27 @@ export component TimelineWindow inherits Window {
                     background: #3c3c42;
                 }
 
-                if (item.action != 4): Text {
-                    text: "  " + item.label;
-                    color: !item.enabled ? #6a6a6e : (item.action == 1 ? #ff8888 : item.action == 0 ? #88c4ff : item.action == 3 ? #ffd23a : (item.action == 5 || item.action == 6) ? #a0a0a8 : (item.action == 7 || item.action == 8 || item.action == 9 || item.action == 10) ? #a0ffb0 : #8aabff.mix(#c0a0ff, mod(max(item.kind, 0), 5) / 4.0));
-                    font-size: 12px;
-                    vertical-alignment: center;
+                if (item.action != 4): HorizontalLayout {
+                    padding-left: 8px;
+                    padding-right: 8px;
+                    spacing: 6px;
+                    alignment: start;
+
+                    IconDisplay {
+                        icon: IconLookup.icon-for(item.icon);
+                        stroke: !item.enabled ? #6a6a6e : (item.action == 1 ? #ff8888 : item.action == 0 ? #88c4ff : item.action == 3 ? #ffd23a : (item.action == 5 || item.action == 6) ? #a0a0a8 : (item.action == 7 || item.action == 8 || item.action == 9 || item.action == 10) ? #a0ffb0 : #8aabff.mix(#c0a0ff, mod(max(item.kind, 0), 5) / 4.0));
+                        size: 14px;
+                        vertical-stretch: 0;
+                    }
+
+                    Text {
+                        text: item.label;
+                        color: !item.enabled ? #6a6a6e : (item.action == 1 ? #ff8888 : item.action == 0 ? #88c4ff : item.action == 3 ? #ffd23a : (item.action == 5 || item.action == 6) ? #a0a0a8 : (item.action == 7 || item.action == 8 || item.action == 9 || item.action == 10) ? #a0ffb0 : #8aabff.mix(#c0a0ff, mod(max(item.kind, 0), 5) / 4.0));
+                        font-size: 12px;
+                        horizontal-alignment: left;
+                        vertical-alignment: center;
+                        horizontal-stretch: 1;
+                    }
                 }
 
                 item-touch := TouchArea {
@@ -284,4 +294,5 @@ export component TimelineWindow inherits Window {
             }
         }
     }
+    init => { key-focus.focus(); }
 }

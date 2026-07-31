@@ -422,4 +422,46 @@ pub fn setup(
     preview.on_quit(|| {
         let _ = slint::quit_event_loop();
     });
+
+    preview.on_raw_key_event({
+        let preview_weak = preview.as_weak();
+        move |ctrl, shift, alt, key| {
+            let Some(preview) = preview_weak.upgrade() else {
+                return;
+            };
+            dispatch_global_command(&preview, ctrl, shift, alt, &key);
+        }
+    });
+}
+
+pub fn dispatch_global_command(
+    preview: &PreviewWindow,
+    ctrl: bool,
+    shift: bool,
+    alt: bool,
+    key: &str,
+) {
+    use crate::shortcuts::{CommandId, Scope, resolve};
+    let Some(cmd) = resolve(Scope::Global, ctrl, shift, alt, key) else {
+        return;
+    };
+    match cmd {
+        CommandId::NewProject => preview.invoke_new_project(),
+        CommandId::OpenProject => preview.invoke_open_project(),
+        CommandId::SaveProject => preview.invoke_save_project(),
+        CommandId::SaveProjectAs => preview.invoke_save_project_as(),
+        CommandId::ExportMedia => preview.invoke_export_media(),
+        CommandId::Quit => preview.invoke_quit(),
+        CommandId::Undo => preview.invoke_undo(),
+        CommandId::Redo => preview.invoke_redo(),
+        CommandId::TogglePlay => preview.invoke_toggle_play(),
+        CommandId::StepFrameFwd => preview.invoke_step_frame(1),
+        CommandId::StepFrameBack => preview.invoke_step_frame(-1),
+        CommandId::ShowTimeline => preview.invoke_show_timeline(),
+        CommandId::ShowProperties => preview.invoke_show_properties(),
+        CommandId::ShowSystemSettings => preview.invoke_show_system_settings(),
+        CommandId::ShowProjectSettings => preview.invoke_show_project_settings(),
+        CommandId::NextProjectTab | CommandId::PrevProjectTab | CommandId::CloseProjectTab => {}
+        _ => {}
+    }
 }

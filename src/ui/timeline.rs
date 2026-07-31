@@ -118,6 +118,45 @@ pub fn setup(
     }
 
     {
+        let (tw, pw) = (timeline.as_weak(), preview_weak.clone());
+        timeline.on_raw_key_event(move |ctrl, shift, alt, key| {
+            let Some(t) = tw.upgrade() else { return };
+            use crate::shortcuts::{CommandId, Scope, resolve};
+            let Some(cmd) = resolve(Scope::Timeline, ctrl, shift, alt, &key) else {
+                return;
+            };
+            match cmd {
+                CommandId::DeleteSelected => {
+                    if t.get_menu_target_id() >= 0 {
+                        t.invoke_delete_object(t.get_menu_target_id());
+                    }
+                }
+                CommandId::SplitAtPlayhead => {
+                    if t.get_menu_target_id() >= 0 {
+                        t.invoke_split_object_at(t.get_menu_target_id(), t.get_current_frame());
+                    }
+                }
+                CommandId::Duplicate => t.invoke_duplicate_requested(t.get_menu_target_id()),
+                CommandId::Cut => t.invoke_cut_requested(t.get_menu_target_id()),
+                CommandId::Copy => t.invoke_copy_requested(t.get_menu_target_id()),
+                CommandId::Paste => t.invoke_paste_requested(),
+                CommandId::ToggleRipple => t.set_ripple_mode(!t.get_ripple_mode()),
+                CommandId::ZoomIn => t.invoke_set_zoom((t.get_zoom_scale() * 1.25).min(10.0)),
+                CommandId::ZoomOut => t.invoke_set_zoom((t.get_zoom_scale() * 0.8).max(0.1)),
+                CommandId::SeekHome => t.invoke_seek_timeline(0),
+                CommandId::SeekEnd => t.invoke_seek_timeline(t.get_total_frames()),
+                CommandId::Undo => t.invoke_undo_requested(),
+                CommandId::Redo => t.invoke_redo_requested(),
+                _ => {
+                    if let Some(p) = pw.upgrade() {
+                        crate::ui::preview::dispatch_global_command(&p, ctrl, shift, alt, &key);
+                    }
+                }
+            }
+        });
+    }
+
+    {
         let (state, tw, pw) = (state.clone(), timeline.as_weak(), preview_weak.clone());
         timeline.on_delete_object(move |id| {
             if id < 0 {
@@ -481,80 +520,91 @@ fn build_context_menu(
         action: 4,
         kind: -1,
         enabled: false,
+        icon: String::new().into(),
     };
     if hit_id >= 0 {
         return vec![
             ContextMenuItem {
-                label: "🗑  Delete".into(),
+                label: "削除".into(),
                 action: 1,
                 kind: -1,
                 enabled: true,
+                icon: "trash".into(),
             },
             ContextMenuItem {
-                label: "✂  Split at Playhead".into(),
+                label: "再生位置で分割".into(),
                 action: 0,
                 kind: -1,
                 enabled: true,
+                icon: "scissors".into(),
             },
             ContextMenuItem {
-                label: "⧉  Duplicate".into(),
+                label: "複製".into(),
                 action: 7,
                 kind: -1,
                 enabled: true,
+                icon: "copy-plus".into(),
             },
             sep(),
             ContextMenuItem {
-                label: "✂  Cut".into(),
+                label: "切り取り".into(),
                 action: 8,
                 kind: -1,
                 enabled: true,
+                icon: "scissors".into(),
             },
             ContextMenuItem {
-                label: "📋  Copy".into(),
+                label: "コピー".into(),
                 action: 9,
                 kind: -1,
                 enabled: true,
+                icon: "copy".into(),
             },
             sep(),
             ContextMenuItem {
                 label: if ripple_mode {
-                    "🔗  Ripple Mode: On".into()
+                    "リップルモード: オン".into()
                 } else {
-                    "🔗  Ripple Mode: Off".into()
+                    "リップルモード: オフ".into()
                 },
                 action: 3,
                 kind: -1,
                 enabled: true,
+                icon: "link".into(),
             },
         ];
     }
     let mut items: Vec<ContextMenuItem> = kinds
         .iter()
         .map(|k| ContextMenuItem {
-            label: format!("＋  Add {}", k.name).into(),
+            label: format!("{}を追加", k.name).into(),
             action: 2,
             kind: k.kind,
             enabled: true,
+            icon: "circle-plus".into(),
         })
         .collect();
     items.push(sep());
     items.push(ContextMenuItem {
-        label: "↩  元に戻す".into(),
+        label: "元に戻す".into(),
         action: 5,
         kind: -1,
         enabled: true,
+        icon: "undo".into(),
     });
     items.push(ContextMenuItem {
-        label: "↪  やり直す".into(),
+        label: "やり直す".into(),
         action: 6,
         kind: -1,
         enabled: true,
+        icon: "redo".into(),
     });
     items.push(ContextMenuItem {
-        label: "📌  貼り付け".into(),
+        label: "貼り付け".into(),
         action: 10,
         kind: -1,
         enabled: !clipboard_empty,
+        icon: "paste".into(),
     });
     items
 }
