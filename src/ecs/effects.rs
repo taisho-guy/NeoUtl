@@ -42,6 +42,8 @@ impl EffectStack {
                     ParamKind::FilePath => Value::FilePath(String::new()),
                     ParamKind::Track => Value::TrackRef(-1),
                     ParamKind::Float | ParamKind::Color => Value::Number(p.default_float),
+                    ParamKind::Separator | ParamKind::Group => continue,
+                    ParamKind::Folder => Value::FilePath(String::new()),
                 };
                 instance.params.insert(key, EffectParam::new(value));
             }

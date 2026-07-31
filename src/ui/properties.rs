@@ -25,6 +25,32 @@ static RECENT_EFFECT_IDS: Mutex<Vec<String>> = Mutex::new(Vec::new());
 /// （EffectInstanceはeffect_idと自パラメータのみを保持し、対象オブジェクトに依存しないため）。
 static EFFECT_CLIPBOARD: Mutex<Option<crate::ecs::types::EffectInstance>> = Mutex::new(None);
 
+/// 折り畳み見出し(kind==Group)の開閉状態スコープ。プロジェクトファイルへは非保存の
+/// ホストUIローカル状態（プロセス生存中のみ有効）。
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+enum GroupScope {
+    Object(i32),
+    Effect(i32, i32),
+}
+
+static GROUP_OPEN_STATE: Mutex<Option<std::collections::HashMap<(GroupScope, String), bool>>> =
+    Mutex::new(None);
+
+fn toggle_group_open(scope: GroupScope, label: &str) {
+    let mut guard = GROUP_OPEN_STATE.lock().unwrap();
+    let map = guard.get_or_insert_with(std::collections::HashMap::new);
+    let entry = map.entry((scope, label.to_owned())).or_insert(true);
+    *entry = !*entry;
+}
+
+/// Group行の現在の開閉状態を取得する。未記録の場合はinitial_openをそのまま用いる
+/// （object_schema::group_field/C ABI側default_floatの初期値）。
+fn is_group_open(scope: GroupScope, label: &str, initial_open: bool) -> bool {
+    let mut guard = GROUP_OPEN_STATE.lock().unwrap();
+    let map = guard.get_or_insert_with(std::collections::HashMap::new);
+    *map.entry((scope, label.to_owned())).or_insert(initial_open)
+}
+
 fn mark_effect_used(id: &str) {
     let mut recent = RECENT_EFFECT_IDS.lock().unwrap();
     recent.retain(|x| x != id);
@@ -301,6 +327,48 @@ pub fn setup(
     {
         let state = state.clone();
         let pw = props.as_weak();
+        props.on_pick_object_folder(move |group, key| {
+            let Some(p) = pw.upgrade() else { return };
+            let id = p.get_object_id();
+            if id < 0 {
+                return;
+            }
+            let Some(path) = rfd::FileDialog::new().pick_folder() else {
+                return;
+            };
+            let path_str = path.to_string_lossy().into_owned();
+            let world_holder = app_state::active_world(&state);
+            let mut world = world_holder.lock().unwrap();
+            apply_object_param_text(
+                &mut world,
+                id as usize,
+                group.as_str(),
+                key.as_str(),
+                path_str.as_str(),
+            );
+            refresh(&p, &world);
+        });
+    }
+
+    {
+        let pw = props.as_weak();
+        let state = state.clone();
+        props.on_toggle_object_settings_group(move |_group, label| {
+            let Some(p) = pw.upgrade() else { return };
+            let id = p.get_object_id();
+            if id < 0 {
+                return;
+            }
+            toggle_group_open(GroupScope::Object(id), &label);
+            let world_holder = app_state::active_world(&state);
+            let world = world_holder.lock().unwrap();
+            refresh(&p, &world);
+        });
+    }
+
+    {
+        let state = state.clone();
+        let pw = props.as_weak();
         props.on_set_effect_enabled(move |index, enabled| {
             let Some(p) = pw.upgrade() else { return };
             let id = p.get_object_id();
@@ -446,6 +514,42 @@ pub fn setup(
             let world_holder = app_state::active_world(&state);
             let mut world = world_holder.lock().unwrap();
             world.set_effect_param_path(id as usize, index as usize, key.as_str(), path_str);
+            refresh(&p, &world);
+        });
+    }
+
+    {
+        let state = state.clone();
+        let pw = props.as_weak();
+        props.on_pick_param_folder(move |index, key| {
+            let Some(p) = pw.upgrade() else { return };
+            let id = p.get_object_id();
+            if id < 0 {
+                return;
+            }
+            let Some(path) = rfd::FileDialog::new().pick_folder() else {
+                return;
+            };
+            let path_str = path.to_string_lossy().into_owned();
+            let world_holder = app_state::active_world(&state);
+            let mut world = world_holder.lock().unwrap();
+            world.set_effect_param_path(id as usize, index as usize, key.as_str(), path_str);
+            refresh(&p, &world);
+        });
+    }
+
+    {
+        let state = state.clone();
+        let pw = props.as_weak();
+        props.on_toggle_param_settings_group(move |index, label| {
+            let Some(p) = pw.upgrade() else { return };
+            let id = p.get_object_id();
+            if id < 0 {
+                return;
+            }
+            toggle_group_open(GroupScope::Effect(id, index), label.as_str());
+            let world_holder = app_state::active_world(&state);
+            let world = world_holder.lock().unwrap();
             refresh(&p, &world);
         });
     }
@@ -967,6 +1071,7 @@ fn empty_track_options() -> TrackOptions {
 fn push_schema_rows(
     out: &mut Vec<ParamRow>,
     schema: &'static [crate::ecs::object_schema::ParamSchema],
+    scope: GroupScope,
     stage_w: f32,
     stage_h: f32,
     clip_start: i32,
@@ -977,7 +1082,17 @@ fn push_schema_rows(
     keyframes: impl Fn(&str) -> Vec<Keyframe>,
     track_options: &TrackOptions,
 ) {
+    let mut collapsed = false;
     for s in schema {
+        if s.kind == ParamKind::Group {
+            let initial_open = match s.range {
+                crate::ecs::object_schema::Range::Fixed(_, max) => max > 0.5,
+                _ => true,
+            };
+            collapsed = !is_group_open(scope, s.label, initial_open);
+        } else if collapsed {
+            continue;
+        }
         if !crate::ecs::object_schema::is_visible(s, &get) {
             continue;
         }
@@ -985,7 +1100,13 @@ fn push_schema_rows(
         let track = keyframes(s.key);
         let non_interpolable = matches!(
             s.kind,
-            ParamKind::Text | ParamKind::Enum | ParamKind::FilePath | ParamKind::Track
+            ParamKind::Text
+                | ParamKind::Enum
+                | ParamKind::FilePath
+                | ParamKind::Track
+                | ParamKind::Separator
+                | ParamKind::Group
+                | ParamKind::Folder
         );
         let base = if non_interpolable { 0.0 } else { get(s.key) };
         let frames: Vec<i32> = track.iter().map(|k| k.frame).collect();
@@ -994,6 +1115,8 @@ fn push_schema_rows(
             get(s.key) as i32
         } else if s.kind == ParamKind::Track {
             get(s.key) as i32
+        } else if s.kind == ParamKind::Group {
+            if collapsed { 0 } else { 1 }
         } else {
             0
         };
@@ -1011,6 +1134,9 @@ fn push_schema_rows(
                 ParamKind::Text => 4,
                 ParamKind::FilePath => 5,
                 ParamKind::Track => 6,
+                ParamKind::Separator => 7,
+                ParamKind::Group => 8,
+                ParamKind::Folder => 9,
             },
             min,
             max,
@@ -1044,6 +1170,7 @@ fn push_schema_rows(
 fn push_c_abi_param_rows(
     out: &mut Vec<ParamRow>,
     schema: &[neoutl_shared_abi::ParamSchema],
+    scope: GroupScope,
     group: &str,
     effect_index: i32,
     clip_start: i32,
@@ -1054,9 +1181,16 @@ fn push_c_abi_param_rows(
     keyframes: impl Fn(&str) -> Vec<Keyframe>,
     track_options: &TrackOptions,
 ) {
+    let mut collapsed = false;
     for s in schema {
         let key = unsafe { s.key.as_str() };
         let label = unsafe { s.label.as_str() };
+        if s.kind == ParamKind::Group {
+            let initial_open = s.default_float != 0.0;
+            collapsed = !is_group_open(scope, label, initial_open);
+        } else if collapsed {
+            continue;
+        }
         let base = current(key);
         let track = keyframes(key);
         let frames: Vec<i32> = track.iter().map(|k| k.frame).collect();
@@ -1066,6 +1200,11 @@ fn push_c_abi_param_rows(
                 .into_iter()
                 .map(SharedString::from)
                 .collect();
+        let enum_index = if s.kind == ParamKind::Group {
+            if collapsed { 0 } else { 1 }
+        } else {
+            base as i32
+        };
         out.push(ParamRow {
             effect_index,
             key: SharedString::from(key),
@@ -1080,12 +1219,15 @@ fn push_c_abi_param_rows(
                 ParamKind::Text => 4,
                 ParamKind::FilePath => 5,
                 ParamKind::Track => 6,
+                ParamKind::Separator => 7,
+                ParamKind::Group => 8,
+                ParamKind::Folder => 9,
             },
             min: s.min,
             max: s.max,
             text: SharedString::from(text(key).unwrap_or_default()),
             enum_options: ModelRc::new(VecModel::from(enum_options)),
-            enum_index: base as i32,
+            enum_index,
             track_options: track_options.options.clone(),
             track_names: track_options.names.clone(),
             has_keyframes: !frames.is_empty(),
@@ -1142,6 +1284,7 @@ fn push_plugin_rows(
     push_c_abi_param_rows(
         out,
         schema,
+        GroupScope::Object(oid as i32),
         &plugin.name,
         -1,
         clip_start,
@@ -1309,6 +1452,7 @@ fn refresh(props: &PropertiesWindow, world: &EcsWorld) {
         push_schema_rows(
             &mut object_params,
             TRANSFORM_SCHEMA,
+            GroupScope::Object(oid as i32),
             stage_w,
             stage_h,
             clip_start,
@@ -1329,6 +1473,7 @@ fn refresh(props: &PropertiesWindow, world: &EcsWorld) {
         push_schema_rows(
             &mut object_params,
             TEXT_SCHEMA,
+            GroupScope::Object(oid as i32),
             stage_w,
             stage_h,
             clip_start,
@@ -1348,6 +1493,7 @@ fn refresh(props: &PropertiesWindow, world: &EcsWorld) {
         push_schema_rows(
             &mut object_params,
             SHAPE_SCHEMA,
+            GroupScope::Object(oid as i32),
             stage_w,
             stage_h,
             clip_start,
@@ -1367,6 +1513,7 @@ fn refresh(props: &PropertiesWindow, world: &EcsWorld) {
         push_schema_rows(
             &mut object_params,
             AUDIO_SCHEMA,
+            GroupScope::Object(oid as i32),
             stage_w,
             stage_h,
             clip_start,
@@ -1416,6 +1563,7 @@ fn refresh(props: &PropertiesWindow, world: &EcsWorld) {
         push_c_abi_param_rows(
             &mut params,
             schema,
+            GroupScope::Effect(id, i as i32),
             meta.name,
             i as i32,
             clip_start,
