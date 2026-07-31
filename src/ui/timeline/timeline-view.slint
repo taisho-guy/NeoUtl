@@ -13,13 +13,14 @@ export component TimelineView inherits Rectangle {
     in property <[LayerState]> layer-states: [];
     in property <length> scroll-x: 0px;
     in property <length> scroll-y: 0px;
+    in property <bool> ripple-mode: false;
 
     callback seek(int);
     callback context-menu(length, length, int /* frame */, int /* layer */, int /* hit-id */);
     callback select-object(int);
     callback range-select(int /* start-frame */, int /* end-frame */, int /* start-layer */, int /* end-layer */);
-    callback move-object(int, int, int);
-    callback resize-object(int, int, int);
+    callback move-object(int, int, int, bool /* ripple */);
+    callback resize-object(int, int, int, bool /* ripple */);
     callback keyframe-moved(int /* id */, int /* old-frame */, int /* new-frame */);
     // クリップ上の境界点クリック（ドラッグ無し）で区間イージング編集を要求する。
     callback keyframe-clicked(int /* id */, int /* frame */);
@@ -112,9 +113,10 @@ export component TimelineView inherits Rectangle {
             scale: root.scale;
             layer-height: root.layer-height;
             locked: root.is-layer-locked(obj.layer);
+            ripple-mode: root.ripple-mode;
             clicked(id) => { root.select-object(id); }
-            moved(id, start, layer) => { root.move-object(id, start, layer); }
-            resized(id, start, end) => { root.resize-object(id, start, end); }
+            moved(id, start, layer, ripple) => { root.move-object(id, start, layer, ripple); }
+            resized(id, start, end, ripple) => { root.resize-object(id, start, end, ripple); }
             context-requested(id, x, y) => { root.context-menu(x, y, obj.start-frame, obj.layer, id); }
             keyframe-moved(id, old-frame, new-frame) => { root.keyframe-moved(id, old-frame, new-frame); }
             keyframe-clicked(id, frame) => { root.keyframe-clicked(id, frame); }

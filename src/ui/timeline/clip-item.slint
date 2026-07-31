@@ -5,10 +5,11 @@ export component ClipItem inherits Rectangle {
     in property <float> scale: 1.0;
     in property <length> layer-height: 24px;
     in property <bool> locked: false;
+    in property <bool> ripple-mode: false;
 
     callback clicked(int);
-    callback moved(int /* id */, int /* new-start-frame */, int /* new-layer */);
-    callback resized(int /* id */, int /* new-start-frame */, int /* new-end-frame */);
+    callback moved(int /* id */, int /* new-start-frame */, int /* new-layer */, bool /* ripple */);
+    callback resized(int /* id */, int /* new-start-frame */, int /* new-end-frame */, bool /* ripple */);
     callback context-requested(int /* id */, length /* x */, length /* y */);
     callback keyframe-moved(int /* id */, int /* old-frame */, int /* new-frame */);
     // クリップ上の境界点を（ドラッグ移動ではなく）クリックした際に発火する。
@@ -158,7 +159,7 @@ export component ClipItem inherits Rectangle {
             if (e.kind == PointerEventKind.up || e.kind == PointerEventKind.cancel) {
                 if (root.dragging) {
                     root.dragging = false;
-                    root.moved(obj.id, root.preview-start, root.preview-layer);
+                    root.moved(obj.id, root.preview-start, root.preview-layer, root.ripple-mode);
                 }
             }
         }
@@ -192,7 +193,7 @@ export component ClipItem inherits Rectangle {
             if (e.kind == PointerEventKind.up || e.kind == PointerEventKind.cancel) {
                 if (root.resizing-left) {
                     root.resizing-left = false;
-                    root.resized(obj.id, root.preview-start, root.preview-end);
+                    root.resized(obj.id, root.preview-start, root.preview-end, false);
                 }
             }
         }
@@ -224,7 +225,7 @@ export component ClipItem inherits Rectangle {
             if (e.kind == PointerEventKind.up || e.kind == PointerEventKind.cancel) {
                 if (root.resizing-right) {
                     root.resizing-right = false;
-                    root.resized(obj.id, root.preview-start, root.preview-end);
+                    root.resized(obj.id, root.preview-start, root.preview-end, root.ripple-mode);
                 }
             }
         }

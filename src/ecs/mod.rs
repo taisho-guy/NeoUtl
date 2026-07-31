@@ -193,6 +193,26 @@ impl EcsWorld {
         }
     }
 
+    /// 複数オブジェクトの一括削除。個々にdelete_objectを適用する
+    /// （1回のみのupdate-total-frames呼び出しで正規化を完結させる）。
+    pub fn delete_objects(&mut self, ids: &[usize]) {
+        for &id in ids {
+            let mut target_entity = None;
+            self.world.run(|object_ids: View<ObjectId>| {
+                for (entity, obj_id) in object_ids.iter().with_id() {
+                    if obj_id.0 == id {
+                        target_entity = Some(entity);
+                        break;
+                    }
+                }
+            });
+            if let Some(entity) = target_entity {
+                self.world.delete_entity(entity);
+            }
+        }
+        self.update_total_frames();
+    }
+
     pub fn update_total_frames(&mut self) {
         self.world.run(
             |mut timeline: UniqueViewMut<TimelineResource>, time_ranges: View<TimeRange>| {
@@ -339,6 +359,54 @@ impl EcsWorld {
         })
     }
 
+    /// グリッドスナップに続く第2段階の吸着。グリッドで吸着済みの場合はそれを優先し
+    /// （両者が競合した場合の挙動を一意に決定するため）、グリッド未吸着の場合のみ
+    /// 同一レイヤー上の他クリップ端（start-frame/end-frame）と再生ヘッド位置を
+    /// 候補として磁力スナップを試みる。excludeIdは対象クリップ自身を候補から除く。
+    /// enable-snap無効時、またはmagnetic-snap-range<=0の場合は吸着しない。
+    fn snap_magnetic(&self, frame: i32, layer: i32, exclude_id: usize) -> i32 {
+        let grid_snapped = self.snap_to_active_scene(frame);
+        if grid_snapped != frame {
+            return grid_snapped;
+        }
+        let (range, enabled) = self.world.run(|scenes: UniqueView<SceneResource>| {
+            scenes
+                .find(scenes.active_scene)
+                .map_or((0, false), |s| (s.magnetic_snap_range, s.enable_snap))
+        });
+        if !enabled || range <= 0 {
+            return frame;
+        }
+        let mut candidates = vec![self.current_frame()];
+        self.world.run(
+            |scenes: UniqueView<SceneResource>,
+             object_ids: View<ObjectId>,
+             time_ranges: View<TimeRange>,
+             layers: View<Layer>,
+             scene_ids: View<SceneId>| {
+                let active = scenes.active_scene;
+                for (id, r, l, s) in (&object_ids, &time_ranges, &layers, &scene_ids).iter() {
+                    if s.0 == active && l.0 == layer && id.0 != exclude_id {
+                        candidates.push(r.start_frame);
+                        candidates.push(r.end_frame);
+                    }
+                }
+            },
+        );
+        candidates
+            .into_iter()
+            .map(|c| (c, (c - frame).abs()))
+            .filter(|&(_, d)| d <= range)
+            .min_by_key(|&(_, d)| d)
+            .map_or(frame, |(c, _)| c)
+    }
+
+    fn object_layer(&self, object_id: usize) -> Option<i32> {
+        let entity = self.find_entity(object_id)?;
+        self.world
+            .run(|layers: View<Layer>| layers.get(entity).ok().map(|l| l.0))
+    }
+
     pub fn object_exists(&self, object_id: usize) -> bool {
         self.find_entity(object_id).is_some()
     }
@@ -349,7 +417,7 @@ impl EcsWorld {
     /// move_objectは中間点の絶対フレーム位置をクリップ本体と同じ量だけ動かす
     /// （移動は中間点へ影響しない、という非対称設計を解消する）。
     pub fn move_object(&mut self, object_id: usize, new_start: i32, new_layer: i32) {
-        let new_start = self.snap_to_active_scene(new_start);
+        let new_start = self.snap_magnetic(new_start, new_layer, object_id);
         self.world.run(
             |object_ids: View<ObjectId>,
              mut time_ranges: ViewMut<TimeRange>,
@@ -398,8 +466,9 @@ impl EcsWorld {
     /// 1フレーム未満へ縮む要求はrange.end_frameの下限クランプで最小幅1フレームへ
     /// 丸められ、破綻（0/負幅）を構造的に排除する。
     pub fn resize_object(&mut self, object_id: usize, new_start: i32, new_end: i32) {
-        let new_start = self.snap_to_active_scene(new_start);
-        let new_end = self.snap_to_active_scene(new_end);
+        let layer = self.object_layer(object_id).unwrap_or(0);
+        let new_start = self.snap_magnetic(new_start, layer, object_id);
+        let new_end = self.snap_magnetic(new_end, layer, object_id);
         self.world.run(
             |object_ids: View<ObjectId>,
              mut time_ranges: ViewMut<TimeRange>,
@@ -468,6 +537,238 @@ impl EcsWorld {
                 .find(|(_, id)| id.0 == object_id)
                 .map(|(e, _)| e)
         })
+    }
+
+    /// リップル移動。対象クリップをmove_objectと同一則で移動し、同一レイヤー上で
+    /// 旧start-frame以降にある全クリップ（対象自身を除く）へ移動量deltaをそのまま
+    /// 伝播させる（AviUtl「リップル編集」相当）。レイヤーは対象クリップの現在値を
+    /// 保持したまま移動する（リップル移動はレイヤー変更を伴わない）。
+    pub fn ripple_move_object(&mut self, object_id: usize, new_start: i32) {
+        let Some(layer) = self.object_layer(object_id) else {
+            return;
+        };
+        let Some(old_start) = self.find_entity(object_id).and_then(|e| {
+            self.world
+                .run(|time_ranges: View<TimeRange>| time_ranges.get(e).ok().map(|r| r.start_frame))
+        }) else {
+            return;
+        };
+        let snapped_start = self.snap_magnetic(new_start, layer, object_id);
+        let delta = snapped_start - old_start;
+        self.move_object(object_id, snapped_start, layer);
+        if delta == 0 {
+            return;
+        }
+        let followers: Vec<(usize, i32)> = self.world.run(
+            |object_ids: View<ObjectId>, time_ranges: View<TimeRange>, layers: View<Layer>| {
+                (&object_ids, &time_ranges, &layers)
+                    .iter()
+                    .filter(|(id, r, l)| {
+                        id.0 != object_id && l.0 == layer && r.start_frame >= old_start
+                    })
+                    .map(|(id, r, _)| (id.0, r.start_frame))
+                    .collect()
+            },
+        );
+        for (id, start) in followers {
+            self.move_object(id, start + delta, layer);
+        }
+    }
+
+    /// リップル伸縮。対象クリップのend-frameをresize_objectと同一則で変更し、
+    /// 同一レイヤー上で旧end-frame以降にある全クリップへ変化量deltaを平行移動
+    /// として伝播させる（後続クリップ自体は伸縮せず、位置のみ追従する）。
+    /// start-frame側（左端リサイズ）のリップルは対象外とする
+    /// （左端はクリップ自身の trim-in のみに影響し、後続位置は変化しないため）。
+    pub fn ripple_resize_object(&mut self, object_id: usize, new_end: i32) {
+        let Some(layer) = self.object_layer(object_id) else {
+            return;
+        };
+        let Some((old_start, old_end)) = self.find_entity(object_id).and_then(|e| {
+            self.world.run(|time_ranges: View<TimeRange>| {
+                time_ranges
+                    .get(e)
+                    .ok()
+                    .map(|r| (r.start_frame, r.end_frame))
+            })
+        }) else {
+            return;
+        };
+        let snapped_end = self
+            .snap_magnetic(new_end, layer, object_id)
+            .max(old_start + 1);
+        let delta = snapped_end - old_end;
+        self.resize_object(object_id, old_start, snapped_end);
+        if delta == 0 {
+            return;
+        }
+        let followers: Vec<(usize, i32)> = self.world.run(
+            |object_ids: View<ObjectId>, time_ranges: View<TimeRange>, layers: View<Layer>| {
+                (&object_ids, &time_ranges, &layers)
+                    .iter()
+                    .filter(|(id, r, l)| {
+                        id.0 != object_id && l.0 == layer && r.start_frame >= old_end
+                    })
+                    .map(|(id, r, _)| (id.0, r.start_frame))
+                    .collect()
+            },
+        );
+        for (id, start) in followers {
+            self.move_object(id, start + delta, layer);
+        }
+    }
+
+    /// ObjectDocから1エンティティを生成する（load_document/paste_objects共通処理）。
+    /// idはo.idをそのまま使用するため、呼び出し側で一意性を保証すること。
+    fn spawn_object_from_doc(&mut self, o: &ObjectDoc) -> shipyard::EntityId {
+        let entity = self.world.add_entity((
+            ObjectId(o.id),
+            TimeRange {
+                start_frame: o.start_frame,
+                end_frame: o.end_frame,
+            },
+            KindId(o.kind_id),
+            Layer(o.layer),
+            SceneId(o.scene_id),
+            o.transform,
+            GlobalMatrix::default(),
+            o.audio,
+            EffectStack(o.effects.clone()),
+        ));
+        if let Some(t) = &o.payload.text {
+            self.world.add_component(entity, t.clone());
+        }
+        if let Some(s) = &o.payload.shape {
+            self.world.add_component(entity, *s);
+        }
+        if let Some(p) = &o.payload.plugin_params {
+            self.world.add_component(entity, PluginParams(p.clone()));
+        }
+        if let Some(m) = &o.payload.media {
+            self.world.add_component(entity, MediaSource::from(m));
+        }
+        if !o.keyframes.is_empty() {
+            self.world
+                .add_component(entity, KeyframeTracks(o.keyframes.clone()));
+        }
+        entity
+    }
+
+    fn alloc_object_id(&mut self) -> usize {
+        self.world
+            .run(|mut timeline: UniqueViewMut<TimelineResource>| {
+                let id = timeline.next_id;
+                timeline.next_id += 1;
+                id
+            })
+    }
+
+    /// idsで指定した全オブジェクトのObjectDocスナップショットを返す（クリップボード用）。
+    /// 複数選択（AviQtl::TimelineView::shouldApplyToSelection相当）を前提に、
+    pub fn copy_objects(&self, ids: &[usize]) -> Vec<ObjectDoc> {
+        self.world.run(|views: ObjectQueryViews| {
+            let mut docs = Vec::new();
+            for (entity, (id, range, kind, layer, scene)) in (
+                &views.object_ids,
+                &views.time_ranges,
+                &views.kind_ids,
+                &views.layers,
+                &views.scene_ids,
+            )
+                .iter()
+                .with_id()
+            {
+                if !ids.contains(&id.0) {
+                    continue;
+                }
+                docs.push(ObjectDoc {
+                    id: id.0,
+                    scene_id: scene.0,
+                    kind_id: kind.0,
+                    layer: layer.0,
+                    start_frame: range.start_frame,
+                    end_frame: range.end_frame,
+                    transform: views.transforms.get(entity).copied().unwrap_or_default(),
+                    audio: views.audio.get(entity).copied().unwrap_or_default(),
+                    keyframes: views
+                        .keyframes
+                        .get(entity)
+                        .map(|k| k.0.clone())
+                        .unwrap_or_default(),
+                    effects: views
+                        .stacks
+                        .get(entity)
+                        .map(|s| s.0.clone())
+                        .unwrap_or_default(),
+                    payload: ObjectPayload {
+                        text: views.texts.get(entity).ok().cloned(),
+                        shape: views.shapes.get(entity).ok().copied(),
+                        plugin_params: views.plugins.get(entity).ok().map(|p| p.0.clone()),
+                        media: views.media.get(entity).ok().map(MediaSourceDoc::from),
+                    },
+                });
+            }
+            docs
+        })
+    }
+
+    /// クリップボードのdocsをアクティブシーンへ貼り付ける。docs内の最小start-frame・
+    /// 最小layerを基準（アンカー）とし、target-frame/target-layerを新アンカーとして
+    /// 各オブジェクトの相対位置（複数選択の位置関係）を保ったまま配置する
+    /// （AviQtl::TimelineView::pasteClip相当。単一貼り付けもdocs長1の特殊形として扱う）。
+    /// 新規idはEcsWorld::next_idから採番し、貼り付け先はアクティブシーンに固定する。
+    /// 戻り値は新規生成した全idsで、呼び出し側の選択状態更新に使う。
+    pub fn paste_objects(
+        &mut self,
+        docs: &[ObjectDoc],
+        target_frame: i32,
+        target_layer: i32,
+    ) -> Vec<usize> {
+        if docs.is_empty() {
+            return Vec::new();
+        }
+        let anchor_start = docs.iter().map(|d| d.start_frame).min().unwrap_or(0);
+        let anchor_layer = docs.iter().map(|d| d.layer).min().unwrap_or(0);
+        let active_scene = self.active_scene();
+        let mut new_ids = Vec::with_capacity(docs.len());
+        for d in docs {
+            let dur = d.end_frame - d.start_frame;
+            let new_start = (target_frame + (d.start_frame - anchor_start)).max(0);
+            let new_layer = (target_layer + (d.layer - anchor_layer)).max(0);
+            let new_id = self.alloc_object_id();
+            let mut doc = d.clone();
+            doc.id = new_id;
+            doc.scene_id = active_scene;
+            doc.start_frame = new_start;
+            doc.end_frame = new_start + dur;
+            doc.layer = new_layer;
+            self.spawn_object_from_doc(&doc);
+            new_ids.push(new_id);
+        }
+        self.recompute_global_matrices();
+        self.update_total_frames();
+        new_ids
+    }
+
+    /// 複数選択オブジェクトの複製。copy_objects→paste_objectsの合成で、
+    /// AviQtl::TimelineView::handleCommand("clip.duplicate")と同じくカーソル位置・
+    /// 選択レイヤーを新アンカーとして貼り付ける。
+    pub fn duplicate_objects(
+        &mut self,
+        ids: &[usize],
+        target_frame: i32,
+        target_layer: i32,
+    ) -> Vec<usize> {
+        let docs = self.copy_objects(ids);
+        self.paste_objects(&docs, target_frame, target_layer)
+    }
+
+    /// 複数選択オブジェクトの切り取り。コピー内容を返しつつ元オブジェクトを削除する
+    /// （呼び出し側でRust側の戻り値をアプリ全体のクリップボード状態へ格納する）。
+    pub fn cut_objects(&mut self, ids: &[usize]) -> Vec<ObjectDoc> {
+        let docs = self.copy_objects(ids);
+        self.delete_objects(ids);
+        docs
     }
 
     /// object_idを絶対フレームsplit_frameで2分割する。前半（元エンティティ）は
@@ -1307,36 +1608,7 @@ impl EcsWorld {
             });
 
         for o in &doc.objects {
-            let entity = self.world.add_entity((
-                ObjectId(o.id),
-                TimeRange {
-                    start_frame: o.start_frame,
-                    end_frame: o.end_frame,
-                },
-                KindId(o.kind_id),
-                Layer(o.layer),
-                SceneId(o.scene_id),
-                o.transform,
-                GlobalMatrix::default(),
-                o.audio,
-                EffectStack(o.effects.clone()),
-            ));
-            if let Some(t) = &o.payload.text {
-                self.world.add_component(entity, t.clone());
-            }
-            if let Some(s) = &o.payload.shape {
-                self.world.add_component(entity, *s);
-            }
-            if let Some(p) = &o.payload.plugin_params {
-                self.world.add_component(entity, PluginParams(p.clone()));
-            }
-            if let Some(m) = &o.payload.media {
-                self.world.add_component(entity, MediaSource::from(m));
-            }
-            if !o.keyframes.is_empty() {
-                self.world
-                    .add_component(entity, KeyframeTracks(o.keyframes.clone()));
-            }
+            self.spawn_object_from_doc(o);
         }
 
         self.recompute_global_matrices();

@@ -5,6 +5,7 @@ import {
     LayerState,
     SceneTabItem,
     ObjectKindItem,
+    ContextMenuItem,
 } from "types.slint";
 import { Ruler } from "timeline/ruler.slint";
 import { LayerHeader } from "timeline/layer-header.slint";
@@ -31,8 +32,8 @@ export component TimelineWindow inherits Window {
     callback add-object-at(int /* frame */, int /* layer */, int /* kind */);
     callback delete-object(int);
     callback select-object(int);
-    callback move-object(int /* id */, int /* start-frame */, int /* layer */);
-    callback resize-object(int /* id */, int /* start-frame */, int /* end-frame */);
+    callback move-object(int /* id */, int /* start-frame */, int /* layer */, bool /* ripple */);
+    callback resize-object(int /* id */, int /* start-frame */, int /* end-frame */, bool /* ripple */);
     callback split-object-at(int /* id */, int /* frame */);
     callback keyframe-moved(int /* id */, int /* old-frame */, int /* new-frame */);
     // クリップ上の境界点クリックで区間イージング編集パネルを開く（値・フレームは指定しない）。
@@ -47,6 +48,10 @@ export component TimelineWindow inherits Window {
     callback close-scene-tab(int);
     callback undo-requested();
     callback redo-requested();
+    callback duplicate-requested(int /* hit-id */);
+    callback cut-requested(int /* hit-id */);
+    callback copy-requested(int /* hit-id */);
+    callback paste-requested();
 
     property <int> header-width: 60;
     property <int> layer-height: 24;
@@ -62,13 +67,19 @@ export component TimelineWindow inherits Window {
         return max(0.1, min(10.0, s));
     }
 
+    in-out property <bool> ripple-mode: false;
+
     property <bool> show-context-menu: false;
-    property <bool> menu-is-delete: false;
     property <int> menu-target-id: -1;
     property <int> menu-frame: 0;
     property <int> menu-layer: 0;
     property <length> menu-x: 0px;
     property <length> menu-y: 0px;
+    // 項目集合はRust側(timeline.rs::build_context_menu)がon-context-menu-requested内で
+    // set-menu-itemsする唯一の生成元。将来の項目追加はRust側1関数の変更のみで完結し、
+    // 本ファイルはaction値による分岐描画のみを担う。
+    in-out property <[ContextMenuItem]> menu-items: [];
+    callback context-menu-requested(int /* hit-id */, int /* frame */, int /* layer */);
 
     FocusScope {
         key-pressed(event) => {
@@ -190,12 +201,13 @@ export component TimelineWindow inherits Window {
                 layer-states: root.layer-states;
                 scroll-x: root.scroll-x;
                 scroll-y: root.scroll-y;
+                ripple-mode: root.ripple-mode;
 
                 seek(frame) => { root.seek-timeline(frame); }
                 select-object(id) => { root.select-object(id); }
                 range-select(sf, ef, sl, el) => { root.range-select(sf, ef, sl, el); }
-                move-object(id, start, layer) => { root.move-object(id, start, layer); }
-                resize-object(id, start, end) => { root.resize-object(id, start, end); }
+                move-object(id, start, layer, ripple) => { root.move-object(id, start, layer, ripple); }
+                resize-object(id, start, end, ripple) => { root.resize-object(id, start, end, ripple); }
                 keyframe-moved(id, old-frame, new-frame) => { root.keyframe-moved(id, old-frame, new-frame); }
                 keyframe-clicked(id, frame) => { root.keyframe-clicked(id, frame); }
                 scroll-requested(dx) => {
@@ -205,20 +217,22 @@ export component TimelineWindow inherits Window {
                     root.menu-frame = frame;
                     root.menu-layer = layer;
                     root.menu-target-id = hit-id;
-                    root.menu-is-delete = hit-id >= 0;
                     root.menu-x = x;
                     root.menu-y = y + 4px;
                     root.show-context-menu = true;
+                    root.context-menu-requested(hit-id, frame, layer);
                 }
             }
         }
     }
 
+    // メニュー項目集合はRust側(timeline.rs::build_context_menu)のみが生成する。
+    // （区切り線=action4はクリック不可・背景色のみ変えた薄い罫線として描画）。
     if (root.show-context-menu): Rectangle {
         x: root.menu-x;
         y: root.menu-y;
-        width: 170px;
-        height: root.menu-is-delete ? 74px : (root.available-kinds.length * 31px + 8px);
+        width: 190px;
+        height: root.menu-items.length * 30px + 8px;
         background: #252528;
         border-width: 1px;
         border-color: #48484e;
@@ -228,60 +242,44 @@ export component TimelineWindow inherits Window {
         drop-shadow-offset-x: 2px;
         drop-shadow-offset-y: 2px;
 
-        if (root.menu-is-delete): VerticalLayout {
+        VerticalLayout {
             padding: 4px;
             spacing: 1px;
 
-            Rectangle {
-                background: split-touch.has-hover ? #15304a : transparent;
-                height: 30px;
+            for item[i] in root.menu-items: Rectangle {
+                height: item.action == 4 ? 9px : 30px;
                 border-radius: 3px;
-                Text {
-                    text: "  ✂  Split at Playhead";
-                    color: #88c4ff;
+                background: item.action == 4 ? transparent : (item-touch.has-hover && item.enabled ? #303038 : transparent);
+
+                if (item.action == 4): Rectangle {
+                    y: 4px;
+                    height: 1px;
+                    width: parent.width;
+                    background: #3c3c42;
+                }
+
+                if (item.action != 4): Text {
+                    text: "  " + item.label;
+                    color: !item.enabled ? #6a6a6e : (item.action == 1 ? #ff8888 : item.action == 0 ? #88c4ff : item.action == 3 ? #ffd23a : (item.action == 5 || item.action == 6) ? #a0a0a8 : (item.action == 7 || item.action == 8 || item.action == 9 || item.action == 10) ? #a0ffb0 : #8aabff.mix(#c0a0ff, mod(max(item.kind, 0), 5) / 4.0));
                     font-size: 12px;
                     vertical-alignment: center;
                 }
 
-                split-touch := TouchArea {
-                    clicked() => { root.split-object-at(root.menu-target-id, root.current-frame); root.show-context-menu = false; }
-                }
-            }
-
-            Rectangle {
-                background: del-touch.has-hover ? #4a1515 : transparent;
-                height: 30px;
-                border-radius: 3px;
-                Text {
-                    text: "  🗑  Delete Object";
-                    color: #ff8888;
-                    font-size: 12px;
-                    vertical-alignment: center;
-                }
-
-                del-touch := TouchArea {
-                    clicked() => { root.delete-object(root.menu-target-id); root.show-context-menu = false; }
-                }
-            }
-        }
-
-        if (!root.menu-is-delete): VerticalLayout {
-            padding: 4px;
-            spacing: 1px;
-
-            for k[i] in root.available-kinds: Rectangle {
-                background: kind-touch.has-hover ? #303038 : transparent;
-                height: 30px;
-                border-radius: 3px;
-                Text {
-                    text: "  ＋  Add " + k.name;
-                    color: #8aabff.mix(#c0a0ff, mod(k.kind, 5) / 4.0);
-                    font-size: 12px;
-                    vertical-alignment: center;
-                }
-
-                kind-touch := TouchArea {
-                    clicked() => { root.add-object-at(root.menu-frame, root.menu-layer, k.kind); root.show-context-menu = false; }
+                item-touch := TouchArea {
+                    enabled: item.action != 4 && item.enabled;
+                    clicked() => {
+                        if (item.action == 0) { root.split-object-at(root.menu-target-id, root.current-frame); }
+                        if (item.action == 1) { root.delete-object(root.menu-target-id); }
+                        if (item.action == 2) { root.add-object-at(root.menu-frame, root.menu-layer, item.kind); }
+                        if (item.action == 3) { root.ripple-mode = !root.ripple-mode; }
+                        if (item.action == 5) { root.undo-requested(); }
+                        if (item.action == 6) { root.redo-requested(); }
+                        if (item.action == 7) { root.duplicate-requested(root.menu-target-id); }
+                        if (item.action == 8) { root.cut-requested(root.menu-target-id); }
+                        if (item.action == 9) { root.copy-requested(root.menu-target-id); }
+                        if (item.action == 10) { root.paste-requested(); }
+                        root.show-context-menu = false;
+                    }
                 }
             }
         }

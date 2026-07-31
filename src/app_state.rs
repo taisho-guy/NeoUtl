@@ -1,5 +1,6 @@
 use crate::config;
 use crate::document::DocumentModel;
+use crate::document::ObjectDoc;
 use crate::ecs::EcsWorld;
 use crate::project::{self, ProjectMeta};
 use crate::renderer::RenderEngine;
@@ -75,6 +76,9 @@ impl ProjectSession {
 pub struct AppState {
     pub sessions: Vec<ProjectSession>,
     pub active: usize,
+    /// クリップ切り取り/コピーのクリップボード（AviQtl::TimelineView::contextMenu相当）。
+    /// プロジェクト横断で共有する（AviUtl本体同様、セッション切替後も貼り付け可能とする）。
+    pub clipboard: Vec<ObjectDoc>,
 }
 
 pub type SharedAppState = Arc<Mutex<AppState>>;
@@ -84,6 +88,7 @@ impl AppState {
         Arc::new(Mutex::new(Self {
             sessions: vec![first],
             active: 0,
+            clipboard: Vec::new(),
         }))
     }
 }
@@ -148,4 +153,15 @@ pub fn redo_active(state: &SharedAppState) -> bool {
     world.load_document(&doc);
     let _ = project::save_from_world(&world);
     true
+}
+
+/// クリップボードへコピー/切り取り結果を格納する。
+pub fn set_clipboard(state: &SharedAppState, docs: Vec<crate::document::ObjectDoc>) {
+    let mut s = state.lock().unwrap();
+    s.clipboard = docs;
+}
+
+/// クリップボード内容の複製を取得する（貼り付け時に消費せず複数回貼り付け可能とする）。
+pub fn clipboard(state: &SharedAppState) -> Vec<crate::document::ObjectDoc> {
+    state.lock().unwrap().clipboard.clone()
 }
