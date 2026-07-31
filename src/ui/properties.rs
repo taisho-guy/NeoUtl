@@ -205,14 +205,27 @@ pub fn setup(
             let world_holder = app_state::active_world(&state);
             let world = world_holder.lock().unwrap();
 
-            let keyframes = if effect_index < 0 {
+            let mut keyframes = if effect_index < 0 {
                 world.get_keyframes(oid, key.as_str())
             } else {
                 world.get_effect_keyframes(oid, effect_index as usize, key.as_str())
             };
-            let Some(target) = keyframes.iter().find(|k| k.frame == frame) else {
-                return;
-            };
+            if !keyframes.iter().any(|k| k.frame == frame) {
+                let base = if effect_index < 0 {
+                    current_object_param_value(&world, oid, _group.as_str(), key.as_str())
+                } else {
+                    current_effect_param_value(&world, oid, effect_index as usize, key.as_str())
+                };
+                let value = resolve_display_value(base, &keyframes, frame);
+                keyframes.push(Keyframe::new(
+                    frame,
+                    value,
+                    "neoutl-easing-standard".to_string(),
+                    Vec::new(),
+                ));
+                keyframes.sort_by_key(|k| k.frame);
+            }
+            let target = keyframes.iter().find(|k| k.frame == frame).unwrap();
             let engine_id = target.engine_id.clone();
             let Some(eng) = crate::easings::loader::by_id(&engine_id) else {
                 return;
