@@ -4,8 +4,9 @@ members = [
     "crates/neoutl-shared-abi",
     "crates/neoutl-object-api",
     "crates/neoutl-effect-api",
+    "crates/neoutl-easing-api",
     "crates/neoutl-theme-api",
-    "crates/neoutl-interp",
+    "crates/easings/neoutl-easing-standard",
     "crates/objects/*",
     "crates/effects/*",
     "crates/themes/*",
@@ -26,9 +27,10 @@ resolver = "2"
 neoutl-shared-abi = { path = "crates/neoutl-shared-abi" }
 neoutl-object-api = { path = "crates/neoutl-object-api" }
 neoutl-effect-api = { path = "crates/neoutl-effect-api" }
+neoutl-easing-api = { path = "crates/neoutl-easing-api" }
 neoutl-theme-api = { path = "crates/neoutl-theme-api" }
 neoutl-media-api = { path = "crates/neoutl-media-api" }
-neoutl-interp = { path = "crates/neoutl-interp", features = ["serde"] }
+neoutl-easing-standard = { path = "crates/easings/neoutl-easing-standard" }
 neoutl-effect-shader-build = { path = "crates/neoutl-effect-shader-build" }
 neoutl-object-shader-build = { path = "crates/neoutl-object-shader-build" }
 toml = "1.1"
@@ -43,9 +45,10 @@ edition = "2024"
 neoutl-shared-abi.workspace = true
 neoutl-object-api.workspace = true
 neoutl-effect-api.workspace = true
+neoutl-easing-api.workspace = true
 neoutl-theme-api.workspace = true
 neoutl-media-api.workspace = true
-neoutl-interp.workspace = true
+neoutl-easing-standard.workspace = true
 toml.workspace = true
 serde_json.workspace = true
 libloading = "0.9"

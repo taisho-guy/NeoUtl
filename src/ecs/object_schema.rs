@@ -32,7 +32,6 @@ pub const fn dep(mut schema: ParamSchema, on: &'static str, eq: f32) -> ParamSch
     schema
 }
 
-/// 現在値取得クロージャgetを用いてschemaの表示可否を判定する。
 /// depends_onが未設定なら常にtrue。
 pub fn is_visible(schema: &ParamSchema, get: impl Fn(&str) -> f32) -> bool {
     match schema.depends_on {

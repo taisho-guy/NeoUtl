@@ -23,6 +23,8 @@ export component SystemSettingsWindow inherits Window {
     in-out property <int> ui-scale-percent: 100;
     in-out property <[string]> theme-names: [];
     in-out property <int> theme-index: 0;
+    in-out property <[string]> easing-engine-names: [];
+    in-out property <int> easing-engine-index: 0;
 
     in-out property <int> worker-threads: 0;
     in-out property <int> audio-max-block-size: 4096;
@@ -40,6 +42,7 @@ export component SystemSettingsWindow inherits Window {
     callback set-general(bool, int);
     callback set-appearance(bool, int);
     callback set-theme(int);
+    callback set-easing-engine(int);
     callback set-performance(int, int);
     callback set-decode(int);
     callback set-timeline-defaults(bool, int);
@@ -82,6 +85,8 @@ export component SystemSettingsWindow inherits Window {
                     ui-scale-percent: root.ui-scale-percent;
                     theme-names: root.theme-names;
                     theme-index: root.theme-index;
+                    easing-engine-names: root.easing-engine-names;
+                    easing-engine-index: root.easing-engine-index;
                     changed(dark, scale) => {
                         root.theme-dark = dark;
                         root.ui-scale-percent = scale;
@@ -90,6 +95,10 @@ export component SystemSettingsWindow inherits Window {
                     theme-changed(v) => {
                         root.theme-index = v;
                         root.set-theme(v);
+                    }
+                    easing-engine-changed(v) => {
+                        root.easing-engine-index = v;
+                        root.set-easing-engine(v);
                     }
                 }
 

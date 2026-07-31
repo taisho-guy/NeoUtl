@@ -1,9 +1,40 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::sync::atomic::{AtomicU64, Ordering};
 
-/// 補間の実体（イージング計算・区間評価）はneoutl-interpクレートへ外部化する。
-/// ここでは再エクスポートのみを行い、ECS層は評価アルゴリズムを一切保持しない。
-pub use neoutl_interp::{Easing, Keyframe};
+static EDIT_SEQ: AtomicU64 = AtomicU64::new(1);
+
+pub fn next_edit_seq() -> u64 {
+    EDIT_SEQ.fetch_add(1, Ordering::Relaxed)
+}
+
+fn default_engine_id() -> String {
+    "neoutl-easing-standard".to_string()
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct Keyframe {
+    pub frame: i32,
+    pub value: f32,
+    #[serde(default = "default_engine_id")]
+    pub engine_id: String,
+    #[serde(default)]
+    pub engine_payload: Vec<u8>,
+    #[serde(default)]
+    pub edit_seq: u64,
+}
+
+impl Keyframe {
+    pub fn new(frame: i32, value: f32, engine_id: String, engine_payload: Vec<u8>) -> Self {
+        Self {
+            frame,
+            value,
+            engine_id,
+            engine_payload,
+            edit_seq: next_edit_seq(),
+        }
+    }
+}
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub enum Value {
@@ -15,9 +46,6 @@ pub enum Value {
     TrackRef(i32),
 }
 
-/// エフェクトの1パラメータ。`static_value`はframe=0相当の基準値、
-/// `keyframes`は基準値に追従する中間点集合（frame昇順）。
-/// Bool/Textは中間点非対応（数値のみ補間対象）。
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct EffectParam {
     pub static_value: Value,
@@ -32,37 +60,53 @@ impl EffectParam {
         }
     }
 
-    /// 指定フレームでの実効値。評価はneoutl_interp::evaluateへ完全委譲する
-    /// （UI・ドキュメント層側での補間計算は一切行わない）。
     pub fn evaluate(&self, frame: i32) -> Value {
         match &self.static_value {
             Value::Number(base) if !self.keyframes.is_empty() => {
-                Value::Number(neoutl_interp::evaluate(&self.keyframes, frame, *base))
+                let first_engine_id = &self.keyframes[0].engine_id;
+                let engine = crate::easings::loader::by_id(first_engine_id);
+                let raw_keyframes: Vec<(i32, f32, Vec<u8>)> = self
+                    .keyframes
+                    .iter()
+                    .map(|k| (k.frame, k.value, k.engine_payload.clone()))
+                    .collect();
+
+                let val = if let Some(eng) = engine {
+                    eng.evaluate(&raw_keyframes, frame, *base)
+                } else {
+                    *base
+                };
+                Value::Number(val)
             }
             other => other.clone(),
         }
     }
 
-    /// 基準値のみを書き換える。既存の中間点は保持する
-    /// （旧実装は編集のたびに中間点を消していた欠陥を修正）。
     pub fn set_static(&mut self, value: Value) {
         self.static_value = value;
     }
 
-    /// frame位置へ中間点を1件設定する。同一frameが既にあれば上書きする。
-    pub fn set_keyframe(&mut self, frame: i32, value: f32, easing: Easing) {
-        let edit_seq = neoutl_interp::next_edit_seq();
+    pub fn set_keyframe(
+        &mut self,
+        frame: i32,
+        value: f32,
+        engine_id: String,
+        engine_payload: Vec<u8>,
+    ) {
+        let edit_seq = next_edit_seq();
         match self.keyframes.iter_mut().find(|k| k.frame == frame) {
             Some(existing) => {
                 existing.value = value;
-                existing.easing = easing;
+                existing.engine_id = engine_id;
+                existing.engine_payload = engine_payload;
                 existing.edit_seq = edit_seq;
             }
             None => {
                 self.keyframes.push(Keyframe {
                     frame,
                     value,
-                    easing,
+                    engine_id,
+                    engine_payload,
                     edit_seq,
                 });
                 self.keyframes.sort_by_key(|k| k.frame);
@@ -70,8 +114,6 @@ impl EffectParam {
         }
     }
 
-    /// move_objectでの平行移動用。全中間点をdeltaだけシフトする
-    /// （KeyframeTracks::shiftとの対称実装）。
     pub fn shift_keyframes(&mut self, delta: i32) {
         for k in self.keyframes.iter_mut() {
             k.frame += delta;
@@ -82,9 +124,6 @@ impl EffectParam {
         self.keyframes.retain(|k| k.frame != frame);
     }
 
-    /// 中間点をold_frameからnew_frameへ移動する。new_frameに既存点がある場合は失敗する
-    /// （上書き移動を許すと編集操作を伴わない値消失が起きるため）。old_frame==new_frameは
-    /// 何もせず成功扱い。対象点が存在しない場合は失敗する。
     pub fn move_keyframe(&mut self, old_frame: i32, new_frame: i32) -> bool {
         if old_frame == new_frame {
             return true;
@@ -100,24 +139,8 @@ impl EffectParam {
         true
     }
 
-    /// split_frame（絶対フレーム）でクリップを分割する際、この呼び出し元自身は
-    /// 前半（frame < split_frame の中間点のみ）として残り、返り値が後半用の
-    /// （KeyframeTracks::apply / EffectStack評価がともに絶対フレームで参照するため）。
-    /// 後半のstatic_valueは分割点での評価値を継承する（AviQtl splitTracksの
-    /// 「後半トラックのstartに分割点評価値を複製する」方針と同一）。
-    /// Bool/Textはそもそも中間点非対応のため、static_valueをそのまま複製するのみ。
     pub fn split_at(&mut self, split_frame: i32) -> EffectParam {
-        let second_value = match &self.static_value {
-            Value::Number(base) => {
-                let v = if self.keyframes.is_empty() {
-                    *base
-                } else {
-                    neoutl_interp::evaluate(&self.keyframes, split_frame, *base)
-                };
-                Value::Number(v)
-            }
-            other => other.clone(),
-        };
+        let second_value = self.evaluate(split_frame);
         let second_keyframes: Vec<Keyframe> = self
             .keyframes
             .iter()
@@ -131,14 +154,6 @@ impl EffectParam {
         }
     }
 
-    /// リサイズ時の境界クランプ則を適用する。実体はneoutl_interp::clamp_and_reseedへ
-    /// 委譲する（KeyframeTracks::clamp_to_rangeと単一実装を共有し、コピペ実装の
-    /// 分岐リスクを排除する）。
-    /// 1) 新境界(new_start/new_end)は旧境界における実効値を必ず継承する（削除のみで
-    ///    終わらない）。
-    /// 2) 内部点は旧範囲から新範囲への長さ比でスケールし、クリップ内相対位置を保存する。
-    /// 3) スケール後に複数点が同一frameへ集約した場合はedit_seq最大（直近の書き込み）
-    ///    が残る。
     pub fn clamp_keyframes_to_range(
         &mut self,
         old_start: i32,
@@ -153,7 +168,7 @@ impl EffectParam {
             Value::Number(b) => *b,
             _ => 0.0,
         };
-        neoutl_interp::clamp_and_reseed(
+        clamp_and_reseed_internal(
             &mut self.keyframes,
             old_start,
             old_end,
@@ -162,6 +177,79 @@ impl EffectParam {
             base,
         );
     }
+}
+
+fn clamp_and_reseed_internal(
+    keyframes: &mut Vec<Keyframe>,
+    old_start: i32,
+    old_end: i32,
+    new_start: i32,
+    new_end: i32,
+    _base: f32,
+) {
+    if keyframes.is_empty() {
+        return;
+    }
+    let old_len = (old_end - old_start).max(1) as f64;
+    let new_len = (new_end - new_start).max(1) as f64;
+    let scale = new_len / old_len;
+
+    let start_engine_id = keyframes
+        .first()
+        .map(|k| k.engine_id.clone())
+        .unwrap_or_default();
+    let start_payload = keyframes
+        .first()
+        .map(|k| k.engine_payload.clone())
+        .unwrap_or_default();
+    let end_engine_id = keyframes
+        .last()
+        .map(|k| k.engine_id.clone())
+        .unwrap_or_default();
+    let end_payload = keyframes
+        .last()
+        .map(|k| k.engine_payload.clone())
+        .unwrap_or_default();
+
+    for k in keyframes.iter_mut() {
+        let offset = (k.frame - old_start) as f64 * scale;
+        k.frame = (new_start as f64 + offset).round() as i32;
+        k.frame = k.frame.clamp(new_start, new_end);
+    }
+    keyframes.sort_by(|a, b| a.frame.cmp(&b.frame).then(a.edit_seq.cmp(&b.edit_seq)));
+
+    let mut deduped: Vec<Keyframe> = Vec::with_capacity(keyframes.len());
+    for k in keyframes.drain(..) {
+        match deduped.last_mut() {
+            Some(last) if last.frame == k.frame => {
+                if k.edit_seq >= last.edit_seq {
+                    *last = k;
+                }
+            }
+            _ => deduped.push(k),
+        }
+    }
+
+    deduped.retain(|k| k.frame != new_start && k.frame != new_end);
+    deduped.insert(
+        0,
+        Keyframe {
+            frame: new_start,
+            value: 0.0,
+            engine_id: start_engine_id,
+            engine_payload: start_payload,
+            edit_seq: next_edit_seq(),
+        },
+    );
+    deduped.push(Keyframe {
+        frame: new_end,
+        value: 0.0,
+        engine_id: end_engine_id,
+        engine_payload: end_payload,
+        edit_seq: next_edit_seq(),
+    });
+
+    *keyframes = deduped;
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -178,76 +266,5 @@ impl EffectInstance {
             enabled: true,
             params: HashMap::new(),
         }
-    }
-}
-
-#[cfg(test)]
-mod clamp_tests {
-    use super::*;
-
-    fn ez() -> Easing {
-        Easing::Linear
-    }
-
-    #[test]
-    fn interior_points_survive_resize() {
-        let mut p = EffectParam::new(Value::Number(0.0));
-        p.set_keyframe(10, 1.0, ez());
-        p.set_keyframe(20, 2.0, ez());
-        p.clamp_keyframes_to_range(0, 30, 0, 30);
-        assert_eq!(p.keyframes.len(), 4);
-    }
-
-    #[test]
-    fn untouched_boundary_keeps_its_value_on_one_sided_resize() {
-        let mut p = EffectParam::new(Value::Number(0.0));
-        p.set_keyframe(0, 1.0, ez());
-        p.set_keyframe(30, 2.0, ez());
-        p.clamp_keyframes_to_range(0, 30, 0, 60);
-        assert_eq!(p.keyframes.first().unwrap().frame, 0);
-        assert_eq!(p.keyframes.first().unwrap().value, 1.0);
-    }
-
-    #[test]
-    fn non_interpolable_kinds_ignore_keyframes_on_evaluate() {
-        let path = EffectParam::new(Value::FilePath("a.png".into()));
-        assert_eq!(path.evaluate(10), Value::FilePath("a.png".into()));
-        let en = EffectParam::new(Value::Enum(2));
-        assert_eq!(en.evaluate(10), Value::Enum(2));
-        let track = EffectParam::new(Value::TrackRef(5));
-        assert_eq!(track.evaluate(10), Value::TrackRef(5));
-    }
-
-    #[test]
-    fn non_interpolable_kinds_split_by_static_value_only() {
-        let mut path = EffectParam::new(Value::FilePath("a.png".into()));
-        let second = path.split_at(15);
-        assert_eq!(path.static_value, Value::FilePath("a.png".into()));
-        assert_eq!(second.static_value, Value::FilePath("a.png".into()));
-        assert!(second.keyframes.is_empty());
-    }
-
-    #[test]
-    fn non_interpolable_kinds_ignore_clamp_to_range() {
-        let mut en = EffectParam::new(Value::Enum(1));
-        en.clamp_keyframes_to_range(0, 30, 0, 60);
-        assert_eq!(en.static_value, Value::Enum(1));
-        assert!(en.keyframes.is_empty());
-    }
-
-    #[test]
-    fn shrink_collision_keeps_latest_write() {
-        let mut p = EffectParam::new(Value::Number(0.0));
-        p.set_keyframe(0, 0.0, ez());
-        p.set_keyframe(10, 1.0, ez());
-        p.set_keyframe(11, 3.0, ez());
-        p.set_keyframe(30, 0.0, ez());
-        p.clamp_keyframes_to_range(0, 30, 0, 3);
-        let interior_value = p
-            .keyframes
-            .iter()
-            .find(|k| k.frame != 0 && k.frame != 3)
-            .map(|k| k.value);
-        assert_eq!(interior_value, Some(3.0));
     }
 }

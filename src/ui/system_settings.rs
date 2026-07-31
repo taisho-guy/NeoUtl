@@ -39,6 +39,24 @@ fn theme_ids_and_names() -> (Vec<String>, Vec<String>) {
     (ids, names)
 }
 
+/// 登録済みイージングエンジンのid一覧と表示名一覧を同一順序で返す。
+fn easing_engine_ids_and_names() -> (Vec<String>, Vec<String>) {
+    let ids = crate::easings::loader::registry()
+        .iter()
+        .map(|e| e.id.clone())
+        .collect();
+    let names = crate::easings::loader::registry()
+        .iter()
+        .map(|e| e.name.clone())
+        .collect();
+    (ids, names)
+}
+
+/// idが一覧中に存在しない場合（未選択・削除済み等）は先頭（0）にフォールバックする。
+fn easing_engine_index_of(ids: &[String], id: &str) -> i32 {
+    ids.iter().position(|i| i == id).map_or(0, |i| i as i32)
+}
+
 /// idが一覧中に存在しない場合（未選択・削除済み等）は先頭（0）にフォールバックする。
 fn theme_index_of(ids: &[String], id: &str) -> i32 {
     ids.iter().position(|i| i == id).map_or(0, |i| i as i32)
@@ -91,10 +109,19 @@ pub fn setup(window: &SystemSettingsWindow, world_holder: Arc<Mutex<EcsWorld>>) 
     ));
     window.set_theme_names(names_model);
 
+    let (easing_engine_ids, easing_engine_names) = easing_engine_ids_and_names();
+    let easing_engine_names_model: ModelRc<SharedString> = ModelRc::new(VecModel::from(
+        easing_engine_names
+            .iter()
+            .map(|n| SharedString::from(n.as_str()))
+            .collect::<Vec<_>>(),
+    ));
+    window.set_easing_engine_names(easing_engine_names_model);
+
     let initial = world_holder.lock().unwrap().get_system_settings();
     crate::media::runtime::set_worker_threads(initial.worker_threads);
     crate::media::runtime::apply_decode_backend_env(initial.decode_backend);
-    sync_from_resource(window, &initial, &theme_ids);
+    sync_from_resource(window, &initial, &theme_ids, &easing_engine_ids);
     apply_theme(window, &initial.theme_id);
 
     {
@@ -136,6 +163,20 @@ pub fn setup(window: &SystemSettingsWindow, world_holder: Arc<Mutex<EcsWorld>>) 
             if let Some(win) = weak.upgrade() {
                 apply_theme(&win, id);
             }
+        });
+    }
+
+    {
+        let wc = world_holder.clone();
+        let easing_engine_ids = easing_engine_ids.clone();
+        window.on_set_easing_engine(move |index| {
+            let Some(id) = easing_engine_ids.get(index as usize) else {
+                return;
+            };
+            let mut world = wc.lock().unwrap();
+            let mut s = world.get_system_settings();
+            s.easing_engine_id.clone_from(id);
+            world.set_system_settings(s);
         });
     }
 
@@ -203,13 +244,14 @@ pub fn setup(window: &SystemSettingsWindow, world_holder: Arc<Mutex<EcsWorld>>) 
         let wc = world_holder.clone();
         let weak = window.as_weak();
         let theme_ids = theme_ids.clone();
+        let easing_engine_ids = easing_engine_ids.clone();
         window.on_reload_settings(move || {
             if let Some(loaded) = load_from_disk() {
                 wc.lock().unwrap().set_system_settings(loaded.clone());
                 crate::media::runtime::set_worker_threads(loaded.worker_threads);
                 crate::media::runtime::apply_decode_backend_env(loaded.decode_backend);
                 if let Some(win) = weak.upgrade() {
-                    sync_from_resource(&win, &loaded, &theme_ids);
+                    sync_from_resource(&win, &loaded, &theme_ids, &easing_engine_ids);
                     apply_theme(&win, &loaded.theme_id);
                     win.set_save_status("再読込完了".into());
                 }
@@ -224,8 +266,13 @@ fn sync_from_resource(
     window: &SystemSettingsWindow,
     s: &SystemSettingsResource,
     theme_ids: &[String],
+    easing_engine_ids: &[String],
 ) {
     window.set_theme_index(theme_index_of(theme_ids, &s.theme_id));
+    window.set_easing_engine_index(easing_engine_index_of(
+        easing_engine_ids,
+        &s.easing_engine_id,
+    ));
     window.set_autosave_enabled(s.autosave_enabled);
     window.set_autosave_interval_sec(s.autosave_interval_sec);
     window.set_theme_dark(s.theme_dark);

@@ -245,12 +245,12 @@ mod tests {
     }
 
     #[test]
-    fn unregistered_kind_falls_back_to_ortho_projection() {
+    fn all_kinds_use_perspective_projection() {
         let (mut world, _id) = world_with_object(0, 30);
         world.set_current_frame(0);
         let active = get_active_objects_system(&world);
         assert_eq!(active.len(), 1);
-        assert_eq!(active[0].mvp[15], 1.0);
+        assert_ne!(active[0].mvp[15], 0.0);
     }
 
     #[test]

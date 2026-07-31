@@ -198,6 +198,7 @@ mod tests {
     use crate::ecs::components::{AudioParams, ShapeParams, TextContent};
     use crate::ecs::transform::Transform;
     use crate::media::MediaKind;
+    use std::collections::HashMap;
 
     fn sample_object(id: usize, scene_id: i32) -> ObjectDoc {
         ObjectDoc {
@@ -216,6 +217,7 @@ mod tests {
                 plugin_params: None,
                 media: None,
             },
+            keyframes: HashMap::new(),
         }
     }
 
@@ -240,6 +242,7 @@ mod tests {
                     trim_in_frame: 0,
                 }),
             },
+            keyframes: HashMap::new(),
         }
     }
 

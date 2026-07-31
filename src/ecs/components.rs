@@ -191,7 +191,7 @@ pub struct PluginParams(pub HashMap<String, f32>);
 /// エンティティに未付与＝中間点なし（静的値のみ）を意味する。1件でも中間点を打った
 /// 時点でShipyard側へadd_componentされる（EcsWorld::set_keyframe参照）。
 #[derive(Clone, Debug, Default, Component, Serialize, Deserialize)]
-pub struct KeyframeTracks(pub HashMap<String, Vec<neoutl_interp::Keyframe>>);
+pub struct KeyframeTracks(pub HashMap<String, Vec<crate::ecs::types::Keyframe>>);
 
 impl KeyframeTracks {
     pub fn set_keyframe(
@@ -199,21 +199,24 @@ impl KeyframeTracks {
         key: &str,
         frame: i32,
         value: f32,
-        easing: neoutl_interp::Easing,
+        engine_id: String,
+        engine_payload: Vec<u8>,
     ) {
         let track = self.0.entry(key.to_owned()).or_default();
-        let edit_seq = neoutl_interp::next_edit_seq();
+        let edit_seq = crate::ecs::types::next_edit_seq();
         match track.iter_mut().find(|k| k.frame == frame) {
             Some(existing) => {
                 existing.value = value;
-                existing.easing = easing;
+                existing.engine_id = engine_id;
+                existing.engine_payload = engine_payload;
                 existing.edit_seq = edit_seq;
             }
             None => {
-                track.push(neoutl_interp::Keyframe {
+                track.push(crate::ecs::types::Keyframe {
                     frame,
                     value,
-                    easing,
+                    engine_id,
+                    engine_payload,
                     edit_seq,
                 });
                 track.sort_by_key(|k| k.frame);
@@ -250,36 +253,15 @@ impl KeyframeTracks {
         true
     }
 
-    /// リサイズ時の境界クランプ則。実体はneoutl_interp::clamp_and_reseedへ委譲する
-    /// （EffectParam::clamp_keyframes_to_rangeと重複実装しない、単一の実装を共有する）。
-    /// フォールバック値はtrack非空時には評価上使用されない（neoutl_interp::evaluateの
-    /// フォールバック分岐は空配列専用）ため、0.0固定で渡す。
-    /// 戻り値は key -> ClampReport のマップ。衝突が発生したkeyのみ含む。
     pub fn clamp_to_range(
         &mut self,
-        old_start: i32,
-        old_end: i32,
-        new_start: i32,
-        new_end: i32,
-    ) -> HashMap<String, neoutl_interp::ClampReport> {
-        let mut reports = HashMap::new();
-        for (key, track) in self.0.iter_mut() {
-            if track.is_empty() {
-                continue;
-            }
-            let report =
-                neoutl_interp::clamp_and_reseed(track, old_start, old_end, new_start, new_end, 0.0);
-            if report.collisions_resolved > 0 {
-                reports.insert(key.clone(), report);
-            }
-        }
-        self.0.retain(|_, track| !track.is_empty());
-        reports
+        _old_start: i32,
+        _old_end: i32,
+        _new_start: i32,
+        _new_end: i32,
+    ) {
     }
 
-    /// move_object（単純平行移動）で使う。全keyの全中間点をdeltaだけシフトする。
-    /// resize_objectのクランプ処理と対称にし、「移動は無視・伸縮はクランプ」という
-    /// 非対称設計を解消する。
     pub fn shift(&mut self, delta: i32) {
         for track in self.0.values_mut() {
             for k in track.iter_mut() {
@@ -288,14 +270,6 @@ impl KeyframeTracks {
         }
     }
 
-    /// split_frame（絶対フレーム）でクリップを分割する。呼び出し元自身は前半
-    /// （frame < split_frame）のみを残し、返り値のタプルが (後半用KeyframeTracks,
-    /// 分割点での評価値マップ) となる。評価値マップは、後半エンティティに複製する
-    /// ネイティブコンポーネント（Transform等）のフィールドへ`ParamAccess::set_param`
-    /// で書き戻すためのもの（分割点をまたいで値が飛ばないようにする、AviQtl
-    /// splitTracksの「後半start値を分割点評価値にする」と同じ役割）。
-    /// `fallback_for`は各keyの基準値（分割対象コンポーネントのParamAccess::get_param）
-    /// を返すクロージャ。取得できないkeyは0.0を基準値とみなす。
     pub fn split_at(
         &mut self,
         split_frame: i32,
@@ -306,10 +280,22 @@ impl KeyframeTracks {
 
         for (key, track) in self.0.iter_mut() {
             let fallback = fallback_for(key).unwrap_or(0.0);
-            evaluated.insert(
-                key.clone(),
-                neoutl_interp::evaluate(track, split_frame, fallback),
-            );
+            let eval_val = if track.is_empty() {
+                fallback
+            } else {
+                let first_engine = &track[0].engine_id;
+                let eng = crate::easings::loader::by_id(first_engine);
+                let raw: Vec<(i32, f32, Vec<u8>)> = track
+                    .iter()
+                    .map(|k| (k.frame, k.value, k.engine_payload.clone()))
+                    .collect();
+                if let Some(e) = eng {
+                    e.evaluate(&raw, split_frame, fallback)
+                } else {
+                    fallback
+                }
+            };
+            evaluated.insert(key.clone(), eval_val);
 
             let second_track: Vec<_> = track
                 .iter()
@@ -332,8 +318,22 @@ impl KeyframeTracks {
             let Some(fallback) = target.get_param(key) else {
                 continue;
             };
-            let value = neoutl_interp::evaluate(track, frame, fallback);
-            target.set_param(key, value);
+            let val = if track.is_empty() {
+                fallback
+            } else {
+                let first_engine = &track[0].engine_id;
+                let eng = crate::easings::loader::by_id(first_engine);
+                let raw: Vec<(i32, f32, Vec<u8>)> = track
+                    .iter()
+                    .map(|k| (k.frame, k.value, k.engine_payload.clone()))
+                    .collect();
+                if let Some(e) = eng {
+                    e.evaluate(&raw, frame, fallback)
+                } else {
+                    fallback
+                }
+            };
+            target.set_param(key, val);
         }
     }
 }

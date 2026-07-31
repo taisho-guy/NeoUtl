@@ -1,5 +1,5 @@
 use crate::app_state::{self, SharedAppState};
-use crate::ecs::types::{Easing, Keyframe};
+use crate::ecs::types::Keyframe;
 use crate::ecs::{
     EcsWorld,
     components::{ParamAccess, ShapeParams},
@@ -10,6 +10,7 @@ use crate::ecs::{
     },
 };
 use crate::{CatalogRow, EffectAddDialog, EffectRow, ParamRow, PropertiesWindow};
+use neoutl_easing_api::{EditResultC, EditResultCode, KeyframeC};
 use neoutl_shared_abi::ParamKind;
 use slint::{ComponentHandle, Model, ModelRc, SharedString, VecModel};
 use std::cell::RefCell;
@@ -176,48 +177,121 @@ fn wire_effect_add_dialog(
     }
 }
 
+unsafe extern "C" fn keyframe_edit_trampoline(
+    user_data: *mut std::ffi::c_void,
+    result: EditResultC,
+) {
+    let boxed: Box<Box<dyn FnOnce(EditResultC)>> =
+        unsafe { Box::from_raw(user_data as *mut Box<dyn FnOnce(EditResultC)>) };
+    (*boxed)(result);
+}
+
 pub fn setup(
     props: &PropertiesWindow,
+    _preview_weak: slint::Weak<crate::PreviewWindow>,
+    _timeline_weak: slint::Weak<crate::TimelineWindow>,
     state: SharedAppState,
-    kf_editor: slint::Weak<crate::KeyframeEditorWindow>,
-    timeline_weak: slint::Weak<crate::TimelineWindow>,
-    active_param: crate::ui::keyframe_editor::ActiveParamSlot,
 ) {
     {
-        let (state, tw) = (state.clone(), timeline_weak.clone());
-        let pw = props.as_weak();
-        props.on_open_keyframe_editor(move |group, key, effect_index, frame| {
+        let (state, pw) = (state.clone(), props.as_weak());
+        props.on_open_keyframe_editor(move |_group, key, effect_index, frame| {
             let Some(p) = pw.upgrade() else { return };
-            let Some(kf) = kf_editor.upgrade() else {
-                return;
-            };
             let id = p.get_object_id();
             if id < 0 {
                 return;
             }
+            let oid = id as usize;
+
             let world_holder = app_state::active_world(&state);
             let world = world_holder.lock().unwrap();
-            crate::ui::keyframe_editor::open_for(
-                &kf,
-                &world,
-                id,
-                effect_index,
-                group.to_string(),
-                key.to_string(),
-                frame,
-            );
-            *active_param.borrow_mut() = Some(crate::ui::keyframe_editor::ActiveParam {
-                object_id: id,
-                effect_index,
-                group: group.to_string(),
-                key: key.to_string(),
-            });
-            if let Some(t) = tw.upgrade() {
-                crate::ui::timeline::refresh_keyframe_markers(&t, &world, &active_param);
-            }
+
+            let keyframes = if effect_index < 0 {
+                world.get_keyframes(oid, key.as_str())
+            } else {
+                world.get_effect_keyframes(oid, effect_index as usize, key.as_str())
+            };
+            let Some(target) = keyframes.iter().find(|k| k.frame == frame) else {
+                return;
+            };
+            let engine_id = target.engine_id.clone();
+            let Some(eng) = crate::easings::loader::by_id(&engine_id) else {
+                return;
+            };
+
+            let payloads: Vec<Vec<u8>> =
+                keyframes.iter().map(|k| k.engine_payload.clone()).collect();
+            let keyframes_c: Vec<KeyframeC> = keyframes
+                .iter()
+                .zip(payloads.iter())
+                .map(|(k, payload)| KeyframeC {
+                    frame: k.frame,
+                    value: k.value,
+                    payload_ptr: if payload.is_empty() {
+                        std::ptr::null()
+                    } else {
+                        payload.as_ptr()
+                    },
+                    payload_len: payload.len(),
+                })
+                .collect();
             drop(world);
-            let _ = kf.show();
-            kf.window().request_redraw();
+
+            let key_owned = key.to_string();
+            let (state_cb, pw_cb) = (state.clone(), pw.clone());
+            let on_result: Box<dyn FnOnce(EditResultC)> = Box::new(move |result: EditResultC| {
+                if result.code != EditResultCode::Success || result.keyframes_ptr.is_null() {
+                    return;
+                }
+                let Some(p) = pw_cb.upgrade() else {
+                    unsafe { (eng.vtable.free_keyframes)(result.keyframes_ptr, result.count) };
+                    return;
+                };
+                let world_holder = app_state::active_world(&state_cb);
+                let mut world = world_holder.lock().unwrap();
+                let edited =
+                    unsafe { std::slice::from_raw_parts(result.keyframes_ptr, result.count) };
+                for kc in edited {
+                    let payload = if kc.payload_ptr.is_null() || kc.payload_len == 0 {
+                        Vec::new()
+                    } else {
+                        unsafe { std::slice::from_raw_parts(kc.payload_ptr, kc.payload_len) }
+                            .to_vec()
+                    };
+                    if effect_index < 0 {
+                        world.set_keyframe(
+                            oid,
+                            &key_owned,
+                            kc.frame,
+                            kc.value,
+                            engine_id.clone(),
+                            payload,
+                        );
+                    } else {
+                        world.set_effect_keyframe(
+                            oid,
+                            effect_index as usize,
+                            &key_owned,
+                            kc.frame,
+                            kc.value,
+                            engine_id.clone(),
+                            payload,
+                        );
+                    }
+                }
+                unsafe { (eng.vtable.free_keyframes)(result.keyframes_ptr, result.count) };
+                refresh(&p, &world);
+            });
+            let user_data = Box::into_raw(Box::new(on_result)) as *mut std::ffi::c_void;
+
+            unsafe {
+                (eng.vtable.open_editor_window)(
+                    std::ptr::null(),
+                    keyframes_c.as_ptr(),
+                    keyframes_c.len(),
+                    keyframe_edit_trampoline,
+                    user_data,
+                );
+            }
         });
     }
 
@@ -256,7 +330,7 @@ pub fn setup(
             let base = current_object_param_value(&world, oid, group.as_str(), key.as_str());
             write_segment_value(
                 |w| w.get_keyframes(oid, key.as_str()),
-                |w, f, v, e| w.set_keyframe(oid, key.as_str(), f, v, e),
+                |w, f, v, eng_id, payload| w.set_keyframe(oid, key.as_str(), f, v, eng_id, payload),
                 &mut world,
                 clip_start,
                 clip_end,
@@ -417,7 +491,9 @@ pub fn setup(
             let base = current_effect_param_value(&world, oid, eidx, key.as_str());
             write_segment_value(
                 |w| w.get_effect_keyframes(oid, eidx, key.as_str()),
-                |w, f, v, e| w.set_effect_keyframe(oid, eidx, key.as_str(), f, v, e),
+                |w, f, v, eng_id, payload| {
+                    w.set_effect_keyframe(oid, eidx, key.as_str(), f, v, eng_id, payload)
+                },
                 &mut world,
                 clip_start,
                 clip_end,
@@ -680,7 +756,9 @@ pub fn setup(
                 let value = resolve_display_value(base, &existing, frame);
                 write_segment_value(
                     |w| w.get_keyframes(oid, key.as_str()),
-                    |w, f, v, e| w.set_keyframe(oid, key.as_str(), f, v, e),
+                    |w, f, v, eng_id, payload| {
+                        w.set_keyframe(oid, key.as_str(), f, v, eng_id, payload)
+                    },
                     &mut world,
                     clip_start,
                     clip_end,
@@ -700,7 +778,9 @@ pub fn setup(
                 let value = resolve_display_value(base, &existing, frame);
                 write_segment_value(
                     |w| w.get_effect_keyframes(oid, eidx, key.as_str()),
-                    |w, f, v, e| w.set_effect_keyframe(oid, eidx, key.as_str(), f, v, e),
+                    |w, f, v, eng_id, payload| {
+                        w.set_effect_keyframe(oid, eidx, key.as_str(), f, v, eng_id, payload)
+                    },
                     &mut world,
                     clip_start,
                     clip_end,
@@ -820,24 +900,32 @@ pub fn select_object(props: &PropertiesWindow, world: &EcsWorld, object_id: i32)
     refresh(props, world);
 }
 
-/// 中間点列が空ならbaseをそのまま、非空ならframe時点の補間値を返す。
 /// プロパティパネル表示・スライダー描画は必ずこの関数を経由し、静的値の直接表示を禁止する
 /// （静的値表示は中間点追加後もスライダーへ反映されず「常に左右同期」して見える不具合の原因だった）。
 fn resolve_display_value(base: f32, keyframes: &[Keyframe], frame: i32) -> f32 {
     if keyframes.is_empty() {
         base
     } else {
-        neoutl_interp::evaluate(keyframes, frame, base)
+        let first_engine = &keyframes[0].engine_id;
+        let eng = crate::easings::loader::by_id(first_engine);
+        let raw: Vec<(i32, f32, Vec<u8>)> = keyframes
+            .iter()
+            .map(|k| (k.frame, k.value, k.engine_payload.clone()))
+            .collect();
+        if let Some(e) = eng {
+            e.evaluate(&raw, frame, base)
+        } else {
+            base
+        }
     }
 }
 
-/// frameに一致する既存中間点があればそのeasingを継承し、無ければLinearで新規点を作る。
-fn easing_for_write(keyframes: &[Keyframe], frame: i32) -> Easing {
+fn keyframe_payload_for_write(keyframes: &[Keyframe], frame: i32) -> (String, Vec<u8>) {
     keyframes
         .iter()
         .find(|k| k.frame == frame)
-        .map(|k| k.easing.clone())
-        .unwrap_or(Easing::Linear)
+        .map(|k| (k.engine_id.clone(), k.engine_payload.clone()))
+        .unwrap_or_else(|| ("neoutl-easing-standard".to_string(), Vec::new()))
 }
 
 /// old_frameの左右に隣接する境界点を探し、new_frameの許容範囲(lo, hi)を返す。
@@ -937,7 +1025,7 @@ fn resolve_segment(
 /// clip_start == clip_endの縮退区間（幅0のクリップ）ではシードを行わずframeのみ書き込む。
 fn write_segment_value(
     keyframes_of: impl Fn(&EcsWorld) -> Vec<Keyframe>,
-    mut set_kf: impl FnMut(&mut EcsWorld, i32, f32, Easing),
+    mut set_kf: impl FnMut(&mut EcsWorld, i32, f32, String, Vec<u8>),
     world: &mut EcsWorld,
     clip_start: i32,
     clip_end: i32,
@@ -947,12 +1035,24 @@ fn write_segment_value(
 ) {
     let existing = keyframes_of(world);
     if existing.is_empty() && clip_start != clip_end {
-        set_kf(world, clip_start, base, Easing::Linear);
-        set_kf(world, clip_end, base, Easing::Linear);
+        set_kf(
+            world,
+            clip_start,
+            base,
+            "neoutl-easing-standard".to_string(),
+            Vec::new(),
+        );
+        set_kf(
+            world,
+            clip_end,
+            base,
+            "neoutl-easing-standard".to_string(),
+            Vec::new(),
+        );
     }
     let existing = keyframes_of(world);
-    let easing = easing_for_write(&existing, frame);
-    set_kf(world, frame, value, easing);
+    let (eng_id, payload) = keyframe_payload_for_write(&existing, frame);
+    set_kf(world, frame, value, eng_id, payload);
 }
 
 /// object-params一行分の書き込みを、スキーマのgroup/keyから該当コンポーネントへ振り分ける。

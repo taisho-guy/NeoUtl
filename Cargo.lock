@@ -10,8 +10,9 @@ dependencies = [
  "gpu-video",
  "libloading 0.9.0",
  "lucide-slint",
+ "neoutl-easing-api",
+ "neoutl-easing-standard",
  "neoutl-effect-api",
- "neoutl-interp",
  "neoutl-media-api",
  "neoutl-media-gpuvideo-decoder",
  "neoutl-media-gstreamer-decoder",
@@ -3509,6 +3510,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "neoutl-easing-api"
+version = "0.1.0"
+dependencies = [
+ "neoutl-shared-abi",
+]
+
+[[package]]
+name = "neoutl-easing-standard"
+version = "0.1.0"
+dependencies = [
+ "neoutl-easing-api",
+ "serde",
+ "serde_json",
+ "slint",
+ "slint-build",
+]
+
+[[package]]
 name = "neoutl-effect-api"
 version = "0.0.0"
 dependencies = [
@@ -3645,13 +3664,6 @@ version = "0.0.0"
 dependencies = [
  "neoutl-effect-api",
  "neoutl-effect-shader-build",
-]
-
-[[package]]
-name = "neoutl-interp"
-version = "0.0.0"
-dependencies = [
- "serde",
 ]
 
 [[package]]

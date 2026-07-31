@@ -5,8 +5,8 @@ use crate::ecs::{
 };
 use crate::objects::registry;
 use crate::{
-    KeyframeEditorWindow, LayerState, ObjectKindItem, PreviewWindow, PropertiesWindow,
-    SceneSettingsWindow, SceneTabItem, TimelineObject, TimelineWindow,
+    LayerState, ObjectKindItem, PreviewWindow, PropertiesWindow, SceneSettingsWindow, SceneTabItem,
+    TimelineObject, TimelineWindow,
 };
 use slint::{ComponentHandle, Model, ModelRc, VecModel, Weak};
 
@@ -15,9 +15,7 @@ pub fn setup(
     preview_weak: Weak<PreviewWindow>,
     props_weak: Weak<PropertiesWindow>,
     scene_settings_weak: Weak<SceneSettingsWindow>,
-    kf_editor_weak: Weak<KeyframeEditorWindow>,
     state: SharedAppState,
-    active_param: crate::ui::keyframe_editor::ActiveParamSlot,
 ) {
     let kinds: Vec<ObjectKindItem> = registry()
         .iter()
@@ -54,34 +52,8 @@ pub fn setup(
     }
 
     {
-        let (state, pw, kw, active) = (
-            state.clone(),
-            props_weak.clone(),
-            kf_editor_weak.clone(),
-            active_param.clone(),
-        );
-        timeline.on_keyframe_clicked(move |id, frame| {
-            let Some(a) = active.borrow().clone() else {
-                return;
-            };
-            if a.object_id != id {
-                return;
-            }
-            let Some(kf) = kw.upgrade() else { return };
-            let world_holder = app_state::active_world(&state);
-            let world = world_holder.lock().unwrap();
-            crate::ui::keyframe_editor::open_for(
-                &kf,
-                &world,
-                id,
-                a.effect_index,
-                a.group.clone(),
-                a.key.clone(),
-                frame,
-            );
-            drop(world);
-            let _ = kf.show();
-            kf.window().request_redraw();
+        let (state, pw) = (state.clone(), props_weak.clone());
+        timeline.on_keyframe_clicked(move |id, _frame| {
             if let Some(p) = pw.upgrade() {
                 let world_holder = app_state::active_world(&state);
                 let world = world_holder.lock().unwrap();
@@ -177,36 +149,15 @@ pub fn setup(
     }
 
     {
-        let (state, tw, pw, active) = (
-            state.clone(),
-            timeline.as_weak(),
-            props_weak.clone(),
-            active_param.clone(),
-        );
+        let (state, tw, pw) = (state.clone(), timeline.as_weak(), props_weak.clone());
         timeline.on_keyframe_moved(move |id, old_frame, new_frame| {
-            let Some(a) = active.borrow().clone() else {
-                return;
-            };
-            if a.object_id != id {
-                return;
-            }
             let Some(t) = tw.upgrade() else { return };
             app_state::snapshot_before_edit(&state);
             let world_holder = app_state::active_world(&state);
             let mut world = world_holder.lock().unwrap();
-            let moved = if a.effect_index < 0 {
-                world.move_keyframe(id as usize, &a.key, old_frame, new_frame)
-            } else {
-                world.move_effect_keyframe(
-                    id as usize,
-                    a.effect_index as usize,
-                    &a.key,
-                    old_frame,
-                    new_frame,
-                )
-            };
+            let moved = world.move_keyframe(id as usize, "", old_frame, new_frame);
             if moved {
-                crate::ui::timeline::refresh_keyframe_markers(&t, &world, &active);
+                crate::ui::timeline::refresh_keyframe_markers(&t, &world);
             }
             if let Some(p) = pw.upgrade() {
                 crate::ui::properties::select_object(&p, &world, id);
@@ -503,36 +454,4 @@ fn sync_scene_tabs(timeline: &TimelineWindow, world: &EcsWorld) {
 /// 中間点フレーム位置を、対応するクリップの行にのみ反映する。他クリップは空へ戻す
 /// （選択切替時に前選択のマーカーが残留しないようにするため）。
 /// 補間計算・値評価は一切行わない（純粋にフレーム位置の表示用）。
-pub fn refresh_keyframe_markers(
-    timeline: &TimelineWindow,
-    world: &EcsWorld,
-    active: &crate::ui::keyframe_editor::ActiveParamSlot,
-) {
-    let active = active.borrow().clone();
-    let objs = timeline.get_objects();
-    for i in 0..objs.row_count() {
-        let Some(mut o) = objs.row_data(i) else {
-            continue;
-        };
-        let frames: Vec<i32> = match &active {
-            Some(a) if a.object_id == o.id => {
-                if a.effect_index < 0 {
-                    world
-                        .get_keyframes(o.id as usize, &a.key)
-                        .iter()
-                        .map(|k| k.frame)
-                        .collect()
-                } else {
-                    world
-                        .get_effect_keyframes(o.id as usize, a.effect_index as usize, &a.key)
-                        .iter()
-                        .map(|k| k.frame)
-                        .collect()
-                }
-            }
-            _ => Vec::new(),
-        };
-        o.keyframe_frames = ModelRc::new(VecModel::from(frames));
-        objs.set_row_data(i, o);
-    }
-}
+pub fn refresh_keyframe_markers(_timeline: &TimelineWindow, _world: &EcsWorld) {}
