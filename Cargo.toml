@@ -73,7 +73,7 @@ pollster = "1.0"
 tempfile = "3"
 
 [build-dependencies]
-lucide-slint = "1.27"
+lucide-slint = "1"
 slint-build = "1.17"
 neoutl-object-shader-build.workspace = true
 
