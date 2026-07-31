@@ -17,6 +17,28 @@ pub struct ParamSchema {
     pub range: Range,
     /// kind==Enumのときのみ選択肢を保持する。それ以外のkindでは空スライス。
     pub enum_options: &'static [&'static str],
+    /// 表示条件（設定項目の動的な増減）。同一グループ内の他キーの現在値がdepends_eqと
+    /// 一致する場合のみUI上に表示する。Noneの場合は常時表示。
+    /// 対象キーがBoolの場合は1.0=true/0.0=falseとの比較、Enumの場合はインデックス比較になる。
+    pub depends_on: Option<&'static str>,
+    pub depends_eq: f32,
+}
+
+/// depends_on/depends_eqを付与する。const文脈で既存ビルダーの結果を包む形で使う。
+/// 例: dep(bool_field(GROUP, "pan", "パン"), "mute", 0.0)
+pub const fn dep(mut schema: ParamSchema, on: &'static str, eq: f32) -> ParamSchema {
+    schema.depends_on = Some(on);
+    schema.depends_eq = eq;
+    schema
+}
+
+/// 現在値取得クロージャgetを用いてschemaの表示可否を判定する。
+/// depends_onが未設定なら常にtrue。
+pub fn is_visible(schema: &ParamSchema, get: impl Fn(&str) -> f32) -> bool {
+    match schema.depends_on {
+        None => true,
+        Some(key) => (get(key) - schema.depends_eq).abs() < f32::EPSILON,
+    }
 }
 
 const fn float_fixed(
@@ -33,6 +55,8 @@ const fn float_fixed(
         kind: ParamKind::Float,
         range: Range::Fixed(min, max),
         enum_options: &[],
+        depends_on: None,
+        depends_eq: 0.0,
     }
 }
 
@@ -49,6 +73,8 @@ const fn float_stage(
         kind: ParamKind::Float,
         range,
         enum_options: &[],
+        depends_on: None,
+        depends_eq: 0.0,
     }
 }
 
@@ -60,6 +86,8 @@ const fn bool_field(group: &'static str, key: &'static str, label: &'static str)
         kind: ParamKind::Bool,
         range: Range::Fixed(0.0, 1.0),
         enum_options: &[],
+        depends_on: None,
+        depends_eq: 0.0,
     }
 }
 
@@ -72,6 +100,8 @@ const fn text_field(group: &'static str, key: &'static str, label: &'static str)
         kind: ParamKind::Text,
         range: Range::Fixed(0.0, 0.0),
         enum_options: &[],
+        depends_on: None,
+        depends_eq: 0.0,
     }
 }
 
@@ -84,6 +114,8 @@ const fn file_field(group: &'static str, key: &'static str, label: &'static str)
         kind: ParamKind::FilePath,
         range: Range::Fixed(0.0, 0.0),
         enum_options: &[],
+        depends_on: None,
+        depends_eq: 0.0,
     }
 }
 
@@ -101,6 +133,8 @@ const fn enum_field(
         kind: ParamKind::Enum,
         range: Range::Fixed(0.0, 0.0),
         enum_options: options,
+        depends_on: None,
+        depends_eq: 0.0,
     }
 }
 
@@ -114,6 +148,8 @@ const fn track_field(group: &'static str, key: &'static str, label: &'static str
         kind: ParamKind::Track,
         range: Range::Fixed(0.0, 0.0),
         enum_options: &[],
+        depends_on: None,
+        depends_eq: 0.0,
     }
 }
 
@@ -151,7 +187,11 @@ pub const SHAPE_SCHEMA: &[ParamSchema] = &[
 
 pub const AUDIO_SCHEMA: &[ParamSchema] = &[
     float_fixed(AUDIO_GROUP, "volume", "音量", 0.0, 2.0),
-    float_fixed(AUDIO_GROUP, "pan", "パン", -1.0, 1.0),
+    dep(
+        float_fixed(AUDIO_GROUP, "pan", "パン", -1.0, 1.0),
+        "mute",
+        0.0,
+    ),
     bool_field(AUDIO_GROUP, "mute", "ミュート"),
 ];
 

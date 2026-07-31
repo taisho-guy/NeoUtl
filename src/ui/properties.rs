@@ -978,6 +978,9 @@ fn push_schema_rows(
     track_options: &TrackOptions,
 ) {
     for s in schema {
+        if !crate::ecs::object_schema::is_visible(s, &get) {
+            continue;
+        }
         let (min, max) = resolve_range(s.range, stage_w, stage_h);
         let track = keyframes(s.key);
         let non_interpolable = matches!(
