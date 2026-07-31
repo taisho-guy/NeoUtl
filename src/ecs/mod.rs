@@ -935,7 +935,8 @@ impl EcsWorld {
         key: &str,
         frame: i32,
         value: f32,
-        easing: crate::ecs::types::Easing,
+        engine_id: String,
+        engine_payload: Vec<u8>,
     ) {
         let Some(entity) = self.find_entity(object_id) else {
             return;
@@ -944,7 +945,7 @@ impl EcsWorld {
             .world
             .run(|t: View<KeyframeTracks>| t.get(entity).ok().cloned())
             .unwrap_or_default();
-        tracks.set_keyframe(key, frame, value, easing);
+        tracks.set_keyframe(key, frame, value, engine_id, engine_payload);
         self.world.add_component(entity, tracks);
     }
 
@@ -1010,14 +1011,15 @@ impl EcsWorld {
         key: &str,
         frame: i32,
         value: f32,
-        easing: crate::ecs::types::Easing,
+        engine_id: String,
+        engine_payload: Vec<u8>,
     ) {
         let Some(entity) = self.find_entity(object_id) else {
             return;
         };
         self.world.run(|mut stacks: ViewMut<EffectStack>| {
             if let Ok(mut stack) = (&mut stacks).get(entity) {
-                stack.set_keyframe(index, key, frame, value, easing);
+                stack.set_keyframe(index, key, frame, value, engine_id, engine_payload);
             }
         });
     }

@@ -122,13 +122,14 @@ impl EffectStack {
         key: &str,
         frame: i32,
         value: f32,
-        easing: crate::ecs::types::Easing,
+        engine_id: String,
+        engine_payload: Vec<u8>,
     ) {
         if let Some(e) = self.0.get_mut(index) {
             e.params
                 .entry(key.to_owned())
                 .or_insert_with(|| EffectParam::new(Value::Number(value)))
-                .set_keyframe(frame, value, easing);
+                .set_keyframe(frame, value, engine_id, engine_payload);
         }
     }
 

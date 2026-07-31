@@ -1,0 +1,7 @@
+[package]
+name = "neoutl-easing-api"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+neoutl-shared-abi.workspace = true

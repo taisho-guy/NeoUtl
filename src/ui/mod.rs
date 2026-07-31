@@ -1,4 +1,3 @@
-pub mod keyframe_editor;
 pub mod launcher;
 mod preview;
 pub mod project_settings;
@@ -10,8 +9,8 @@ pub mod timeline;
 use crate::app_state::{self, AppState, ProjectSession, SharedAppState};
 use crate::project::ProjectMeta;
 use crate::{
-    KeyframeEditorWindow, LauncherWindow, PreviewWindow, ProjectSettingsWindow, PropertiesWindow,
-    SceneSettingsWindow, SystemSettingsWindow, TimelineWindow,
+    LauncherWindow, PreviewWindow, ProjectSettingsWindow, PropertiesWindow, SceneSettingsWindow,
+    SystemSettingsWindow, TimelineWindow,
 };
 use slint::ComponentHandle;
 use std::cell::RefCell;
@@ -22,8 +21,6 @@ struct AppHandles {
     preview: PreviewWindow,
     timeline: TimelineWindow,
     props: PropertiesWindow,
-    #[allow(dead_code)]
-    kf_editor: KeyframeEditorWindow,
     #[allow(dead_code)]
     settings: SystemSettingsWindow,
     #[allow(dead_code)]
@@ -100,7 +97,6 @@ fn build_main_windows(
     let preview = PreviewWindow::new()?;
     let timeline = TimelineWindow::new()?;
     let props = PropertiesWindow::new()?;
-    let kf_editor = KeyframeEditorWindow::new()?;
     let settings = SystemSettingsWindow::new()?;
     let scene_settings_win = SceneSettingsWindow::new()?;
     let project_settings_win = ProjectSettingsWindow::new()?;
@@ -115,7 +111,6 @@ fn build_main_windows(
         settings.window(),
         scene_settings_win.window(),
         project_settings_win.window(),
-        kf_editor.window(),
     ] {
         let _ = w.show();
         let _ = w.hide();
@@ -129,53 +124,18 @@ fn build_main_windows(
         state.clone(),
         gpu_slot,
     );
-    let active_param = keyframe_editor::new_active_param_slot();
     timeline::setup(
         &timeline,
         preview.as_weak(),
         props.as_weak(),
         scene_settings_win.as_weak(),
-        kf_editor.as_weak(),
         state.clone(),
-        active_param.clone(),
     );
-    keyframe_editor::setup(
-        &kf_editor,
-        state.clone(),
-        props.as_weak(),
-        timeline.as_weak(),
-        active_param.clone(),
-    );
-    properties::setup(
-        &props,
-        state.clone(),
-        kf_editor.as_weak(),
-        timeline.as_weak(),
-        active_param,
-    );
-
-    preview.on_new_project({
-        let launcher_weak = launcher_weak.clone();
-        move || {
-            if let Some(l) = launcher_weak.upgrade() {
-                let _ = l.show();
-            }
-        }
-    });
-    preview.on_open_project({
-        let launcher_weak = launcher_weak.clone();
-        move || {
-            if let Some(l) = launcher_weak.upgrade() {
-                let _ = l.show();
-            }
-        }
-    });
-
+    properties::setup(&props, preview.as_weak(), timeline.as_weak(), state.clone());
     Ok(AppHandles {
         preview,
         timeline,
         props,
-        kf_editor,
         settings,
         scene_settings: scene_settings_win,
         project_settings: project_settings_win,

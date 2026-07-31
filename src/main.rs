@@ -6,6 +6,7 @@
 mod app_state;
 mod config;
 mod document;
+mod easings;
 mod ecs;
 mod effects;
 mod media;
@@ -87,6 +88,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     effects::load_all(&effects::default_effects_dir());
     media::loader::load_all(&media::loader::default_decoders_dir());
     theme::load_all(&theme::default_themes_dir());
+    easings::loader::load_all(&easings::loader::default_easings_dir());
 
     #[cfg(not(target_os = "macos"))]
     {

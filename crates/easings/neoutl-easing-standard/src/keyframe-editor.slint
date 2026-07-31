@@ -1,15 +1,7 @@
 import { LineEdit, ComboBox, Button } from "std-widgets.slint";
 
-// 区間の補間（イージング）のみを編集するパネル。
-// 「絶対フレーム＋絶対値を任意に指定する」旧モデルは廃止した。
-// 編集対象は常に「実在する境界点」（クリップ両端、または既存の中間点）のみで、
-// このウィンドウ自身が新規点を作成することはない。値の編集はここでは行わず、
-// 設定ダイアログ内の数直線とクリップ上の点が提供する2箇所に一元化されている。
-// プロパティパネルのラベルクリック／クリップ上の点クリックいずれから開いても
-// 同一ウィンドウを使い回し、対象が変わるたびopen_for()が内容を差し替える
-// （ウィンドウは閉じずに居続け、選択に追従する）。
 export component KeyframeEditorWindow inherits Window {
-    title: "NeoUtl - 区間イージング編集";
+    title: "NeoUtl - 区間イージング編集 (標準エンジン)";
     preferred-width: 340px;
     preferred-height: 380px;
     background: #0e0e12;
@@ -20,11 +12,9 @@ export component KeyframeEditorWindow inherits Window {
     in-out property <string> key: "";
     in-out property <string> label: "";
 
-    // 編集対象の区間（常に実在する2境界点）。値はここでは表示・編集しない。
     in-out property <int> segment-start-frame: 0;
     in-out property <int> segment-end-frame: 0;
 
-    // easing-kind: EasingKindId(Rust側)と1:1対応する固定順のインデックス。
     in-out property <int> easing-kind: 0;
     in-out property <[string]> easing-names: [];
 
@@ -36,9 +26,6 @@ export component KeyframeEditorWindow inherits Window {
     in-out property <int> random-seed: 1;
     in-out property <int> random-step: 1;
 
-    // 補間曲線プレビュー。Rust側(neoutl_interp::ease()を32分割サンプリング)が
-    // SVGパスコマンド文字列を完成形で渡す。この文字列はviewbox 0..1空間の
-    // "M x y L x y L x y ..."系列で、t(区間内進捗)・v(イージング後の進捗)を直接埋め込む。
     in-out property <string> preview-path-commands: "M 0 1";
 
     callback easing-changed(int);
@@ -83,7 +70,6 @@ export component KeyframeEditorWindow inherits Window {
             }
         }
 
-        // Bezier制御点。easing-kind==23(Bezier)選択時のみ表示。
         if root.easing-kind == 23: VerticalLayout {
             spacing: 4px;
             HorizontalLayout {
@@ -133,9 +119,6 @@ export component KeyframeEditorWindow inherits Window {
             }
         }
 
-        // ランダム設定。easing-kind==24(Random)選択時のみ表示。
-        // seedは「絶対」（同一seed・同一区間位置は常に同一値）を保証する
-        // neoutl_interp::Easing::Random側の決定論的ハッシュにそのまま渡る。
         if root.easing-kind == 24: HorizontalLayout {
             spacing: 4px;
             Text {
@@ -167,8 +150,6 @@ export component KeyframeEditorWindow inherits Window {
             }
         }
 
-        // 補間曲線プレビュー。Rust側でneoutl_interp::ease()を32分割サンプリングした結果を描画するのみ
-        // （このウィンドウはプレビュー用の演算を一切持たない）。
         Rectangle {
             height: 140px;
             border-radius: 3px;
