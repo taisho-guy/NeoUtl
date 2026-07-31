@@ -5,8 +5,8 @@ use crate::ecs::{
 };
 use crate::objects::registry;
 use crate::{
-    LayerState, ObjectKindItem, PreviewWindow, PropertiesWindow, SceneSettingsWindow, SceneTabItem,
-    TimelineObject, TimelineWindow,
+    ContextMenuItem, LayerState, ObjectKindItem, PreviewWindow, PropertiesWindow,
+    SceneSettingsWindow, SceneTabItem, TimelineObject, TimelineWindow,
 };
 use slint::{ComponentHandle, Model, ModelRc, VecModel, Weak};
 
@@ -191,7 +191,7 @@ pub fn setup(
 
     {
         let (state, tw, pw) = (state.clone(), timeline.as_weak(), preview_weak.clone());
-        timeline.on_move_object(move |id, start, layer| {
+        timeline.on_move_object(move |id, start, layer, ripple| {
             let state = state.clone();
             let tw = tw.clone();
             let pw = pw.clone();
@@ -206,7 +206,11 @@ pub fn setup(
                 }
                 app_state::snapshot_before_edit(&state);
                 let mut world = world_holder.lock().unwrap();
-                world.move_object(id as usize, start, layer);
+                if ripple {
+                    world.ripple_move_object(id as usize, start);
+                } else {
+                    world.move_object(id as usize, start, layer);
+                }
                 sync(&t, pw.upgrade().as_ref(), &world);
             });
         });
@@ -214,7 +218,7 @@ pub fn setup(
 
     {
         let (state, tw, pw) = (state.clone(), timeline.as_weak(), preview_weak.clone());
-        timeline.on_resize_object(move |id, start, end| {
+        timeline.on_resize_object(move |id, start, end, ripple| {
             let state = state.clone();
             let tw = tw.clone();
             let pw = pw.clone();
@@ -229,7 +233,11 @@ pub fn setup(
                 }
                 app_state::snapshot_before_edit(&state);
                 let mut world = world_holder.lock().unwrap();
-                world.resize_object(id as usize, start, end);
+                if ripple {
+                    world.ripple_resize_object(id as usize, end);
+                } else {
+                    world.resize_object(id as usize, start, end);
+                }
                 sync(&t, pw.upgrade().as_ref(), &world);
             });
         });
@@ -370,7 +378,202 @@ pub fn setup(
         });
     }
 
+    {
+        let (state, tw) = (state.clone(), timeline.as_weak());
+        timeline.on_context_menu_requested(move |hit_id, _frame, _layer| {
+            let Some(t) = tw.upgrade() else { return };
+            let ripple_mode = t.get_ripple_mode();
+            let clipboard_empty = app_state::clipboard(&state).is_empty();
+            let kinds = t.get_available_kinds();
+            let items = build_context_menu(hit_id, ripple_mode, clipboard_empty, &kinds);
+            t.set_menu_items(ModelRc::new(VecModel::from(items)));
+        });
+    }
+
+    {
+        let (state, tw, pw) = (state.clone(), timeline.as_weak(), preview_weak.clone());
+        timeline.on_duplicate_requested(move |hit_id| {
+            let Some(t) = tw.upgrade() else { return };
+            if hit_id < 0 {
+                return;
+            }
+            let ids = selection_target_ids(&t, hit_id);
+            app_state::snapshot_before_edit(&state);
+            let world_holder = app_state::active_world(&state);
+            let mut world = world_holder.lock().unwrap();
+            let frame = world.current_frame();
+            let layer = t.get_selected_layer();
+            world.duplicate_objects(&ids, frame, layer);
+            sync(&t, pw.upgrade().as_ref(), &world);
+        });
+    }
+
+    {
+        let (state, tw, pw) = (state.clone(), timeline.as_weak(), preview_weak.clone());
+        timeline.on_cut_requested(move |hit_id| {
+            let Some(t) = tw.upgrade() else { return };
+            if hit_id < 0 {
+                return;
+            }
+            let ids = selection_target_ids(&t, hit_id);
+            app_state::snapshot_before_edit(&state);
+            let world_holder = app_state::active_world(&state);
+            let mut world = world_holder.lock().unwrap();
+            let docs = world.cut_objects(&ids);
+            app_state::set_clipboard(&state, docs);
+            sync(&t, pw.upgrade().as_ref(), &world);
+        });
+    }
+
+    {
+        let (state, tw) = (state.clone(), timeline.as_weak());
+        timeline.on_copy_requested(move |hit_id| {
+            let Some(t) = tw.upgrade() else { return };
+            if hit_id < 0 {
+                return;
+            }
+            let ids = selection_target_ids(&t, hit_id);
+            let world_holder = app_state::active_world(&state);
+            let world = world_holder.lock().unwrap();
+            let docs = world.copy_objects(&ids);
+            app_state::set_clipboard(&state, docs);
+        });
+    }
+
+    {
+        let (state, tw, pw) = (state.clone(), timeline.as_weak(), preview_weak.clone());
+        timeline.on_paste_requested(move || {
+            let Some(t) = tw.upgrade() else { return };
+            let docs = app_state::clipboard(&state);
+            if docs.is_empty() {
+                return;
+            }
+            app_state::snapshot_before_edit(&state);
+            let world_holder = app_state::active_world(&state);
+            let mut world = world_holder.lock().unwrap();
+            let frame = world.current_frame();
+            let layer = t.get_selected_layer();
+            world.paste_objects(&docs, frame, layer);
+            sync(&t, pw.upgrade().as_ref(), &world);
+        });
+    }
+
     sync_active_session(&state, &timeline.as_weak());
+}
+
+/// タイムライン右クリックメニューの項目集合を構築する唯一の経路。
+/// AviQtl(ui/qml/timeline/TimelineView.qml::rebuildMenu)の項目順序を踏襲する。
+/// hit-id>=0（クリップ上）: 削除→分割→複製→区切り→切り取り→コピー→区切り→リップルモード切替。
+///   複数選択時（呼び出し側selection_ids参照）は削除/複製/切り取り/コピーとも選択全体へ適用する。
+///   AviQtl側のクリッピング/エフェクト追加サブメニューはエフェクトカタログ連携が
+///   未実装のため本関数では対象外（次段対応）。
+/// hit-id<0（背景上）: 登録済みオブジェクト種別ごとのAdd項目→区切り→元に戻す→やり直す→貼り付け。
+///   貼り付けはclipboard_empty時disabledとする。AviQtl側のシーン設定/プロジェクト設定/
+///   環境設定は該当ウィンドウのWeak参照がtimeline::setup()に配線されていないため対象外（次段対応）。
+fn build_context_menu(
+    hit_id: i32,
+    ripple_mode: bool,
+    clipboard_empty: bool,
+    kinds: &ModelRc<ObjectKindItem>,
+) -> Vec<ContextMenuItem> {
+    let sep = || ContextMenuItem {
+        label: String::new().into(),
+        action: 4,
+        kind: -1,
+        enabled: false,
+    };
+    if hit_id >= 0 {
+        return vec![
+            ContextMenuItem {
+                label: "🗑  Delete".into(),
+                action: 1,
+                kind: -1,
+                enabled: true,
+            },
+            ContextMenuItem {
+                label: "✂  Split at Playhead".into(),
+                action: 0,
+                kind: -1,
+                enabled: true,
+            },
+            ContextMenuItem {
+                label: "⧉  Duplicate".into(),
+                action: 7,
+                kind: -1,
+                enabled: true,
+            },
+            sep(),
+            ContextMenuItem {
+                label: "✂  Cut".into(),
+                action: 8,
+                kind: -1,
+                enabled: true,
+            },
+            ContextMenuItem {
+                label: "📋  Copy".into(),
+                action: 9,
+                kind: -1,
+                enabled: true,
+            },
+            sep(),
+            ContextMenuItem {
+                label: if ripple_mode {
+                    "🔗  Ripple Mode: On".into()
+                } else {
+                    "🔗  Ripple Mode: Off".into()
+                },
+                action: 3,
+                kind: -1,
+                enabled: true,
+            },
+        ];
+    }
+    let mut items: Vec<ContextMenuItem> = kinds
+        .iter()
+        .map(|k| ContextMenuItem {
+            label: format!("＋  Add {}", k.name).into(),
+            action: 2,
+            kind: k.kind,
+            enabled: true,
+        })
+        .collect();
+    items.push(sep());
+    items.push(ContextMenuItem {
+        label: "↩  元に戻す".into(),
+        action: 5,
+        kind: -1,
+        enabled: true,
+    });
+    items.push(ContextMenuItem {
+        label: "↪  やり直す".into(),
+        action: 6,
+        kind: -1,
+        enabled: true,
+    });
+    items.push(ContextMenuItem {
+        label: "📌  貼り付け".into(),
+        action: 10,
+        kind: -1,
+        enabled: !clipboard_empty,
+    });
+    items
+}
+
+/// 右クリック対象(hit-id)に対する操作適用先id集合を決定する。
+/// AviQtl::TimelineView::shouldApplyToSelection相当: 現在選択が複数件かつ
+/// hit-idがその選択に含まれる場合のみ選択全体を対象とし、それ以外はhit-id単体を対象とする。
+fn selection_target_ids(t: &TimelineWindow, hit_id: i32) -> Vec<usize> {
+    let objs = t.get_objects();
+    let selected: Vec<usize> = objs
+        .iter()
+        .filter(|o| o.selected)
+        .map(|o| o.id as usize)
+        .collect();
+    if selected.len() > 1 && selected.contains(&(hit_id as usize)) {
+        selected
+    } else {
+        vec![hit_id as usize]
+    }
 }
 
 /// アクティブプロジェクト切替時、タイムライン全体（オブジェクト・レイヤー・シーンタブ）を再同期する。
