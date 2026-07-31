@@ -54,18 +54,17 @@ pub fn load_all(easings_dir: &Path) {
             _lib: None,
         });
 
-        let entries = match std::fs::read_dir(easings_dir) {
-            Ok(e) => e,
+        let candidates: Vec<PathBuf> = match std::fs::read_dir(easings_dir) {
+            Ok(entries) => entries
+                .flatten()
+                .map(|e| e.path())
+                .filter(|p| is_dylib(p))
+                .collect(),
             Err(err) => {
                 eprintln!("[NeoUtl] easings/ 読み込み通知: {err} (組み込み標準エンジンのみ使用)");
-                return plugins;
+                Vec::new()
             }
         };
-        let candidates: Vec<PathBuf> = entries
-            .flatten()
-            .map(|e| e.path())
-            .filter(|p| is_dylib(p))
-            .collect();
 
         for path in &candidates {
             match load_one(path) {
