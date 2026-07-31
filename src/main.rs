@@ -13,6 +13,7 @@ mod media;
 mod objects;
 mod project;
 mod renderer;
+mod shortcuts;
 mod theme;
 mod ui;
 

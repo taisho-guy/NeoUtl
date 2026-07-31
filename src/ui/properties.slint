@@ -1,4 +1,5 @@
 import { EffectRow, ParamRow, TrackOption } from "types.slint";
+import { KeyUtil } from "common.slint";
 import { Slider, ComboBox } from "std-widgets.slint";
 
 // AviQtl(ParamControl.qml)の左右対称構成を踏襲するが、左右の意味は
@@ -755,6 +756,16 @@ export component PropertiesWindow inherits Window {
     // 引数: (group, key, effect-index, frame)。frameは常に実在する境界点
     // （clip-start・clip-end・既存中間点のいずれか）であり、任意のフレームは渡らない。
     callback open-keyframe-editor(string, string, int, int);
+    callback raw-key-event(bool /* ctrl */, bool /* shift */, bool /* alt */, string /* key */);
+
+    key-focus := FocusScope {
+        width: 100%;
+        height: 100%;
+        key-pressed(event) => {
+            root.raw-key-event(event.modifiers.control, event.modifiers.shift, event.modifiers.alt, KeyUtil.normalize-key(event));
+            accept
+        }
+    }
 
     if object-id < 0: Text {
         text: "オブジェクトが選択されていません";
@@ -1086,4 +1097,5 @@ export component PropertiesWindow inherits Window {
             }
         }
     }
+    init => { key-focus.focus(); }
 }

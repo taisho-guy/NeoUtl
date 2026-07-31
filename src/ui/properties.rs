@@ -188,10 +188,22 @@ unsafe extern "C" fn keyframe_edit_trampoline(
 
 pub fn setup(
     props: &PropertiesWindow,
-    _preview_weak: slint::Weak<crate::PreviewWindow>,
+    preview_weak: slint::Weak<crate::PreviewWindow>,
     _timeline_weak: slint::Weak<crate::TimelineWindow>,
     state: SharedAppState,
 ) {
+    {
+        let pw = preview_weak.clone();
+        props.on_raw_key_event(move |ctrl, shift, alt, key| {
+            use crate::shortcuts::{Scope, resolve};
+            if resolve(Scope::Properties, ctrl, shift, alt, &key).is_some()
+                && let Some(p) = pw.upgrade()
+            {
+                crate::ui::preview::dispatch_global_command(&p, ctrl, shift, alt, &key);
+            }
+        });
+    }
+
     {
         let (state, pw) = (state.clone(), props.as_weak());
         props.on_open_keyframe_editor(move |_group, key, effect_index, frame| {

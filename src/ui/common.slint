@@ -1,5 +1,38 @@
 import { IconDisplay, IconSet, Icon } from "@lucide";
 
+export global IconLookup {
+    public pure function icon-for(key: string) -> Icon {
+        if (key == "trash") { return IconSet.Trash2; }
+        if (key == "scissors") { return IconSet.Scissors; }
+        if (key == "copy-plus") { return IconSet.CopyPlus; }
+        if (key == "copy") { return IconSet.Copy; }
+        if (key == "link") { return IconSet.Link2; }
+        if (key == "circle-plus") { return IconSet.CirclePlus; }
+        if (key == "undo") { return IconSet.Undo2; }
+        if (key == "redo") { return IconSet.Redo2; }
+        if (key == "paste") { return IconSet.ClipboardPaste; }
+        return IconSet.Circle;
+    }
+}
+
+export global KeyUtil {
+    public pure function normalize-key(event: KeyEvent) -> string {
+        if (event.text == Key.Delete) { return "Delete"; }
+        if (event.text == Key.LeftArrow) { return "Left"; }
+        if (event.text == Key.RightArrow) { return "Right"; }
+        if (event.text == Key.Home) { return "Home"; }
+        if (event.text == Key.End) { return "End"; }
+        if (event.text == Key.Escape) { return "Escape"; }
+        if (event.text == Key.Tab) { return "Tab"; }
+        if (event.text == Key.F2) { return "F2"; }
+        if (event.text == Key.F3) { return "F3"; }
+        if (event.text == Key.F9) { return "F9"; }
+        if (event.text == Key.F10) { return "F10"; }
+        if (event.text == " ") { return "Space"; }
+        return event.text;
+    }
+}
+
 export component IconButton inherits Rectangle {
     in property <Icon> icon;
     in property <color> stroke: #e0e0e0;
