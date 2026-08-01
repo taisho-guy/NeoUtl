@@ -14,9 +14,10 @@ use std::time::{Duration, Instant};
 /// リングバッファの上限秒数。出力側の消費停止・遅延時の無制限蓄積を防ぐ。
 const RING_CAPACITY_SECONDS: usize = 2;
 
-/// 1tick分のdt上限。フレーム描画停滞・デバッガ中断等による長時間ギャップを
-/// そのままサンプル数へ反映すると巨大バーストが発生するためクランプする。
-const MAX_TICK_SECONDS: f64 = 0.1;
+/// ring目標充足量（秒）。process_frame呼び出し間隔（設計値16msだがタイマー・ロック競合・
+/// 描画処理によるジッタを含む実測値）に対し十分な余裕を持たせ、呼び出し1回あたりの遅延・
+/// 欠落がそのままring枯渇（無音混入=プツプツ）に直結しない量を確保する。
+const TARGET_BUFFER_SECONDS: f64 = 0.12;
 
 /// process_frame呼び出し間隔がこれを超えたクリップは非連続（新規再生開始）とみなし、
 /// sourceフレーム位置から位相を再計算する。ビデオフレーム番号ではなく実時間で判定するため、
@@ -32,8 +33,6 @@ pub struct AudioMixer {
     ring: Arc<Mutex<VecDeque<f32>>>,
     sample_rate: u32,
     channels: u16,
-    /// 直前process_frame呼び出し時刻。dt算出に使用し、pause()/reset()でNoneへ戻す。
-    last_tick: Option<Instant>,
     decode_cache: HashMap<PathBuf, Arc<AudioBuffer>>,
     clip_phase: HashMap<usize, f64>,
     clip_last_tick: HashMap<usize, Instant>,
@@ -56,7 +55,6 @@ impl AudioMixer {
             ring,
             sample_rate,
             channels,
-            last_tick: None,
             decode_cache: HashMap::new(),
             clip_phase: HashMap::new(),
             clip_last_tick: HashMap::new(),
@@ -71,7 +69,6 @@ impl AudioMixer {
             ring: Arc::new(Mutex::new(VecDeque::new())),
             sample_rate: 48_000,
             channels: 2,
-            last_tick: None,
             decode_cache: HashMap::new(),
             clip_phase: HashMap::new(),
             clip_last_tick: HashMap::new(),
@@ -85,7 +82,6 @@ impl AudioMixer {
         }
         self.sample_rate = sample_rate;
         self.ring.lock().unwrap().clear();
-        self.last_tick = None;
         match build_output(sample_rate, self.channels, self.ring.clone()) {
             Ok(output) => self.output = Some(output),
             Err(err) => {
@@ -99,34 +95,34 @@ impl AudioMixer {
     pub fn reset(&mut self) {
         self.clip_phase.clear();
         self.clip_last_tick.clear();
-        self.last_tick = None;
         self.ring.lock().unwrap().clear();
     }
 
-    /// 即座に無音化する。dt起点もクリアし、再開時の巨大dt流入を防ぐ。
+    /// 即座に無音化する。ring内既生成分を破棄するのみで、次回process_frame呼び出し時に
+    /// 目標充足量から再充填される。
     pub fn pause(&self) {
         self.ring.lock().unwrap().clear();
     }
 
     pub fn play(&self) {}
 
-    /// 直前process_frame呼び出しからの実経過時間分のサンプルを合成しringへ積む。
-    /// ビデオフレーム更新の有無に依存せず、呼び出される度に実時間ベースで音声を生成するため、
-    /// タイマー周期とfpsが非整数比でもring枯渇（プツプツ音）が生じない。
-    /// current_frameは合成対象クリップの検索窓（get_active_audio_system）にのみ用いる。
+    /// ring内サンプル数がTARGET_BUFFER_SECONDS分に満たない差分だけ合成し積む。
+    /// dt（呼び出し間隔の実測値）に基づく量産ではなく目標充足量への差分補充とすることで、
+    /// タイマー周期・ロック競合・描画処理による呼び出し間隔のジッタがそのままring枯渇
+    /// （無音混入=プツプツ）に直結しない（呼び出しが一時的に遅延・欠落してもTARGET_BUFFER分の
+    /// 先読みが吸収する）。current_frameは合成対象クリップの検索窓（get_active_audio_system）
+    /// にのみ用いる。
     pub fn process_frame(&mut self, world: &EcsWorld, current_frame: i32, speed: f64) {
         if speed <= 0.0 {
-            self.last_tick = None;
             return;
         }
         let now = Instant::now();
-        let dt = match self.last_tick {
-            Some(prev) => (now - prev).as_secs_f64().min(MAX_TICK_SECONDS),
-            None => 1.0 / 60.0,
-        };
-        self.last_tick = Some(now);
 
-        let samples_per_tick = (dt * f64::from(self.sample_rate)).round() as usize;
+        let target_len =
+            (TARGET_BUFFER_SECONDS * f64::from(self.sample_rate)) as usize * self.channels as usize;
+        let current_len = self.ring.lock().unwrap().len();
+        let needed_len = target_len.saturating_sub(current_len);
+        let samples_per_tick = needed_len / self.channels as usize;
         if samples_per_tick == 0 {
             return;
         }
