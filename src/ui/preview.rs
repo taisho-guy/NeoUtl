@@ -46,6 +46,10 @@ fn sync_resolution_fps(preview: &PreviewWindow, proj: &ProjectResource) {
     preview.set_res_height(proj.height as i32);
 }
 
+/// apply_frame呼び出し元のうちAudioMixer駆動を必要とする経路（playback_timer/on_seek/
+/// on_step_frame）が共有する速度指定。100=等速。
+const SPEED_NORMAL_PERCENT: i32 = 100;
+
 fn apply_frame(
     frame: i32,
     state: &SharedAppState,
@@ -53,10 +57,40 @@ fn apply_frame(
     timeline_weak: &Weak<TimelineWindow>,
     props_weak: &Weak<PropertiesWindow>,
 ) {
+    apply_frame_with_speed(
+        frame,
+        SPEED_NORMAL_PERCENT,
+        state,
+        preview_weak,
+        timeline_weak,
+        props_weak,
+    );
+}
+
+/// フレーム反映の唯一の窓口。任意方向シーク検出時（フレーム差分の絶対値>1）は
+/// AudioMixer::resetを呼び、通常時はprocess_frameでtick分の音声を合成する。
+fn apply_frame_with_speed(
+    frame: i32,
+    speed_percent: i32,
+    state: &SharedAppState,
+    preview_weak: &Weak<PreviewWindow>,
+    timeline_weak: &Weak<TimelineWindow>,
+    props_weak: &Weak<PropertiesWindow>,
+) {
     let world_holder = app_state::active_world(state);
+    let mixer_holder = app_state::active_audio_mixer(state);
     let mut world = world_holder.lock().unwrap();
+    let previous = world.current_frame();
     let clamped = frame.clamp(0, world.total_frames());
     world.set_current_frame(clamped);
+
+    let mut mixer = mixer_holder.lock().unwrap();
+    if (clamped - previous).abs() > 1 {
+        mixer.reset();
+    }
+    mixer.process_frame(&world, clamped, f64::from(speed_percent) / 100.0);
+    drop(mixer);
+
     if let Some(p) = preview_weak.upgrade() {
         p.set_current_frame(clamped);
     }
@@ -112,6 +146,8 @@ pub fn sync_active_session(
     let proj = world.get_project();
     let total = world.total_frames();
     drop(world);
+
+    app_state::active_audio_mixer(state).lock().unwrap().pause();
 
     if let Some(p) = preview_weak.upgrade() {
         sync_resolution_fps(&p, &proj);
@@ -186,12 +222,43 @@ pub fn setup(
                 let total = p.get_total_frames();
                 let next = frame_from_anchor(anchor_instant, anchor_frame, fps, speed_percent);
 
+                {
+                    let world_holder = app_state::active_world(&state);
+                    let world = world_holder.lock().unwrap();
+                    app_state::active_audio_mixer(&state)
+                        .lock()
+                        .unwrap()
+                        .process_frame(
+                            &world,
+                            p.get_current_frame(),
+                            f64::from(speed_percent) / 100.0,
+                        );
+                }
+
                 if next >= total {
                     p.set_is_playing(false);
                     *playback_anchor.borrow_mut() = None;
-                    apply_frame(total, &state, &preview_weak, &timeline_weak, &props_weak);
+                    apply_frame_with_speed(
+                        total,
+                        speed_percent,
+                        &state,
+                        &preview_weak,
+                        &timeline_weak,
+                        &props_weak,
+                    );
+                    app_state::active_audio_mixer(&state)
+                        .lock()
+                        .unwrap()
+                        .pause();
                 } else if next != p.get_current_frame() {
-                    apply_frame(next, &state, &preview_weak, &timeline_weak, &props_weak);
+                    apply_frame_with_speed(
+                        next,
+                        speed_percent,
+                        &state,
+                        &preview_weak,
+                        &timeline_weak,
+                        &props_weak,
+                    );
                 }
                 p.window().request_redraw();
             }
@@ -235,14 +302,18 @@ pub fn setup(
     preview.on_toggle_play({
         let preview_weak = preview_weak.clone();
         let playback_anchor = playback_anchor.clone();
+        let state = state.clone();
         move || {
             if let Some(p) = preview_weak.upgrade() {
                 let playing = !p.get_is_playing();
                 p.set_is_playing(playing);
+                let mixer = app_state::active_audio_mixer(&state);
                 if playing {
                     *playback_anchor.borrow_mut() = Some((Instant::now(), p.get_current_frame()));
+                    mixer.lock().unwrap().play();
                 } else {
                     *playback_anchor.borrow_mut() = None;
+                    mixer.lock().unwrap().pause();
                 }
             }
         }

@@ -4,6 +4,7 @@
 #![warn(clippy::arithmetic_side_effects)]
 
 mod app_state;
+mod audio;
 mod config;
 mod document;
 mod easings;

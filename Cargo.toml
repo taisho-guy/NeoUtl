@@ -52,6 +52,7 @@ neoutl-easing-standard.workspace = true
 toml.workspace = true
 serde_json.workspace = true
 libloading = "0.9"
+rodio = { version = "0.22", default-features = false, features = ["playback", "symphonia-wav", "symphonia-mp3", "symphonia-vorbis", "symphonia-flac", "symphonia-aac", "symphonia-isomp4"] }
 neoutl-media-gpuvideo-decoder = { path = "crates/media/gpuvideo-decoder" }
 neoutl-media-gstreamer-decoder = { path = "crates/media/gstreamer-decoder" }
 slint = { version = "1.17", default-features = false, features = [

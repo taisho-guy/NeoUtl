@@ -75,6 +75,12 @@ type PayloadGroupViews<'v> = (
     View<'v, EffectStack>,
 );
 
+/// TimeRange・SceneId双方の合致判定。get_active_objects_system/get_active_audio_system
+/// 双方が共有する唯一の定義元。
+fn is_active_at(range: &TimeRange, scene: &SceneId, active_scene: i32, frame: i32) -> bool {
+    scene.0 == active_scene && frame >= range.start_frame && frame < range.end_frame
+}
+
 pub fn get_active_objects_system(world: &EcsWorld) -> Vec<ActiveObject> {
     world.world.run(
         |(timeline, scenes, project, camera): UniqueGroupViews,
@@ -96,10 +102,7 @@ pub fn get_active_objects_system(world: &EcsWorld) -> Vec<ActiveObject> {
 
             for (id, (range, kind, scene)) in (&time_ranges, &kind_ids, &scene_ids).iter().with_id()
             {
-                if scene.0 != active_scene {
-                    continue;
-                }
-                if current < range.start_frame || current >= range.end_frame {
+                if !is_active_at(range, scene, active_scene, current) {
                     continue;
                 }
                 let keyframes = keyframe_tracks.get(id).ok();
@@ -172,6 +175,55 @@ pub fn get_active_objects_system(world: &EcsWorld) -> Vec<ActiveObject> {
                     opacity,
                     audio,
                     effects,
+                });
+            }
+            active
+        },
+    )
+}
+
+type AudioSelectorViews<'v> = (
+    View<'v, TimeRange>,
+    View<'v, SceneId>,
+    View<'v, MediaSource>,
+    View<'v, ObjectId>,
+);
+type AudioPayloadViews<'v> = (View<'v, AudioParams>, View<'v, KeyframeTracks>);
+
+/// AudioMixer::process_frameのtick駆動点として使用し、get_active_objects_systemとは
+/// 独立に（タイムライン描画とは非同期に）呼び出される前提のためframeを明示引数化する。
+pub fn get_active_audio_system(
+    world: &EcsWorld,
+    frame: i32,
+) -> Vec<crate::audio::mixer::ActiveAudioEntity> {
+    world.world.run(
+        |(scenes, project): (UniqueView<SceneResource>, UniqueView<ProjectResource>),
+         (time_ranges, scene_ids, media_sources, object_ids): AudioSelectorViews,
+         (audio_params, keyframe_tracks): AudioPayloadViews| {
+            let active_scene = scenes.active_scene;
+            let fps = f64::from(project.fps.max(1));
+            let mut active = Vec::new();
+
+            for (id, (range, scene, media_source)) in
+                (&time_ranges, &scene_ids, &media_sources).iter().with_id()
+            {
+                if !is_active_at(range, scene, active_scene, frame) {
+                    continue;
+                }
+                let keyframes = keyframe_tracks.get(id).ok();
+                let mut audio = audio_params.get(id).copied().unwrap_or_default();
+                if let Some(kt) = keyframes {
+                    kt.apply(&mut audio, frame);
+                }
+                let source_frame =
+                    media_source.trim_in_frame + i64::from(frame - range.start_frame);
+
+                active.push(crate::audio::mixer::ActiveAudioEntity {
+                    id: object_ids.get(id).map_or(0, |o| o.0 as usize),
+                    audio,
+                    media_source: Some(media_source.clone()),
+                    source_frame,
+                    fps,
                 });
             }
             active
