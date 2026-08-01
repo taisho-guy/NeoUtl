@@ -4,7 +4,10 @@ mod error;
 mod vst3;
 
 pub use clap::ClapWrapper;
-pub use discover::{PluginCatalogEntry, clap_plugin_id_cstring, discover_clap, discover_vst3};
+pub use discover::{
+    PluginCatalogEntry, clap_plugin_id_cstring, discover_clap, discover_clap_file,
+    discover_clap_paths, discover_vst3, discover_vst3_file, discover_vst3_paths,
+};
 pub use error::PluginError;
 pub use vst3::{PluginParamInfo, Vst3Wrapper};
 
