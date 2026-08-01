@@ -113,6 +113,115 @@ impl EffectCatalogState {
     }
 }
 
+/// audio-plugin-hostのRegistryから構築するカタログ。EffectCatalogStateと同型で、
+/// categoryにはPluginFormat（"Vst3"/"Clap"）を流用する（フィルタ・カテゴリタブの
+/// 挙動をエフェクト側と完全に共通化するため、専用フィールドを設けない）。
+struct PluginCatalogState {
+    all: Vec<CatalogRow>,
+    categories: Vec<SharedString>,
+}
+
+impl PluginCatalogState {
+    fn build() -> Self {
+        let mut all: Vec<CatalogRow> = crate::audio::plugin_registry::registry()
+            .iter()
+            .map(|e| CatalogRow {
+                id: e.plugin_id.clone().into(),
+                name: e.name.clone().into(),
+                category: format!("{:?}", e.format).into(),
+            })
+            .collect();
+        all.sort_by(|a, b| a.category.cmp(&b.category).then(a.name.cmp(&b.name)));
+
+        let mut categories: Vec<SharedString> = all.iter().map(|r| r.category.clone()).collect();
+        categories.sort();
+        categories.dedup();
+
+        Self { all, categories }
+    }
+
+    fn filtered(&self, query: &str, sort_mode: i32, category: &str) -> Vec<CatalogRow> {
+        let q = query.to_lowercase();
+        let mut rows: Vec<CatalogRow> = self
+            .all
+            .iter()
+            .filter(|r| q.is_empty() || r.name.to_lowercase().contains(&q))
+            .filter(|r| category.is_empty() || r.category.as_str() == category)
+            .cloned()
+            .collect();
+
+        match sort_mode {
+            1 => rows.sort_by(|a, b| a.name.cmp(&b.name)),
+            _ => rows.sort_by(|a, b| a.category.cmp(&b.category).then(a.name.cmp(&b.name))),
+        }
+        rows
+    }
+}
+
+/// EffectAddDialogをVST3/CLAPカタログ向けに配線する。wire_effect_add_dialogと対で、
+/// confirmはinvoke_add_plugin（plugin_id）へ委譲する（「最近使用」ソートは対象外、
+/// mark_effect_usedはエフェクトID空間専用のため混在させない）。
+fn wire_plugin_add_dialog(
+    dialog: &EffectAddDialog,
+    catalog_state: &Rc<PluginCatalogState>,
+    props_weak: &slint::Weak<PropertiesWindow>,
+) {
+    dialog.set_categories(ModelRc::new(VecModel::from(
+        catalog_state.categories.clone(),
+    )));
+
+    let refresh = {
+        let dialog_weak = dialog.as_weak();
+        let catalog_state = catalog_state.clone();
+        move || {
+            let Some(d) = dialog_weak.upgrade() else {
+                return;
+            };
+            let rows = catalog_state.filtered(
+                d.get_query().as_str(),
+                d.get_sort_mode(),
+                d.get_category_filter().as_str(),
+            );
+            d.set_catalog(ModelRc::new(VecModel::from(rows)));
+        }
+    };
+    refresh();
+
+    {
+        let refresh = refresh.clone();
+        dialog.on_query_changed(move |_| refresh());
+    }
+    {
+        let refresh = refresh.clone();
+        dialog.on_sort_changed(move |_| refresh());
+    }
+    {
+        let refresh = refresh.clone();
+        dialog.on_category_changed(move |_| refresh());
+    }
+
+    {
+        let props_weak = props_weak.clone();
+        let dialog_weak = dialog.as_weak();
+        dialog.on_confirm(move |id| {
+            if let Some(p) = props_weak.upgrade() {
+                p.invoke_add_effect(id.clone());
+            }
+            if let Some(d) = dialog_weak.upgrade() {
+                let _ = d.hide();
+            }
+        });
+    }
+    {
+        let dialog_weak = dialog.as_weak();
+        dialog.on_cancel(move || {
+            if let Some(d) = dialog_weak.upgrade() {
+                let _ = d.hide();
+            }
+        });
+    }
+}
+
 /// EffectAddDialogの検索・ソート・カテゴリ操作をカタログ再算出へ配線する。
 /// confirm/cancelもここで確定し、setup()側は生成・表示要求のみを担う。
 fn wire_effect_add_dialog(
@@ -322,20 +431,41 @@ pub fn setup(
 
     {
         let catalog_state = Rc::new(EffectCatalogState::build());
+        let plugin_catalog_state = Rc::new(PluginCatalogState::build());
         let dialog_slot: Rc<RefCell<Option<EffectAddDialog>>> = Rc::new(RefCell::new(None));
         let pw = props.as_weak();
+        let state = state.clone();
         props.on_open_effect_add_dialog(move || {
             let mut slot = dialog_slot.borrow_mut();
             if slot.is_none() {
                 let Ok(dialog) = EffectAddDialog::new() else {
                     return;
                 };
-                wire_effect_add_dialog(&dialog, &catalog_state, &pw);
                 *slot = Some(dialog);
             }
-            if let Some(d) = slot.as_ref() {
-                let _ = d.show();
+            let Some(dialog) = slot.as_ref() else {
+                return;
+            };
+
+            let is_audio = (|| {
+                let id = pw.upgrade()?.get_object_id();
+                if id < 0 {
+                    return None;
+                }
+                let world_holder = app_state::active_world(&state);
+                let world = world_holder.lock().unwrap();
+                let kind_id = world.get_kind_id(id as usize)?;
+                let plugin = crate::objects::loader::by_kind_id(kind_id)?;
+                Some(plugin.stable_id == neoutl_object_api::AUDIO_STABLE_ID)
+            })()
+            .unwrap_or(false);
+
+            if is_audio {
+                wire_plugin_add_dialog(dialog, &plugin_catalog_state, &pw);
+            } else {
+                wire_effect_add_dialog(dialog, &catalog_state, &pw);
             }
+            let _ = dialog.show();
         });
     }
 
@@ -684,6 +814,29 @@ pub fn setup(
             let world_holder = app_state::active_world(&state);
             let mut world = world_holder.lock().unwrap();
             world.add_effect(id as usize, effect_id.as_str());
+            refresh(&p, &world);
+        });
+    }
+
+    {
+        let state = state.clone();
+        let pw = props.as_weak();
+        props.on_add_effect(move |plugin_id| {
+            let Some(p) = pw.upgrade() else { return };
+            let id = p.get_object_id();
+            if id < 0 {
+                return;
+            }
+            let Some(entry) = crate::audio::plugin_registry::by_plugin_id(plugin_id.as_str())
+            else {
+                return;
+            };
+            let (format, path, plugin_id) =
+                (entry.format, entry.path.clone(), entry.plugin_id.clone());
+            app_state::snapshot_before_edit(&state);
+            let world_holder = app_state::active_world(&state);
+            let mut world = world_holder.lock().unwrap();
+            world.add_plugin(id as usize, format, path, plugin_id);
             refresh(&p, &world);
         });
     }
@@ -1110,7 +1263,7 @@ fn apply_object_param(world: &mut EcsWorld, oid: usize, group: &str, key: &str, 
             }
         }
         _ => {
-            world.set_plugin_param(oid, key, value);
+            world.set_plugin_param_value(oid, key, value);
         }
     }
 }

@@ -1,3 +1,4 @@
+pub mod audio_plugins;
 pub mod components;
 pub mod effects;
 pub mod object_schema;
@@ -8,6 +9,7 @@ pub mod types;
 
 use crate::document::{DocumentModel, MediaSourceDoc, ObjectDoc, ObjectPayload};
 use crate::ecs::types::EffectInstance;
+use audio_plugins::PluginChain;
 use components::{
     AudioParams, KeyframeTracks, KindId, Layer, MediaSource, ObjectId, ParamAccess, PluginParams,
     SceneId, ShapeParams, TextContent, TimeRange,
@@ -43,6 +45,7 @@ struct ObjectQueryViews<'v> {
     plugins: View<'v, PluginParams>,
     media: View<'v, MediaSource>,
     keyframes: View<'v, KeyframeTracks>,
+    plugin_chains: View<'v, PluginChain>,
 }
 
 /// タイムラインUIに渡すオブジェクト情報（Slint型に非依存）
@@ -644,6 +647,9 @@ impl EcsWorld {
         if let Some(p) = &o.payload.plugin_params {
             self.world.add_component(entity, PluginParams(p.clone()));
         }
+        if let Some(chain) = &o.payload.plugin_chain {
+            self.world.add_component(entity, PluginChain(chain.clone()));
+        }
         if let Some(m) = &o.payload.media {
             self.world.add_component(entity, MediaSource::from(m));
         }
@@ -704,6 +710,7 @@ impl EcsWorld {
                         text: views.texts.get(entity).ok().cloned(),
                         shape: views.shapes.get(entity).ok().copied(),
                         plugin_params: views.plugins.get(entity).ok().map(|p| p.0.clone()),
+                        plugin_chain: views.plugin_chains.get(entity).ok().map(|c| c.0.clone()),
                         media: views.media.get(entity).ok().map(MediaSourceDoc::from),
                     },
                 });
@@ -977,6 +984,85 @@ impl EcsWorld {
                 stack.push(effect_id);
             }
         });
+    }
+
+    /// VST3/CLAPプラグインをPluginChain末尾へ追加する。エンティティ未付与の場合は
+    /// PluginChainを新規付与する（EffectStackはadd_object時に必ず付与されるが、
+    /// PluginChainはaudioオブジェクトのみが対象のため遅延付与とする）。
+    pub fn add_plugin(
+        &mut self,
+        object_id: usize,
+        format: neoutl_audio_plugin_host::PluginFormat,
+        path: std::path::PathBuf,
+        plugin_id: String,
+    ) {
+        let Some(entity) = self.find_entity(object_id) else {
+            return;
+        };
+        let has_chain = self
+            .world
+            .run(|chains: View<PluginChain>| chains.get(entity).is_ok());
+        if !has_chain {
+            self.world.add_component(entity, PluginChain::default());
+        }
+        self.world.run(|mut chains: ViewMut<PluginChain>| {
+            if let Ok(mut chain) = (&mut chains).get(entity) {
+                chain.push(format, path, plugin_id);
+            }
+        });
+    }
+
+    pub fn remove_plugin(&mut self, object_id: usize, index: usize) {
+        let Some(entity) = self.find_entity(object_id) else {
+            return;
+        };
+        self.world.run(|mut chains: ViewMut<PluginChain>| {
+            if let Ok(mut chain) = (&mut chains).get(entity) {
+                chain.remove(index);
+            }
+        });
+    }
+
+    pub fn reorder_plugin(&mut self, object_id: usize, from: usize, to: usize) {
+        let Some(entity) = self.find_entity(object_id) else {
+            return;
+        };
+        self.world.run(|mut chains: ViewMut<PluginChain>| {
+            if let Ok(mut chain) = (&mut chains).get(entity) {
+                chain.reorder(from, to);
+            }
+        });
+    }
+
+    pub fn set_plugin_bypass(&mut self, object_id: usize, index: usize, bypass: bool) {
+        let Some(entity) = self.find_entity(object_id) else {
+            return;
+        };
+        self.world.run(|mut chains: ViewMut<PluginChain>| {
+            if let Ok(mut chain) = (&mut chains).get(entity) {
+                chain.set_bypass(index, bypass);
+            }
+        });
+    }
+
+    pub fn set_plugin_param(&mut self, object_id: usize, index: usize, param_id: u32, value: f64) {
+        let Some(entity) = self.find_entity(object_id) else {
+            return;
+        };
+        self.world.run(|mut chains: ViewMut<PluginChain>| {
+            if let Ok(mut chain) = (&mut chains).get(entity) {
+                chain.set_param(index, param_id, value);
+            }
+        });
+    }
+
+    pub fn get_plugin_chain(
+        &self,
+        object_id: usize,
+    ) -> Option<Vec<audio_plugins::PluginInstanceRef>> {
+        let entity = self.find_entity(object_id)?;
+        self.world
+            .run(|chains: View<PluginChain>| chains.get(entity).ok().map(|c| c.0.clone()))
     }
 
     pub fn reorder_effect(&mut self, object_id: usize, from: usize, to: usize) {
@@ -1383,7 +1469,7 @@ impl EcsWorld {
         })
     }
 
-    pub fn set_plugin_param(&mut self, object_id: usize, key: &str, value: f32) {
+    pub fn set_plugin_param_value(&mut self, object_id: usize, key: &str, value: f32) {
         let Some(entity) = self.find_entity(object_id) else {
             return;
         };
@@ -1561,6 +1647,7 @@ impl EcsWorld {
                         text: views.texts.get(entity).ok().cloned(),
                         shape: views.shapes.get(entity).ok().copied(),
                         plugin_params: views.plugins.get(entity).ok().map(|p| p.0.clone()),
+                        plugin_chain: views.plugin_chains.get(entity).ok().map(|c| c.0.clone()),
                         media: views.media.get(entity).ok().map(MediaSourceDoc::from),
                     },
                 });

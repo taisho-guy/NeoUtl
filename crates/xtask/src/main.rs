@@ -23,6 +23,7 @@ struct DiscoveredCrate {
 /// [workspace].membersコメントアウトと対で管理する）。
 /// gstreamer-encoder: エンコーダー要件確定まで凍結（同上）。
 const WORKSPACE_EXCLUDED_DIRS: &[&str] = &[
+    "audio-plugin-host",
     "ffmpeg-decoder",
     "gstreamer-encoder",
     "gpuvideo-decoder",

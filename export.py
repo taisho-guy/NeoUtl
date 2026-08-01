@@ -22,6 +22,8 @@ EXCLUDE_DIRS = {
     "i18n",
     "target",
     "slang",
+    "carla",
+    "carla-repo",
 }
 
 EXCLUDE_FILES = {
