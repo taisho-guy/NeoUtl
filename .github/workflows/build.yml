@@ -34,12 +34,12 @@ jobs:
             os_name: macOS(Apple Silicon)
             artifact_name: neoutl-macos-aarch64
             binary_name: NeoUtl
-            install_cmd: brew update && brew install gstreamer
+            install_cmd: brew update && brew install gstreamer libnice-gstreamer
           - os: macos-26-intel
             os_name: macOS(Intel)
             artifact_name: neoutl-macos-x86_64
             binary_name: NeoUtl
-            install_cmd: brew update && brew install gstreamer
+            install_cmd: brew update && brew install gstreamer libnice-gstreamer
           - os: windows-latest
             os_name: Windows(x86_64)
             artifact_name: neoutl-windows-x86_64
@@ -153,13 +153,20 @@ jobs:
           [ -d target/release/effects ] && cp -r target/release/effects "$APP_DIR/Contents/Resources/"
 
           BREW_GST_PLUGINS="$(brew --prefix gstreamer)/lib/gstreamer-1.0"
-          PLUGIN_COUNT=$(find "$BREW_GST_PLUGINS" -type f \( -name "*.so" -o -name "*.dylib" \) 2>/dev/null | wc -l | tr -d ' ')
+          BREW_LIBNICE_PLUGINS="$(brew --prefix libnice-gstreamer)/lib/gstreamer-1.0"
+          PLUGIN_COUNT=$(find "$BREW_GST_PLUGINS" "$BREW_LIBNICE_PLUGINS" -type f \( -name "*.so" -o -name "*.dylib" \) 2>/dev/null | wc -l | tr -d ' ')
           if [ "$PLUGIN_COUNT" -eq 0 ]; then
             echo "エラー: GStreamerプラグインが0件です" >&2
             exit 1
           fi
+          if [ ! -f "$BREW_LIBNICE_PLUGINS/libgstnice.dylib" ]; then
+            echo "エラー: libnice-gstreamerがインストールされていません: $BREW_LIBNICE_PLUGINS/libgstnice.dylib" >&2
+            exit 1
+          fi
           find "$BREW_GST_PLUGINS" -name "*.so" -exec cp {} "$APP_DIR/Contents/Resources/gstreamer-1.0/" \;
           find "$BREW_GST_PLUGINS" -name "*.dylib" -exec cp {} "$APP_DIR/Contents/Resources/gstreamer-1.0/" \;
+          find "$BREW_LIBNICE_PLUGINS" -name "*.so" -exec cp {} "$APP_DIR/Contents/Resources/gstreamer-1.0/" \;
+          find "$BREW_LIBNICE_PLUGINS" -name "*.dylib" -exec cp {} "$APP_DIR/Contents/Resources/gstreamer-1.0/" \;
 
           EXCLUDE_PLUGINS="libgstpython.dylib libgstgtk.dylib libgstgtk4.dylib libgstges.dylib libgstvalidategtk.dylib libgstvalidategapplication.dylib libgstvalidatessim.dylib libgstvalidatefaultinjection.dylib libgstvalidatetracer.dylib libgstdecklink.dylib libgstndi.dylib libgstjack.dylib libgstwhisper.dylib libgstdeepgram.dylib libgstelevenlabs.dylib libgstspeechmatics.dylib libgstdemucs.dylib libgsttensordecoders.dylib libgstspotify.dylib libgstrtmp.dylib libgstrtmp2.dylib libgstrtsp.dylib libgstrtspclientsink.dylib libgstsrt.dylib libgstsctp.dylib libgstdtls.dylib libgstsrtp.dylib libgstrist.dylib libgstwebrtc.dylib libgstwebrtchttp.dylib libgstshm.dylib libgstaws.dylib libgsticecast.dylib libgsthls.dylib libgsthlssink3.dylib libgsthlsmultivariantsink.dylib libgstdash.dylib libgstmse.dylib libgstreqwest.dylib libgstquinn.dylib libgstraptorq.dylib libgstunixfd.dylib libgstipcpipeline.dylib libgstthreadshare.dylib libgstnetsim.dylib libgstcurl.dylib libgstsoup.dylib libgstrfbsrc.dylib libgstvmnc.dylib"
           for name in $EXCLUDE_PLUGINS; do
@@ -175,23 +182,29 @@ jobs:
                   local base
                   base="$(basename "$dep")"
                   local dest="$FRAMEWORKS_DIR/$base"
-                  if [ ! -f "$dest" ]; then
+                  if [ ! -e "$dep" ]; then
+                    echo "警告: macOS依存ライブラリが見つかりません: $dep" >&2
+                  elif [ ! -f "$dest" ]; then
                     cp -L "$dep" "$dest"
                     chmod +w "$dest"
                     install_name_tool -id "@rpath/$base" "$dest"
                     relink "$dest"
+                    install_name_tool -change "$dep" "@rpath/$base" "$target"
+                  else
+                    install_name_tool -change "$dep" "@rpath/$base" "$target"
                   fi
-                  install_name_tool -change "$dep" "@rpath/$base" "$target"
                   ;;
               esac
             done
           }
 
           relink "$APP_DIR/Contents/MacOS/${{ matrix.binary_name }}"
+          relink "$APP_DIR/Contents/MacOS/vst3-host-helper"
           find "$APP_DIR/Contents/Resources/gstreamer-1.0" -type f -name "*.dylib" -print0 \
             | while IFS= read -r -d '' plugin; do relink "$plugin"; done
 
           install_name_tool -add_rpath "@executable_path/../Frameworks" "$APP_DIR/Contents/MacOS/${{ matrix.binary_name }}"
+          install_name_tool -add_rpath "@executable_path/../Frameworks" "$APP_DIR/Contents/MacOS/vst3-host-helper"
 
           FRAMEWORK_COUNT=$(find "$FRAMEWORKS_DIR" -type f | wc -l | tr -d ' ')
           if [ "$FRAMEWORK_COUNT" -eq 0 ]; then
@@ -228,6 +241,7 @@ jobs:
           find "$APP_DIR/Contents/Resources/gstreamer-1.0" -type f -exec codesign --force --sign - {} \;
           [ -d "$APP_DIR/Contents/Resources/objects" ] && find "$APP_DIR/Contents/Resources/objects" -type f -exec codesign --force --sign - {} \;
           [ -d "$APP_DIR/Contents/Resources/effects" ] && find "$APP_DIR/Contents/Resources/effects" -type f -exec codesign --force --sign - {} \;
+          codesign --force --sign - "$APP_DIR/Contents/MacOS/vst3-host-helper"
           codesign --force --sign - "$APP_DIR/Contents/MacOS/${{ matrix.binary_name }}"
 
           cd dist
@@ -264,7 +278,7 @@ jobs:
           }
 
           $pluginDlls |
-            Sort-Object Name -Unique |
+            Sort-Object FullName -Unique |
             Copy-Item -Destination dist/package/lib/gstreamer-1.0/
 
           $excludePlugins = @(
@@ -283,9 +297,63 @@ jobs:
           }
           Write-Host "GStreamerプラグイン同梱数: $copiedCount"
 
-          # 共有ライブラリ本体（gstreamer-1.0-0.dll等）と、gstreamer以外の依存DLL一式。
-          Get-ChildItem -Path $vcpkgBin -Filter "*.dll" |
-            Copy-Item -Destination dist/package/
+          $dumpbin = Get-Command dumpbin.exe -ErrorAction SilentlyContinue
+          if (-not $dumpbin) {
+            Write-Error "エラー: dumpbin.exeが見つかりません。依存DLLを解析できません"
+            exit 1
+          }
+
+          $packageRoot = (Resolve-Path dist/package).Path
+          $searchDlls = Get-ChildItem -Path $vcpkgRoot -Recurse -Filter "*.dll" -File
+          $visited = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+          $queued = [System.Collections.Generic.Queue[System.IO.FileInfo]]::new()
+
+          $roots = @(
+            (Get-Item "dist/package/${{ matrix.binary_name }}"),
+            (Get-Item "dist/package/vst3-host-helper.exe")
+          ) + @(Get-ChildItem -Path "dist/package/lib/gstreamer-1.0" -Filter "*.dll" -File)
+          foreach ($root in $roots) { $queued.Enqueue($root) }
+
+          function Is-SystemDll([string]$name) {
+            $lower = $name.ToLowerInvariant()
+            return $lower.StartsWith("api-ms-win-") -or
+              $lower.StartsWith("ext-ms-win-") -or
+              @("kernel32.dll","user32.dll","advapi32.dll","ole32.dll","oleaut32.dll",
+                "shell32.dll","ws2_32.dll","bcrypt.dll","ntdll.dll","gdi32.dll",
+                "winmm.dll","imm32.dll","version.dll","shlwapi.dll","secur32.dll",
+                "iphlpapi.dll","setupapi.dll","dwmapi.dll","uxtheme.dll").Contains($lower)
+          }
+
+          while ($queued.Count -gt 0) {
+            $current = $queued.Dequeue()
+            $key = $current.FullName
+            if (-not $visited.Add($key)) { continue }
+
+            $deps = & $dumpbin.Source /DEPENDENTS $current.FullName 2>$null |
+              ForEach-Object {
+                if ($_ -match '^\s+([A-Za-z0-9_.-]+\.dll)\s*$') { $matches[1] }
+              }
+
+            foreach ($name in $deps) {
+              $dependency = $searchDlls |
+                Where-Object { $_.Name -ieq $name } |
+                Select-Object -First 1
+              if (-not $dependency) {
+                if (Is-SystemDll $name) { continue }
+                Write-Error "エラー: 依存DLLを解決できません: $name (from=$($current.Name))"
+                exit 1
+              }
+
+              $destination = Join-Path $packageRoot $dependency.Name
+              if (-not (Test-Path $destination)) {
+                Copy-Item $dependency.FullName $destination
+              }
+              $queued.Enqueue($dependency)
+            }
+          }
+
+          $runtimeCount = (Get-ChildItem -Path $packageRoot -Filter "*.dll" -File).Count
+          Write-Host "依存関係を再帰解決したWindows DLL数: $runtimeCount"
 
           Compress-Archive -Path dist/package/* -DestinationPath "dist/${{ matrix.artifact_name }}.zip"
 
