@@ -298,8 +298,9 @@ jobs:
           Write-Host "GStreamerプラグイン同梱数: $copiedCount"
 
           $dumpbin = Get-Command dumpbin.exe -ErrorAction SilentlyContinue
-          if (-not $dumpbin) {
-            Write-Error "エラー: dumpbin.exeが見つかりません。依存DLLを解析できません"
+          $objdump = Get-Command llvm-objdump.exe -ErrorAction SilentlyContinue
+          if (-not $dumpbin -and -not $objdump) {
+            Write-Error "エラー: dumpbin.exe/llvm-objdump.exeが見つかりません。依存DLLを解析できません"
             exit 1
           }
 
@@ -329,10 +330,17 @@ jobs:
             $key = $current.FullName
             if (-not $visited.Add($key)) { continue }
 
-            $deps = & $dumpbin.Source /DEPENDENTS $current.FullName 2>$null |
-              ForEach-Object {
-                if ($_ -match '^\s+([A-Za-z0-9_.-]+\.dll)\s*$') { $matches[1] }
-              }
+            if ($dumpbin) {
+              $deps = & $dumpbin.Source /DEPENDENTS $current.FullName 2>$null |
+                ForEach-Object {
+                  if ($_ -match '^\s+([A-Za-z0-9_.-]+\.dll)\s*$') { $matches[1] }
+                }
+            } else {
+              $deps = & $objdump.Source -p $current.FullName 2>$null |
+                ForEach-Object {
+                  if ($_ -match '^\s*DLL Name:\s*([^\s]+\.dll)\s*$') { $matches[1] }
+                }
+            }
 
             foreach ($name in $deps) {
               $dependency = $searchDlls |
