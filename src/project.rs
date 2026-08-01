@@ -241,10 +241,6 @@ pub fn clear_recovery(dir: &Path) {
     let _ = std::fs::remove_dir(dir.join(".recovery"));
 }
 
-pub fn recovery_exists(dir: &Path) -> bool {
-    recovery_is_newer(dir)
-}
-
 pub fn runtime_marker_path() -> PathBuf {
     settings_runtime_dir().join("running.lock")
 }

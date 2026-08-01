@@ -63,7 +63,6 @@ impl HostHandlers for NeoHost {
 enum ProcessorState<H: clack_host::host::HostHandlers> {
     Stopped(StoppedPluginAudioProcessor<H>),
     Started(StartedPluginAudioProcessor<H>),
-    Transitioning,
 }
 
 pub struct ClapWrapper {
@@ -271,7 +270,6 @@ impl Drop for ClapWrapper {
         let stopped = match state {
             ProcessorState::Started(started) => started.stop_processing(),
             ProcessorState::Stopped(stopped) => stopped,
-            ProcessorState::Transitioning => return,
         };
         self.instance.deactivate(stopped);
     }

@@ -92,7 +92,7 @@ pub fn install(launcher: &LauncherWindow) {
 
 fn build_main_windows(
     state: &SharedAppState,
-    launcher_weak: &slint::Weak<LauncherWindow>,
+    _launcher_weak: &slint::Weak<LauncherWindow>,
 ) -> Result<AppHandles, Box<dyn std::error::Error>> {
     let preview = PreviewWindow::new()?;
     let timeline = TimelineWindow::new()?;

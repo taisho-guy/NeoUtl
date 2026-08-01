@@ -119,6 +119,17 @@ jobs:
           mkdir -p dist/package
           cp target/release/${{ matrix.binary_name }} dist/package/
           cp target/release/vst3-host-helper dist/package/
+          cp assets/icon.svg dist/package/
+          cat > dist/package/NeoUtl.desktop <<'EOF'
+          [Desktop Entry]
+          Type=Application
+          Name=NeoUtl
+          Exec=NeoUtl
+          Icon=icon.svg
+          StartupWMClass=NeoUtl
+          Terminal=false
+          Categories=AudioVideo;Graphics;
+          EOF
           [ -d target/release/objects ] && cp -r target/release/objects dist/package/
           [ -d target/release/effects ] && cp -r target/release/effects dist/package/
           cd dist/package
@@ -137,6 +148,7 @@ jobs:
 
           cp target/release/${{ matrix.binary_name }} "$APP_DIR/Contents/MacOS/"
           cp target/release/vst3-host-helper "$APP_DIR/Contents/MacOS/"
+          cp assets/icon.svg "$APP_DIR/Contents/Resources/"
           [ -d target/release/objects ] && cp -r target/release/objects "$APP_DIR/Contents/Resources/"
           [ -d target/release/effects ] && cp -r target/release/effects "$APP_DIR/Contents/Resources/"
 
@@ -204,6 +216,8 @@ jobs:
             <string>${{ github.ref_name }}</string>
             <key>CFBundlePackageType</key>
             <string>APPL</string>
+            <key>CFBundleIconFile</key>
+            <string>icon.svg</string>
             <key>LSMinimumSystemVersion</key>
             <string>11.0</string>
           </dict>
@@ -228,6 +242,7 @@ jobs:
 
           Copy-Item "target/release/${{ matrix.binary_name }}" dist/package/
           Copy-Item "target/release/vst3-host-helper.exe" dist/package/
+          Copy-Item "assets/icon.ico" dist/package/
           if (Test-Path "target/release/objects") { Copy-Item -Recurse "target/release/objects" dist/package/ }
           if (Test-Path "target/release/effects") { Copy-Item -Recurse "target/release/effects" dist/package/ }
 

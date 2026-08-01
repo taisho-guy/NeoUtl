@@ -1,6 +1,5 @@
 use gstreamer as gst;
 use gstreamer_pbutils as gst_pbutils;
-use gstreamer_pbutils::prelude::*;
 use std::path::Path;
 
 /// GstDiscovererによるメディアファイルのストリーム情報取得結果。
