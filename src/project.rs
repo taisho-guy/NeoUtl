@@ -3,6 +3,7 @@ use crate::ecs::EcsWorld;
 use crate::ecs::resources::SceneMeta;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 #[derive(Clone, Debug)]
 pub struct ProjectMeta {
@@ -45,6 +46,20 @@ fn meta_path(dir: &Path) -> PathBuf {
     dir.join("project.yaml")
 }
 
+fn recovery_path(dir: &Path) -> PathBuf {
+    dir.join(".recovery").join("autosave.yaml")
+}
+
+fn recovery_is_newer(dir: &Path) -> bool {
+    let Ok(recovery) = std::fs::metadata(recovery_path(dir)).and_then(|m| m.modified()) else {
+        return false;
+    };
+    let Ok(project) = std::fs::metadata(meta_path(dir)).and_then(|m| m.modified()) else {
+        return true;
+    };
+    recovery > project
+}
+
 fn sanitize_dir_name(name: &str) -> String {
     let cleaned: String = name
         .trim()
@@ -65,7 +80,12 @@ fn sanitize_dir_name(name: &str) -> String {
 }
 
 fn read_file(dir: &Path) -> Option<ProjectFile> {
-    let content = std::fs::read_to_string(meta_path(dir)).ok()?;
+    let path = if recovery_is_newer(dir) {
+        recovery_path(dir)
+    } else {
+        meta_path(dir)
+    };
+    let content = std::fs::read_to_string(path).ok()?;
     rust_yaml::from_str(&content).ok()
 }
 
@@ -178,7 +198,83 @@ pub fn save_document(dir: &Path, doc: &DocumentModel) -> std::io::Result<()> {
         objects: doc.objects.clone(),
     };
     let yaml = rust_yaml::to_string(&file).map_err(std::io::Error::other)?;
-    std::fs::write(meta_path(dir), yaml)
+    write_atomic(&meta_path(dir), &yaml)?;
+    clear_recovery(dir);
+    Ok(())
+}
+
+fn write_atomic(path: &Path, content: &str) -> std::io::Result<()> {
+    let temp = path.with_extension("yaml.tmp");
+    std::fs::write(&temp, content)?;
+    std::fs::rename(temp, path)
+}
+
+pub fn save_autosave_from_world(world: &EcsWorld) -> std::io::Result<()> {
+    let project = world.get_project();
+    let Some(dir) = project.dir else {
+        return Ok(());
+    };
+    let recovery = recovery_path(&dir);
+    if let Some(parent) = recovery.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    let doc = world.to_document();
+    let active_scene_meta = doc.scenes.iter().find(|s| s.id == doc.active_scene);
+    let file = ProjectFile {
+        name: doc.project_name.clone(),
+        fps: active_scene_meta.map_or(30, |s| s.fps),
+        width: active_scene_meta.map_or(1920, |s| s.width),
+        height: active_scene_meta.map_or(1080, |s| s.height),
+        audio_sample_rate: doc.audio_sample_rate,
+        audio_channels: doc.audio_channels,
+        active_scene: doc.active_scene,
+        next_object_id: doc.next_object_id,
+        scenes: doc.scenes,
+        objects: doc.objects,
+    };
+    let yaml = rust_yaml::to_string(&file).map_err(std::io::Error::other)?;
+    write_atomic(&recovery, &yaml)
+}
+
+pub fn clear_recovery(dir: &Path) {
+    let _ = std::fs::remove_file(recovery_path(dir));
+    let _ = std::fs::remove_dir(dir.join(".recovery"));
+}
+
+pub fn recovery_exists(dir: &Path) -> bool {
+    recovery_is_newer(dir)
+}
+
+pub fn runtime_marker_path() -> PathBuf {
+    settings_runtime_dir().join("running.lock")
+}
+
+fn settings_runtime_dir() -> PathBuf {
+    std::env::current_exe()
+        .ok()
+        .and_then(|p| p.parent().map(|d| d.join("settings")))
+        .unwrap_or_else(|| PathBuf::from("settings"))
+}
+
+pub fn begin_runtime_session() -> std::io::Result<bool> {
+    let path = runtime_marker_path();
+    let crashed = path.exists();
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    let content = format!(
+        "{}\n{}",
+        std::process::id(),
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map_or(0, |d| d.as_secs())
+    );
+    write_atomic(&path, &content)?;
+    Ok(crashed)
+}
+
+pub fn finish_runtime_session() {
+    let _ = std::fs::remove_file(runtime_marker_path());
 }
 
 /// EcsWorldの現在状態（DocumentModelへ変換した上で）をディスクへ確定する。

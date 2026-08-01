@@ -266,6 +266,33 @@ pub fn setup(
     );
     std::mem::forget(playback_timer);
 
+    let autosave_timer = slint::Timer::default();
+    autosave_timer.start(
+        slint::TimerMode::Repeated,
+        std::time::Duration::from_secs(1),
+        {
+            let state = state.clone();
+            move || {
+                let (enabled, interval, dirty, last) = {
+                    let settings_world = app_state::settings_world(&state);
+                    let settings = settings_world.lock().unwrap().get_system_settings();
+                    let s = state.lock().unwrap();
+                    let session = &s.sessions[s.active];
+                    (
+                        settings.autosave_enabled,
+                        settings.autosave_interval_sec.clamp(10, 86_400) as u64,
+                        session.dirty,
+                        session.last_autosave,
+                    )
+                };
+                if enabled && dirty && last.elapsed() >= std::time::Duration::from_secs(interval) {
+                    app_state::autosave_active(&state);
+                }
+            }
+        },
+    );
+    std::mem::forget(autosave_timer);
+
     preview.on_request_render({
         let preview_weak = preview_weak.clone();
         let state = state.clone();
@@ -422,9 +449,7 @@ pub fn setup(
     preview.on_save_project({
         let state = state.clone();
         move || {
-            let world_holder = app_state::active_world(&state);
-            let world = world_holder.lock().unwrap();
-            let _ = crate::project::save_from_world(&world);
+            app_state::save_active(&state);
         }
     });
     preview.on_save_project_as(|| {});
@@ -490,8 +515,12 @@ pub fn setup(
         }
     });
 
-    preview.on_quit(|| {
-        let _ = slint::quit_event_loop();
+    preview.on_quit({
+        let state = state.clone();
+        move || {
+            app_state::save_all(&state);
+            let _ = slint::quit_event_loop();
+        }
     });
 
     preview.on_raw_key_event({
