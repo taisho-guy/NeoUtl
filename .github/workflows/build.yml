@@ -34,12 +34,12 @@ jobs:
             os_name: macOS(Apple Silicon)
             artifact_name: neoutl-macos-aarch64
             binary_name: NeoUtl
-            install_cmd: brew update && brew install gstreamer libnice-gstreamer
+            install_cmd: brew update && brew install gstreamer
           - os: macos-26-intel
             os_name: macOS(Intel)
             artifact_name: neoutl-macos-x86_64
             binary_name: NeoUtl
-            install_cmd: brew update && brew install gstreamer libnice-gstreamer
+            install_cmd: brew update && brew install gstreamer
           - os: windows-latest
             os_name: Windows(x86_64)
             artifact_name: neoutl-windows-x86_64
@@ -153,11 +153,8 @@ jobs:
           [ -d target/release/effects ] && cp -r target/release/effects "$APP_DIR/Contents/Resources/"
 
           BREW_GST_PLUGINS="$(brew --prefix gstreamer)/lib/gstreamer-1.0"
-          BREW_LIBNICE_ROOT="$(brew --prefix libnice-gstreamer)"
-          BREW_LIBNICE_PLUGINS="$BREW_LIBNICE_ROOT/lib/gstreamer-1.0"
           PLUGIN_DIRS=()
           [ -d "$BREW_GST_PLUGINS" ] && PLUGIN_DIRS+=("$BREW_GST_PLUGINS")
-          [ -d "$BREW_LIBNICE_PLUGINS" ] && PLUGIN_DIRS+=("$BREW_LIBNICE_PLUGINS")
           if [ "${#PLUGIN_DIRS[@]}" -eq 0 ]; then
             echo "エラー: GStreamerプラグインディレクトリが見つかりません" >&2
             exit 1
@@ -167,17 +164,12 @@ jobs:
             echo "エラー: GStreamerプラグインが0件です" >&2
             exit 1
           fi
-          LIBGSTNICE=$(find "$BREW_LIBNICE_ROOT" -type f -name "libgstnice.dylib" -print -quit 2>/dev/null || true)
-          if [ -z "$LIBGSTNICE" ]; then
-            echo "エラー: libnice-gstreamer配下にlibgstnice.dylibがありません: $BREW_LIBNICE_ROOT" >&2
-            exit 1
-          fi
           for plugin_dir in "${PLUGIN_DIRS[@]}"; do
             find "$plugin_dir" -name "*.so" -exec cp {} "$APP_DIR/Contents/Resources/gstreamer-1.0/" \;
             find "$plugin_dir" -name "*.dylib" -exec cp {} "$APP_DIR/Contents/Resources/gstreamer-1.0/" \;
           done
 
-          EXCLUDE_PLUGINS="libgstpython.dylib libgstgtk.dylib libgstgtk4.dylib libgstges.dylib libgstvalidategtk.dylib libgstvalidategapplication.dylib libgstvalidatessim.dylib libgstvalidatefaultinjection.dylib libgstvalidatetracer.dylib libgstdecklink.dylib libgstndi.dylib libgstjack.dylib libgstwhisper.dylib libgstdeepgram.dylib libgstelevenlabs.dylib libgstspeechmatics.dylib libgstdemucs.dylib libgsttensordecoders.dylib libgstspotify.dylib libgstrtmp.dylib libgstrtmp2.dylib libgstrtsp.dylib libgstrtspclientsink.dylib libgstsrt.dylib libgstsctp.dylib libgstdtls.dylib libgstsrtp.dylib libgstrist.dylib libgstwebrtc.dylib libgstwebrtchttp.dylib libgstshm.dylib libgstaws.dylib libgsticecast.dylib libgsthls.dylib libgsthlssink3.dylib libgsthlsmultivariantsink.dylib libgstdash.dylib libgstmse.dylib libgstreqwest.dylib libgstquinn.dylib libgstraptorq.dylib libgstunixfd.dylib libgstipcpipeline.dylib libgstthreadshare.dylib libgstnetsim.dylib libgstcurl.dylib libgstsoup.dylib libgstrfbsrc.dylib libgstvmnc.dylib"
+          EXCLUDE_PLUGINS="libgstnice.dylib libgstpython.dylib libgstgtk.dylib libgstgtk4.dylib libgstges.dylib libgstvalidategtk.dylib libgstvalidategapplication.dylib libgstvalidatessim.dylib libgstvalidatefaultinjection.dylib libgstvalidatetracer.dylib libgstdecklink.dylib libgstndi.dylib libgstjack.dylib libgstwhisper.dylib libgstdeepgram.dylib libgstelevenlabs.dylib libgstspeechmatics.dylib libgstdemucs.dylib libgsttensordecoders.dylib libgstspotify.dylib libgstrtmp.dylib libgstrtmp2.dylib libgstrtsp.dylib libgstrtspclientsink.dylib libgstsrt.dylib libgstsctp.dylib libgstdtls.dylib libgstsrtp.dylib libgstrist.dylib libgstwebrtc.dylib libgstwebrtchttp.dylib libgstshm.dylib libgstaws.dylib libgsticecast.dylib libgsthls.dylib libgsthlssink3.dylib libgsthlsmultivariantsink.dylib libgstdash.dylib libgstmse.dylib libgstreqwest.dylib libgstquinn.dylib libgstraptorq.dylib libgstunixfd.dylib libgstipcpipeline.dylib libgstthreadshare.dylib libgstnetsim.dylib libgstcurl.dylib libgstsoup.dylib libgstrfbsrc.dylib libgstvmnc.dylib"
           for name in $EXCLUDE_PLUGINS; do
             rm -f "$APP_DIR/Contents/Resources/gstreamer-1.0/$name"
           done
