@@ -6,6 +6,7 @@ use crate::ecs::EcsWorld;
 use crate::project::{self, ProjectMeta};
 use crate::renderer::RenderEngine;
 use std::sync::{Arc, Mutex};
+use std::time::Instant;
 
 /// Undo可能な正本データ（DocumentModel）のスナップショット履歴。
 /// ECS(EcsWorld)は焼き込み済み描画状態のためUndo対象に含めない。
@@ -52,6 +53,8 @@ pub struct ProjectSession {
     pub engine: Arc<Mutex<Option<RenderEngine>>>,
     pub audio_mixer: Arc<Mutex<AudioMixer>>,
     pub history: History,
+    pub dirty: bool,
+    pub last_autosave: Instant,
 }
 
 impl ProjectSession {
@@ -77,6 +80,8 @@ impl ProjectSession {
             engine: Arc::new(Mutex::new(None)),
             audio_mixer: Arc::new(Mutex::new(audio_mixer)),
             history: History::new(),
+            dirty: false,
+            last_autosave: Instant::now(),
         }
     }
 }
@@ -130,6 +135,54 @@ pub fn snapshot_before_edit(state: &SharedAppState) {
     let mut s = state.lock().unwrap();
     let active = s.active;
     s.sessions[active].history.push(snapshot);
+    s.sessions[active].dirty = true;
+}
+
+pub fn autosave_active(state: &SharedAppState) -> bool {
+    let world_holder = active_world(state);
+    let result = {
+        let world = world_holder.lock().unwrap();
+        crate::project::save_autosave_from_world(&world)
+    };
+    let mut s = state.lock().unwrap();
+    let active = s.active;
+    if result.is_ok() {
+        s.sessions[active].last_autosave = Instant::now();
+    }
+    if let Err(err) = &result {
+        eprintln!("[NeoUtl] オートセーブ失敗: {err}");
+    }
+    result.is_ok()
+}
+
+pub fn save_all(state: &SharedAppState) {
+    let mut s = state.lock().unwrap();
+    for session in &mut s.sessions {
+        let world = session.world.lock().unwrap();
+        if let Err(err) = crate::project::save_from_world(&world) {
+            eprintln!("[NeoUtl] プロジェクト保存失敗: {err}");
+        } else {
+            session.dirty = false;
+        }
+    }
+}
+
+pub fn save_active(state: &SharedAppState) -> bool {
+    let world_holder = active_world(state);
+    let result = {
+        let world = world_holder.lock().unwrap();
+        crate::project::save_from_world(&world)
+    };
+    if let Err(err) = &result {
+        eprintln!("[NeoUtl] プロジェクト保存失敗: {err}");
+    }
+    if result.is_ok() {
+        let mut s = state.lock().unwrap();
+        let active = s.active;
+        s.sessions[active].dirty = false;
+        s.sessions[active].last_autosave = Instant::now();
+    }
+    result.is_ok()
 }
 
 /// アクティブセッションをUndoし、EcsWorldへ再焼き込みする。実行有無を返す。

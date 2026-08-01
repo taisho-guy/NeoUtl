@@ -84,6 +84,8 @@ fn configure_gst_plugin_path() {
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     use slint::ComponentHandle;
 
+    let _ = project::begin_runtime_session();
+
     configure_gst_plugin_path();
 
     objects::load_all(&objects::default_objects_dir());
@@ -146,5 +148,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     launcher.show()?;
     slint::run_event_loop_until_quit()?;
+    project::finish_runtime_session();
     Ok(())
 }

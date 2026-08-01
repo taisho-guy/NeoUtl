@@ -130,7 +130,7 @@ pub fn setup(window: &SystemSettingsWindow, world_holder: Arc<Mutex<EcsWorld>>) 
             let mut world = wc.lock().unwrap();
             let mut s = world.get_system_settings();
             s.autosave_enabled = autosave_enabled;
-            s.autosave_interval_sec = autosave_interval_sec;
+            s.autosave_interval_sec = autosave_interval_sec.clamp(10, 86_400);
             world.set_system_settings(s);
         });
     }
