@@ -118,6 +118,7 @@ jobs:
         run: |
           mkdir -p dist/package
           cp target/release/${{ matrix.binary_name }} dist/package/
+          cp target/release/vst3-host-helper dist/package/
           [ -d target/release/objects ] && cp -r target/release/objects dist/package/
           [ -d target/release/effects ] && cp -r target/release/effects dist/package/
           cd dist/package
@@ -135,6 +136,7 @@ jobs:
           mkdir -p "$APP_DIR/Contents/Resources/gstreamer-1.0"
 
           cp target/release/${{ matrix.binary_name }} "$APP_DIR/Contents/MacOS/"
+          cp target/release/vst3-host-helper "$APP_DIR/Contents/MacOS/"
           [ -d target/release/objects ] && cp -r target/release/objects "$APP_DIR/Contents/Resources/"
           [ -d target/release/effects ] && cp -r target/release/effects "$APP_DIR/Contents/Resources/"
 
@@ -225,6 +227,7 @@ jobs:
           New-Item -ItemType Directory -Force -Path dist/package/lib/gstreamer-1.0 | Out-Null
 
           Copy-Item "target/release/${{ matrix.binary_name }}" dist/package/
+          Copy-Item "target/release/vst3-host-helper.exe" dist/package/
           if (Test-Path "target/release/objects") { Copy-Item -Recurse "target/release/objects" dist/package/ }
           if (Test-Path "target/release/effects") { Copy-Item -Recurse "target/release/effects" dist/package/ }
 
