@@ -120,6 +120,20 @@ pub fn find_all_by_extension(ext: &str) -> Vec<&'static MediaPlugin> {
         .collect()
 }
 
+/// pathの拡張子に対応するdecode_audio実装プラグインを検索し全読み込みデコードする。
+/// AudioMixer::mix_entityの未キャッシュ時経路として使用する。
+pub fn decode_audio(path: &Path) -> Result<neoutl_media_api::AudioBuffer, String> {
+    let ext = path
+        .extension()
+        .and_then(OsStr::to_str)
+        .map(str::to_ascii_lowercase)
+        .ok_or_else(|| format!("拡張子なし: {}", path.display()))?;
+    find_all_by_extension(&ext)
+        .into_iter()
+        .find_map(|plugin| plugin.vtable.decode_audio)
+        .ok_or_else(|| format!("decode_audio対応プラグイン未検出: {ext}"))?(path)
+}
+
 pub fn default_decoders_dir() -> PathBuf {
     let Some(exe_dir) = std::env::current_exe()
         .ok()

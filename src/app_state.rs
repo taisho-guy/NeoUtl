@@ -1,3 +1,4 @@
+use crate::audio::AudioMixer;
 use crate::config;
 use crate::document::DocumentModel;
 use crate::document::ObjectDoc;
@@ -49,6 +50,7 @@ pub struct ProjectSession {
     pub meta: ProjectMeta,
     pub world: Arc<Mutex<EcsWorld>>,
     pub engine: Arc<Mutex<Option<RenderEngine>>>,
+    pub audio_mixer: Arc<Mutex<AudioMixer>>,
     pub history: History,
 }
 
@@ -64,10 +66,16 @@ impl ProjectSession {
             world.load_document(&doc);
         }
 
+        let audio_mixer = AudioMixer::new(meta.audio_sample_rate).unwrap_or_else(|err| {
+            eprintln!("[NeoUtl] audio_mixer初期化失敗: {err}");
+            AudioMixer::silent()
+        });
+
         Self {
             meta,
             world: Arc::new(Mutex::new(world)),
             engine: Arc::new(Mutex::new(None)),
+            audio_mixer: Arc::new(Mutex::new(audio_mixer)),
             history: History::new(),
         }
     }
@@ -101,6 +109,11 @@ pub fn active_world(state: &SharedAppState) -> Arc<Mutex<EcsWorld>> {
 pub fn active_engine(state: &SharedAppState) -> Arc<Mutex<Option<RenderEngine>>> {
     let s = state.lock().unwrap();
     s.sessions[s.active].engine.clone()
+}
+
+pub fn active_audio_mixer(state: &SharedAppState) -> Arc<Mutex<AudioMixer>> {
+    let s = state.lock().unwrap();
+    s.sessions[s.active].audio_mixer.clone()
 }
 
 /// システム設定は全プロジェクト共通のため、先頭セッションのEcsWorldへ固定する。
