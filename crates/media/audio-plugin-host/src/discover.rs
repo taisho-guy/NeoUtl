@@ -4,6 +4,7 @@ use clack_host::prelude::PluginEntry;
 use serde::{Deserialize, Serialize};
 use std::ffi::CString;
 use std::path::{Path, PathBuf};
+use std::time::Duration;
 
 /// エフェクトカタログのCatalogRowへ直接写像可能な形へ正規化した1プラグイン分の情報。
 /// PluginChain::pushはこのpath/plugin_idのペアでプラグイン実体をロードする。
@@ -19,21 +20,46 @@ pub struct PluginCatalogEntry {
 /// dir配下のVST3バンドルを走査する。vst3-hostのビルトインスキャナ
 /// （モジュール単位でmoduleinfo.json優先、なければCOM経由の実ロードで内省）に委譲する。
 pub fn discover_vst3(dir: &Path) -> Vec<PluginCatalogEntry> {
-    let infos = match vst3_host::simple::discover_plugins_in(dir) {
-        Ok(v) => v,
-        Err(err) => {
-            eprintln!("[NeoUtl] vst3 discover 失敗 {}: {err}", dir.display());
-            return Vec::new();
-        }
-    };
-    infos
+    let report =
+        vst3_host::discovery::discover_plugins_safe(&[dir.to_path_buf()], Duration::from_secs(3));
+    if let Some(err) = report.error {
+        eprintln!(
+            "[NeoUtl] vst3 safe discover 利用不可 {}: {err}",
+            dir.display()
+        );
+        return Vec::new();
+    }
+    report
+        .plugins
         .into_iter()
-        .map(|info| PluginCatalogEntry {
+        .map(|detailed| PluginCatalogEntry {
             format: PluginFormat::Vst3,
-            path: info.path,
-            plugin_id: info.uid,
-            name: info.name,
-            vendor: info.vendor,
+            path: detailed.info.path,
+            plugin_id: detailed.info.uid,
+            name: detailed.info.name,
+            vendor: detailed.info.vendor,
+        })
+        .collect()
+}
+
+pub fn discover_vst3_paths(dir: &Path) -> Vec<PathBuf> {
+    let mut paths = Vec::new();
+    collect_dirs(dir, "vst3", &mut paths);
+    paths
+}
+
+pub fn discover_vst3_file(path: &Path) -> Vec<PluginCatalogEntry> {
+    let report =
+        vst3_host::discovery::discover_plugins_safe(&[path.to_path_buf()], Duration::from_secs(10));
+    report
+        .plugins
+        .into_iter()
+        .map(|detailed| PluginCatalogEntry {
+            format: PluginFormat::Vst3,
+            path: detailed.info.path,
+            plugin_id: detailed.info.uid,
+            name: detailed.info.name,
+            vendor: detailed.info.vendor,
         })
         .collect()
 }
@@ -43,23 +69,55 @@ pub fn discover_vst3(dir: &Path) -> Vec<PluginCatalogEntry> {
 /// （実インスタンス化はPluginChainへ追加された時点まで遅延させる方針のため、
 /// ここではメタデータ取得のみに限定する）。
 pub fn discover_clap(dir: &Path) -> Vec<PluginCatalogEntry> {
-    let entries = match std::fs::read_dir(dir) {
-        Ok(e) => e,
-        Err(err) => {
-            eprintln!("[NeoUtl] clap discover 失敗 {}: {err}", dir.display());
-            return Vec::new();
-        }
-    };
-
-    entries
-        .flatten()
-        .map(|e| e.path())
-        .filter(|p| p.extension().and_then(|e| e.to_str()) == Some("clap"))
-        .flat_map(|path| discover_clap_file(&path))
+    let mut files = Vec::new();
+    collect_files(dir, "clap", &mut files);
+    files
+        .into_iter()
+        .flat_map(|path| discover_clap_file_impl(&path))
         .collect()
 }
 
-fn discover_clap_file(path: &Path) -> Vec<PluginCatalogEntry> {
+pub fn discover_clap_paths(dir: &Path) -> Vec<PathBuf> {
+    let mut files = Vec::new();
+    collect_files(dir, "clap", &mut files);
+    files
+}
+
+pub fn discover_clap_file(path: &Path) -> Vec<PluginCatalogEntry> {
+    discover_clap_file_impl(path)
+}
+
+fn collect_dirs(dir: &Path, extension: &str, paths: &mut Vec<PathBuf>) {
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.is_dir() {
+            if path.extension().and_then(|e| e.to_str()) == Some(extension) {
+                paths.push(path);
+            } else {
+                collect_dirs(&path, extension, paths);
+            }
+        }
+    }
+}
+
+fn collect_files(dir: &Path, extension: &str, files: &mut Vec<PathBuf>) {
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.is_dir() {
+            collect_files(&path, extension, files);
+        } else if path.extension().and_then(|e| e.to_str()) == Some(extension) {
+            files.push(path);
+        }
+    }
+}
+
+fn discover_clap_file_impl(path: &Path) -> Vec<PluginCatalogEntry> {
     let Some(path_str) = path.to_str() else {
         eprintln!("[NeoUtl] clap discover: non-UTF8 path {}", path.display());
         return Vec::new();

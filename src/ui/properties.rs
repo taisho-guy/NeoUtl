@@ -838,12 +838,18 @@ pub fn setup(
             if id < 0 {
                 return;
             }
-            let Some(entry) = crate::audio::plugin_registry::by_plugin_id(plugin_id.as_str())
-            else {
+            let Some(entry) = crate::audio::plugin_registry::by_path(plugin_id.as_str()) else {
                 return;
             };
-            let (format, path, plugin_id) =
-                (entry.format, entry.path.clone(), entry.plugin_id.clone());
+            let Some(resolved) = crate::audio::plugin_registry::resolve(&entry.path, entry.format)
+            else {
+                eprintln!(
+                    "[NeoUtl] audioプラグインのメタデータ取得失敗: {}",
+                    entry.path.display()
+                );
+                return;
+            };
+            let (format, path, plugin_id) = (resolved.format, resolved.path, resolved.plugin_id);
             app_state::snapshot_before_edit(&state);
             let world_holder = app_state::active_world(&state);
             let mut world = world_holder.lock().unwrap();
