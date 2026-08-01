@@ -7,7 +7,7 @@ use neoutl_audio_plugin_host::{NeoPlugin, PluginFormat, load_clap, load_vst3};
 use neoutl_media_api::AudioBuffer;
 use rodio::Source;
 use rodio::stream::{DeviceSinkBuilder, MixerDeviceSink};
-use std::collections::{HashMap, VecDeque};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::num::NonZero;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
@@ -40,7 +40,7 @@ pub struct AudioMixer {
     clip_last_tick: HashMap<usize, Instant>,
     /// (entity_id, chain_index)キー。CLAP側はNeoPlugin::process未実装（無音）のため、
     /// ロード自体は保持しつつ実処理はVST3のみとなる（milestone順序6のスコープ）。
-    plugin_instances: HashMap<(usize, usize), CachedPlugin>,
+    plugin_instances: HashMap<u64, CachedPlugin>,
 }
 
 unsafe impl Send for AudioMixer {}
@@ -144,6 +144,14 @@ impl AudioMixer {
             return;
         }
         let mut master = vec![0.0f32; samples_per_tick * self.channels as usize];
+
+        let active_uids: HashSet<u64> = get_active_audio_system(world, current_frame)
+            .iter()
+            .flat_map(|entity| entity.plugin_chain.iter().map(|p| p.instance_uid))
+            .filter(|uid| *uid != 0)
+            .collect();
+        self.plugin_instances
+            .retain(|uid, _| active_uids.contains(uid));
 
         for entity in get_active_audio_system(world, current_frame) {
             if entity.audio.mute {
@@ -251,11 +259,15 @@ impl AudioMixer {
         chan_r: &mut [f32],
     ) {
         let frames = chan_l.len();
-        for (index, instance_ref) in chain.iter().enumerate() {
+        for instance_ref in chain {
             if instance_ref.bypass {
                 continue;
             }
-            let key = (entity_id, index);
+            let key = if instance_ref.instance_uid == 0 {
+                entity_id as u64
+            } else {
+                instance_ref.instance_uid
+            };
             let stale = self.plugin_instances.get(&key).is_none_or(|c| {
                 c.path != instance_ref.path || c.plugin_id != instance_ref.plugin_id
             });

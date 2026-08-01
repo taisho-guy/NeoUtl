@@ -684,6 +684,7 @@ export component PropertiesWindow inherits Window {
     in-out property <bool> has-text: false;
     in-out property <bool> has-shape: false;
     in-out property <bool> has-audio: false;
+    in-out property <bool> is-audio-object: false;
     // タイムラインのプレビュー再生位置（絶対フレーム）。KeyframeTrackの縦線描画に使う。
     in-out property <int> current-frame: 0;
 
@@ -793,7 +794,7 @@ export component PropertiesWindow inherits Window {
                     height: 20px;
                     spacing: 6px;
                     SectionHeader {
-                        text: "エフェクト";
+                        text: root.is-audio-object ? "オーディオプラグイン" : "エフェクト";
                         vertical-alignment: center;
                         height: 100%;
                     }

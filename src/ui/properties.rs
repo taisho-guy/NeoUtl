@@ -10,6 +10,7 @@ use crate::ecs::{
     },
 };
 use crate::{CatalogRow, EffectAddDialog, EffectRow, ParamRow, PropertiesWindow};
+use neoutl_audio_plugin_host::{NeoPlugin, PluginFormat, load_clap, load_vst3};
 use neoutl_easing_api::{EditResultC, EditResultCode, KeyframeC};
 use neoutl_shared_abi::ParamKind;
 use slint::{ComponentHandle, Model, ModelRc, SharedString, VecModel};
@@ -481,6 +482,16 @@ pub fn setup(
             let world_holder = app_state::active_world(&state);
             let mut world = world_holder.lock().unwrap();
             let oid = id as usize;
+            if let Some(index) = group
+                .strip_prefix("__plugin:")
+                .and_then(|v| v.parse::<usize>().ok())
+            {
+                if let Ok(param_id) = key.parse::<u32>() {
+                    world.set_plugin_param(oid, index, param_id, value as f64);
+                }
+                refresh(&p, &world);
+                return;
+            }
             let (clip_start, clip_end) = world.get_time_range(oid);
             let base = current_object_param_value(&world, oid, group.as_str(), key.as_str());
             write_segment_value(
@@ -1237,6 +1248,15 @@ fn write_segment_value(
 /// key単位のフィールド選択はParamAccess::set_param（各コンポーネント定義側）に委譲する。
 /// ここではgroup名から対象コンポーネントを選び、読み出し→trait経由の書き込み→保存のみを行う。
 fn apply_object_param(world: &mut EcsWorld, oid: usize, group: &str, key: &str, value: f32) {
+    if let Some(index) = group
+        .strip_prefix("__plugin:")
+        .and_then(|v| v.parse::<usize>().ok())
+    {
+        if let Ok(param_id) = key.parse::<u32>() {
+            world.set_plugin_param(oid, index, param_id, value as f64);
+        }
+        return;
+    }
     match group {
         TRANSFORM_GROUP => {
             let mut t = world.get_transform(oid).unwrap_or_default();
@@ -1293,6 +1313,21 @@ pub(crate) fn current_object_param_value(
             .get_audio_params(oid)
             .and_then(|a| a.get_param(key))
             .unwrap_or(0.0),
+        _ if group.starts_with("__plugin:") => {
+            let index = group.trim_start_matches("__plugin:").parse::<usize>().ok();
+            let param_id = key.parse::<u32>().ok();
+            match (index, param_id) {
+                (Some(index), Some(param_id)) => world
+                    .get_plugin_chain(oid)
+                    .and_then(|chain| {
+                        chain
+                            .get(index)
+                            .and_then(|plugin| plugin.params.get(&param_id).copied())
+                    })
+                    .unwrap_or(0.0) as f32,
+                _ => 0.0,
+            }
+        }
         _ => world
             .get_plugin_params(oid)
             .and_then(|p| p.get(key).copied())
@@ -1582,6 +1617,62 @@ fn push_plugin_rows(
     );
 }
 
+fn push_audio_plugin_rows(out: &mut Vec<ParamRow>, world: &EcsWorld, oid: usize) {
+    let Some(chain) = world.get_plugin_chain(oid) else {
+        return;
+    };
+    for (index, instance) in chain.iter().enumerate() {
+        let mut plugin: Box<dyn NeoPlugin> = match instance.format {
+            PluginFormat::Vst3 => match load_vst3(&instance.path) {
+                Ok(plugin) => Box::new(plugin),
+                Err(_) => continue,
+            },
+            PluginFormat::Clap => match load_clap(&instance.path, &instance.plugin_id) {
+                Ok(plugin) => Box::new(plugin),
+                Err(_) => continue,
+            },
+        };
+        let group = format!("__plugin:{index}");
+        for info in plugin.param_info() {
+            out.push(ParamRow {
+                effect_index: -1,
+                key: info.id.to_string().into(),
+                label: info.name.into(),
+                group: group.clone().into(),
+                value: instance
+                    .params
+                    .get(&info.id)
+                    .copied()
+                    .unwrap_or(info.default) as f32,
+                kind: 0,
+                min: info.min as f32,
+                max: info.max as f32,
+                text: Default::default(),
+                enum_options: ModelRc::new(VecModel::from(Vec::<SharedString>::new())),
+                enum_index: 0,
+                track_options: empty_track_options().options,
+                track_names: empty_track_options().names,
+                has_keyframes: false,
+                keyframe_frames: ModelRc::new(VecModel::from(Vec::<i32>::new())),
+                boundary_frames: ModelRc::new(VecModel::from(Vec::<i32>::new())),
+                segment_start_frame: 0,
+                segment_end_frame: 0,
+                segment_start_value: instance
+                    .params
+                    .get(&info.id)
+                    .copied()
+                    .unwrap_or(info.default) as f32,
+                segment_end_value: instance
+                    .params
+                    .get(&info.id)
+                    .copied()
+                    .unwrap_or(info.default) as f32,
+            });
+        }
+        let _ = plugin.stop();
+    }
+}
+
 /// object_paramsモデルの該当行(group/key一致)のみ区間フィールドを書き換える。
 /// ModelRcの同一性を保つため、Slint側のコンポーネント再構築(=ドラッグ状態/
 /// テキスト選択状態の喪失)を発生させない。構造変化を伴わない値更新はこの経路を使う。
@@ -1671,6 +1762,7 @@ pub fn refresh_current_frame(props: &PropertiesWindow, world: &EcsWorld) {
         return;
     }
     let oid = id as usize;
+
     let (clip_start, clip_end) = world.get_time_range(oid);
 
     let object_model = props.get_object_params();
@@ -1711,6 +1803,11 @@ fn refresh(props: &PropertiesWindow, world: &EcsWorld) {
         return;
     }
     let oid = id as usize;
+    let is_audio_object = world
+        .get_kind_id(oid)
+        .and_then(crate::objects::loader::by_kind_id)
+        .is_some_and(|plugin| plugin.stable_id == neoutl_object_api::AUDIO_STABLE_ID);
+    props.set_is_audio_object(is_audio_object);
 
     let project = world.get_project();
     let stage_w = project.width as f32;
@@ -1814,6 +1911,9 @@ fn refresh(props: &PropertiesWindow, world: &EcsWorld) {
         clip_end,
         current_frame,
     );
+    if is_audio_object {
+        push_audio_plugin_rows(&mut object_params, world, oid);
+    }
 
     props.set_object_params(ModelRc::new(VecModel::from(object_params)));
 

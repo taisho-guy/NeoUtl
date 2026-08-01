@@ -648,7 +648,9 @@ impl EcsWorld {
             self.world.add_component(entity, PluginParams(p.clone()));
         }
         if let Some(chain) = &o.payload.plugin_chain {
-            self.world.add_component(entity, PluginChain(chain.clone()));
+            let mut chain = PluginChain(chain.clone());
+            chain.repair_instance_uids();
+            self.world.add_component(entity, chain);
         }
         if let Some(m) = &o.payload.media {
             self.world.add_component(entity, MediaSource::from(m));

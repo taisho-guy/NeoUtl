@@ -1,6 +1,11 @@
 use crate::{NeoPlugin, error::PluginError};
+use clack_common::events::io::{InputEvents, OutputEvents};
+use clack_common::process::PluginAudioConfiguration;
 use clack_host::prelude::*;
-use clack_host::process::{StartedPluginAudioProcessor, StoppedPluginAudioProcessor};
+use clack_host::process::{
+    StartedPluginAudioProcessor, StoppedPluginAudioProcessor,
+    audio_buffers::{AudioPortBuffer, AudioPortBufferType, AudioPorts, InputChannel},
+};
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 
@@ -81,7 +86,7 @@ impl ClapWrapper {
             }
             .map_err(|e| PluginError::Clap(e.to_string()))?;
 
-        let instance = PluginInstance::<NeoHost>::new(
+        let mut instance = PluginInstance::<NeoHost>::new(
             |_shared| NeoHostShared::default(),
             |_shared| NeoHostMainThread { instance: None },
             &entry,
@@ -90,18 +95,35 @@ impl ClapWrapper {
         )
         .map_err(|e| PluginError::Clap(e.to_string()))?;
 
+        let processor = instance
+            .activate(
+                |_shared, _main_thread| (),
+                PluginAudioConfiguration {
+                    sample_rate: 48_000.0,
+                    min_frames_count: 1,
+                    max_frames_count: 4096,
+                },
+            )
+            .map_err(|e| PluginError::Clap(e.to_string()))?;
+
         Ok(Self {
             instance,
-            processor: None,
+            processor: Some(ProcessorState::Stopped(processor)),
         })
     }
 }
 
 impl NeoPlugin for ClapWrapper {
     fn start(&mut self) -> Result<(), PluginError> {
-        Err(PluginError::Clap(
-            "activate 未実装（plugin/instance.rs API未確認）".to_string(),
-        ))
+        let Some(ProcessorState::Stopped(processor)) = self.processor.take() else {
+            return Ok(());
+        };
+        self.processor = Some(ProcessorState::Started(
+            processor
+                .start_processing()
+                .map_err(|e| PluginError::Clap(e.to_string()))?,
+        ));
+        Ok(())
     }
 
     fn stop(&mut self) -> Result<(), PluginError> {
@@ -118,7 +140,45 @@ impl NeoPlugin for ClapWrapper {
         }
     }
 
-    fn process(&mut self, _inputs: &[&[f32]], _outputs: &mut [&mut [f32]], _frames: usize) {}
+    fn process(&mut self, inputs: &[&[f32]], outputs: &mut [&mut [f32]], frames: usize) {
+        let Some(ProcessorState::Started(processor)) = self.processor.as_mut() else {
+            for output in outputs.iter_mut() {
+                output.fill(0.0);
+            }
+            return;
+        };
+        let mut input_ports = AudioPorts::with_capacity(inputs.len(), 1);
+        let mut input_buffers: Vec<Vec<f32>> = inputs
+            .iter()
+            .map(|channel| channel[..frames.min(channel.len())].to_vec())
+            .collect();
+        let input_channels = input_buffers
+            .iter_mut()
+            .map(|channel| InputChannel::variable(channel));
+        let input = input_ports.with_input_buffers([AudioPortBuffer {
+            channels: AudioPortBufferType::f32_input_only(input_channels),
+            latency: 0,
+        }]);
+        let output_count = outputs.len();
+        let output_channels = outputs.iter_mut().map(|channel| {
+            let length = frames.min(channel.len());
+            &mut channel[..length]
+        });
+        let mut output_ports = AudioPorts::with_capacity(output_count, 1);
+        let mut output = output_ports.with_output_buffers([AudioPortBuffer {
+            channels: AudioPortBufferType::f32_output_only(output_channels),
+            latency: 0,
+        }]);
+        let mut output_events = OutputEvents::void();
+        let _ = processor.process(
+            &input,
+            &mut output,
+            &InputEvents::empty(),
+            &mut output_events,
+            None,
+            None,
+        );
+    }
 
     fn set_parameter(&mut self, _id: u32, _value: f64) -> Result<(), PluginError> {
         Err(PluginError::Clap(
@@ -130,5 +190,19 @@ impl NeoPlugin for ClapWrapper {
     /// マイルストーン6以降、params拡張導入時にVst3Wrapper::param_infoと同型で実装する。
     fn param_info(&self) -> Vec<crate::vst3::PluginParamInfo> {
         Vec::new()
+    }
+}
+
+impl Drop for ClapWrapper {
+    fn drop(&mut self) {
+        let Some(state) = self.processor.take() else {
+            return;
+        };
+        let stopped = match state {
+            ProcessorState::Started(started) => started.stop_processing(),
+            ProcessorState::Stopped(stopped) => stopped,
+            ProcessorState::Transitioning => return,
+        };
+        self.instance.deactivate(stopped);
     }
 }
