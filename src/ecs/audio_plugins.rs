@@ -3,6 +3,13 @@ use serde::{Deserialize, Serialize};
 use shipyard::Component;
 use std::collections::HashMap;
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicU64, Ordering};
+
+static NEXT_PLUGIN_INSTANCE_UID: AtomicU64 = AtomicU64::new(1);
+
+fn next_plugin_instance_uid() -> u64 {
+    NEXT_PLUGIN_INSTANCE_UID.fetch_add(1, Ordering::Relaxed)
+}
 
 /// PluginChainが保持する1件分のメタデータ。実体（Box<dyn NeoPlugin>）はここに含めない
 /// （ShipyardのComponentはSend + 'staticかつ複製・シリアライズ対象となるため、
@@ -10,6 +17,8 @@ use std::path::PathBuf;
 /// （src/audio/mixer.rs管轄）側でentity idキーのマップとして別途保持する。
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct PluginInstanceRef {
+    #[serde(default)]
+    pub instance_uid: u64,
     pub format: PluginFormat,
     pub path: PathBuf,
     pub plugin_id: String,
@@ -21,6 +30,7 @@ pub struct PluginInstanceRef {
 impl PluginInstanceRef {
     pub fn new(format: PluginFormat, path: PathBuf, plugin_id: String) -> Self {
         Self {
+            instance_uid: next_plugin_instance_uid(),
             format,
             path,
             plugin_id,
@@ -36,6 +46,26 @@ impl PluginInstanceRef {
 pub struct PluginChain(pub Vec<PluginInstanceRef>);
 
 impl PluginChain {
+    pub fn repair_instance_uids(&mut self) {
+        let mut seen = std::collections::HashSet::new();
+        for instance in &mut self.0 {
+            if instance.instance_uid == 0 || !seen.insert(instance.instance_uid) {
+                instance.instance_uid = next_plugin_instance_uid();
+                seen.insert(instance.instance_uid);
+            } else {
+                let current = NEXT_PLUGIN_INSTANCE_UID.load(Ordering::Relaxed);
+                if instance.instance_uid >= current {
+                    let _ = NEXT_PLUGIN_INSTANCE_UID.compare_exchange(
+                        current,
+                        instance.instance_uid.saturating_add(1),
+                        Ordering::Relaxed,
+                        Ordering::Relaxed,
+                    );
+                }
+            }
+        }
+    }
+
     pub fn push(&mut self, format: PluginFormat, path: PathBuf, plugin_id: String) {
         self.0.push(PluginInstanceRef::new(format, path, plugin_id));
     }
