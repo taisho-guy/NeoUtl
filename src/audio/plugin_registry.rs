@@ -148,10 +148,20 @@ pub fn by_path(path: &str) -> Option<&'static PluginCatalogEntry> {
 }
 
 pub fn resolve(path: &Path, format: PluginFormat) -> Option<PluginCatalogEntry> {
+    if format == PluginFormat::Vst3 {
+        return discover_vst3_file(path).into_iter().next();
+    }
     let entries = match format {
         PluginFormat::Vst3 => discover_vst3_file(path),
         PluginFormat::Clap => discover_clap_file(path),
     };
+    if entries.is_empty() {
+        eprintln!(
+            "[NeoUtl] audioプラグインのメタデータ取得失敗: {:?} {}",
+            format,
+            path.display()
+        );
+    }
     entries.into_iter().next()
 }
 

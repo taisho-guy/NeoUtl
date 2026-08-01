@@ -247,10 +247,7 @@ impl AudioMixer {
         self.clip_last_tick.insert(entity.id, now);
     }
 
-    /// entity_idに紐づくPluginChainをchan_l/chan_rへ順次適用する。参照(path/plugin_id)が
-    /// キャッシュと一致しない場合は差し替わったとみなし再ロードする。CLAP側は
-    /// NeoPlugin::process未実装（マイルストーン順序6段階では常に無音を書き込む）ため、
-    /// 追加はできるが結果的にそのチェーン以降が無音化する（意図した暫定挙動）。
+    /// entity_idに紐づくPluginChainをchan_l/chan_rへ順次適用する。
     fn apply_plugin_chain(
         &mut self,
         entity_id: usize,
@@ -282,6 +279,16 @@ impl AudioMixer {
                 continue;
             };
 
+            for (&param_id, &value) in &instance_ref.params {
+                if let Err(err) = plugin.set_parameter(param_id, value) {
+                    eprintln!(
+                        "[NeoUtl] audio_mixer: parameter設定失敗 path={} id={}: {err}",
+                        instance_ref.path.display(),
+                        param_id
+                    );
+                }
+            }
+
             let mut out_l = vec![0.0f32; frames];
             let mut out_r = vec![0.0f32; frames];
             {
@@ -295,9 +302,8 @@ impl AudioMixer {
     }
 }
 
-/// PluginInstanceRefから実体を生成する。VST3はstart_processingまで完了させ即座に
-/// process可能な状態とし、CLAPはロードのみ行う（activate/process未実装、milestone順序6の
-/// スコープ外）。読込失敗時はpluginをNoneとし、以後は当該参照が変わるまで再試行しない
+/// PluginInstanceRefから実体を生成する。VST3/CLAPともstart_processingまで完了させ即座に
+/// process可能な状態とする。読込失敗時はpluginをNoneとし、以後は当該参照が変わるまで再試行しない
 /// （毎tick再ロードを試みてスパムログにならないようにする）。
 fn load_plugin_instance(instance_ref: &PluginInstanceRef) -> CachedPlugin {
     let plugin: Option<Box<dyn NeoPlugin>> = match instance_ref.format {
@@ -313,18 +319,27 @@ fn load_plugin_instance(instance_ref: &PluginInstanceRef) -> CachedPlugin {
             }
             Err(err) => {
                 eprintln!(
-                    "[NeoUtl] audio_mixer: vst3読込失敗 {}: {err}",
+                    "[NeoUtl] audio_mixer: vst3ホスト生成失敗 path={}: {err}",
                     instance_ref.path.display()
                 );
                 None
             }
         },
         PluginFormat::Clap => match load_clap(&instance_ref.path, &instance_ref.plugin_id) {
-            Ok(p) => Some(Box::new(p)),
+            Ok(mut p) => {
+                if let Err(err) = p.start() {
+                    eprintln!(
+                        "[NeoUtl] audio_mixer: clap start失敗 {}: {err}",
+                        instance_ref.path.display()
+                    );
+                }
+                Some(Box::new(p))
+            }
             Err(err) => {
                 eprintln!(
-                    "[NeoUtl] audio_mixer: clap読込失敗 {}: {err}",
-                    instance_ref.path.display()
+                    "[NeoUtl] audio_mixer: clapホスト生成失敗 path={} id={}: {err}",
+                    instance_ref.path.display(),
+                    instance_ref.plugin_id
                 );
                 None
             }

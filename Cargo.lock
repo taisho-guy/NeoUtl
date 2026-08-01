@@ -839,6 +839,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "clack-extensions"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6d97d8b4cab1975314c053b9ec35575c5cccd8c7b3db37b21cbe435be6174416"
+dependencies = [
+ "bitflags 2.13.1",
+ "clack-common",
+ "clap-sys",
+]
+
+[[package]]
 name = "clack-host"
 version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3717,7 +3728,9 @@ name = "neoutl-audio-plugin-host"
 version = "0.1.0"
 dependencies = [
  "clack-common",
+ "clack-extensions",
  "clack-host",
+ "clap-sys",
  "serde",
  "thiserror 2.0.19",
  "vst3-host",

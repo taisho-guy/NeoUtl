@@ -618,7 +618,11 @@ pub fn setup(
             app_state::snapshot_before_edit(&state);
             let world_holder = app_state::active_world(&state);
             let mut world = world_holder.lock().unwrap();
-            world.set_effect_enabled(id as usize, index as usize, enabled);
+            if world.get_plugin_chain(id as usize).is_some() {
+                world.set_plugin_bypass(id as usize, index as usize, !enabled);
+            } else {
+                world.set_effect_enabled(id as usize, index as usize, enabled);
+            }
             refresh(&p, &world);
         });
     }
@@ -635,7 +639,11 @@ pub fn setup(
             app_state::snapshot_before_edit(&state);
             let world_holder = app_state::active_world(&state);
             let mut world = world_holder.lock().unwrap();
-            world.remove_effect(id as usize, index as usize);
+            if world.get_plugin_chain(id as usize).is_some() {
+                world.remove_plugin(id as usize, index as usize);
+            } else {
+                world.remove_effect(id as usize, index as usize);
+            }
             refresh(&p, &world);
         });
     }
@@ -850,10 +858,16 @@ pub fn setup(
                 return;
             };
             let (format, path, plugin_id) = (resolved.format, resolved.path, resolved.plugin_id);
+            let param_info = match format {
+                PluginFormat::Vst3 => load_vst3(&path).map(|p| p.param_info()).unwrap_or_default(),
+                PluginFormat::Clap => load_clap(&path, &plugin_id)
+                    .map(|p| p.param_info())
+                    .unwrap_or_default(),
+            };
             app_state::snapshot_before_edit(&state);
             let world_holder = app_state::active_world(&state);
             let mut world = world_holder.lock().unwrap();
-            world.add_plugin(id as usize, format, path, plugin_id);
+            world.add_plugin(id as usize, format, path, plugin_id, param_info);
             refresh(&p, &world);
         });
     }
@@ -870,7 +884,11 @@ pub fn setup(
             app_state::snapshot_before_edit(&state);
             let world_holder = app_state::active_world(&state);
             let mut world = world_holder.lock().unwrap();
-            world.reorder_effect(id as usize, from as usize, to as usize);
+            if world.get_plugin_chain(id as usize).is_some() {
+                world.reorder_plugin(id as usize, from as usize, to as usize);
+            } else {
+                world.reorder_effect(id as usize, from as usize, to as usize);
+            }
             refresh(&p, &world);
         });
     }
@@ -1628,22 +1646,12 @@ fn push_audio_plugin_rows(out: &mut Vec<ParamRow>, world: &EcsWorld, oid: usize)
         return;
     };
     for (index, instance) in chain.iter().enumerate() {
-        let mut plugin: Box<dyn NeoPlugin> = match instance.format {
-            PluginFormat::Vst3 => match load_vst3(&instance.path) {
-                Ok(plugin) => Box::new(plugin),
-                Err(_) => continue,
-            },
-            PluginFormat::Clap => match load_clap(&instance.path, &instance.plugin_id) {
-                Ok(plugin) => Box::new(plugin),
-                Err(_) => continue,
-            },
-        };
         let group = format!("__plugin:{index}");
-        for info in plugin.param_info() {
+        for info in &instance.param_info {
             out.push(ParamRow {
                 effect_index: -1,
                 key: info.id.to_string().into(),
-                label: info.name.into(),
+                label: info.name.clone().into(),
                 group: group.clone().into(),
                 value: instance
                     .params
@@ -1675,8 +1683,41 @@ fn push_audio_plugin_rows(out: &mut Vec<ParamRow>, world: &EcsWorld, oid: usize)
                     .unwrap_or(info.default) as f32,
             });
         }
-        let _ = plugin.stop();
     }
+}
+
+fn audio_plugin_rows(world: &EcsWorld, oid: usize) -> Vec<EffectRow> {
+    world
+        .get_plugin_chain(oid)
+        .unwrap_or_default()
+        .into_iter()
+        .enumerate()
+        .map(|(index, plugin)| EffectRow {
+            index: index as i32,
+            name: plugin_display_name(&plugin).into(),
+            enabled: !plugin.bypass,
+            dragging: false,
+        })
+        .collect()
+}
+
+fn plugin_display_name(plugin: &crate::ecs::audio_plugins::PluginInstanceRef) -> String {
+    let name = plugin
+        .path
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .filter(|s| !s.is_empty())
+        .unwrap_or_else(|| {
+            if plugin.plugin_id.is_empty() {
+                "Audio Plugin"
+            } else {
+                &plugin.plugin_id
+            }
+        })
+        .trim_end_matches(".vst3")
+        .trim_end_matches(".clap")
+        .to_owned();
+    name
 }
 
 /// object_paramsモデルの該当行(group/key一致)のみ区間フィールドを書き換える。
@@ -1936,6 +1977,11 @@ fn refresh(props: &PropertiesWindow, world: &EcsWorld) {
             dragging: false,
         })
         .collect();
+    let rows = if is_audio_object {
+        audio_plugin_rows(world, oid)
+    } else {
+        rows
+    };
     props.set_effects(ModelRc::new(VecModel::from(rows)));
 
     let mut params = Vec::new();

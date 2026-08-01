@@ -4,8 +4,10 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-vst3-host = "0.9.0"
-clack-host = { version = "0.1.1", features = ["libloading"] }
-clack-common = "0.1.1"
+vst3-host = "0.9"
+clack-host = { version = "0.1", features = ["libloading"] }
+clack-common = "0.1"
 thiserror = "2"
 serde = { version = "1", features = ["derive"] }
+clack-extensions = { version = "0.1", features = ["params"] }
+clap-sys = "0.5"
