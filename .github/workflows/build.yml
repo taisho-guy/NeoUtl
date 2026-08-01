@@ -153,20 +153,29 @@ jobs:
           [ -d target/release/effects ] && cp -r target/release/effects "$APP_DIR/Contents/Resources/"
 
           BREW_GST_PLUGINS="$(brew --prefix gstreamer)/lib/gstreamer-1.0"
-          BREW_LIBNICE_PLUGINS="$(brew --prefix libnice-gstreamer)/lib/gstreamer-1.0"
-          PLUGIN_COUNT=$(find "$BREW_GST_PLUGINS" "$BREW_LIBNICE_PLUGINS" -type f \( -name "*.so" -o -name "*.dylib" \) 2>/dev/null | wc -l | tr -d ' ')
+          BREW_LIBNICE_ROOT="$(brew --prefix libnice-gstreamer)"
+          BREW_LIBNICE_PLUGINS="$BREW_LIBNICE_ROOT/lib/gstreamer-1.0"
+          PLUGIN_DIRS=()
+          [ -d "$BREW_GST_PLUGINS" ] && PLUGIN_DIRS+=("$BREW_GST_PLUGINS")
+          [ -d "$BREW_LIBNICE_PLUGINS" ] && PLUGIN_DIRS+=("$BREW_LIBNICE_PLUGINS")
+          if [ "${#PLUGIN_DIRS[@]}" -eq 0 ]; then
+            echo "エラー: GStreamerプラグインディレクトリが見つかりません" >&2
+            exit 1
+          fi
+          PLUGIN_COUNT=$(find "${PLUGIN_DIRS[@]}" -type f \( -name "*.so" -o -name "*.dylib" \) 2>/dev/null | wc -l | tr -d ' ')
           if [ "$PLUGIN_COUNT" -eq 0 ]; then
             echo "エラー: GStreamerプラグインが0件です" >&2
             exit 1
           fi
-          if [ ! -f "$BREW_LIBNICE_PLUGINS/libgstnice.dylib" ]; then
-            echo "エラー: libnice-gstreamerがインストールされていません: $BREW_LIBNICE_PLUGINS/libgstnice.dylib" >&2
+          LIBGSTNICE=$(find "$BREW_LIBNICE_ROOT" -type f -name "libgstnice.dylib" -print -quit 2>/dev/null || true)
+          if [ -z "$LIBGSTNICE" ]; then
+            echo "エラー: libnice-gstreamer配下にlibgstnice.dylibがありません: $BREW_LIBNICE_ROOT" >&2
             exit 1
           fi
-          find "$BREW_GST_PLUGINS" -name "*.so" -exec cp {} "$APP_DIR/Contents/Resources/gstreamer-1.0/" \;
-          find "$BREW_GST_PLUGINS" -name "*.dylib" -exec cp {} "$APP_DIR/Contents/Resources/gstreamer-1.0/" \;
-          find "$BREW_LIBNICE_PLUGINS" -name "*.so" -exec cp {} "$APP_DIR/Contents/Resources/gstreamer-1.0/" \;
-          find "$BREW_LIBNICE_PLUGINS" -name "*.dylib" -exec cp {} "$APP_DIR/Contents/Resources/gstreamer-1.0/" \;
+          for plugin_dir in "${PLUGIN_DIRS[@]}"; do
+            find "$plugin_dir" -name "*.so" -exec cp {} "$APP_DIR/Contents/Resources/gstreamer-1.0/" \;
+            find "$plugin_dir" -name "*.dylib" -exec cp {} "$APP_DIR/Contents/Resources/gstreamer-1.0/" \;
+          done
 
           EXCLUDE_PLUGINS="libgstpython.dylib libgstgtk.dylib libgstgtk4.dylib libgstges.dylib libgstvalidategtk.dylib libgstvalidategapplication.dylib libgstvalidatessim.dylib libgstvalidatefaultinjection.dylib libgstvalidatetracer.dylib libgstdecklink.dylib libgstndi.dylib libgstjack.dylib libgstwhisper.dylib libgstdeepgram.dylib libgstelevenlabs.dylib libgstspeechmatics.dylib libgstdemucs.dylib libgsttensordecoders.dylib libgstspotify.dylib libgstrtmp.dylib libgstrtmp2.dylib libgstrtsp.dylib libgstrtspclientsink.dylib libgstsrt.dylib libgstsctp.dylib libgstdtls.dylib libgstsrtp.dylib libgstrist.dylib libgstwebrtc.dylib libgstwebrtchttp.dylib libgstshm.dylib libgstaws.dylib libgsticecast.dylib libgsthls.dylib libgsthlssink3.dylib libgsthlsmultivariantsink.dylib libgstdash.dylib libgstmse.dylib libgstreqwest.dylib libgstquinn.dylib libgstraptorq.dylib libgstunixfd.dylib libgstipcpipeline.dylib libgstthreadshare.dylib libgstnetsim.dylib libgstcurl.dylib libgstsoup.dylib libgstrfbsrc.dylib libgstvmnc.dylib"
           for name in $EXCLUDE_PLUGINS; do
@@ -317,6 +326,8 @@ jobs:
 
           function Is-SystemDll([string]$name) {
             $lower = $name.ToLowerInvariant()
+            $system32 = Join-Path $env:windir "System32\$name"
+            if (Test-Path $system32) { return $true }
             return $lower.StartsWith("api-ms-win-") -or
               $lower.StartsWith("ext-ms-win-") -or
               @("kernel32.dll","user32.dll","advapi32.dll","ole32.dll","oleaut32.dll",
