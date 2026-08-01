@@ -49,19 +49,22 @@ pub fn discover_vst3_paths(dir: &Path) -> Vec<PathBuf> {
 }
 
 pub fn discover_vst3_file(path: &Path) -> Vec<PluginCatalogEntry> {
-    let report =
-        vst3_host::discovery::discover_plugins_safe(&[path.to_path_buf()], Duration::from_secs(10));
-    report
-        .plugins
-        .into_iter()
-        .map(|detailed| PluginCatalogEntry {
-            format: PluginFormat::Vst3,
-            path: detailed.info.path,
-            plugin_id: detailed.info.uid,
-            name: detailed.info.name,
-            vendor: detailed.info.vendor,
-        })
-        .collect()
+    if !path.is_dir() {
+        return Vec::new();
+    }
+    Some(PluginCatalogEntry {
+        format: PluginFormat::Vst3,
+        path: path.to_path_buf(),
+        plugin_id: String::new(),
+        name: path
+            .file_stem()
+            .and_then(|name| name.to_str())
+            .unwrap_or("VST3 plugin")
+            .to_owned(),
+        vendor: String::new(),
+    })
+    .into_iter()
+    .collect()
 }
 
 /// dir配下の`.clap`ファイルを走査する。ファイル単位でPluginEntryを一時ロードし、

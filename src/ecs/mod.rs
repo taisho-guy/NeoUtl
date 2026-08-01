@@ -997,6 +997,7 @@ impl EcsWorld {
         format: neoutl_audio_plugin_host::PluginFormat,
         path: std::path::PathBuf,
         plugin_id: String,
+        param_info: Vec<neoutl_audio_plugin_host::PluginParamInfo>,
     ) {
         let Some(entity) = self.find_entity(object_id) else {
             return;
@@ -1010,6 +1011,9 @@ impl EcsWorld {
         self.world.run(|mut chains: ViewMut<PluginChain>| {
             if let Ok(mut chain) = (&mut chains).get(entity) {
                 chain.push(format, path, plugin_id);
+                if let Some(instance) = chain.0.last_mut() {
+                    instance.param_info = param_info;
+                }
             }
         });
     }

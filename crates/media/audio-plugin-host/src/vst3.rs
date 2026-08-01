@@ -1,4 +1,5 @@
 use crate::{NeoPlugin, error::PluginError};
+use serde::{Deserialize, Serialize};
 use std::path::Path;
 use vst3_host::{audio::AudioBuffers, plugin::Plugin, simple};
 
@@ -6,7 +7,7 @@ use vst3_host::{audio::AudioBuffers, plugin::Plugin, simple};
 /// neoutl_shared_abi::ParamKind::Floatのmin/max/defaultとしてそのまま消費する。
 /// VST3パラメータは常に正規化空間0.0..=1.0（vst3-host::Parameter::min/maxの仕様）であり、
 /// plain値はプラグイン非公開のためUI表示・保存双方とも正規化値をそのまま扱う。
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PluginParamInfo {
     pub id: u32,
     pub name: String,
@@ -20,7 +21,7 @@ pub struct Vst3Wrapper(Plugin);
 
 impl Vst3Wrapper {
     pub fn load(path: &Path) -> Result<Self, PluginError> {
-        Ok(Self(simple::load_plugin(path)?))
+        Ok(Self(simple::load_plugin_isolated(path)?))
     }
 }
 

@@ -1,4 +1,4 @@
-use neoutl_audio_plugin_host::PluginFormat;
+use neoutl_audio_plugin_host::{PluginFormat, PluginParamInfo};
 use serde::{Deserialize, Serialize};
 use shipyard::Component;
 use std::collections::HashMap;
@@ -25,6 +25,8 @@ pub struct PluginInstanceRef {
     pub bypass: bool,
     /// パラメータID→正規化値(0.0..=1.0、VST3のParameter::value空間に合わせる)。
     pub params: HashMap<u32, f64>,
+    #[serde(default)]
+    pub param_info: Vec<PluginParamInfo>,
 }
 
 impl PluginInstanceRef {
@@ -36,6 +38,7 @@ impl PluginInstanceRef {
             plugin_id,
             bypass: false,
             params: HashMap::new(),
+            param_info: Vec::new(),
         }
     }
 }
