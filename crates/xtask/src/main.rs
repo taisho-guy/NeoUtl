@@ -173,7 +173,7 @@ fn build_all<'a>(
     }
 }
 
-fn build_vst3_helpers(workspace_root: &Path, profile: &str, offline: bool) {
+fn build_vst3_helpers(workspace_root: &Path, profile: &str, target: Option<&str>, offline: bool) {
     let mut cmd = Command::new("cargo");
     cmd.current_dir(workspace_root)
         .arg("build")
@@ -184,6 +184,9 @@ fn build_vst3_helpers(workspace_root: &Path, profile: &str, offline: bool) {
         .arg("vst3-host-probe");
     if profile == "release" {
         cmd.arg("--release");
+    }
+    if let Some(target) = target {
+        cmd.arg("--target").arg(target);
     }
     if offline {
         cmd.arg("--offline");
@@ -204,6 +207,9 @@ fn build_vst3_helpers(workspace_root: &Path, profile: &str, offline: bool) {
         .arg("vst3-host-helper");
     if profile == "release" {
         helper.arg("--release");
+    }
+    if let Some(target) = target {
+        helper.arg("--target").arg(target);
     }
     if offline {
         helper.arg("--offline");
@@ -271,7 +277,7 @@ fn main() {
     let root = workspace_root();
 
     slang::ensure_installed(&root, offline);
-    build_vst3_helpers(&root, profile, offline);
+    build_vst3_helpers(&root, profile, target, offline);
 
     let objects = discover_crates(&root, "crates/objects");
     let effects = discover_crates(&root, "crates/effects");
