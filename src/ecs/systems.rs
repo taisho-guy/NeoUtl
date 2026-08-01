@@ -188,7 +188,11 @@ type AudioSelectorViews<'v> = (
     View<'v, MediaSource>,
     View<'v, ObjectId>,
 );
-type AudioPayloadViews<'v> = (View<'v, AudioParams>, View<'v, KeyframeTracks>);
+type AudioPayloadViews<'v> = (
+    View<'v, AudioParams>,
+    View<'v, KeyframeTracks>,
+    View<'v, crate::ecs::audio_plugins::PluginChain>,
+);
 
 /// AudioMixer::process_frameのtick駆動点として使用し、get_active_objects_systemとは
 /// 独立に（タイムライン描画とは非同期に）呼び出される前提のためframeを明示引数化する。
@@ -199,7 +203,7 @@ pub fn get_active_audio_system(
     world.world.run(
         |(scenes, project): (UniqueView<SceneResource>, UniqueView<ProjectResource>),
          (time_ranges, scene_ids, media_sources, object_ids): AudioSelectorViews,
-         (audio_params, keyframe_tracks): AudioPayloadViews| {
+         (audio_params, keyframe_tracks, plugin_chains): AudioPayloadViews| {
             let active_scene = scenes.active_scene;
             let fps = f64::from(project.fps.max(1));
             let mut active = Vec::new();
@@ -224,6 +228,10 @@ pub fn get_active_audio_system(
                     media_source: Some(media_source.clone()),
                     source_frame,
                     fps,
+                    plugin_chain: plugin_chains
+                        .get(id)
+                        .map(|c| c.0.clone())
+                        .unwrap_or_default(),
                 });
             }
             active

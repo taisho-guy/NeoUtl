@@ -748,6 +748,9 @@ export component PropertiesWindow inherits Window {
     callback set-param-track(int, string, int);
     callback commit-param(int, string);
     callback add-effect(string);
+    // audioオブジェクト向け。EffectAddDialogを再利用しplugin_registry由来のcatalogを
+    // 表示した際の確定コールバック（引数はplugin_id）。
+    callback add-plugin(string);
     callback move-effect(int, int);
     callback copy-effect(int);
     callback paste-effect(int);

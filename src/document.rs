@@ -1,3 +1,4 @@
+use crate::ecs::audio_plugins::PluginInstanceRef;
 use crate::ecs::components::{AudioParams, MediaSource, ShapeParams, TextContent};
 use crate::ecs::resources::SceneMeta;
 use crate::ecs::transform::Transform;
@@ -42,6 +43,9 @@ pub struct ObjectPayload {
     pub shape: Option<ShapeParams>,
     pub plugin_params: Option<HashMap<String, f32>>,
     pub media: Option<MediaSourceDoc>,
+    /// audioオブジェクトのVST3/CLAPチェーン。EffectStackと同型シリアライズ
+    /// （project.yaml上はNone＝チェーン未付与、空Vecはチェーン付与済み・要素数0を区別する）。
+    pub plugin_chain: Option<Vec<PluginInstanceRef>>,
 }
 
 /// 1オブジェクトの正本データ（AviQtl::Core::Clip相当）。

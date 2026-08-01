@@ -1,7 +1,9 @@
 use crate::ecs::EcsWorld;
+use crate::ecs::audio_plugins::PluginInstanceRef;
 use crate::ecs::components::{AudioParams, MediaSource};
 use crate::ecs::systems::get_active_audio_system;
 use crate::media;
+use neoutl_audio_plugin_host::{NeoPlugin, PluginFormat, load_clap, load_vst3};
 use neoutl_media_api::AudioBuffer;
 use rodio::Source;
 use rodio::stream::{DeviceSinkBuilder, MixerDeviceSink};
@@ -36,6 +38,19 @@ pub struct AudioMixer {
     decode_cache: HashMap<PathBuf, Arc<AudioBuffer>>,
     clip_phase: HashMap<usize, f64>,
     clip_last_tick: HashMap<usize, Instant>,
+    /// (entity_id, chain_index)キー。CLAP側はNeoPlugin::process未実装（無音）のため、
+    /// ロード自体は保持しつつ実処理はVST3のみとなる（milestone順序6のスコープ）。
+    plugin_instances: HashMap<(usize, usize), CachedPlugin>,
+}
+
+unsafe impl Send for AudioMixer {}
+
+/// PluginChain側のメタデータ（path/plugin_id）変更検知用。エンティティのチェーンが
+/// UI操作で差し替えられた場合、この照合に失敗した時点で実体を再ロードする。
+struct CachedPlugin {
+    path: PathBuf,
+    plugin_id: String,
+    plugin: Option<Box<dyn NeoPlugin>>,
 }
 
 /// deviceはdrop時に出力を停止するため、AudioMixerと同じ生存期間で保持する。
@@ -58,6 +73,7 @@ impl AudioMixer {
             decode_cache: HashMap::new(),
             clip_phase: HashMap::new(),
             clip_last_tick: HashMap::new(),
+            plugin_instances: HashMap::new(),
         })
     }
 
@@ -72,6 +88,7 @@ impl AudioMixer {
             decode_cache: HashMap::new(),
             clip_phase: HashMap::new(),
             clip_last_tick: HashMap::new(),
+            plugin_instances: HashMap::new(),
         }
     }
 
@@ -191,6 +208,9 @@ impl AudioMixer {
         let gain_l = volume * (1.0 - pan.max(0.0));
         let gain_r = volume * (1.0 + pan.min(0.0));
 
+        let mut chan_l = vec![0.0f32; samples_per_tick];
+        let mut chan_r = vec![0.0f32; samples_per_tick];
+
         for frame_idx in 0..samples_per_tick {
             let idx = phase as usize;
             if idx + 1 >= buffer.frame_count() {
@@ -203,13 +223,105 @@ impl AudioMixer {
             } else {
                 sample_l
             };
-            master[frame_idx * 2] += sample_l * gain_l;
-            master[frame_idx * 2 + 1] += sample_r * gain_r;
+            chan_l[frame_idx] = sample_l * gain_l;
+            chan_r[frame_idx] = sample_r * gain_r;
             phase += step;
+        }
+
+        self.apply_plugin_chain(entity.id, &entity.plugin_chain, &mut chan_l, &mut chan_r);
+
+        for frame_idx in 0..samples_per_tick {
+            master[frame_idx * 2] += chan_l[frame_idx];
+            master[frame_idx * 2 + 1] += chan_r[frame_idx];
         }
 
         self.clip_phase.insert(entity.id, phase);
         self.clip_last_tick.insert(entity.id, now);
+    }
+
+    /// entity_idに紐づくPluginChainをchan_l/chan_rへ順次適用する。参照(path/plugin_id)が
+    /// キャッシュと一致しない場合は差し替わったとみなし再ロードする。CLAP側は
+    /// NeoPlugin::process未実装（マイルストーン順序6段階では常に無音を書き込む）ため、
+    /// 追加はできるが結果的にそのチェーン以降が無音化する（意図した暫定挙動）。
+    fn apply_plugin_chain(
+        &mut self,
+        entity_id: usize,
+        chain: &[PluginInstanceRef],
+        chan_l: &mut [f32],
+        chan_r: &mut [f32],
+    ) {
+        let frames = chan_l.len();
+        for (index, instance_ref) in chain.iter().enumerate() {
+            if instance_ref.bypass {
+                continue;
+            }
+            let key = (entity_id, index);
+            let stale = self.plugin_instances.get(&key).is_none_or(|c| {
+                c.path != instance_ref.path || c.plugin_id != instance_ref.plugin_id
+            });
+            if stale {
+                self.plugin_instances
+                    .insert(key, load_plugin_instance(instance_ref));
+            }
+            let Some(cached) = self.plugin_instances.get_mut(&key) else {
+                continue;
+            };
+            let Some(plugin) = cached.plugin.as_mut() else {
+                continue;
+            };
+
+            let mut out_l = vec![0.0f32; frames];
+            let mut out_r = vec![0.0f32; frames];
+            {
+                let inputs: [&[f32]; 2] = [chan_l, chan_r];
+                let mut outputs: [&mut [f32]; 2] = [&mut out_l, &mut out_r];
+                plugin.process(&inputs, &mut outputs, frames);
+            }
+            chan_l.copy_from_slice(&out_l);
+            chan_r.copy_from_slice(&out_r);
+        }
+    }
+}
+
+/// PluginInstanceRefから実体を生成する。VST3はstart_processingまで完了させ即座に
+/// process可能な状態とし、CLAPはロードのみ行う（activate/process未実装、milestone順序6の
+/// スコープ外）。読込失敗時はpluginをNoneとし、以後は当該参照が変わるまで再試行しない
+/// （毎tick再ロードを試みてスパムログにならないようにする）。
+fn load_plugin_instance(instance_ref: &PluginInstanceRef) -> CachedPlugin {
+    let plugin: Option<Box<dyn NeoPlugin>> = match instance_ref.format {
+        PluginFormat::Vst3 => match load_vst3(&instance_ref.path) {
+            Ok(mut p) => {
+                if let Err(err) = p.start() {
+                    eprintln!(
+                        "[NeoUtl] audio_mixer: vst3 start失敗 {}: {err}",
+                        instance_ref.path.display()
+                    );
+                }
+                Some(Box::new(p))
+            }
+            Err(err) => {
+                eprintln!(
+                    "[NeoUtl] audio_mixer: vst3読込失敗 {}: {err}",
+                    instance_ref.path.display()
+                );
+                None
+            }
+        },
+        PluginFormat::Clap => match load_clap(&instance_ref.path, &instance_ref.plugin_id) {
+            Ok(p) => Some(Box::new(p)),
+            Err(err) => {
+                eprintln!(
+                    "[NeoUtl] audio_mixer: clap読込失敗 {}: {err}",
+                    instance_ref.path.display()
+                );
+                None
+            }
+        },
+    };
+    CachedPlugin {
+        path: instance_ref.path.clone(),
+        plugin_id: instance_ref.plugin_id.clone(),
+        plugin,
     }
 }
 
@@ -289,4 +401,5 @@ pub struct ActiveAudioEntity {
     pub media_source: Option<MediaSource>,
     pub source_frame: i64,
     pub fps: f64,
+    pub plugin_chain: Vec<PluginInstanceRef>,
 }
