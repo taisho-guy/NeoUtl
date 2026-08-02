@@ -262,6 +262,7 @@ export component TimelineWindow inherits Window {
                     alignment: start;
 
                     IconDisplay {
+                        y: 8px;
                         icon: IconLookup.icon-for(item.icon);
                         stroke: !item.enabled ? #6a6a6e : (item.action == 1 ? #ff8888 : item.action == 0 ? #88c4ff : item.action == 3 ? #ffd23a : (item.action == 5 || item.action == 6) ? #a0a0a8 : (item.action == 7 || item.action == 8 || item.action == 9 || item.action == 10) ? #a0ffb0 : #8aabff.mix(#c0a0ff, mod(max(item.kind, 0), 5) / 4.0));
                         size: 14px;
