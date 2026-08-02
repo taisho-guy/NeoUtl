@@ -40,12 +40,14 @@
 - [x] タイムラインのスナップ・リップル編集機能を実装
 - [x] オートセーブ・クラッシュ時のプロジェクト復元機能を実装（system_settings.rsのautosave設定項目を実処理へ接続）
 - [ ] メディアキャッシュ機構の実装完了（media/cache.rsのプロキシ・サムネイル生成）
+  - 正直あまり意味がないのでスキップ
 
 # 0.3.0
 - [x] 音声ミキサー機能を実装（audio_mixer相当）
 - [x] 音声プラグインホスト機能を実装
 - [x] エンコード機能を実装（gpuvideo-encoder: Vulkan HW H.264/H.265。gstreamer-encoder: encodebin2によるH.264/H.265/VP9/ProResソフトウェア・HW自動選択エンコード＋mux_encoded()による事前エンコード済みビットストリームの再エンコード無しmux。src/export.rsがRenderEngine/EcsWorld/AudioMixerを接続し、gpuvideo-encoder初期化・エンコード失敗時はgstreamer-encoder全体経路へ自動縮退）
-- [ ] プラグインUIの統合を実装
+- [ ] 音声プラグインUIの統合を実装
+  - X11やWaylandの兼ね合いで断念
 - [ ] レンダーキュー・書き出しプリセット機能を実装
 - [ ] 波形表示（オーディオクリップ上のウェーブフォーム描画）を実装
 
