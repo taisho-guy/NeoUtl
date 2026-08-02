@@ -1,3 +1,4 @@
+import { IconSet } from "@lucide";
 import { Button } from "common.slint";
 import { SettingsSidebar } from "system-settings/sidebar.slint";
 import { GeneralPage } from "system-settings/general.slint";
@@ -161,11 +162,13 @@ export component SystemSettingsWindow inherits Window {
 
                 Button {
                     label: "再読込";
+                    icon: IconSet.RefreshCw;
                     clicked => { root.reload-settings(); }
                 }
 
                 Button {
                     label: "保存";
+                    icon: IconSet.Save;
                     primary: true;
                     clicked => { root.save-settings(); }
                 }

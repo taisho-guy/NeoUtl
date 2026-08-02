@@ -1,3 +1,4 @@
+import { IconSet } from "@lucide";
 import { Button } from "common.slint";
 import { NameField, ChoiceField } from "system-settings/fields.slint";
 
@@ -82,11 +83,13 @@ export component ProjectSettingsWindow inherits Window {
 
             Button {
                 label: "キャンセル";
+                icon: IconSet.X;
                 clicked => { root.cancel(); }
             }
 
             Button {
                 label: "OK";
+                icon: IconSet.Check;
                 primary: true;
                 clicked => { root.confirm(); }
             }

@@ -71,7 +71,7 @@ wgpu_text = "29"
 tokio = { version = "1.52", features = ["rt-multi-thread", "sync"] }
 bytemuck = { version = "1.25", features = ["derive"] }
 shipyard = "0.11"
-lucide-slint = "1.27"
+lucide-slint = "1"
 rust-yaml = { version = "1.1", features = ["serde"] }
 serde = { version = "1.0", features = ["derive"] }
 rfd = "0.17"

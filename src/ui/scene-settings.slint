@@ -221,11 +221,13 @@ export component SceneSettingsWindow inherits Window {
 
             Button {
                 label: "キャンセル";
+                icon: IconSet.X;
                 clicked => { root.cancel(); }
             }
 
             Button {
                 label: "OK";
+                icon: IconSet.Check;
                 primary: true;
                 clicked => { root.confirm(); }
             }
