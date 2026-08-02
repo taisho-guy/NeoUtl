@@ -170,6 +170,27 @@ impl AudioMixer {
         }
     }
 
+    /// エクスポート専用。指定ビデオフレームに対応する音声区間をring/deviceを経ずに
+    /// 直接ミックスし、インターリーブ済みステレオf32列(sample_count*2)で返す。
+    /// 呼び出し順はビデオフレーム昇順を前提とする（mix_entityのclip_phase継続判定が
+    /// 前回呼び出しからの経過時間ではなくフレーム連番前提で機能するため）。
+    pub fn render_frame_offline(
+        &mut self,
+        world: &EcsWorld,
+        current_frame: i32,
+        sample_count: usize,
+    ) -> Vec<f32> {
+        let now = Instant::now();
+        let mut master = vec![0.0f32; sample_count * self.channels as usize];
+        for entity in get_active_audio_system(world, current_frame) {
+            if entity.audio.mute {
+                continue;
+            }
+            self.mix_entity(&entity, now, 1.0, &mut master, sample_count);
+        }
+        master
+    }
+
     fn mix_entity(
         &mut self,
         entity: &ActiveAudioEntity,

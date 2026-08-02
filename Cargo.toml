@@ -15,8 +15,9 @@ members = [
     "crates/media/symphonia-decoder",
     "crates/media/gpuvideo-decoder",
     "crates/media/image-decoder",
+    "crates/media/gpuvideo-encoder",
+    "crates/media/gstreamer-encoder",
     # "crates/media/ffmpeg-decoder",
-    # "crates/media/gstreamer-encoder",
     "crates/neoutl-effect-shader-build",
     "crates/neoutl-object-shader-build",
     "crates/xtask", "crates/media/audio-plugin-host",
@@ -55,6 +56,8 @@ libloading = "0.9"
 rodio = { version = "0.22", default-features = false, features = ["playback", "symphonia-wav", "symphonia-mp3", "symphonia-vorbis", "symphonia-flac", "symphonia-aac", "symphonia-isomp4"] }
 neoutl-media-gpuvideo-decoder = { path = "crates/media/gpuvideo-decoder" }
 neoutl-media-gstreamer-decoder = { path = "crates/media/gstreamer-decoder" }
+neoutl-media-gpuvideo-encoder = { path = "crates/media/gpuvideo-encoder" }
+neoutl-media-gstreamer-encoder = { path = "crates/media/gstreamer-encoder" }
 neoutl-audio-plugin-host = { path = "crates/media/audio-plugin-host" }
 slint = { version = "1.17", default-features = false, features = [
     "std",

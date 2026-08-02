@@ -1,0 +1,15 @@
+[package]
+name = "neoutl-media-gpuvideo-encoder"
+version = "0.0.0"
+edition = "2024"
+
+[lib]
+name       = "neoutl_media_gpuvideo_encoder"
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+neoutl-media-api = { path = "../../neoutl-media-api" }
+wgpu = "29"
+
+[target.'cfg(not(target_os = "macos"))'.dependencies]
+gpu-video = { version = "0.4", features = ["wgpu"] }
