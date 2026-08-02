@@ -8,7 +8,9 @@ use crate::{
     ContextMenuItem, LayerState, ObjectKindItem, PreviewWindow, PropertiesWindow,
     SceneSettingsWindow, SceneTabItem, TimelineObject, TimelineWindow,
 };
-use slint::{ComponentHandle, Model, ModelRc, VecModel, Weak};
+use slint::{
+    ComponentHandle, Image, Model, ModelRc, Rgba8Pixel, SharedPixelBuffer, VecModel, Weak,
+};
 
 pub fn setup(
     timeline: &TimelineWindow,
@@ -640,8 +642,21 @@ pub fn sync_active_session(state: &SharedAppState, timeline_weak: &Weak<Timeline
     t.set_layer_count(world.layer_count());
 }
 
-fn to_slint(data: &crate::ecs::TimelineData) -> TimelineObject {
+fn to_slint(data: &crate::ecs::TimelineData, fps: f64) -> TimelineObject {
     let plugin = registry().get(data.kind as usize);
+    let waveform = data.media_path.as_deref().and_then(build_waveform_image);
+    let waveform_duration_frames = data
+        .media_path
+        .as_deref()
+        .and_then(|path| {
+            crate::media::cache::global()
+                .load_audio(path)
+                .ok()
+                .map(|audio| {
+                    (audio.frame_count() as f64 / audio.sample_rate as f64 * fps).ceil() as i32
+                })
+        })
+        .unwrap_or(0);
     TimelineObject {
         id: data.id,
         start_frame: data.start_frame,
@@ -652,13 +667,52 @@ fn to_slint(data: &crate::ecs::TimelineData) -> TimelineObject {
         label: plugin.map_or("Unknown", |p| p.name.as_str()).into(),
         selected: false,
         keyframe_frames: ModelRc::new(VecModel::from(Vec::<i32>::new())),
+        waveform: waveform.clone().unwrap_or_default(),
+        has_waveform: waveform.is_some(),
+        waveform_origin_frame: -data.media_trim_in_frame as i32,
+        waveform_duration_frames,
     }
+}
+
+/// 波形はピーク列から一度だけRGBA画像へ変換し、Slint側ではImage一枚として描画する。
+/// 画像幅は固定512pxのため、ズーム変更時もUI要素数は増えない。
+fn build_waveform_image(path: &std::path::Path) -> Option<Image> {
+    let audio = crate::media::cache::global().load_audio(path).ok()?;
+    let asset = crate::media::waveform::get(path).unwrap_or_else(|| {
+        let asset = crate::media::waveform::build(path, &audio);
+        crate::media::waveform::insert(asset.clone());
+        asset
+    });
+    let peaks = crate::media::waveform::level_for_columns(&asset, 512);
+    let visible_peaks = peaks.as_ref();
+    let width = 512usize;
+    let height = 48usize;
+    let mut pixels = SharedPixelBuffer::<Rgba8Pixel>::new(width as u32, height as u32);
+    let pixels_slice = pixels.make_mut_slice();
+    for x in 0..width {
+        let Some(peak) = visible_peaks.get(x * visible_peaks.len() / width) else {
+            continue;
+        };
+        let center = height as i32 / 2;
+        let top = ((1.0 - peak.max.clamp(-1.0, 1.0)) * center as f32).round() as i32;
+        let bottom = ((1.0 - peak.min.clamp(-1.0, 1.0)) * center as f32).round() as i32;
+        for y in top.max(0)..bottom.min(height as i32) {
+            pixels_slice[y as usize * width + x] = Rgba8Pixel {
+                r: 92,
+                g: 177,
+                b: 255,
+                a: 210,
+            };
+        }
+    }
+    Some(Image::from_rgba8(pixels))
 }
 
 /// タイムライン内部モデルをECSと同期する。`preview`が渡された場合は本体ウィンドウの
 /// total-framesも同時に更新し、タイムライン編集による総フレーム数変化を伝播させる。
 fn sync(timeline: &TimelineWindow, preview: Option<&PreviewWindow>, world: &EcsWorld) {
     let total = world.total_frames();
+    let fps = world.get_project().fps as f64;
     timeline.set_total_frames(total);
     if let Some(p) = preview {
         p.set_total_frames(total);
@@ -673,7 +727,7 @@ fn sync(timeline: &TimelineWindow, preview: Option<&PreviewWindow>, world: &EcsW
     let objs: Vec<TimelineObject> = world
         .get_timeline_objects()
         .iter()
-        .map(to_slint)
+        .map(|data| to_slint(data, fps))
         .map(|mut o| {
             o.selected = Some(o.id) == selected_id;
             o

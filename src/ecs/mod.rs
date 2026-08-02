@@ -56,6 +56,8 @@ pub struct TimelineData {
     pub end_frame: i32,
     pub kind: i32,
     pub layer: i32,
+    pub media_path: Option<std::path::PathBuf>,
+    pub media_trim_in_frame: i64,
 }
 
 /// シーン設定ウィンドウとの受け渡し用（AviQtl::UI::SceneData の設定サブセットに相当）
@@ -328,7 +330,8 @@ impl EcsWorld {
              time_ranges: View<TimeRange>,
              kind_ids: View<KindId>,
              layers: View<Layer>,
-             scene_ids: View<SceneId>| {
+             scene_ids: View<SceneId>,
+             media: View<MediaSource>| {
                 let active = scenes.active_scene;
                 let mut objs = Vec::new();
                 for (_entity, (id, range, kind, layer, scene)) in
@@ -345,6 +348,8 @@ impl EcsWorld {
                         end_frame: range.end_frame,
                         kind: kind.0 as i32,
                         layer: layer.0,
+                        media_path: media.get(_entity).ok().map(|m| m.path.clone()),
+                        media_trim_in_frame: media.get(_entity).ok().map_or(0, |m| m.trim_in_frame),
                     });
                 }
                 objs

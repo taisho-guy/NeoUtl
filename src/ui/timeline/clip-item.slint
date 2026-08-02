@@ -64,6 +64,16 @@ export component ClipItem inherits Rectangle {
     border-width: obj.selected ? 2px : 1px;
     border-color: obj.selected ? #ffffff : base-color.darker(30%);
     border-radius: 3px;
+    clip: true;
+
+    if obj.has-waveform: Image {
+        x: 3px + (obj.waveform-origin-frame - root.preview-start) * root.scale * 1px;
+        y: 3px;
+        width: max(1px, obj.waveform-duration-frames * root.scale * 1px);
+        height: max(1px, parent.height - 6px);
+        source: obj.waveform;
+        opacity: obj.selected ? 0.9 : 0.65;
+    }
 
     Text {
         text: obj.label;

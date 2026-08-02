@@ -567,6 +567,13 @@ impl MediaCache {
         }
     }
 
+    /// 波形解析など、音声を明示的に要求する利用者向けAPI。
+    /// 初回のみデコーダを構築し、以後は既存の音声キャッシュを返す。
+    pub fn load_audio(&self, path: &Path) -> Result<Arc<AudioBuffer>, String> {
+        let _ = self.entry(path);
+        self.audio(path)
+    }
+
     pub fn evict(&self, path: &Path) {
         self.entries.lock().unwrap().remove(path);
     }
