@@ -92,6 +92,8 @@ pub struct AppState {
     /// クリップ切り取り/コピーのクリップボード（AviQtl::TimelineView::contextMenu相当）。
     /// プロジェクト横断で共有する（AviUtl本体同様、セッション切替後も貼り付け可能とする）。
     pub clipboard: Vec<ObjectDoc>,
+    /// 全プロジェクト共有の直列レンダーキュー。
+    pub render_queue: crate::export::RenderQueue,
 }
 
 pub type SharedAppState = Arc<Mutex<AppState>>;
@@ -102,6 +104,7 @@ impl AppState {
             sessions: vec![first],
             active: 0,
             clipboard: Vec::new(),
+            render_queue: crate::export::RenderQueue::new(),
         }))
     }
 }
@@ -119,6 +122,25 @@ pub fn active_engine(state: &SharedAppState) -> Arc<Mutex<Option<RenderEngine>>>
 pub fn active_audio_mixer(state: &SharedAppState) -> Arc<Mutex<AudioMixer>> {
     let s = state.lock().unwrap();
     s.sessions[s.active].audio_mixer.clone()
+}
+
+pub fn activate_session_by_dir(
+    state: &SharedAppState,
+    dir: &std::path::Path,
+) -> Result<(), String> {
+    let mut s = state.lock().unwrap();
+    let Some(index) = s
+        .sessions
+        .iter()
+        .position(|session| session.meta.dir == dir)
+    else {
+        return Err(format!(
+            "プロジェクトセッションが見つかりません: {}",
+            dir.display()
+        ));
+    };
+    s.active = index;
+    Ok(())
 }
 
 /// システム設定は全プロジェクト共通のため、先頭セッションのEcsWorldへ固定する。

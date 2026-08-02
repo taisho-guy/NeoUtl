@@ -6,7 +6,7 @@ use crate::{
     PreviewWindow, ProjectSettingsWindow, ProjectTabItem, PropertiesWindow, SystemSettingsWindow,
     TimelineWindow,
 };
-use slint::{ComponentHandle, ModelRc, VecModel, Weak};
+use slint::{ComponentHandle, ModelRc, SharedString, VecModel, Weak};
 use std::cell::RefCell;
 use std::rc::Rc;
 use std::time::Instant;
@@ -455,12 +455,14 @@ pub fn setup(
     preview.on_save_project_as(|| {});
     {
         use crate::ExportDialog;
-        use crate::export::{EncoderBackend, ExportCodec, ExportJob};
+        use crate::export::{EncoderBackend, ExportCodec, ExportJob, ExportPreset};
         use std::sync::Arc;
         use std::sync::atomic::{AtomicBool, Ordering};
 
         let dialog_slot: Rc<RefCell<Option<ExportDialog>>> = Rc::new(RefCell::new(None));
         let cancel_slot: Rc<RefCell<Option<Arc<AtomicBool>>>> = Rc::new(RefCell::new(None));
+        let presets: Rc<RefCell<Vec<ExportPreset>>> =
+            Rc::new(RefCell::new(crate::export::load_export_presets()));
         let state = state.clone();
 
         preview.on_export_media({
@@ -487,7 +489,117 @@ pub fn setup(
                 dialog.set_start_frame(0);
                 dialog.set_end_frame(total_frames);
                 dialog.set_status_text("".into());
+                let names: Vec<SharedString> = presets
+                    .borrow()
+                    .iter()
+                    .map(|p| p.name.clone().into())
+                    .collect();
+                dialog.set_preset_names(ModelRc::new(VecModel::from(names)));
+                if !presets.borrow().is_empty() {
+                    dialog.set_selected_preset(0);
+                    dialog.set_preset_name(presets.borrow()[0].name.clone().into());
+                }
 
+                {
+                    let dialog_weak = dialog.as_weak();
+                    let presets = presets.clone();
+                    dialog.on_select_preset(move |index| {
+                        let Some(d) = dialog_weak.upgrade() else {
+                            return;
+                        };
+                        let index = index as usize;
+                        let Some(preset) = presets.borrow().get(index).cloned() else {
+                            return;
+                        };
+                        d.set_selected_preset(index as i32);
+                        d.set_preset_name(preset.name.clone().into());
+                        d.set_codec(if preset.codec == ExportCodec::H264 {
+                            0
+                        } else {
+                            1
+                        });
+                        d.set_backend(match preset.backend {
+                            EncoderBackend::GpuVideo => 1,
+                            EncoderBackend::Gstreamer => 2,
+                            EncoderBackend::Auto => 0,
+                        });
+                        d.set_average_bitrate_kbps((preset.average_bitrate / 1000) as i32);
+                        d.set_max_bitrate_kbps((preset.max_bitrate / 1000) as i32);
+                        d.set_mkv_container(preset.container_ext.eq_ignore_ascii_case("mkv"));
+                    });
+                }
+                {
+                    let dialog_weak = dialog.as_weak();
+                    let presets = presets.clone();
+                    dialog.on_save_preset(move || {
+                        let Some(d) = dialog_weak.upgrade() else {
+                            return;
+                        };
+                        let name = d.get_preset_name().trim().to_owned();
+                        if name.is_empty() {
+                            return;
+                        }
+                        let preset = ExportPreset {
+                            name: name.clone(),
+                            codec: if d.get_codec() == 0 {
+                                ExportCodec::H264
+                            } else {
+                                ExportCodec::H265
+                            },
+                            backend: match d.get_backend() {
+                                1 => EncoderBackend::GpuVideo,
+                                2 => EncoderBackend::Gstreamer,
+                                _ => EncoderBackend::Auto,
+                            },
+                            average_bitrate: d.get_average_bitrate_kbps().max(0) as u32 * 1000,
+                            max_bitrate: d.get_max_bitrate_kbps().max(0) as u32 * 1000,
+                            container_ext: if d.get_mkv_container() {
+                                "mkv".into()
+                            } else {
+                                "mp4".into()
+                            },
+                        };
+                        let mut list = presets.borrow_mut();
+                        if let Some(old) = list.iter_mut().find(|p| p.name == name) {
+                            *old = preset;
+                        } else {
+                            list.push(preset);
+                        }
+                        let _ = crate::export::save_export_presets(&list);
+                        d.set_preset_names(ModelRc::new(VecModel::from(
+                            list.iter()
+                                .map(|p| p.name.clone().into())
+                                .collect::<Vec<SharedString>>(),
+                        )));
+                        d.set_status_text("プリセットを保存しました".into());
+                    });
+                }
+                {
+                    let dialog_weak = dialog.as_weak();
+                    let presets = presets.clone();
+                    dialog.on_delete_preset(move || {
+                        let Some(d) = dialog_weak.upgrade() else {
+                            return;
+                        };
+                        let index = d.get_selected_preset();
+                        if index < 0 {
+                            return;
+                        }
+                        let mut list = presets.borrow_mut();
+                        if (index as usize) < list.len() {
+                            list.remove(index as usize);
+                        }
+                        let _ = crate::export::save_export_presets(&list);
+                        d.set_preset_names(ModelRc::new(VecModel::from(
+                            list.iter()
+                                .map(|p| p.name.clone().into())
+                                .collect::<Vec<SharedString>>(),
+                        )));
+                        d.set_selected_preset(-1);
+                        d.set_preset_name("".into());
+                        d.set_status_text("プリセットを削除しました".into());
+                    });
+                }
                 {
                     let dialog_weak = dialog.as_weak();
                     dialog.on_pick_output_path(move || {
@@ -576,24 +688,18 @@ pub fn setup(
                         d.set_status_is_error(false);
                         d.set_status_text("".into());
 
-                        let state = state.clone();
-                        let dialog_weak = dialog_weak.clone();
-                        std::thread::spawn(move || {
-                            let result = crate::export::run(&state, job);
-                            let _ = slint::invoke_from_event_loop(move || {
-                                let Some(d) = dialog_weak.upgrade() else {
-                                    return;
-                                };
-                                d.set_is_exporting(false);
-                                match result {
-                                    Ok(()) => d.set_status_text("書き出し完了".into()),
-                                    Err(e) => {
-                                        d.set_status_is_error(true);
-                                        d.set_status_text(e.into());
-                                    }
-                                }
-                            });
-                        });
+                        let project_dir = {
+                            let s = state.lock().unwrap();
+                            s.sessions[s.active].meta.dir.clone()
+                        };
+                        let queue = {
+                            let s = state.lock().unwrap();
+                            s.render_queue.clone()
+                        };
+                        queue.enqueue(job, project_dir);
+                        queue.start(state.clone());
+                        d.set_is_exporting(false);
+                        d.set_status_text("レンダーキューに追加しました".into());
                     });
                 }
 

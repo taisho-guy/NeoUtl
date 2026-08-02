@@ -1,15 +1,18 @@
 use crate::app_state::{self, SharedAppState};
 use crate::ecs::systems::get_active_objects_system;
 use neoutl_media_api::{EncodeParameters, VideoCodec, VideoEncoder};
+use serde::{Deserialize, Serialize};
+use std::collections::VecDeque;
 use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex};
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub enum ExportCodec {
     H264,
     H265,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub enum EncoderBackend {
     /// GPU HW優先、失敗時ソフトウェアへ自動縮退（既定）。
     Auto,
@@ -29,6 +32,186 @@ pub struct ExportJob {
     pub end_frame: i32,
     pub progress: Option<Box<dyn FnMut(i32, i32) + Send>>,
     pub cancel: Option<std::sync::Arc<std::sync::atomic::AtomicBool>>,
+}
+
+/// ユーザーが名前を付けて再利用できる書き出し設定。
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ExportPreset {
+    pub name: String,
+    pub codec: ExportCodec,
+    pub backend: EncoderBackend,
+    pub average_bitrate: u32,
+    pub max_bitrate: u32,
+    pub container_ext: String,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, Default)]
+struct ExportPresetFile {
+    presets: Vec<ExportPreset>,
+}
+
+pub fn default_export_presets() -> Vec<ExportPreset> {
+    vec![
+        ExportPreset {
+            name: "H.264 標準 (MP4)".into(),
+            codec: ExportCodec::H264,
+            backend: EncoderBackend::Auto,
+            average_bitrate: 8_000_000,
+            max_bitrate: 12_000_000,
+            container_ext: "mp4".into(),
+        },
+        ExportPreset {
+            name: "H.265 標準 (MP4)".into(),
+            codec: ExportCodec::H265,
+            backend: EncoderBackend::Auto,
+            average_bitrate: 6_000_000,
+            max_bitrate: 10_000_000,
+            container_ext: "mp4".into(),
+        },
+    ]
+}
+
+fn presets_path() -> PathBuf {
+    crate::project::projects_dir()
+        .parent()
+        .unwrap_or_else(|| Path::new("."))
+        .join("settings")
+        .join("export_presets.yaml")
+}
+
+pub fn load_export_presets() -> Vec<ExportPreset> {
+    let path = presets_path();
+    let Ok(text) = std::fs::read_to_string(path) else {
+        return default_export_presets();
+    };
+    rust_yaml::from_str::<ExportPresetFile>(&text)
+        .map(|f| f.presets)
+        .unwrap_or_else(|_| default_export_presets())
+}
+
+pub fn save_export_presets(presets: &[ExportPreset]) -> Result<(), String> {
+    let path = presets_path();
+    std::fs::create_dir_all(path.parent().unwrap_or_else(|| Path::new(".")))
+        .map_err(|e| e.to_string())?;
+    let text = rust_yaml::to_string(&ExportPresetFile {
+        presets: presets.to_vec(),
+    })
+    .map_err(|e| e.to_string())?;
+    std::fs::write(path, text).map_err(|e| e.to_string())
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum QueueState {
+    Idle,
+    Running,
+    Paused,
+    CancelRequested,
+    Completed,
+}
+
+pub struct QueuedJob {
+    pub job: ExportJob,
+    pub project_dir: PathBuf,
+    pub id: u64,
+}
+pub struct JobHandle {
+    pub id: u64,
+    pub cancel: Arc<std::sync::atomic::AtomicBool>,
+}
+
+struct QueueInner {
+    jobs: VecDeque<QueuedJob>,
+    current: Option<JobHandle>,
+    state: QueueState,
+    next_id: u64,
+}
+
+/// プロジェクトをまたいで投入できる直列レンダーキュー。
+#[derive(Clone)]
+pub struct RenderQueue {
+    inner: Arc<Mutex<QueueInner>>,
+}
+
+impl RenderQueue {
+    pub fn new() -> Self {
+        Self {
+            inner: Arc::new(Mutex::new(QueueInner {
+                jobs: VecDeque::new(),
+                current: None,
+                state: QueueState::Idle,
+                next_id: 1,
+            })),
+        }
+    }
+    pub fn enqueue(&self, mut job: ExportJob, project_dir: PathBuf) -> u64 {
+        let cancel = Arc::new(std::sync::atomic::AtomicBool::new(false));
+        job.cancel = Some(cancel);
+        let mut q = self.inner.lock().unwrap();
+        let id = q.next_id;
+        q.next_id += 1;
+        q.jobs.push_back(QueuedJob {
+            job,
+            project_dir,
+            id,
+        });
+        id
+    }
+    pub fn pending_count(&self) -> usize {
+        self.inner.lock().unwrap().jobs.len()
+    }
+    pub fn state(&self) -> QueueState {
+        self.inner.lock().unwrap().state
+    }
+    pub fn cancel_current(&self) {
+        let mut q = self.inner.lock().unwrap();
+        if let Some(h) = &q.current {
+            h.cancel.store(true, std::sync::atomic::Ordering::Relaxed);
+            q.state = QueueState::CancelRequested;
+        }
+    }
+    pub fn start(&self, state: SharedAppState) {
+        {
+            let q = self.inner.lock().unwrap();
+            if q.state == QueueState::Running || q.state == QueueState::CancelRequested {
+                return;
+            }
+        }
+        let inner = self.inner.clone();
+        std::thread::spawn(move || {
+            loop {
+                let next = {
+                    let mut q = inner.lock().unwrap();
+                    let Some(item) = q.jobs.pop_front() else {
+                        q.state = QueueState::Completed;
+                        q.current = None;
+                        break;
+                    };
+                    let cancel = item.job.cancel.clone().unwrap();
+                    q.current = Some(JobHandle {
+                        id: item.id,
+                        cancel,
+                    });
+                    q.state = QueueState::Running;
+                    item
+                };
+                if let Err(error) = app_state::activate_session_by_dir(&state, &next.project_dir) {
+                    eprintln!("[NeoUtl][export] キュージョブをスキップ: {error}");
+                    let mut q = inner.lock().unwrap();
+                    q.current = None;
+                    continue;
+                }
+                let _ = run(&state, next.job);
+                let mut q = inner.lock().unwrap();
+                q.current = None;
+            }
+        });
+    }
+}
+
+impl Default for RenderQueue {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 /// GPU RGBA8Unormテクスチャをホストメモリへ読み出す。frame_gpu契約とは異なりexportは
