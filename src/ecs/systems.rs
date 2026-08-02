@@ -1,7 +1,7 @@
 use super::EcsWorld;
 use crate::ecs::components::{
-    AudioParams, KeyframeTracks, KindId, MediaSource, ObjectId, SceneId, ShapeParams, TextContent,
-    TimeRange,
+    AudioParams, KeyframeTracks, KindId, MediaSource, ObjectId, SceneId, SceneObject, ShapeParams,
+    TextContent, TimeRange,
 };
 use crate::ecs::effects::{EffectStack, compute_effect_params_at};
 use crate::ecs::resources::{ProjectResource, SceneResource, TimelineResource};
@@ -29,6 +29,10 @@ pub struct ActiveObject {
     pub opacity: f32,
     pub audio: AudioParams,
     pub effects: Vec<(String, HashMap<String, Value>)>,
+    /// SCENE_STABLE_IDオブジェクトのみSome((target_scene, local_frame))。
+    /// local_frameはtarget_scene側の評価フレーム（0.4.0時点は
+    /// クリップ開始からtarget_scene側frame 0起点固定、シーン内時間オフセット未対応）。
+    pub nested_scene: Option<(i32, i32)>,
 }
 
 /// シーン内の全オブジェクトへ適用する射影方式。常にPerspectiveを返す。
@@ -67,6 +71,7 @@ type SelectorGroupViews<'v> = (
     View<'v, ShapeParams>,
     View<'v, MediaSource>,
     View<'v, ObjectId>,
+    View<'v, SceneObject>,
 );
 type PayloadGroupViews<'v> = (
     View<'v, Transform>,
@@ -81,9 +86,23 @@ fn is_active_at(range: &TimeRange, scene: &SceneId, active_scene: i32, frame: i3
     scene.0 == active_scene && frame >= range.start_frame && frame < range.end_frame
 }
 
+/// タイムライン表示・プレビュー用の従来呼び出し窓口。アクティブシーン・現在フレームを
+/// 暗黙参照する。ネストしたシーン内評価にはget_active_objects_system_atを直接使うこと。
 pub fn get_active_objects_system(world: &EcsWorld) -> Vec<ActiveObject> {
+    let active_scene = world.active_scene();
+    let current = world.current_frame();
+    get_active_objects_system_at(world, active_scene, current)
+}
+
+/// 指定scene_id・frameでの評価。SceneObjectレンダリングの再帰呼び出しの起点となる
+/// （renderer::pipeline::render_sceneがnested_sceneを見てこの関数を再帰呼び出しする）。
+pub fn get_active_objects_system_at(
+    world: &EcsWorld,
+    active_scene: i32,
+    current: i32,
+) -> Vec<ActiveObject> {
     world.world.run(
-        |(timeline, scenes, project, camera): UniqueGroupViews,
+        |(_timeline, scenes, project, camera): UniqueGroupViews,
          (
             time_ranges,
             kind_ids,
@@ -92,10 +111,9 @@ pub fn get_active_objects_system(world: &EcsWorld) -> Vec<ActiveObject> {
             shape_params,
             media_sources,
             object_ids,
+            scene_objects,
         ): SelectorGroupViews,
          (transforms, keyframe_tracks, audio_params, effect_stacks): PayloadGroupViews| {
-            let current = timeline.current_frame;
-            let active_scene = scenes.active_scene;
             let project_width = project.width.max(1) as f32;
             let project_height = project.height.max(1) as f32;
             let mut active = Vec::new();
@@ -139,6 +157,11 @@ pub fn get_active_objects_system(world: &EcsWorld) -> Vec<ActiveObject> {
                     };
                     m.trim_in_frame + (base * ratio).round() as i64
                 });
+                let nested_scene = scene_objects
+                    .get(id)
+                    .ok()
+                    .map(|s| (s.target_scene, current - range.start_frame));
+
                 let matrix = compute_global_matrix(&transform);
                 let matrix = match &media_source {
                     Some(src) if matches!(src.kind, MediaKind::Video | MediaKind::Image) => {
@@ -147,7 +170,15 @@ pub fn get_active_objects_system(world: &EcsWorld) -> Vec<ActiveObject> {
                             Err(_) => matrix,
                         }
                     }
-                    _ => matrix,
+                    _ => match nested_scene {
+                        Some((target_scene, _)) => match scenes.find(target_scene) {
+                            Some(scene) => {
+                                rescale_for_source(&matrix, scene.width as f32, scene.height as f32)
+                            }
+                            None => matrix,
+                        },
+                        None => matrix,
+                    },
                 };
                 let mvp = compute_mvp(
                     &matrix,
@@ -175,6 +206,7 @@ pub fn get_active_objects_system(world: &EcsWorld) -> Vec<ActiveObject> {
                     opacity,
                     audio,
                     effects,
+                    nested_scene,
                 });
             }
             active

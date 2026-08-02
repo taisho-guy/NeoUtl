@@ -304,7 +304,6 @@ pub fn setup(
             let world = world_holder.lock().unwrap();
             let proj = world.get_project();
             let active = get_active_objects_system(&world);
-            drop(world);
 
             let mut engine_lock = engine_holder.lock().unwrap();
             if engine_lock.is_none()
@@ -316,7 +315,7 @@ pub fn setup(
                 if engine.render_width != proj.width || engine.render_height != proj.height {
                     engine.resize_render_target(proj.width, proj.height);
                 }
-                engine.render(&active, &proj);
+                engine.render(&world, &active, &proj);
                 let img = slint::Image::try_from(engine.texture.clone()).unwrap();
                 if let Some(p) = preview_weak.upgrade() {
                     p.set_video_frame(img);

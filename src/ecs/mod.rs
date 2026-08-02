@@ -12,7 +12,7 @@ use crate::ecs::types::EffectInstance;
 use audio_plugins::PluginChain;
 use components::{
     AudioParams, KeyframeTracks, KindId, Layer, MediaSource, ObjectId, ParamAccess, PluginParams,
-    SceneId, ShapeParams, TextContent, TimeRange,
+    SceneId, SceneObject, ShapeParams, TextContent, TimeRange,
 };
 use effects::EffectStack;
 use resources::{
@@ -46,6 +46,7 @@ struct ObjectQueryViews<'v> {
     media: View<'v, MediaSource>,
     keyframes: View<'v, KeyframeTracks>,
     plugin_chains: View<'v, PluginChain>,
+    scene_objects: View<'v, SceneObject>,
 }
 
 /// タイムラインUIに渡すオブジェクト情報（Slint型に非依存）
@@ -177,6 +178,24 @@ impl EcsWorld {
         let id = self.add_object(start, duration, kind_id, layer, None);
         if let Some(entity) = self.find_entity(id) {
             self.world.add_component(entity, media);
+        }
+        id
+    }
+
+    /// シーンオブジェクトを追加する。SceneObjectコンポーネントを併せて付与する。
+    /// 呼び出し側（timeline.rs）でwould_create_scene_cycle判定済みのtarget_sceneを渡すこと。
+    pub fn add_scene_object(
+        &mut self,
+        start: i32,
+        duration: i32,
+        kind_id: u32,
+        layer: i32,
+        target_scene: i32,
+    ) -> usize {
+        let id = self.add_object(start, duration, kind_id, layer, None);
+        if let Some(entity) = self.find_entity(id) {
+            self.world
+                .add_component(entity, SceneObject { target_scene });
         }
         id
     }
@@ -660,6 +679,10 @@ impl EcsWorld {
         if let Some(m) = &o.payload.media {
             self.world.add_component(entity, MediaSource::from(m));
         }
+        if let Some(target_scene) = o.payload.scene {
+            self.world
+                .add_component(entity, SceneObject { target_scene });
+        }
         if !o.keyframes.is_empty() {
             self.world
                 .add_component(entity, KeyframeTracks(o.keyframes.clone()));
@@ -719,6 +742,7 @@ impl EcsWorld {
                         plugin_params: views.plugins.get(entity).ok().map(|p| p.0.clone()),
                         plugin_chain: views.plugin_chains.get(entity).ok().map(|c| c.0.clone()),
                         media: views.media.get(entity).ok().map(MediaSourceDoc::from),
+                        scene: views.scene_objects.get(entity).ok().map(|s| s.target_scene),
                     },
                 });
             }
@@ -1281,6 +1305,18 @@ impl EcsWorld {
             .run(|media: View<MediaSource>| media.get(entity).ok().cloned())
     }
 
+    pub fn get_scene_object(&self, object_id: usize) -> Option<SceneObject> {
+        let entity = self.find_entity(object_id)?;
+        self.world
+            .run(|scene_objects: View<SceneObject>| scene_objects.get(entity).ok().copied())
+    }
+
+    pub fn get_object_scene_id(&self, object_id: usize) -> Option<i32> {
+        let entity = self.find_entity(object_id)?;
+        self.world
+            .run(|scene_ids: View<SceneId>| scene_ids.get(entity).ok().map(|s| s.0))
+    }
+
     pub fn set_media_trim(&mut self, object_id: usize, trim_in_frame: i64) {
         let Some(entity) = self.find_entity(object_id) else {
             return;
@@ -1506,7 +1542,86 @@ impl EcsWorld {
         })
     }
 
-    pub fn remove_scene(&mut self, scene_id: i32) {
+    /// scene_id -> このシーン内に配置されたSceneObjectのtarget_scene一覧。
+    fn scene_edges(&self) -> HashMap<i32, Vec<i32>> {
+        self.world.run(
+            |scene_ids: View<SceneId>, scene_objects: View<SceneObject>| {
+                let mut edges: HashMap<i32, Vec<i32>> = HashMap::new();
+                for (entity, obj) in scene_objects.iter().with_id() {
+                    if let Ok(scene) = scene_ids.get(entity) {
+                        edges.entry(scene.0).or_default().push(obj.target_scene);
+                    }
+                }
+                edges
+            },
+        )
+    }
+
+    /// fromシーン内へtargetシーンを配置した場合に循環参照が生じるか判定する。
+    /// targetから到達可能な全シーンを深さ優先で辿り、fromへ戻る経路の有無を見る。
+    pub fn would_create_scene_cycle(&self, from_scene: i32, target_scene: i32) -> bool {
+        if from_scene == target_scene {
+            return true;
+        }
+        let edges = self.scene_edges();
+        let mut visited = std::collections::HashSet::new();
+        let mut stack = vec![target_scene];
+        while let Some(cur) = stack.pop() {
+            if cur == from_scene {
+                return true;
+            }
+            if !visited.insert(cur) {
+                continue;
+            }
+            if let Some(next) = edges.get(&cur) {
+                stack.extend(next.iter().copied());
+            }
+        }
+        false
+    }
+
+    /// scene_idを参照しているSceneObjectが属する全シーンidを返す（削除可否判定用）。
+    pub fn scenes_referencing(&self, scene_id: i32) -> Vec<i32> {
+        self.world.run(
+            |scene_ids: View<SceneId>, scene_objects: View<SceneObject>| {
+                let mut referrers = Vec::new();
+                for (entity, obj) in scene_objects.iter().with_id() {
+                    if obj.target_scene == scene_id {
+                        if let Ok(scene) = scene_ids.get(entity) {
+                            referrers.push(scene.0);
+                        }
+                    }
+                }
+                referrers
+            },
+        )
+    }
+
+    /// entityが持つSceneObjectのtarget_sceneを変更する。循環参照となる場合は
+    /// 変更を行わずfalseを返す（呼び出し側はUIへの拒否通知に用いる）。
+    pub fn set_scene_object_target(&mut self, object_id: usize, target_scene: i32) -> bool {
+        let Some(entity) = self.find_entity(object_id) else {
+            return false;
+        };
+        let host_scene = self
+            .world
+            .run(|scene_ids: View<SceneId>| scene_ids.get(entity).map(|s| s.0));
+        let Ok(host_scene) = host_scene else {
+            return false;
+        };
+        if self.would_create_scene_cycle(host_scene, target_scene) {
+            return false;
+        }
+        self.world
+            .add_component(entity, SceneObject { target_scene });
+        true
+    }
+
+    /// scene_idを削除する。他シーンのSceneObjectから参照中であれば削除せずfalseを返す。
+    pub fn remove_scene(&mut self, scene_id: i32) -> bool {
+        if !self.scenes_referencing(scene_id).is_empty() {
+            return false;
+        }
         let mut removed_entities = Vec::new();
         self.world
             .run(|object_ids: View<ObjectId>, scene_ids: View<SceneId>| {
@@ -1525,6 +1640,7 @@ impl EcsWorld {
                 scenes.active_scene = scenes.scenes.first().map_or(0, |s| s.id);
             }
         });
+        true
     }
 
     pub fn switch_scene(&mut self, scene_id: i32) -> bool {
@@ -1660,6 +1776,7 @@ impl EcsWorld {
                         plugin_params: views.plugins.get(entity).ok().map(|p| p.0.clone()),
                         plugin_chain: views.plugin_chains.get(entity).ok().map(|c| c.0.clone()),
                         media: views.media.get(entity).ok().map(MediaSourceDoc::from),
+                        scene: views.scene_objects.get(entity).ok().map(|s| s.target_scene),
                     },
                 });
             }

@@ -1306,6 +1306,16 @@ fn apply_object_param(world: &mut EcsWorld, oid: usize, group: &str, key: &str, 
                 world.set_audio_params(oid, a.volume, a.pan, a.mute);
             }
         }
+        crate::ecs::object_schema::SCENE_GROUP => {
+            if key == "target_scene" {
+                let target_scene = value.round() as i32;
+                if !world.set_scene_object_target(oid, target_scene) {
+                    eprintln!(
+                        "[NeoUtl] シーン参照変更を拒否: oid={oid} target_scene={target_scene}（循環参照）"
+                    );
+                }
+            }
+        }
         _ => {
             world.set_plugin_param_value(oid, key, value);
         }
@@ -1402,6 +1412,26 @@ fn empty_track_options() -> TrackOptions {
     TrackOptions {
         options: ModelRc::new(VecModel::from(Vec::<crate::TrackOption>::new())),
         names: ModelRc::new(VecModel::from(Vec::<SharedString>::new())),
+    }
+}
+
+/// kind==SCENE_STABLE_IDオブジェクト用の選択候補。TrackOptions型をそのまま流用し
+/// （id=シーンid、name=シーン名）、循環参照となる候補（would_create_scene_cycle）は
+/// 一覧から除外する。self_scene_idはこのSceneObjectが配置されているシーン自身。
+fn build_scene_options(world: &EcsWorld, self_scene_id: i32) -> TrackOptions {
+    let options: Vec<crate::TrackOption> = world
+        .scenes()
+        .into_iter()
+        .filter(|s| !world.would_create_scene_cycle(self_scene_id, s.id))
+        .map(|s| crate::TrackOption {
+            id: s.id,
+            name: SharedString::from(s.name),
+        })
+        .collect();
+    let names: Vec<SharedString> = options.iter().map(|o| o.name.clone()).collect();
+    TrackOptions {
+        options: ModelRc::new(VecModel::from(options)),
+        names: ModelRc::new(VecModel::from(names)),
     }
 }
 
@@ -1948,6 +1978,25 @@ fn refresh(props: &PropertiesWindow, world: &EcsWorld) {
         );
     } else {
         props.set_has_audio(false);
+    }
+
+    if let Some(scene_obj) = world.get_scene_object(oid) {
+        let host_scene = world.get_object_scene_id(oid).unwrap_or(-1);
+        let scene_options = build_scene_options(world, host_scene);
+        push_schema_rows(
+            &mut object_params,
+            crate::ecs::object_schema::SCENE_SCHEMA,
+            GroupScope::Object(oid as i32),
+            stage_w,
+            stage_h,
+            clip_start,
+            clip_end,
+            current_frame,
+            |_k| scene_obj.target_scene as f32,
+            |_| None,
+            |k| world.get_keyframes(oid, k),
+            &scene_options,
+        );
     }
 
     push_plugin_rows(

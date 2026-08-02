@@ -46,6 +46,10 @@ pub struct ObjectPayload {
     /// audioオブジェクトのVST3/CLAPチェーン。EffectStackと同型シリアライズ
     /// （project.yaml上はNone＝チェーン未付与、空Vecはチェーン付与済み・要素数0を区別する）。
     pub plugin_chain: Option<Vec<PluginInstanceRef>>,
+    /// SCENE_STABLE_IDオブジェクトのtarget_scene（SceneResource.scenes[].id）。
+    /// 旧project.yamlはフィールド自体を持たないためserde(default)でNone補完する。
+    #[serde(default)]
+    pub scene: Option<i32>,
 }
 
 /// 1オブジェクトの正本データ（AviQtl::Core::Clip相当）。

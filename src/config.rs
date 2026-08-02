@@ -64,6 +64,12 @@ pub const DECODE_WATCHDOG_TIMEOUT_MS: u64 = 5_000;
 
 /// レンダリング上限（renderer/pipeline.rs）
 pub const MAX_SCENE_OBJECTS: u64 = 512;
+
+/// SceneObjectのネスト評価・レンダリング再帰の最大深度。
+/// 循環参照はEcsWorld::would_create_scene_cycleで作成時点で拒否されるため、
+/// 通常経路では到達しない。到達時はRenderEngine::render_scene_textureが
+/// Noneを返し当該クリップを非描画とすることでスタックオーバーフローを防ぐ。
+pub const MAX_SCENE_NESTING_DEPTH: u32 = 8;
 pub const UNIFORM_STRIDE_BYTES: u64 = 256;
 pub const MAX_EFFECT_UNIFORM_BYTES: u64 = 128;
 pub const MEDIA_UNIFORM_BYTES: u64 = 80;
