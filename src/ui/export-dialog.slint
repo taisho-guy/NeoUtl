@@ -1,0 +1,329 @@
+component CodecTab inherits Rectangle {
+    in property <string> label;
+    in property <bool> active;
+    callback pick();
+
+    height: 22px;
+    border-radius: 3px;
+    background: active ? #2a4db8 : #16161b;
+
+    Text {
+        text: label;
+        color: active ? #e8e8ee : #8a8a96;
+        font-size: 10px;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+        width: 100%;
+        height: 100%;
+    }
+
+    TouchArea {
+        clicked => { root.pick(); }
+    }
+}
+
+component LabeledField inherits VerticalLayout {
+    in property <string> label;
+    spacing: 2px;
+
+    Text {
+        text: label;
+        color: #8a8a96;
+        font-size: 9px;
+    }
+}
+
+component NumberInput inherits Rectangle {
+    in-out property <int> value;
+    in property <int> minimum: 0;
+    in property <int> maximum: 2147483647;
+    callback edited(int);
+
+    height: 24px;
+    border-radius: 3px;
+    background: #16161b;
+    border-width: 1px;
+    border-color: #303038;
+
+    TextInput {
+        x: 6px;
+        width: parent.width - 12px;
+        height: 100%;
+        color: #dde3ee;
+        font-size: 11px;
+        vertical-alignment: center;
+        input-type: number;
+        text: root.value;
+        edited => {
+            if self.text.to-float() >= root.minimum && self.text.to-float() <= root.maximum {
+                root.value = self.text.to-float();
+                root.edited(root.value);
+            }
+        }
+    }
+}
+
+export component ExportDialog inherits Window {
+    title: "メディアの書き出し";
+    preferred-width: 420px;
+    preferred-height: 420px;
+    background: #0e0e12;
+
+    in-out property <string> output-path: "";
+    in-out property <int> codec: 0;
+    in-out property <int> backend: 0;
+    in-out property <bool> mkv-container: false;
+    in-out property <int> average-bitrate-kbps: 8000;
+    in-out property <int> max-bitrate-kbps: 12000;
+    in-out property <int> start-frame: 0;
+    in-out property <int> end-frame: 0;
+    in property <int> total-frames: 0;
+
+    in property <bool> is-exporting: false;
+    in property <int> progress-current: 0;
+    in property <int> progress-total: 0;
+    in property <string> status-text: "";
+    in property <bool> status-is-error: false;
+
+    callback pick-output-path();
+    callback start-export();
+    callback cancel-export();
+    callback dismiss();
+
+    VerticalLayout {
+        padding: 10px;
+        spacing: 8px;
+
+        LabeledField {
+            label: "出力ファイル";
+            HorizontalLayout {
+                spacing: 4px;
+                Rectangle {
+                    height: 24px;
+                    border-radius: 3px;
+                    background: #16161b;
+                    border-width: 1px;
+                    border-color: #303038;
+                    Text {
+                        x: 6px;
+                        width: parent.width - 12px;
+                        text: root.output-path == "" ? "未選択" : root.output-path;
+                        color: root.output-path == "" ? #55555e : #c8c8d2;
+                        font-size: 10px;
+                        vertical-alignment: center;
+                        overflow: elide;
+                    }
+                }
+
+                Rectangle {
+                    width: 64px;
+                    height: 24px;
+                    border-radius: 3px;
+                    background: #1e1e24;
+                    border-width: 1px;
+                    border-color: #303038;
+                    Text {
+                        text: "選択...";
+                        color: #c8c8d2;
+                        font-size: 10px;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                        width: 100%;
+                        height: 100%;
+                    }
+
+                    TouchArea {
+                        enabled: !root.is-exporting;
+                        clicked => { root.pick-output-path(); }
+                    }
+                }
+            }
+        }
+
+        LabeledField {
+            label: "映像コーデック";
+            HorizontalLayout {
+                spacing: 4px;
+                CodecTab {
+                    label: "H.264";
+                    active: root.codec == 0;
+                    pick => { root.codec = 0; }
+                }
+
+                CodecTab {
+                    label: "H.265";
+                    active: root.codec == 1;
+                    pick => { root.codec = 1; }
+                }
+            }
+        }
+
+        LabeledField {
+            label: "エンコーダー";
+            HorizontalLayout {
+                spacing: 4px;
+                CodecTab {
+                    label: "自動(HW優先)";
+                    active: root.backend == 0;
+                    pick => { root.backend = 0; }
+                }
+
+                CodecTab {
+                    label: "GPU HW固定";
+                    active: root.backend == 1;
+                    pick => { root.backend = 1; }
+                }
+
+                CodecTab {
+                    label: "ソフトウェア";
+                    active: root.backend == 2;
+                    pick => { root.backend = 2; }
+                }
+            }
+        }
+
+        LabeledField {
+            label: "コンテナ";
+            HorizontalLayout {
+                spacing: 4px;
+                CodecTab {
+                    label: root.codec == 0 ? "MP4 + AAC" : "MP4 + AAC";
+                    active: !root.mkv-container;
+                    pick => { root.mkv-container = false; }
+                }
+
+                CodecTab {
+                    label: root.codec == 0 ? "MKV + Opus" : "MKV + Opus";
+                    active: root.mkv-container;
+                    pick => { root.mkv-container = true; }
+                }
+            }
+        }
+
+        HorizontalLayout {
+            spacing: 8px;
+            LabeledField {
+                label: "平均ビットレート(kbps)";
+                NumberInput {
+                    value <=> root.average-bitrate-kbps;
+                    minimum: 500;
+                    maximum: 200000;
+                }
+            }
+
+            LabeledField {
+                label: "最大ビットレート(kbps)";
+                NumberInput {
+                    value <=> root.max-bitrate-kbps;
+                    minimum: 500;
+                    maximum: 200000;
+                }
+            }
+        }
+
+        HorizontalLayout {
+            spacing: 8px;
+            LabeledField {
+                label: "開始フレーム";
+                NumberInput {
+                    value <=> root.start-frame;
+                    minimum: 0;
+                    maximum: root.total-frames > 0 ? root.total-frames - 1 : 0;
+                }
+            }
+
+            LabeledField {
+                label: "終了フレーム";
+                NumberInput {
+                    value <=> root.end-frame;
+                    minimum: 1;
+                    maximum: root.total-frames;
+                }
+            }
+        }
+
+        Rectangle { }
+
+        if root.is-exporting: VerticalLayout {
+            spacing: 4px;
+            Text {
+                text: "書き出し中: " + root.progress-current + " / " + root.progress-total;
+                color: #8a8a96;
+                font-size: 10px;
+            }
+
+            Rectangle {
+                height: 6px;
+                border-radius: 3px;
+                background: #16161b;
+                Rectangle {
+                    x: 0;
+                    height: 100%;
+                    width: parent.width * (root.progress-total > 0 ? root.progress-current / root.progress-total : 0);
+                    border-radius: 3px;
+                    background: #2a4db8;
+                }
+            }
+        }
+
+        if root.status-text != "": Text {
+            text: root.status-text;
+            color: root.status-is-error ? #d94f4f : #4fd97a;
+            font-size: 10px;
+            wrap: word-wrap;
+        }
+
+        HorizontalLayout {
+            height: 26px;
+            spacing: 6px;
+            Rectangle { }
+
+            Rectangle {
+                width: 64px;
+                border-radius: 3px;
+                background: #1e1e24;
+                border-width: 1px;
+                border-color: #303038;
+                Text {
+                    text: root.is-exporting ? "中止" : "閉じる";
+                    color: #8a8a96;
+                    font-size: 10px;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                    width: 100%;
+                    height: 100%;
+                }
+
+                TouchArea {
+                    clicked => {
+                        if root.is-exporting {
+                            root.cancel-export();
+                        } else {
+                            root.dismiss();
+                        }
+                    }
+                }
+            }
+
+            Rectangle {
+                width: 80px;
+                border-radius: 3px;
+                background: root.is-exporting ? #23233a : #2a4db8;
+                Text {
+                    text: "書き出し";
+                    color: #e8e8ee;
+                    font-size: 10px;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                    width: 100%;
+                    height: 100%;
+                }
+
+                TouchArea {
+                    enabled: !root.is-exporting && root.output-path != "";
+                    clicked => { root.start-export(); }
+                }
+            }
+        }
+    }
+}

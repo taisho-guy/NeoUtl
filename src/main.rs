@@ -10,6 +10,7 @@ mod document;
 mod easings;
 mod ecs;
 mod effects;
+mod export;
 mod media;
 mod objects;
 mod project;
@@ -88,6 +89,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     configure_gst_plugin_path();
 
+    std::thread::spawn(neoutl_media_gstreamer_encoder::warm_up);
+
     objects::load_all(&objects::default_objects_dir());
     effects::load_all(&effects::default_effects_dir());
     media::loader::load_all(&media::loader::default_decoders_dir());
@@ -114,7 +117,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let wgpu_device = gpu_device.wgpu_device().clone();
         let wgpu_queue = gpu_device.wgpu_queue().clone();
 
-        media::loader::inject_gpuvideo_shared_device(gpu_device);
+        media::loader::inject_gpuvideo_shared_device(gpu_device.clone());
+        neoutl_media_gpuvideo_encoder::set_shared_device(gpu_device);
 
         renderer::pipeline::install_device_lost_watcher(&wgpu_device);
 

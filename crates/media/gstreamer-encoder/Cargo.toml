@@ -3,8 +3,13 @@ name = "neoutl-media-gstreamer-encoder"
 version = "0.0.0"
 edition = "2024"
 
+[lib]
+name       = "neoutl_media_gstreamer_encoder"
+crate-type = ["cdylib", "rlib"]
+
 [dependencies]
 neoutl-media-api = { path = "../../neoutl-media-api" }
 gstreamer = "0.25"
 gstreamer-app = "0.25"
 gstreamer-pbutils = "0.25"
+bytemuck = { version = "1.25", features = ["derive"] }

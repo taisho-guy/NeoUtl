@@ -114,3 +114,60 @@ pub struct MediaVTable {
 
 pub const ENTRY_SYMBOL: &[u8] = b"neoutl_media_entry\0";
 pub type EntryFn = unsafe extern "C" fn() -> *const MediaVTable;
+
+#[repr(u8)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub enum VideoCodec {
+    H264 = 0,
+    H265 = 1,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct EncodeParameters {
+    pub width: u32,
+    pub height: u32,
+    pub framerate: f64,
+    pub average_bitrate: u32,
+    pub max_bitrate: u32,
+    pub keyframe_interval: u32,
+}
+
+pub struct EncodedChunk {
+    pub data: Vec<u8>,
+    pub pts: i64,
+    pub keyframe: bool,
+}
+
+/// エンコーダ契約。encode_rgbaはexportワーカースレッド専用呼び出し。
+/// RenderSystemが生成したRgba8Unormテクスチャを直接受け取り、NV12変換・
+/// エンコード発行まで内部完結する。
+pub trait VideoEncoder: Send {
+    fn encode_rgba(
+        &mut self,
+        rgba: &wgpu::Texture,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        pts: i64,
+        force_keyframe: bool,
+    ) -> Result<Vec<EncodedChunk>, String>;
+    fn flush(&mut self) -> Result<Vec<EncodedChunk>, String>;
+}
+
+#[repr(C)]
+pub struct EncoderMeta {
+    pub id: &'static str,
+    pub name: &'static str,
+    pub codec: VideoCodec,
+    pub hardware: bool,
+}
+unsafe impl Send for EncoderMeta {}
+unsafe impl Sync for EncoderMeta {}
+
+pub type CreateEncoderFn = fn(EncodeParameters) -> Result<Box<dyn VideoEncoder>, String>;
+
+pub struct EncoderVTable {
+    pub meta: fn() -> &'static EncoderMeta,
+    pub create: CreateEncoderFn,
+}
+unsafe impl Send for EncoderVTable {}
+unsafe impl Sync for EncoderVTable {}

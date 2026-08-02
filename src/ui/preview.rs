@@ -453,7 +453,154 @@ pub fn setup(
         }
     });
     preview.on_save_project_as(|| {});
-    preview.on_export_media(|| {});
+    {
+        use crate::ExportDialog;
+        use crate::export::{EncoderBackend, ExportCodec, ExportJob};
+        use std::sync::Arc;
+        use std::sync::atomic::{AtomicBool, Ordering};
+
+        let dialog_slot: Rc<RefCell<Option<ExportDialog>>> = Rc::new(RefCell::new(None));
+        let cancel_slot: Rc<RefCell<Option<Arc<AtomicBool>>>> = Rc::new(RefCell::new(None));
+        let state = state.clone();
+
+        preview.on_export_media({
+            let dialog_slot = dialog_slot.clone();
+            let state = state.clone();
+            move || {
+                let mut slot = dialog_slot.borrow_mut();
+                if slot.is_none() {
+                    let Ok(dialog) = ExportDialog::new() else {
+                        return;
+                    };
+                    *slot = Some(dialog);
+                }
+                let Some(dialog) = slot.as_ref() else {
+                    return;
+                };
+
+                let total_frames = {
+                    let world_holder = app_state::active_world(&state);
+                    let world = world_holder.lock().unwrap();
+                    world.total_frames()
+                };
+                dialog.set_total_frames(total_frames);
+                dialog.set_start_frame(0);
+                dialog.set_end_frame(total_frames);
+                dialog.set_status_text("".into());
+
+                {
+                    let dialog_weak = dialog.as_weak();
+                    dialog.on_pick_output_path(move || {
+                        let Some(d) = dialog_weak.upgrade() else {
+                            return;
+                        };
+                        let is_mkv = d.get_mkv_container();
+                        let mut picker = rfd::FileDialog::new();
+                        picker = if is_mkv {
+                            picker.add_filter("Matroska", &["mkv"])
+                        } else {
+                            picker.add_filter("MP4", &["mp4"])
+                        };
+                        let Some(path) = picker.save_file() else {
+                            return;
+                        };
+                        d.set_output_path(path.to_string_lossy().into_owned().into());
+                    });
+                }
+
+                {
+                    let dialog_weak = dialog.as_weak();
+                    dialog.on_dismiss(move || {
+                        if let Some(d) = dialog_weak.upgrade() {
+                            let _ = d.hide();
+                        }
+                    });
+                }
+
+                {
+                    let cancel_slot = cancel_slot.clone();
+                    dialog.on_cancel_export(move || {
+                        if let Some(c) = cancel_slot.borrow().as_ref() {
+                            c.store(true, Ordering::Relaxed);
+                        }
+                    });
+                }
+
+                {
+                    let dialog_weak = dialog.as_weak();
+                    let state = state.clone();
+                    let cancel_slot = cancel_slot.clone();
+                    dialog.on_start_export(move || {
+                        let Some(d) = dialog_weak.upgrade() else {
+                            return;
+                        };
+                        let output_path = d.get_output_path().to_string();
+                        if output_path.is_empty() {
+                            return;
+                        }
+                        let cancel = Arc::new(AtomicBool::new(false));
+                        *cancel_slot.borrow_mut() = Some(cancel.clone());
+
+                        let job = ExportJob {
+                            output_path: output_path.into(),
+                            codec: if d.get_codec() == 0 {
+                                ExportCodec::H264
+                            } else {
+                                ExportCodec::H265
+                            },
+                            backend: match d.get_backend() {
+                                1 => EncoderBackend::GpuVideo,
+                                2 => EncoderBackend::Gstreamer,
+                                _ => EncoderBackend::Auto,
+                            },
+                            average_bitrate: d.get_average_bitrate_kbps() as u32 * 1000,
+                            max_bitrate: d.get_max_bitrate_kbps() as u32 * 1000,
+                            start_frame: d.get_start_frame(),
+                            end_frame: d.get_end_frame(),
+                            progress: {
+                                let dialog_weak = dialog_weak.clone();
+                                Some(Box::new(move |current, total| {
+                                    let dialog_weak = dialog_weak.clone();
+                                    let _ = slint::invoke_from_event_loop(move || {
+                                        if let Some(d) = dialog_weak.upgrade() {
+                                            d.set_progress_current(current);
+                                            d.set_progress_total(total);
+                                        }
+                                    });
+                                }))
+                            },
+                            cancel: Some(cancel),
+                        };
+
+                        d.set_is_exporting(true);
+                        d.set_status_is_error(false);
+                        d.set_status_text("".into());
+
+                        let state = state.clone();
+                        let dialog_weak = dialog_weak.clone();
+                        std::thread::spawn(move || {
+                            let result = crate::export::run(&state, job);
+                            let _ = slint::invoke_from_event_loop(move || {
+                                let Some(d) = dialog_weak.upgrade() else {
+                                    return;
+                                };
+                                d.set_is_exporting(false);
+                                match result {
+                                    Ok(()) => d.set_status_text("書き出し完了".into()),
+                                    Err(e) => {
+                                        d.set_status_is_error(true);
+                                        d.set_status_text(e.into());
+                                    }
+                                }
+                            });
+                        });
+                    });
+                }
+
+                let _ = dialog.show();
+            }
+        });
+    }
     preview.on_undo({
         let state = state.clone();
         let preview_weak = preview_weak.clone();

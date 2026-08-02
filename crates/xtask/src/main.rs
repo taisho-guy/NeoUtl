@@ -21,12 +21,17 @@ struct DiscoveredCrate {
 /// 存在していてもここに含まれるものはxtaskの検出対象から外す。
 /// ffmpeg-decoder: gstreamer/symphonia経路で代替、要件確定まで凍結（Cargo.toml側の
 /// [workspace].membersコメントアウトと対で管理する）。
-/// gstreamer-encoder: エンコーダー要件確定まで凍結（同上）。
+/// gstreamer-encoder: NeoUtl本体へ直接静的リンク（export.rsから使用）。dlsymプラグイン
+/// ではないため除外。
+/// gpuvideo-decoder/gpuvideo-encoder: NeoUtl本体からgpu_video共有デバイス注入のため
+/// path依存として直接静的リンクされ、native_plugins()/native_vtables()経由で自己登録する。
+/// dlsymプラグインではないため、decoders/への配置対象から外す。
 const WORKSPACE_EXCLUDED_DIRS: &[&str] = &[
     "audio-plugin-host",
     "ffmpeg-decoder",
     "gstreamer-encoder",
     "gpuvideo-decoder",
+    "gpuvideo-encoder",
     "gstreamer-decoder",
 ];
 
