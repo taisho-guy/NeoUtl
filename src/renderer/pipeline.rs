@@ -4,7 +4,7 @@ use crate::ecs::systems::ActiveObject;
 use crate::ecs::types::Value;
 use crate::effects;
 use crate::objects::{by_kind_id, registry};
-use neoutl_object_api::{IMAGE_STABLE_ID, UNIT_SIZE_PX, VIDEO_STABLE_ID};
+use neoutl_object_api::{IMAGE_STABLE_ID, SCENE_STABLE_ID, UNIT_SIZE_PX, VIDEO_STABLE_ID};
 use slint::wgpu_29::wgpu;
 use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
@@ -85,6 +85,11 @@ pub struct RenderEngine {
     media_sampler: wgpu::Sampler,
     video_pipeline: wgpu::RenderPipeline,
     video_bind_group_layout: wgpu::BindGroupLayout,
+    /// SceneObjectのレンダリング結果キャッシュ。key=target_scene。
+    /// render()呼び出し1回（トップレベル呼び出し1回、depth=0起点）につき
+    /// クリアし、同一フレーム内で同一シーンを複数クリップが参照する際の
+    /// 再レンダリングを避ける唯一の窓口とする。
+    scene_texture_cache: HashMap<i32, wgpu::Texture>,
 }
 
 /// テキスト1オブジェクト分の描画先。widthxheightはmedia::text::measure()の結果と一致し、
@@ -661,7 +666,52 @@ impl RenderEngine {
             media_sampler,
             video_pipeline,
             video_bind_group_layout,
+            scene_texture_cache: HashMap::new(),
         }
+    }
+
+    /// target_scene・local_frameのシーンをオフスクリーンへレンダリングし、
+    /// 結果テクスチャを返す（RGBA、self.texture同一フォーマット）。
+    /// 呼び出し中はself.texture/depth_textureをtarget_scene解像度へ一時的に
+    /// 差し替え、完了後に呼び出し元の解像度へ復元する。
+    ///
+    /// 既知の制約: get_active_objects_system_atはCamera/MVP計算にECS側の
+    /// グローバルProjectResourceを参照するため、target_sceneの解像度が
+    /// トップレベルプロジェクトと異なる場合、内包オブジェクトの画角は
+    /// target_scene基準ではなくプロジェクト基準のまま計算される
+    /// （SceneMeta.width/height自体はオフスクリーンテクスチャ寸法として正しく反映される）。
+    fn render_scene_texture(
+        &mut self,
+        world: &crate::ecs::EcsWorld,
+        target_scene: i32,
+        local_frame: i32,
+        depth: u32,
+    ) -> Option<wgpu::Texture> {
+        if depth >= config::MAX_SCENE_NESTING_DEPTH {
+            eprintln!(
+                "[NeoUtl] シーンネスト深度上限({})到達 target_scene={target_scene}: 非描画",
+                config::MAX_SCENE_NESTING_DEPTH
+            );
+            return None;
+        }
+        if let Some(cached) = self.scene_texture_cache.get(&target_scene) {
+            return Some(cached.clone());
+        }
+        let scene = world.get_scene(target_scene)?;
+        let saved_width = self.render_width;
+        let saved_height = self.render_height;
+        self.resize_render_target(scene.width, scene.height);
+
+        let active =
+            crate::ecs::systems::get_active_objects_system_at(world, target_scene, local_frame);
+        let project = world.get_project();
+        self.render_at(world, &active, &project, depth);
+        let texture = self.texture.clone();
+
+        self.resize_render_target(saved_width, saved_height);
+        self.scene_texture_cache
+            .insert(target_scene, texture.clone());
+        Some(texture)
     }
 
     pub fn resize_render_target(&mut self, width: u32, height: u32) {
@@ -856,7 +906,26 @@ impl RenderEngine {
         self.queue.submit([encoder.finish()]);
     }
 
-    pub fn render(&mut self, active_objects: &[ActiveObject], _project: &ProjectResource) {
+    /// 従来通りの外部呼び出し窓口（depth=0起点）。呼び出し前にscene_texture_cacheを
+    /// クリアし、フレーム単位で1回だけ各ネストシーンをレンダリングする。
+    pub fn render(
+        &mut self,
+        world: &crate::ecs::EcsWorld,
+        active_objects: &[ActiveObject],
+        project: &ProjectResource,
+    ) {
+        self.scene_texture_cache.clear();
+        self.render_at(world, active_objects, project, 0);
+    }
+
+    /// SceneObjectの再帰評価を伴う本体。depthはMAX_SCENE_NESTING_DEPTH判定にのみ使う。
+    fn render_at(
+        &mut self,
+        world: &crate::ecs::EcsWorld,
+        active_objects: &[ActiveObject],
+        _project: &ProjectResource,
+        depth: u32,
+    ) {
         if is_device_lost() {
             return;
         }
@@ -864,10 +933,8 @@ impl RenderEngine {
         {
             let cache = crate::media::cache::global();
             for obj in active_objects {
-                let is_visual = matches!(
-                    stable_id_of(obj.kind_id),
-                    Some(VIDEO_STABLE_ID | IMAGE_STABLE_ID)
-                );
+                let stable_id = stable_id_of(obj.kind_id);
+                let is_visual = matches!(stable_id, Some(VIDEO_STABLE_ID | IMAGE_STABLE_ID));
                 let tex = if is_visual {
                     if let Some(src) = &obj.media_source {
                         match cache.frame_at(
@@ -894,6 +961,13 @@ impl RenderEngine {
                             obj.kind_id
                         );
                         None
+                    }
+                } else if stable_id == Some(SCENE_STABLE_ID) {
+                    match obj.nested_scene {
+                        Some((target_scene, local_frame)) => {
+                            self.render_scene_texture(world, target_scene, local_frame, depth + 1)
+                        }
+                        None => None,
                     }
                 } else {
                     None
@@ -1028,18 +1102,23 @@ impl RenderEngine {
             .create_view(&wgpu::TextureViewDescriptor::default());
 
         {
+            let clear_color = if depth == 0 {
+                wgpu::Color {
+                    r: 0.05,
+                    g: 0.05,
+                    b: 0.07,
+                    a: 1.0,
+                }
+            } else {
+                wgpu::Color::TRANSPARENT
+            };
             let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("Render Pass"),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
                     view: &view,
                     resolve_target: None,
                     ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(wgpu::Color {
-                            r: 0.05,
-                            g: 0.05,
-                            b: 0.07,
-                            a: 1.0,
-                        }),
+                        load: wgpu::LoadOp::Clear(clear_color),
                         store: wgpu::StoreOp::Store,
                     },
                     depth_slice: None,

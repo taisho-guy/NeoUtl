@@ -108,6 +108,25 @@ pub fn setup(
                     world.add_shape_object(start, 90, kind_id, layer, ShapeParams::default());
                     sync(&t, pw.upgrade().as_ref(), &world);
                 }
+                "Scene" => {
+                    app_state::snapshot_before_edit(&state);
+                    let world_holder = app_state::active_world(&state);
+                    let mut world = world_holder.lock().unwrap();
+                    let host_scene = world.active_scene();
+                    let default_target = world
+                        .scenes()
+                        .into_iter()
+                        .map(|s| s.id)
+                        .find(|&id| !world.would_create_scene_cycle(host_scene, id));
+                    let Some(default_target) = default_target else {
+                        eprintln!(
+                            "[NeoUtl] シーンオブジェクト追加を中止: 配置可能なシーンがありません"
+                        );
+                        return;
+                    };
+                    world.add_scene_object(start, 90, kind_id, layer, default_target);
+                    sync(&t, pw.upgrade().as_ref(), &world);
+                }
                 _ => {
                     app_state::snapshot_before_edit(&state);
                     let world_holder = app_state::active_world(&state);
@@ -411,9 +430,14 @@ pub fn setup(
                 let world_holder = app_state::active_world(&state);
                 let mut world = world_holder.lock().unwrap();
                 if world.scenes().len() > 1 {
-                    world.remove_scene(id);
-                    sync(&t, pw.upgrade().as_ref(), &world);
-                    sync_scene_tabs(&t, &world);
+                    if world.remove_scene(id) {
+                        sync(&t, pw.upgrade().as_ref(), &world);
+                        sync_scene_tabs(&t, &world);
+                    } else {
+                        eprintln!(
+                            "[NeoUtl] シーン削除を拒否: id={id}（他シーンのSceneObjectから参照中）"
+                        );
+                    }
                 }
             }
         });

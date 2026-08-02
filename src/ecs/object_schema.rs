@@ -199,6 +199,13 @@ pub const TRANSFORM_GROUP: &str = "トランスフォーム";
 pub const TEXT_GROUP: &str = "テキスト";
 pub const SHAPE_GROUP: &str = "図形";
 pub const AUDIO_GROUP: &str = "オーディオ";
+pub const SCENE_GROUP: &str = "シーン";
+
+/// SCENE_STABLE_IDオブジェクト専用の1項目スキーマ。選択肢はSceneResource.scenesから
+/// 実行時に構築するため、track_fieldと同じ「候補一覧を静的に持たない」型を流用する
+/// （properties.rs側でTrack用UIコンポーネントを再利用しつつ、値変更経路のみ
+/// EcsWorld::set_scene_object_targetへ差し替える。set_param経由のTrackRef書き込みは行わない）。
+pub const SCENE_SCHEMA: &[ParamSchema] = &[track_field(SCENE_GROUP, "target_scene", "シーン")];
 
 pub const TRANSFORM_SCHEMA: &[ParamSchema] = &[
     float_stage(TRANSFORM_GROUP, "x", "X", Range::StageWidth),

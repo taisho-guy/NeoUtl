@@ -59,3 +59,8 @@ pub const IMAGE_STABLE_ID: &str = "neoutl.object.image";
 /// 音声オブジェクトの予約stable_id。視覚描画を持たずAudioParams経由の
 /// 音量・パン制御のみをタイムライン上で保持する。
 pub const AUDIO_STABLE_ID: &str = "neoutl.object.audio";
+
+/// シーンオブジェクトの予約stable_id。VIDEO/IMAGE同様にObjectVTable.renderを呼ばず、
+/// ホストがSceneObjectコンポーネントのtarget_sceneを読み取り、対象シーンの
+/// レンダリング結果テクスチャをこのクリップの描画内容として合成する。
+pub const SCENE_STABLE_ID: &str = "neoutl.object.scene";

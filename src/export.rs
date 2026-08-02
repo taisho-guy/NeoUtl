@@ -373,12 +373,11 @@ pub fn run(state: &SharedAppState, mut job: ExportJob) -> Result<(), String> {
                 world.set_current_frame(frame_index);
                 let active = get_active_objects_system(&world);
                 let proj = world.get_project();
-                drop(world);
                 let mut engine_lock = engine_holder.lock().unwrap();
                 let Some(engine) = engine_lock.as_mut() else {
                     return Err("RenderEngine消失".to_owned());
                 };
-                engine.render(&active, &proj);
+                engine.render(&world, &active, &proj);
                 engine.texture.clone()
             };
 
@@ -457,12 +456,11 @@ pub fn run(state: &SharedAppState, mut job: ExportJob) -> Result<(), String> {
                 world.set_current_frame(start_frame + frame_index as i32);
                 let active = get_active_objects_system(&world);
                 let proj = world.get_project();
-                drop(world);
                 let mut engine_lock = engine_holder.lock().unwrap();
                 let engine = engine_lock
                     .as_mut()
                     .ok_or_else(|| "RenderEngine消失".to_owned())?;
-                engine.render(&active, &proj);
+                engine.render(&world, &active, &proj);
                 Ok(read_texture_rgba(
                     &engine.device,
                     &engine.queue,

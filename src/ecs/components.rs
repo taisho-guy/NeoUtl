@@ -30,6 +30,14 @@ pub struct Layer(pub i32);
 #[derive(Clone, Copy, Debug, Component)]
 pub struct SceneId(pub i32);
 
+/// シーン参照オブジェクト。SCENE_STABLE_IDのクリップにのみ付与する。
+/// target_sceneはSceneResource.scenes[].id。ネスト評価・循環検出は
+/// SceneResource::would_cycle/systems::get_active_objects_systemが担う。
+#[derive(Clone, Copy, Debug, Component, Serialize, Deserialize)]
+pub struct SceneObject {
+    pub target_scene: i32,
+}
+
 #[derive(Clone, Copy, Debug, Component, Serialize, Deserialize)]
 pub struct AudioParams {
     pub volume: f32,
