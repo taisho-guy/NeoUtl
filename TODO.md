@@ -48,7 +48,7 @@
 - [x] エンコード機能を実装（gpuvideo-encoder: Vulkan HW H.264/H.265。gstreamer-encoder: encodebin2によるH.264/H.265/VP9/ProResソフトウェア・HW自動選択エンコード＋mux_encoded()による事前エンコード済みビットストリームの再エンコード無しmux。src/export.rsがRenderEngine/EcsWorld/AudioMixerを接続し、gpuvideo-encoder初期化・エンコード失敗時はgstreamer-encoder全体経路へ自動縮退）
 - [ ] 音声プラグインUIの統合を実装
   - X11やWaylandの兼ね合いで断念
-- [ ] レンダーキュー・書き出しプリセット機能を実装
+- [x] レンダーキュー・書き出しプリセット機能を実装
 - [ ] 波形表示（オーディオクリップ上のウェーブフォーム描画）を実装
 
 # 0.4.0

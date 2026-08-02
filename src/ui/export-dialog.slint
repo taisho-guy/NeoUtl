@@ -77,6 +77,9 @@ export component ExportDialog inherits Window {
     in-out property <int> max-bitrate-kbps: 12000;
     in-out property <int> start-frame: 0;
     in-out property <int> end-frame: 0;
+    in-out property <[string]> preset-names: [];
+    in-out property <int> selected-preset: -1;
+    in-out property <string> preset-name: "";
     in property <int> total-frames: 0;
 
     in property <bool> is-exporting: false;
@@ -89,10 +92,63 @@ export component ExportDialog inherits Window {
     callback start-export();
     callback cancel-export();
     callback dismiss();
+    callback select-preset(int);
+    callback save-preset();
+    callback delete-preset();
 
     VerticalLayout {
         padding: 10px;
         spacing: 8px;
+
+        LabeledField {
+            label: "書き出しプリセット";
+            HorizontalLayout {
+                spacing: 4px;
+                Rectangle {
+                    height: 24px;
+                    background: #16161b;
+                    border-width: 1px;
+                    border-color: #303038;
+                    for preset[i] in root.preset-names: Text {
+                        visible: i == root.selected-preset;
+                        text: preset;
+                        x: 6px;
+                        width: parent.width - 12px;
+                        height: 100%;
+                        color: #c8c8d2;
+                        font-size: 10px;
+                        vertical-alignment: center;
+                    }
+                    TouchArea {
+                        clicked => {
+                            if root.preset-names.length > 0 {
+                                root.select-preset(Math.mod(root.selected-preset + 1, root.preset-names.length));
+                            }
+                        }
+                    }
+                }
+                Rectangle {
+                    width: 56px;
+                    height: 24px;
+                    background: #1e1e24;
+                    Text { text: "保存"; color: #c8c8d2; font-size: 10px; horizontal-alignment: center; vertical-alignment: center; width: 100%; height: 100%; }
+                    TouchArea { clicked => { root.save-preset(); } }
+                }
+                Rectangle {
+                    width: 56px;
+                    height: 24px;
+                    background: #1e1e24;
+                    Text { text: "削除"; color: #c8c8d2; font-size: 10px; horizontal-alignment: center; vertical-alignment: center; width: 100%; height: 100%; }
+                    TouchArea { enabled: root.selected-preset >= 0; clicked => { root.delete-preset(); } }
+                }
+            }
+            TextInput {
+                height: 24px;
+                text <=> root.preset-name;
+                color: #c8c8d2;
+                font-size: 10px;
+            }
+        }
 
         LabeledField {
             label: "出力ファイル";
