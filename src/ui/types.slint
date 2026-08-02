@@ -9,6 +9,10 @@ export struct TimelineObject {
     label: string,
     selected: bool,
     keyframe-frames: [int],
+    waveform: image,
+    has-waveform: bool,
+    waveform-origin-frame: int,
+    waveform-duration-frames: int,
 }
 
 // Trackパラメータ（他オブジェクト参照）の選択候補1件。idはobject_id。
