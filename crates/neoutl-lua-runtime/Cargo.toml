@@ -9,12 +9,10 @@ crate-type = ["rlib"]
 [dependencies]
 neoutl-shared-abi = { path = "../neoutl-shared-abi" }
 neoutl-effect-lua = { path = "../neoutl-effect-lua" }
+mlua = { version = "0.12", default-features = false, features = ["vendored", "send"] }
 
-# LuaJITはWindows ARM64を正式サポートしない(lj_vm_*アセンブリがAAPCS64/SEH双方に
-# 未対応)ため、当該ターゲットのみvendored Lua5.4(Cのみ、移植性優先)へ切替える。
-# system拡張の呼び出し頻度・処理量は小さく、JIT無しでも実用上の速度劣化は許容範囲。
-[target.'cfg(not(all(target_os = "windows", target_arch = "aarch64")))'.dependencies]
-mlua = { version = "0.12", features = ["luajit", "vendored", "send"] }
-
-[target.'cfg(all(target_os = "windows", target_arch = "aarch64"))'.dependencies]
-mlua = { version = "0.12", features = ["lua54", "vendored", "send"] }
+# （defaultを空にすることで、[target.'cfg(...)']による自動切替がCargoのfeature統一で
+[features]
+default = []
+luajit = ["mlua/luajit"]
+lua54 = ["mlua/lua54"]

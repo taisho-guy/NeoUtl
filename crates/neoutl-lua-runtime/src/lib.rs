@@ -1,14 +1,3 @@
-//! システムレベルLua拡張。
-//!
-//! `system`名前空間をLuaへ公開する。公開関数はいずれも文字列・数値・スカラー配列の
-//! 授受のみを行い、wgpu::Device/Texture/Buffer等の実体・生ポインタをLua側へ渡さない。
-//! GPUリソース確保・コンピュートパス実行・バッファ読み出しはRust側（renderer）の
-//! 責務であり、本クレートは「何を実行するか」の定義（WGSL文字列・パラメータ・
-//! コールバック）を収集するだけの層に留める（wgpu非依存、GPU無しでも単体テスト可能）。
-//!
-//! 読み出し系はreduce結果（スカラー配列）のみを返す`system.reduce_result(name)`に限定する。
-//! ピクセル単位の生データを返す関数は導入しない（ゼロコピー境界の維持）。
-
 use mlua::{Lua, RegistryKey, StdLib, Table, Value as LuaValue};
 use neoutl_effect_lua::LuaEffectSource;
 use std::path::Path;

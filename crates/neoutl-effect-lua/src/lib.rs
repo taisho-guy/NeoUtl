@@ -1,23 +1,3 @@
-//! Lua供給エフェクト読込。
-//!
-//! スクリプトはテーブル1個を返す。テーブルは文字列・数値・入れ子テーブルのみを
-//! 含み、関数・userdata・スレッドを含まない（`validate_return`が拒否する）。
-//! Rustはこのテーブルから[`LuaEffectSource`]を構築するのみで、Lua側へ
-//! ピクセルバッファ・GPUリソースを一切引き渡さない。
-//!
-//! スクリプト契約:
-//! ```lua
-//! return {
-//!   id = "my_glow",
-//!   name = "Glow",
-//!   category = "Light",
-//!   params = {
-//!     { key = "intensity", label = "強度", kind = "float", min = 0, max = 10, default = 1 },
-//!   },
-//!   wgsl = [[ @fragment fn fs_main(...) -> @location(0) vec4<f32> { ... } ]],
-//! }
-//! ```
-
 use mlua::{Lua, StdLib, Table, Value as LuaValue};
 use neoutl_shared_abi::{ParamKind, ParamRowOwned};
 use std::path::{Path, PathBuf};
@@ -27,7 +7,6 @@ pub struct LuaEffectSource {
     pub id: String,
     pub name: String,
     pub category: String,
-    /// dylib供給側と同一のParamRowOwnedを用いる（ホスト側消費コードを供給元非依存にする）。
     pub param_schema: Vec<ParamRowOwned>,
     pub wgsl: String,
     pub script_path: PathBuf,
