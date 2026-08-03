@@ -136,6 +136,7 @@ fn build_all<'a>(
     offline: bool,
     groups: &[(&str, &'a [DiscoveredCrate])],
     extra_packages: &[&str],
+    lua_feature: &str,
 ) {
     let mut cmd = Command::new("cargo");
     cmd.current_dir(workspace_root).arg("build").arg("--locked");
@@ -148,6 +149,11 @@ fn build_all<'a>(
     if let Some(triple) = target {
         cmd.arg("--target").arg(triple);
     }
+    // neoutl-lua-runtimeのmlua採用言語(luajit/lua54)は[target.'cfg(...)']による
+    cmd.arg("-p")
+        .arg("neoutl-lua-runtime")
+        .arg("--features")
+        .arg(format!("neoutl-lua-runtime/{lua_feature}"));
 
     let mut package_count = 0usize;
     for (label, crates) in groups {
@@ -286,6 +292,7 @@ fn main() {
     let mut offline = false;
     let mut task = "run".to_string();
     let mut target: Option<String> = None;
+    let mut lua_feature = "luajit".to_string();
 
     let mut i = 0;
     while i < args.len() {
@@ -296,6 +303,12 @@ fn main() {
             "--target" => {
                 i += 1;
                 target = args.get(i).cloned();
+            }
+            "--lua-feature" => {
+                i += 1;
+                if let Some(v) = args.get(i) {
+                    lua_feature = v.clone();
+                }
             }
             _ => {}
         }
@@ -326,6 +339,7 @@ fn main() {
             ("themes", themes.as_slice()),
         ],
         &["NeoUtl"],
+        &lua_feature,
     );
 
     stage_crates(&root, profile, target, "objects", &objects);

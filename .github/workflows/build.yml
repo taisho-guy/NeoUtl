@@ -24,21 +24,25 @@ jobs:
             os_name: Linux(x86_64)
             artifact_name: neoutl-linux-x86_64
             binary_name: NeoUtl
+            lua_feature: luajit
             install_cmd: sudo apt-get update && sudo apt-get install -y --no-install-recommends pkg-config clang cmake ninja-build mold libxkbcommon-dev libwayland-dev libegl1-mesa-dev libudev-dev libasound2-dev libfontconfig1-dev libfreetype6-dev libexpat1-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev gstreamer1.0-plugins-base gstreamer1.0-plugins-good gstreamer1.0-plugins-bad gstreamer1.0-plugins-ugly gstreamer1.0-libav
           - os: ubuntu-24.04-arm
             os_name: Linux(ARM64)
             artifact_name: neoutl-linux-arm64
             binary_name: NeoUtl
+            lua_feature: luajit
             install_cmd: sudo apt-get update && sudo apt-get install -y --no-install-recommends pkg-config clang cmake ninja-build mold libxkbcommon-dev libwayland-dev libegl1-mesa-dev libudev-dev libasound2-dev libfontconfig1-dev libfreetype6-dev libexpat1-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev gstreamer1.0-plugins-base gstreamer1.0-plugins-good gstreamer1.0-plugins-bad gstreamer1.0-plugins-ugly gstreamer1.0-libav
           - os: macos-latest
             os_name: macOS(Apple Silicon)
             artifact_name: neoutl-macos-aarch64
             binary_name: NeoUtl
+            lua_feature: luajit
             install_cmd: brew update && brew install gstreamer
           - os: macos-26-intel
             os_name: macOS(Intel)
             artifact_name: neoutl-macos-x86_64
             binary_name: NeoUtl
+            lua_feature: luajit
             install_cmd: brew update && brew install gstreamer
           - os: windows-latest
             os_name: Windows(x86_64)
@@ -47,6 +51,7 @@ jobs:
             rust_target: x86_64-pc-windows-msvc
             vcpkg_triplet: x64-windows
             msvc_arch: x64
+            lua_feature: luajit
           - os: windows-11-arm
             os_name: Windows(ARM64)
             artifact_name: neoutl-windows-arm64
@@ -54,6 +59,7 @@ jobs:
             rust_target: aarch64-pc-windows-msvc
             vcpkg_triplet: arm64-windows
             msvc_arch: arm64
+            lua_feature: lua54
     runs-on: ${{ matrix.os }}
 
     steps:
@@ -104,7 +110,7 @@ jobs:
         env:
           PKG_CONFIG: pkg-config
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: cargo xtask build --release
+        run: cargo xtask build --release --lua-feature ${{ matrix.lua_feature }}
 
       - name: MSVC開発者環境セットアップ(Windows x86_64)
         # mlua vendored機能のLuaJIT配置(luajit-src crate)はmsvcbuild.batを直接実行して
@@ -125,7 +131,7 @@ jobs:
           PKG_CONFIG_PATH: ${{ env.VCPKG_INSTALLED }}/lib/pkgconfig
           PKG_CONFIG: pkg-config.exe
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: cargo xtask build --release
+        run: cargo xtask build --release --lua-feature ${{ matrix.lua_feature }}
 
       - name: 成果物収集(Linux)
         if: runner.os == 'Linux'
