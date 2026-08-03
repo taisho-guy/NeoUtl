@@ -1,3 +1,4 @@
+use arc_swap::ArcSwap;
 use libloading::{Library, Symbol};
 use neoutl_effect_api::{ENTRY_SYMBOL, EffectVTable, EntryFn};
 use neoutl_effect_lua::LuaEffectSource;
@@ -5,7 +6,7 @@ use neoutl_shared_abi::ParamRowOwned;
 use std::{
     ffi::OsStr,
     path::{Path, PathBuf},
-    sync::OnceLock,
+    sync::{Arc, OnceLock},
 };
 
 pub struct EffectPlugin {
@@ -114,54 +115,118 @@ impl EffectSource {
     }
 }
 
-static REGISTRY: OnceLock<Vec<EffectSource>> = OnceLock::new();
+fn registry_swap() -> &'static ArcSwap<Vec<Arc<EffectSource>>> {
+    static SWAP: OnceLock<ArcSwap<Vec<Arc<EffectSource>>>> = OnceLock::new();
+    SWAP.get_or_init(|| ArcSwap::new(Arc::new(Vec::new())))
+}
 
 /// dylib(effects_dir)・Lua(scripts_dir)双方からエフェクトを収集し統合registryを構築する。
 /// id重複時は先勝ち（走査順: Native全件→Lua全件）とし、後続side loadでの
 /// 静かな上書きを避ける（システムAPI経由の動的登録drainは別経路、本registryとは独立）。
 pub fn load_all(effects_dir: &Path, scripts_dir: &Path) {
-    REGISTRY.get_or_init(|| {
-        let mut ids = std::collections::HashSet::new();
-        let mut sources = Vec::new();
+    let mut ids = std::collections::HashSet::new();
+    let mut sources: Vec<Arc<EffectSource>> = Vec::new();
 
-        for plugin in load_native(effects_dir) {
-            if ids.insert(plugin.id.clone()) {
-                sources.push(EffectSource::Native(plugin));
-            } else {
-                eprintln!("[NeoUtl] エフェクトID重複、除外: {}", plugin.id);
-            }
+    for plugin in load_native(effects_dir) {
+        if ids.insert(plugin.id.clone()) {
+            sources.push(Arc::new(EffectSource::Native(plugin)));
+        } else {
+            eprintln!("[NeoUtl] エフェクトID重複、除外: {}", plugin.id);
         }
-        for lua_source in neoutl_effect_lua::load_dir(scripts_dir) {
-            if ids.insert(lua_source.id.clone()) {
-                sources.push(EffectSource::Lua(lua_source));
-            } else {
-                eprintln!("[NeoUtl] エフェクトID重複、除外: {}", lua_source.id);
-            }
+    }
+    for lua_source in neoutl_effect_lua::load_dir(scripts_dir) {
+        if ids.insert(lua_source.id.clone()) {
+            sources.push(Arc::new(EffectSource::Lua(lua_source)));
+        } else {
+            eprintln!("[NeoUtl] エフェクトID重複、除外: {}", lua_source.id);
         }
+    }
 
-        sources.sort_by(|a, b| a.id().cmp(b.id()));
-        for s in &sources {
-            let kind = match s {
-                EffectSource::Native(_) => "native",
-                EffectSource::Lua(_) => "lua",
-            };
-            eprintln!(
-                "[NeoUtl] エフェクト登録: {} ({}) [{}]",
-                s.name(),
-                s.id(),
-                kind
-            );
-        }
-        sources
-    });
+    sources.sort_by(|a, b| a.id().cmp(b.id()));
+    for s in &sources {
+        let kind = match s.as_ref() {
+            EffectSource::Native(_) => "native",
+            EffectSource::Lua(_) => "lua",
+        };
+        eprintln!(
+            "[NeoUtl] エフェクト登録: {} ({}) [{}]",
+            s.name(),
+            s.id(),
+            kind
+        );
+    }
+    registry_swap().store(Arc::new(sources));
 }
 
-pub fn registry() -> &'static [EffectSource] {
-    REGISTRY.get().map_or(&[][..], Vec::as_slice)
+/// 現行スナップショットを返す。呼び出し側はフレーム内のみ保持し、以降は破棄する
+/// （旧Native側Libraryを無参照後即解放させる設計を担保するため、長期保持しない）。
+pub fn registry() -> Arc<Vec<Arc<EffectSource>>> {
+    registry_swap().load_full()
 }
 
-pub fn by_id(id: &str) -> Option<&'static EffectSource> {
-    registry().iter().find(|p| p.id() == id)
+pub fn by_id(id: &str) -> Option<Arc<EffectSource>> {
+    registry().iter().find(|p| p.id() == id).cloned()
+}
+
+/// Native(dylib)エフェクト1件の再ロード。既存id一致エントリのみ差し替える。
+/// Lua側エフェクトの再ロードは対象外（Phase7でLuaSystem側へ別途統合）。
+/// シンボル欠落・メタ不整合・id未検出時は現行registryを変更せずエラーを返す。
+pub fn reload_one(path: &Path) -> Result<(), String> {
+    let new_plugin = load_one(path).map_err(|e| e.to_string())?;
+    let current = registry_swap().load_full();
+    let Some(pos) = current.iter().position(|s| s.id() == new_plugin.id) else {
+        return Err(format!(
+            "既存エフェクト未検出、新規追加は対象外: {}",
+            new_plugin.id
+        ));
+    };
+
+    let id = new_plugin.id.clone();
+    let mut new_plugin = Some(new_plugin);
+    let next: Vec<Arc<EffectSource>> = current
+        .iter()
+        .enumerate()
+        .map(|(i, s)| {
+            if i == pos {
+                Arc::new(EffectSource::Native(
+                    new_plugin.take().expect("posは一度のみ一致"),
+                ))
+            } else {
+                Arc::clone(s)
+            }
+        })
+        .collect();
+    registry_swap().store(Arc::new(next));
+    eprintln!("[NeoUtl] エフェクト再ロード完了: {id}");
+    Ok(())
+}
+
+/// Lua供給元エフェクトを一括差し替える。現行registry中のNative側全件は保持し、
+/// Lua側全件を渡されたsourcesで置換する（idはNative側優先で重複除外、
+/// LuaSystem::reload_dirがhooks/computes/effectsを事前に空化済みの前提で、
+/// 本関数はsourcesを当該dir由来の全件として扱う）。
+pub fn reload_lua(sources: Vec<LuaEffectSource>) {
+    let current = registry_swap().load_full();
+    let mut ids = std::collections::HashSet::new();
+    let mut next: Vec<Arc<EffectSource>> = Vec::new();
+
+    for s in current.iter() {
+        if matches!(s.as_ref(), EffectSource::Native(_)) && ids.insert(s.id().to_owned()) {
+            next.push(Arc::clone(s));
+        }
+    }
+    for lua_source in sources {
+        if ids.insert(lua_source.id.clone()) {
+            next.push(Arc::new(EffectSource::Lua(lua_source)));
+        } else {
+            eprintln!("[NeoUtl] エフェクトID重複、除外: {}", lua_source.id);
+        }
+    }
+
+    next.sort_by(|a, b| a.id().cmp(b.id()));
+    let count = next.len();
+    registry_swap().store(Arc::new(next));
+    eprintln!("[NeoUtl] Luaエフェクト再ロード完了: {count}件");
 }
 
 fn load_native(effects_dir: &Path) -> Vec<EffectPlugin> {

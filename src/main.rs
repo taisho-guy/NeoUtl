@@ -11,6 +11,7 @@ mod easings;
 mod ecs;
 mod effects;
 mod export;
+mod hot_reload;
 mod media;
 mod objects;
 mod project;

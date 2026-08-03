@@ -3,6 +3,7 @@ use crate::ecs::resources::ProjectResource;
 use crate::ecs::systems::ActiveObject;
 use crate::ecs::types::Value;
 use crate::effects;
+use crate::hot_reload::{self, ReloadEvent};
 use crate::objects::{by_kind_id, registry};
 use neoutl_object_api::{IMAGE_STABLE_ID, SCENE_STABLE_ID, UNIT_SIZE_PX, VIDEO_STABLE_ID};
 use slint::wgpu_29::wgpu;
@@ -114,6 +115,17 @@ pub struct RenderEngine {
     /// クリアし、同一フレーム内で同一シーンを複数クリップが参照する際の
     /// 再レンダリングを避ける唯一の窓口とする。
     scene_texture_cache: HashMap<i32, wgpu::Texture>,
+    /// 標準オブジェクトパイプラインのレイアウト。build_pipelines_from_registry初回構築時のみ
+    /// 使用する一時値ではなく、ホットリロード時の単体パイプライン再構築（build_pipeline）に
+    /// も同一レイアウトが必要なため保持する。
+    object_pipeline_layout: wgpu::PipelineLayout,
+    /// エフェクトパイプラインのレイアウト。用途はobject_pipeline_layoutと対称。
+    effect_pipeline_layout: wgpu::PipelineLayout,
+    /// プラグインdylibファイル監視からの通知チャネル。ホットリロード無効時（リリースビルド既定）
+    /// はNoneのままとし、render()冒頭のdrain処理を素通りさせる。
+    hot_reload_rx: Option<std::sync::mpsc::Receiver<ReloadEvent>>,
+    /// system.load_dir/reload_dir対象ディレクトリ。apply_script_reloadが再参照する。
+    scripts_dir: std::path::PathBuf,
 }
 
 /// テキスト1オブジェクト分の描画先。widthxheightはmedia::text::measure()の結果と一致し、
@@ -827,6 +839,16 @@ impl RenderEngine {
             });
         let effect_pipelines =
             build_effect_pipelines_from_registry(&device, &effect_pipeline_layout);
+        let scripts_dir = crate::effects::default_effects_lua_dir();
+        let hot_reload_rx = if crate::config::SYSTEM_DEFAULT_HOT_RELOAD_ENABLED {
+            Some(hot_reload::spawn_watcher(
+                crate::objects::default_objects_dir(),
+                crate::effects::default_effects_dir(),
+                scripts_dir.clone(),
+            ))
+        } else {
+            None
+        };
         let effect_sampler = device.create_sampler(&wgpu::SamplerDescriptor {
             label: Some("Effect Sampler"),
             address_mode_u: wgpu::AddressMode::ClampToEdge,
@@ -907,10 +929,6 @@ impl RenderEngine {
 
         let lua_system = match neoutl_lua_runtime::LuaSystem::new() {
             Ok(sys) => {
-                let scripts_dir = crate::effects::default_effects_dir()
-                    .parent()
-                    .map(|p| p.join("scripts"))
-                    .unwrap_or_else(|| std::path::PathBuf::from("scripts"));
                 sys.load_dir(&scripts_dir);
                 Some(sys)
             }
@@ -960,6 +978,10 @@ impl RenderEngine {
             reduce_mean_bind_group_layout,
             reduce_mean_buffer,
             reduce_mean_readback_buffer,
+            object_pipeline_layout: pipeline_layout,
+            effect_pipeline_layout,
+            hot_reload_rx,
+            scripts_dir,
         }
     }
 
@@ -1541,6 +1563,7 @@ impl RenderEngine {
         project: &ProjectResource,
     ) {
         self.scene_texture_cache.clear();
+        self.drain_hot_reload_events();
         if let Some(sys) = &self.lua_system
             && let Err(err) = sys.run_pre_render_hooks()
         {
@@ -1548,6 +1571,87 @@ impl RenderEngine {
         }
         self.render_at(world, active_objects, project, 0);
         self.run_lua_reduce_hooks();
+    }
+
+    /// hot_reload::spawn_watcherからの通知を非ブロッキングでdrainし、対応するプラグイン
+    /// registryとGPUパイプラインを差分更新する。フレーム先頭（lua pre-render hook実行前）
+    /// でのみ呼ぶことで、当該フレーム内の描画は常に一貫したパイプライン集合を参照する。
+    fn drain_hot_reload_events(&mut self) {
+        let Some(rx) = &self.hot_reload_rx else {
+            return;
+        };
+        let events: Vec<ReloadEvent> = rx.try_iter().collect();
+        for event in events {
+            match event {
+                ReloadEvent::Object(path) => self.apply_object_reload(&path),
+                ReloadEvent::Effect(path) => self.apply_effect_reload(&path),
+                ReloadEvent::Script(path) => self.apply_script_reload(&path),
+            }
+        }
+    }
+
+    /// objects::loader::reload_one成功時、pipelines全体を現行registryから再構築する。
+    /// 失敗時（Phase6方針）は現行pipelinesを変更せずログのみ出力する。
+    fn apply_object_reload(&mut self, path: &std::path::Path) {
+        if let Err(err) = crate::objects::loader::reload_one(path) {
+            eprintln!(
+                "[NeoUtl] ホットリロード失敗（objects） {}: {err}",
+                path.display()
+            );
+            return;
+        }
+        self.rebuild_all_object_pipelines();
+    }
+
+    /// effects::loader::reload_one成功時、effect_pipelines全体を現行registryから再構築する。
+    fn apply_effect_reload(&mut self, path: &std::path::Path) {
+        if let Err(err) = crate::effects::loader::reload_one(path) {
+            eprintln!(
+                "[NeoUtl] ホットリロード失敗（effects） {}: {err}",
+                path.display()
+            );
+            return;
+        }
+        self.rebuild_all_effect_pipelines();
+    }
+
+    /// scripts_dir配下の*.lua変更検知時、LuaSystem::reload_dirでhooks/effects/computesを
+    /// 全解除・全再実行し、drain結果でlua_compute_pipelinesとeffects registryのLua側分を
+    /// 差し替える。失敗時は現行状態を変更せずログのみ出力する
+    /// （clear_hooksが先行実行されるため、load_dir内個別ファイル失敗があっても
+    /// hookの多重登録は発生しない）。
+    fn apply_script_reload(&mut self, _path: &std::path::Path) {
+        let Some(sys) = &self.lua_system else {
+            return;
+        };
+        if let Err(err) = sys.reload_dir(&self.scripts_dir) {
+            eprintln!(
+                "[NeoUtl] ホットリロード失敗（scripts） {}: {err}",
+                self.scripts_dir.display()
+            );
+            return;
+        }
+        self.lua_compute_pipelines =
+            build_lua_compute_pipelines(&self.device, &sys.drain_computes());
+        crate::effects::loader::reload_lua(sys.drain_effects());
+        self.rebuild_all_effect_pipelines();
+        eprintln!(
+            "[NeoUtl] scriptsホットリロード完了: {}",
+            self.scripts_dir.display()
+        );
+    }
+
+    /// 現行objects registry全件からpipelinesを再構築する。差し替え対象は再ロードされた
+    /// 1プラグインのみだが、kind_id -> パイプライン対応の再構築コスト自体はO(登録数)で
+    /// 小さく（プラグイン数は数十件規模）、対象特定の複雑化より全体再構築の単純さを優先する。
+    fn rebuild_all_object_pipelines(&mut self) {
+        self.pipelines = build_pipelines_from_registry(&self.device, &self.object_pipeline_layout);
+    }
+
+    /// 現行effects registry全件からeffect_pipelinesを再構築する。理由はrebuild_all_object_pipelinesと同様。
+    fn rebuild_all_effect_pipelines(&mut self) {
+        self.effect_pipelines =
+            build_effect_pipelines_from_registry(&self.device, &self.effect_pipeline_layout);
     }
 
     /// SceneObjectの再帰評価を伴う本体。depthはMAX_SCENE_NESTING_DEPTH判定にのみ使う。

@@ -2021,7 +2021,8 @@ fn refresh(props: &PropertiesWindow, world: &EcsWorld) {
         .map(|(i, e)| EffectRow {
             index: i as i32,
             name: find_effect(&e.effect_id)
-                .map_or(e.effect_id.as_str(), |m| m.name())
+                .map(|m| m.name().to_owned())
+                .unwrap_or_else(|| e.effect_id.clone())
                 .into(),
             enabled: e.enabled,
             dragging: false,
@@ -2039,7 +2040,7 @@ fn refresh(props: &PropertiesWindow, world: &EcsWorld) {
         let Some(meta) = find_effect(&e.effect_id) else {
             continue;
         };
-        let schema = param_schema(meta);
+        let schema = param_schema(&meta);
         push_c_abi_param_rows(
             &mut params,
             &schema,

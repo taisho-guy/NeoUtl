@@ -7,7 +7,7 @@ use crate::ecs::types::{EffectInstance, EffectParam, Value};
 /// 詳細も意識しない。
 pub use neoutl_shared_abi::{ParamKind, ParamRowOwned};
 
-pub fn find_effect(id: &str) -> Option<&'static crate::effects::EffectSource> {
+pub fn find_effect(id: &str) -> Option<std::sync::Arc<crate::effects::EffectSource>> {
     crate::effects::loader::by_id(id)
 }
 
@@ -29,7 +29,7 @@ impl EffectStack {
         let effect_id = effect_id.into();
         let mut instance = EffectInstance::new(effect_id.clone());
         if let Some(source) = find_effect(&effect_id) {
-            for p in param_schema(source) {
+            for p in param_schema(&source) {
                 let value = match p.kind {
                     ParamKind::Bool => Value::Bool(p.default_float != 0.0),
                     ParamKind::Enum => Value::Enum(p.default_float as u32),
