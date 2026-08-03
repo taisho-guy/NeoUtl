@@ -3,8 +3,8 @@ use crate::ecs::resources::ProjectResource;
 use crate::ecs::systems::get_active_objects_system;
 use crate::renderer::RenderEngine;
 use crate::{
-    PreviewWindow, ProjectSettingsWindow, ProjectTabItem, PropertiesWindow, SystemSettingsWindow,
-    TimelineWindow,
+    KeybindingsWindow, PreviewWindow, ProjectSettingsWindow, ProjectTabItem, PropertiesWindow,
+    SystemSettingsWindow, TimelineWindow,
 };
 use slint::{ComponentHandle, ModelRc, SharedString, VecModel, Weak};
 use std::cell::RefCell;
@@ -168,6 +168,7 @@ pub fn setup(
     props_weak: Weak<PropertiesWindow>,
     settings_weak: Weak<SystemSettingsWindow>,
     project_settings_weak: Weak<ProjectSettingsWindow>,
+    keybindings_weak: Weak<KeybindingsWindow>,
     state: SharedAppState,
     gpu_slot: GpuSlot,
 ) {
@@ -767,6 +768,16 @@ pub fn setup(
         }
     });
 
+    preview.on_show_keybindings({
+        let keybindings_weak = keybindings_weak.clone();
+        move || {
+            if let Some(w) = keybindings_weak.upgrade() {
+                let _ = w.show();
+                w.window().request_redraw();
+            }
+        }
+    });
+
     preview.on_quit({
         let state = state.clone();
         move || {
@@ -793,8 +804,8 @@ pub fn dispatch_global_command(
     alt: bool,
     key: &str,
 ) {
-    use crate::shortcuts::{CommandId, Scope, resolve};
-    let Some(cmd) = resolve(Scope::Global, ctrl, shift, alt, key) else {
+    use crate::shortcuts::{CommandId, Scope};
+    let Some(cmd) = crate::shortcuts::resolve_active(Scope::Global, ctrl, shift, alt, key) else {
         return;
     };
     match cmd {
@@ -813,7 +824,18 @@ pub fn dispatch_global_command(
         CommandId::ShowProperties => preview.invoke_show_properties(),
         CommandId::ShowSystemSettings => preview.invoke_show_system_settings(),
         CommandId::ShowProjectSettings => preview.invoke_show_project_settings(),
-        CommandId::NextProjectTab | CommandId::PrevProjectTab | CommandId::CloseProjectTab => {}
+        CommandId::ShowKeybindings => preview.invoke_show_keybindings(),
+        CommandId::NextProjectTab
+        | CommandId::PrevProjectTab
+        | CommandId::CloseProjectTab
+        | CommandId::ShowPreview
+        | CommandId::ShowSceneSettings
+        | CommandId::NewScene
+        | CommandId::CloseScene
+        | CommandId::NextScene
+        | CommandId::PrevScene
+        | CommandId::SeekHome
+        | CommandId::SeekEnd => {}
         _ => {}
     }
 }

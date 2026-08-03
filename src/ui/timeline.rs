@@ -142,8 +142,10 @@ pub fn setup(
         let (tw, pw) = (timeline.as_weak(), preview_weak.clone());
         timeline.on_raw_key_event(move |ctrl, shift, alt, key| {
             let Some(t) = tw.upgrade() else { return };
-            use crate::shortcuts::{CommandId, Scope, resolve};
-            let Some(cmd) = resolve(Scope::Timeline, ctrl, shift, alt, &key) else {
+            use crate::shortcuts::{CommandId, Scope};
+            let Some(cmd) =
+                crate::shortcuts::resolve_active(Scope::Timeline, ctrl, shift, alt, &key)
+            else {
                 return;
             };
             match cmd {

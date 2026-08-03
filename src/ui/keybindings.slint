@@ -1,0 +1,93 @@
+import {
+    Button,
+    ListView,
+    LineEdit,
+    VerticalBox,
+    HorizontalBox,
+} from "std-widgets.slint";
+
+export struct KeyBindingRow {
+    command-index: int,
+    label: string,
+    scope-label: string,
+    key-display: string,
+    conflict: bool,
+}
+
+export component KeybindingsWindow inherits Window {
+    title: "ショートカット設定";
+    width: 640px;
+    height: 480px;
+
+    in-out property <[KeyBindingRow]> rows: [];
+    in-out property <string> save-status: "";
+    in-out property <string> conflict-message: "";
+
+    callback capture-binding(int /* command-index */, bool /* ctrl */, bool /* shift */, bool /* alt */, string /* key */);
+    callback reset-binding(int /* command-index */);
+    callback reset-all();
+    callback save-settings();
+    callback reload-settings();
+
+    VerticalBox {
+        Text {
+            text: root.conflict-message;
+            color: red;
+            visible: root.conflict-message != "";
+        }
+
+        ListView {
+            for row in root.rows: HorizontalBox {
+                Text {
+                    text: row.label;
+                    width: 220px;
+                }
+
+                Text {
+                    text: row.scope-label;
+                    width: 120px;
+                }
+
+                capture := LineEdit {
+                    text: row.key-display;
+                    width: 140px;
+                    key-pressed(event) => {
+                        root.capture-binding(
+                            row.command-index,
+                            event.modifiers.control,
+                            event.modifiers.shift,
+                            event.modifiers.alt,
+                            event.text);
+                        accept
+                    }
+                }
+
+                Button {
+                    text: "既定へ";
+                    clicked => { root.reset-binding(row.command-index); }
+                }
+            }
+        }
+
+        HorizontalBox {
+            Button {
+                text: "全て既定へ";
+                clicked => { root.reset-all(); }
+            }
+
+            Button {
+                text: "保存";
+                clicked => { root.save-settings(); }
+            }
+
+            Button {
+                text: "再読込";
+                clicked => { root.reload-settings(); }
+            }
+
+            Text {
+                text: root.save-status;
+            }
+        }
+    }
+}

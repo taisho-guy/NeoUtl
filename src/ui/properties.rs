@@ -305,8 +305,8 @@ pub fn setup(
     {
         let pw = preview_weak.clone();
         props.on_raw_key_event(move |ctrl, shift, alt, key| {
-            use crate::shortcuts::{Scope, resolve};
-            if resolve(Scope::Properties, ctrl, shift, alt, &key).is_some()
+            use crate::shortcuts::Scope;
+            if crate::shortcuts::resolve_active(Scope::Properties, ctrl, shift, alt, &key).is_some()
                 && let Some(p) = pw.upgrade()
             {
                 crate::ui::preview::dispatch_global_command(&p, ctrl, shift, alt, &key);
@@ -615,7 +615,6 @@ pub fn setup(
             if id < 0 {
                 return;
             }
-            app_state::snapshot_before_edit(&state);
             let world_holder = app_state::active_world(&state);
             let mut world = world_holder.lock().unwrap();
             if world.get_plugin_chain(id as usize).is_some() {
@@ -636,7 +635,6 @@ pub fn setup(
             if id < 0 {
                 return;
             }
-            app_state::snapshot_before_edit(&state);
             let world_holder = app_state::active_world(&state);
             let mut world = world_holder.lock().unwrap();
             if world.get_plugin_chain(id as usize).is_some() {
@@ -823,29 +821,29 @@ pub fn setup(
     {
         let state = state.clone();
         let pw = props.as_weak();
-        props.on_add_effect(move |effect_id| {
+        props.on_add_effect(move |selected_id| {
             let Some(p) = pw.upgrade() else { return };
             let id = p.get_object_id();
             if id < 0 {
                 return;
             }
+
             app_state::snapshot_before_edit(&state);
             let world_holder = app_state::active_world(&state);
             let mut world = world_holder.lock().unwrap();
-            world.add_effect(id as usize, effect_id.as_str());
-            refresh(&p, &world);
-        });
-    }
+            let is_audio = world
+                .get_kind_id(id as usize)
+                .and_then(|kind_id| crate::objects::loader::by_kind_id(kind_id))
+                .is_some_and(|plugin| plugin.stable_id == neoutl_object_api::AUDIO_STABLE_ID);
 
-    {
-        let state = state.clone();
-        let pw = props.as_weak();
-        props.on_add_effect(move |plugin_id| {
-            let Some(p) = pw.upgrade() else { return };
-            let id = p.get_object_id();
-            if id < 0 {
+            if !is_audio {
+                world.add_effect(id as usize, selected_id.as_str());
+                refresh(&p, &world);
                 return;
             }
+
+            drop(world);
+            let plugin_id = selected_id;
             let Some(entry) = crate::audio::plugin_registry::by_path(plugin_id.as_str()) else {
                 return;
             };
@@ -864,7 +862,6 @@ pub fn setup(
                     .map(|p| p.param_info())
                     .unwrap_or_default(),
             };
-            app_state::snapshot_before_edit(&state);
             let world_holder = app_state::active_world(&state);
             let mut world = world_holder.lock().unwrap();
             world.add_plugin(id as usize, format, path, plugin_id, param_info);
