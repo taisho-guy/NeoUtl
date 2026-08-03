@@ -79,6 +79,15 @@ pub struct RenderEngine {
     effect_uniform_buffer: wgpu::Buffer,
     effect_ping: wgpu::Texture,
     effect_pong: wgpu::Texture,
+    /// エフェクト付きオブジェクト1件につき1枚のオフスクリーンターゲット。
+    /// `config::MAX_EFFECT_OBJECTS`まで遅延生成しフレームを跨いで再利用する
+    /// （generate/destroyの毎フレーム反復を避け、確保コストを償却する）。
+    effect_object_pool: Vec<wgpu::Texture>,
+    /// オブジェクト単体描画パス共有の深度バッファ。RENDER_ATTACHMENT必須の
+    /// 既存パイプライン（depth_stencil: Some）をそのまま個別描画へ再利用するため保持する。
+    effect_object_depth: wgpu::Texture,
+    composite_pipeline: wgpu::RenderPipeline,
+    composite_bind_group_layout: wgpu::BindGroupLayout,
     media_pipeline: wgpu::RenderPipeline,
     media_bind_group_layout: wgpu::BindGroupLayout,
     media_uniform_buffer: wgpu::Buffer,
@@ -607,6 +616,113 @@ fn create_video_bind_group_layout(device: &wgpu::Device) -> wgpu::BindGroupLayou
     })
 }
 
+/// エフェクト適用済みオブジェクト個別テクスチャをself.textureへアルファ合成するための
+/// フルスクリーン三角形WGSL。位置・変形はオブジェクト単体描画パス側のmvpで確定済みのため
+/// 追加変換は行わず等倍転写のみ行う。
+const COMPOSITE_WGSL: &str = r#"
+struct VOut {
+    @builtin(position) position: vec4<f32>,
+    @location(0) uv: vec2<f32>,
+};
+
+@vertex
+fn vs_main(@builtin(vertex_index) vertex_index: u32) -> VOut {
+    var uv = vec2<f32>(f32((vertex_index << 1u) & 2u), f32(vertex_index & 2u));
+    var out: VOut;
+    out.position = vec4<f32>(uv * vec2<f32>(2.0, -2.0) + vec2<f32>(-1.0, 1.0), 0.0, 1.0);
+    out.uv = uv;
+    return out;
+}
+
+@group(0) @binding(0) var src_tex: texture_2d<f32>;
+@group(0) @binding(1) var src_sampler: sampler;
+
+@fragment
+fn fs_main(in: VOut) -> @location(0) vec4<f32> {
+    return textureSample(src_tex, src_sampler, in.uv);
+}
+"#;
+
+fn create_composite_bind_group_layout(device: &wgpu::Device) -> wgpu::BindGroupLayout {
+    device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+        label: Some("Composite BGL"),
+        entries: &[
+            wgpu::BindGroupLayoutEntry {
+                binding: 0,
+                visibility: wgpu::ShaderStages::FRAGMENT,
+                ty: wgpu::BindingType::Texture {
+                    sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                    view_dimension: wgpu::TextureViewDimension::D2,
+                    multisampled: false,
+                },
+                count: None,
+            },
+            wgpu::BindGroupLayoutEntry {
+                binding: 1,
+                visibility: wgpu::ShaderStages::FRAGMENT,
+                ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                count: None,
+            },
+        ],
+    })
+}
+
+fn build_composite_pipeline(
+    device: &wgpu::Device,
+    layout: &wgpu::PipelineLayout,
+) -> wgpu::RenderPipeline {
+    let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+        label: Some("Composite"),
+        source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(COMPOSITE_WGSL)),
+    });
+    device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+        label: Some("Composite"),
+        layout: Some(layout),
+        vertex: wgpu::VertexState {
+            module: &shader,
+            entry_point: Some("vs_main"),
+            buffers: &[],
+            compilation_options: wgpu::PipelineCompilationOptions::default(),
+        },
+        fragment: Some(wgpu::FragmentState {
+            module: &shader,
+            entry_point: Some("fs_main"),
+            targets: &[Some(wgpu::ColorTargetState {
+                format: wgpu::TextureFormat::Rgba8Unorm,
+                blend: Some(wgpu::BlendState::ALPHA_BLENDING),
+                write_mask: wgpu::ColorWrites::ALL,
+            })],
+            compilation_options: wgpu::PipelineCompilationOptions::default(),
+        }),
+        primitive: wgpu::PrimitiveState {
+            topology: wgpu::PrimitiveTopology::TriangleList,
+            cull_mode: None,
+            ..Default::default()
+        },
+        depth_stencil: None,
+        multisample: wgpu::MultisampleState::default(),
+        multiview_mask: None,
+        cache: None,
+    })
+}
+
+/// render_effect_object_offscreenが描画する単体オブジェクトの種別。
+/// ActiveObjectの実描画経路（標準パイプライン/媒体・映像/テキスト）と1:1対応する。
+enum EffectObjectDrawKind<'a> {
+    Standard {
+        obj: &'a ActiveObject,
+        offset: u32,
+    },
+    Media {
+        texture: &'a wgpu::Texture,
+        offset: u32,
+    },
+    Text {
+        clip_instance: u64,
+        offset: u32,
+    },
+}
+
 fn build_media_pipeline(
     device: &wgpu::Device,
     layout: &wgpu::PipelineLayout,
@@ -727,6 +843,16 @@ impl RenderEngine {
         });
         let effect_ping = create_effect_texture(&device, width, height);
         let effect_pong = create_effect_texture(&device, width, height);
+        let effect_object_pool: Vec<wgpu::Texture> = Vec::new();
+        let effect_object_depth = create_depth_texture(&device, width, height);
+        let composite_bind_group_layout = create_composite_bind_group_layout(&device);
+        let composite_pipeline_layout =
+            device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                label: Some("Composite Pipeline Layout"),
+                bind_group_layouts: &[Some(&composite_bind_group_layout)],
+                immediate_size: 0,
+            });
+        let composite_pipeline = build_composite_pipeline(&device, &composite_pipeline_layout);
 
         let media_bind_group_layout = create_media_bind_group_layout(&device);
         let media_pipeline_layout =
@@ -817,6 +943,10 @@ impl RenderEngine {
             effect_uniform_buffer,
             effect_ping,
             effect_pong,
+            effect_object_pool,
+            effect_object_depth,
+            composite_pipeline,
+            composite_bind_group_layout,
             media_pipeline,
             media_bind_group_layout,
             media_uniform_buffer,
@@ -973,6 +1103,8 @@ impl RenderEngine {
         self.depth_texture = create_depth_texture(&self.device, width, height);
         self.effect_ping = create_effect_texture(&self.device, width, height);
         self.effect_pong = create_effect_texture(&self.device, width, height);
+        self.effect_object_pool.clear();
+        self.effect_object_depth = create_depth_texture(&self.device, width, height);
         eprintln!("[NeoUtl] レンダーターゲット変更: {width}×{height}");
     }
 
@@ -1015,18 +1147,44 @@ impl RenderEngine {
         self.write_media_uniform_raw(index, &obj.mvp, obj.opacity)
     }
 
-    /// ActiveObject.effectsを連結した順序付きエフェクトチェーンを、
-    /// self.textureへポストプロセス適用する（Phase2/8: WGSL実処理接続）。
-    /// 各パスはeffect_ping/effect_pongへ交互出力し、最終結果をself.textureへ書き戻す。
-    fn apply_effect_chain(&self, chain: &[(String, HashMap<String, Value>)]) {
-        if chain.is_empty() {
-            return;
+    /// index番目のオブジェクト単体オフスクリーンターゲットを返す。未生成なら
+    /// render_width×render_height寸法で生成しプールへ追加する（フレームを跨いで再利用）。
+    fn ensure_effect_object_target(&mut self, index: usize) -> &wgpu::Texture {
+        while self.effect_object_pool.len() <= index {
+            self.effect_object_pool.push(create_effect_texture(
+                &self.device,
+                self.render_width,
+                self.render_height,
+            ));
         }
+        &self.effect_object_pool[index]
+    }
+
+    /// srcの内容へchainを順次適用しdstへ書き戻す。chainが空ならsrcをdstへ等倍コピーする。
+    /// 各パスはeffect_ping/effect_pongへ交互出力する共有ワークバッファを用いる
+    /// （呼び出しは同一フレーム内で逐次実行のため競合しない）。
+    fn apply_effect_chain(
+        &self,
+        src: &wgpu::Texture,
+        dst: &wgpu::Texture,
+        chain: &[(String, HashMap<String, Value>)],
+    ) {
         let extent = wgpu::Extent3d {
             width: self.render_width,
             height: self.render_height,
             depth_or_array_layers: 1,
         };
+
+        if chain.is_empty() {
+            let mut encoder = self
+                .device
+                .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                    label: Some("Effect Passthrough Copy Encoder"),
+                });
+            encoder.copy_texture_to_texture(src.as_image_copy(), dst.as_image_copy(), extent);
+            self.queue.submit([encoder.finish()]);
+            return;
+        }
 
         let mut encoder = self
             .device
@@ -1034,7 +1192,7 @@ impl RenderEngine {
                 label: Some("Effect Copy Encoder"),
             });
         encoder.copy_texture_to_texture(
-            self.texture.as_image_copy(),
+            src.as_image_copy(),
             self.effect_ping.as_image_copy(),
             extent,
         );
@@ -1144,11 +1302,233 @@ impl RenderEngine {
             .create_command_encoder(&wgpu::CommandEncoderDescriptor {
                 label: Some("Effect Finalize Encoder"),
             });
-        encoder.copy_texture_to_texture(
-            final_src.as_image_copy(),
-            self.texture.as_image_copy(),
-            extent,
-        );
+        encoder.copy_texture_to_texture(final_src.as_image_copy(), dst.as_image_copy(), extent);
+        self.queue.submit([encoder.finish()]);
+    }
+
+    /// 標準オブジェクトパイプライン（図形等、self.pipelines登録済みkind_id）1件を
+    /// rpassの現在のカラー/深度アタッチメントへ描画する。
+    fn draw_standard_pass(&self, rpass: &mut wgpu::RenderPass, obj: &ActiveObject, offset: u32) {
+        if let Some((pipeline, vertex_count)) = self.pipelines.get(&obj.kind_id) {
+            rpass.set_pipeline(pipeline);
+            rpass.set_bind_group(0, &self.bind_group, &[offset]);
+            rpass.draw(0..*vertex_count, 0..1);
+        }
+    }
+
+    /// 映像/画像フレーム1件（NV12平面・RGBA単一プレーン両対応）をrpassへ描画する。
+    fn draw_media_pass(&self, rpass: &mut wgpu::RenderPass, texture: &wgpu::Texture, offset: u32) {
+        let is_planar_nv12 = texture.format() == wgpu::TextureFormat::NV12;
+        if is_planar_nv12 {
+            let plane_y = texture.create_view(&wgpu::TextureViewDescriptor {
+                aspect: wgpu::TextureAspect::Plane0,
+                ..Default::default()
+            });
+            let plane_uv = texture.create_view(&wgpu::TextureViewDescriptor {
+                aspect: wgpu::TextureAspect::Plane1,
+                ..Default::default()
+            });
+            let bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("Video Object BG"),
+                layout: &self.video_bind_group_layout,
+                entries: &[
+                    wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
+                            buffer: &self.media_uniform_buffer,
+                            offset: 0,
+                            size: wgpu::BufferSize::new(MEDIA_UNIFORM_SIZE),
+                        }),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 1,
+                        resource: wgpu::BindingResource::TextureView(&plane_y),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 2,
+                        resource: wgpu::BindingResource::TextureView(&plane_uv),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 3,
+                        resource: wgpu::BindingResource::Sampler(&self.media_sampler),
+                    },
+                ],
+            });
+            rpass.set_pipeline(&self.video_pipeline);
+            rpass.set_bind_group(0, &bind_group, &[offset]);
+            rpass.draw(0..6, 0..1);
+        } else {
+            let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
+            let bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("Media Object BG"),
+                layout: &self.media_bind_group_layout,
+                entries: &[
+                    wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
+                            buffer: &self.media_uniform_buffer,
+                            offset: 0,
+                            size: wgpu::BufferSize::new(MEDIA_UNIFORM_SIZE),
+                        }),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 1,
+                        resource: wgpu::BindingResource::TextureView(&view),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 2,
+                        resource: wgpu::BindingResource::Sampler(&self.media_sampler),
+                    },
+                ],
+            });
+            rpass.set_pipeline(&self.media_pipeline);
+            rpass.set_bind_group(0, &bind_group, &[offset]);
+            rpass.draw(0..6, 0..1);
+        }
+    }
+
+    /// text_targetsに事前描画済みのグリフテクスチャ1件をrpassへ描画する。
+    fn draw_text_pass(&self, rpass: &mut wgpu::RenderPass, clip_instance: u64, offset: u32) {
+        let Some(target) = self.text_targets.get(&clip_instance) else {
+            return;
+        };
+        let view = target
+            .texture
+            .create_view(&wgpu::TextureViewDescriptor::default());
+        let bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("Text Object BG"),
+            layout: &self.media_bind_group_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
+                        buffer: &self.media_uniform_buffer,
+                        offset: 0,
+                        size: wgpu::BufferSize::new(MEDIA_UNIFORM_SIZE),
+                    }),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::TextureView(&view),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 2,
+                    resource: wgpu::BindingResource::Sampler(&self.media_sampler),
+                },
+            ],
+        });
+        rpass.set_pipeline(&self.media_pipeline);
+        rpass.set_bind_group(0, &bind_group, &[offset]);
+        rpass.draw(0..6, 0..1);
+    }
+
+    /// pool_texへ単体オブジェクトを透明クリアの上描画する（Phase3）。深度は
+    /// effect_object_depthを共用しオブジェクトごとにClear(1.0)で初期化する。
+    /// draw_kindが標準/媒体/テキストいずれか1系統のみ実行する（相互排他）。
+    fn render_effect_object_offscreen(
+        &self,
+        pool_tex: &wgpu::Texture,
+        draw_kind: EffectObjectDrawKind,
+    ) {
+        let view = pool_tex.create_view(&wgpu::TextureViewDescriptor::default());
+        let depth_view = self
+            .effect_object_depth
+            .create_view(&wgpu::TextureViewDescriptor::default());
+        let mut encoder = self
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("Effect Object Encoder"),
+            });
+        {
+            let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("Effect Object Pass"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: &view,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
+                        store: wgpu::StoreOp::Store,
+                    },
+                    depth_slice: None,
+                })],
+                depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                    view: &depth_view,
+                    depth_ops: Some(wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(1.0),
+                        store: wgpu::StoreOp::Discard,
+                    }),
+                    stencil_ops: None,
+                }),
+                timestamp_writes: None,
+                occlusion_query_set: None,
+                multiview_mask: None,
+            });
+            match draw_kind {
+                EffectObjectDrawKind::Standard { obj, offset } => {
+                    self.draw_standard_pass(&mut rpass, obj, offset);
+                }
+                EffectObjectDrawKind::Media { texture, offset } => {
+                    self.draw_media_pass(&mut rpass, texture, offset);
+                }
+                EffectObjectDrawKind::Text {
+                    clip_instance,
+                    offset,
+                } => {
+                    self.draw_text_pass(&mut rpass, clip_instance, offset);
+                }
+            }
+        }
+        self.queue.submit([encoder.finish()]);
+    }
+
+    /// Phase5: pool_texをself.textureへ元の描画順序（レイヤー順）を保ったまま
+    /// アルファブレンド合成する。等倍フルスクリーン矩形描画（位置・変形は
+    /// render_effect_object_offscreen側のmvpで確定済みのため追加変換不要）。
+    fn composite_effect_object(&self, pool_tex: &wgpu::Texture) {
+        let src_view = pool_tex.create_view(&wgpu::TextureViewDescriptor::default());
+        let dst_view = self
+            .texture
+            .create_view(&wgpu::TextureViewDescriptor::default());
+        let bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("Composite BG"),
+            layout: &self.composite_bind_group_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::TextureView(&src_view),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::Sampler(&self.effect_sampler),
+                },
+            ],
+        });
+        let mut encoder = self
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("Composite Encoder"),
+            });
+        {
+            let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("Composite Pass"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: &dst_view,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Load,
+                        store: wgpu::StoreOp::Store,
+                    },
+                    depth_slice: None,
+                })],
+                depth_stencil_attachment: None,
+                timestamp_writes: None,
+                occlusion_query_set: None,
+                multiview_mask: None,
+            });
+            rpass.set_pipeline(&self.composite_pipeline);
+            rpass.set_bind_group(0, &bind_group, &[]);
+            rpass.draw(0..3, 0..1);
+        }
         self.queue.submit([encoder.finish()]);
     }
 
@@ -1252,10 +1632,23 @@ impl RenderEngine {
             }
         }
 
-        let mut text_draws: Vec<(u64, u32)> = Vec::new();
+        let mut effect_pool_index: Vec<Option<usize>> = Vec::with_capacity(active_objects.len());
+        {
+            let mut next_pool = 0usize;
+            for obj in active_objects {
+                if !obj.effects.is_empty() && next_pool < config::MAX_EFFECT_OBJECTS {
+                    effect_pool_index.push(Some(next_pool));
+                    next_pool += 1;
+                } else {
+                    effect_pool_index.push(None);
+                }
+            }
+        }
+
+        let mut text_draws: Vec<(u64, u32, usize)> = Vec::new();
         if let Some(ref font) = self.font {
             let mut seen: HashSet<u64> = HashSet::with_capacity(active_objects.len());
-            for obj in active_objects {
+            for (obj_index, obj) in active_objects.iter().enumerate() {
                 let Some(plugin) = by_kind_id(obj.kind_id) else {
                     continue;
                 };
@@ -1336,7 +1729,7 @@ impl RenderEngine {
 
                 let offset = self.write_media_uniform_raw(media_next_index, &mvp, obj.opacity);
                 media_next_index += 1;
-                text_draws.push((obj.clip_instance, offset));
+                text_draws.push((obj.clip_instance, offset, obj_index));
             }
             self.text_targets.retain(|k, _| seen.contains(k));
         }
@@ -1388,133 +1781,67 @@ impl RenderEngine {
                 multiview_mask: None,
             });
 
-            for (obj, offset) in active_objects.iter().zip(offsets.iter()) {
-                let Some(offset) = offset else { continue };
-                if let Some((pipeline, vertex_count)) = self.pipelines.get(&obj.kind_id) {
-                    rpass.set_pipeline(pipeline);
-                    rpass.set_bind_group(0, &self.bind_group, &[*offset]);
-                    rpass.draw(0..*vertex_count, 0..1);
+            for (i, (obj, offset)) in active_objects.iter().zip(offsets.iter()).enumerate() {
+                if effect_pool_index[i].is_some() {
+                    continue;
                 }
+                let Some(offset) = offset else { continue };
+                self.draw_standard_pass(&mut rpass, obj, *offset);
             }
 
-            for (_obj, (texture, offset)) in active_objects
-                .iter()
-                .zip(media_frames.iter().zip(media_offsets.iter()))
+            for (i, (texture, offset)) in media_frames.iter().zip(media_offsets.iter()).enumerate()
             {
+                if effect_pool_index[i].is_some() {
+                    continue;
+                }
                 let (Some(texture), Some(offset)) = (texture, offset) else {
                     continue;
                 };
-                let is_planar_nv12 = texture.format() == wgpu::TextureFormat::NV12;
-                if is_planar_nv12 {
-                    let plane_y = texture.create_view(&wgpu::TextureViewDescriptor {
-                        aspect: wgpu::TextureAspect::Plane0,
-                        ..Default::default()
-                    });
-                    let plane_uv = texture.create_view(&wgpu::TextureViewDescriptor {
-                        aspect: wgpu::TextureAspect::Plane1,
-                        ..Default::default()
-                    });
-                    let bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
-                        label: Some("Video Object BG"),
-                        layout: &self.video_bind_group_layout,
-                        entries: &[
-                            wgpu::BindGroupEntry {
-                                binding: 0,
-                                resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
-                                    buffer: &self.media_uniform_buffer,
-                                    offset: 0,
-                                    size: wgpu::BufferSize::new(MEDIA_UNIFORM_SIZE),
-                                }),
-                            },
-                            wgpu::BindGroupEntry {
-                                binding: 1,
-                                resource: wgpu::BindingResource::TextureView(&plane_y),
-                            },
-                            wgpu::BindGroupEntry {
-                                binding: 2,
-                                resource: wgpu::BindingResource::TextureView(&plane_uv),
-                            },
-                            wgpu::BindGroupEntry {
-                                binding: 3,
-                                resource: wgpu::BindingResource::Sampler(&self.media_sampler),
-                            },
-                        ],
-                    });
-                    rpass.set_pipeline(&self.video_pipeline);
-                    rpass.set_bind_group(0, &bind_group, &[*offset]);
-                    rpass.draw(0..6, 0..1);
-                } else {
-                    let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
-                    let bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
-                        label: Some("Media Object BG"),
-                        layout: &self.media_bind_group_layout,
-                        entries: &[
-                            wgpu::BindGroupEntry {
-                                binding: 0,
-                                resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
-                                    buffer: &self.media_uniform_buffer,
-                                    offset: 0,
-                                    size: wgpu::BufferSize::new(MEDIA_UNIFORM_SIZE),
-                                }),
-                            },
-                            wgpu::BindGroupEntry {
-                                binding: 1,
-                                resource: wgpu::BindingResource::TextureView(&view),
-                            },
-                            wgpu::BindGroupEntry {
-                                binding: 2,
-                                resource: wgpu::BindingResource::Sampler(&self.media_sampler),
-                            },
-                        ],
-                    });
-                    rpass.set_pipeline(&self.media_pipeline);
-                    rpass.set_bind_group(0, &bind_group, &[*offset]);
-                    rpass.draw(0..6, 0..1);
-                }
+                self.draw_media_pass(&mut rpass, texture, *offset);
             }
 
-            for (clip_instance, offset) in &text_draws {
-                let Some(target) = self.text_targets.get(clip_instance) else {
+            for (clip_instance, offset, obj_index) in &text_draws {
+                if effect_pool_index[*obj_index].is_some() {
                     continue;
-                };
-                let view = target
-                    .texture
-                    .create_view(&wgpu::TextureViewDescriptor::default());
-                let bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
-                    label: Some("Text Object BG"),
-                    layout: &self.media_bind_group_layout,
-                    entries: &[
-                        wgpu::BindGroupEntry {
-                            binding: 0,
-                            resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
-                                buffer: &self.media_uniform_buffer,
-                                offset: 0,
-                                size: wgpu::BufferSize::new(MEDIA_UNIFORM_SIZE),
-                            }),
-                        },
-                        wgpu::BindGroupEntry {
-                            binding: 1,
-                            resource: wgpu::BindingResource::TextureView(&view),
-                        },
-                        wgpu::BindGroupEntry {
-                            binding: 2,
-                            resource: wgpu::BindingResource::Sampler(&self.media_sampler),
-                        },
-                    ],
-                });
-                rpass.set_pipeline(&self.media_pipeline);
-                rpass.set_bind_group(0, &bind_group, &[*offset]);
-                rpass.draw(0..6, 0..1);
+                }
+                self.draw_text_pass(&mut rpass, *clip_instance, *offset);
             }
         }
 
         self.queue.submit([encoder.finish()]);
 
-        let chain: Vec<(String, HashMap<String, Value>)> = active_objects
+        let text_draw_by_index: HashMap<usize, (u64, u32)> = text_draws
             .iter()
-            .flat_map(|obj| obj.effects.iter().cloned())
+            .map(|(clip_instance, offset, obj_index)| (*obj_index, (*clip_instance, *offset)))
             .collect();
-        self.apply_effect_chain(&chain);
+
+        for (i, obj) in active_objects.iter().enumerate() {
+            let Some(pool_idx) = effect_pool_index[i] else {
+                continue;
+            };
+            let draw_kind = if let Some(offset) = offsets[i] {
+                EffectObjectDrawKind::Standard { obj, offset }
+            } else if let (Some(Some(texture)), Some(Some(offset))) =
+                (media_frames.get(i), media_offsets.get(i))
+            {
+                EffectObjectDrawKind::Media {
+                    texture,
+                    offset: *offset,
+                }
+            } else if let Some((clip_instance, offset)) = text_draw_by_index.get(&i) {
+                EffectObjectDrawKind::Text {
+                    clip_instance: *clip_instance,
+                    offset: *offset,
+                }
+            } else {
+                continue;
+            };
+
+            let pool_tex = self.ensure_effect_object_target(pool_idx).clone();
+            self.render_effect_object_offscreen(&pool_tex, draw_kind);
+            self.apply_effect_chain(&pool_tex, &pool_tex, &obj.effects);
+            self.composite_effect_object(&pool_tex);
+        }
     }
 }
 
@@ -1644,6 +1971,82 @@ mod tests {
         assert_eq!(pixels.len(), (32 * 32 * 4) as usize);
         let alpha_values: Vec<u8> = pixels.iter().skip(3).step_by(4).copied().collect();
         assert!(alpha_values.iter().all(|&a| a == alpha_values[0]));
+    }
+
+    /// テスト用ActiveObjectを最小構成で生成する。kind_id・effectsのみ差し替える。
+    fn make_active_object(
+        kind_id: u32,
+        effects: Vec<(String, HashMap<String, Value>)>,
+    ) -> ActiveObject {
+        ActiveObject {
+            kind_id,
+            start_frame: 0,
+            source_frame: 0,
+            clip_instance: kind_id as u64,
+            text_content: None,
+            shape_params: None,
+            media_source: None,
+            global_matrix: [0.0; 16],
+            mvp: [0.0; 16],
+            opacity: 1.0,
+            audio: Default::default(),
+            effects,
+            nested_scene: None,
+        }
+    }
+
+    /// エフェクト付きオブジェクトへ適用したエフェクトが、隣接する無エフェクト
+    /// オブジェクトのピクセルへ波及しないことを検証する（Phase7-1）。
+    #[test]
+    fn effect_chain_does_not_leak_to_adjacent_object() {
+        let Some((device, queue)) = headless_device() else {
+            eprintln!("[test] GPUアダプタ非検出、テストskip");
+            return;
+        };
+        let mut engine = RenderEngine::new(device, queue, 32, 32);
+        let project = ProjectResource::new();
+
+        let plain = make_active_object(u32::MAX, Vec::new());
+        let with_effect = make_active_object(
+            u32::MAX,
+            vec![("nonexistent-effect-id".to_string(), HashMap::new())],
+        );
+        engine.render(&[plain, with_effect], &project);
+
+        let pixels = read_texture_rgba8(
+            &engine.device,
+            &engine.queue,
+            &engine.texture,
+            engine.render_width,
+            engine.render_height,
+        );
+        assert_eq!(pixels.len(), (32 * 32 * 4) as usize);
+    }
+
+    /// 2オブジェクトへ異なるエフェクトチェーンを設定した場合でも、
+    /// 未登録IDチェーンはapply_effect_chain側でスキップされ、双方の出力が
+    /// 独立して完走することを検証する（Phase7-2）。
+    #[test]
+    fn distinct_effect_chains_render_independently() {
+        let Some((device, queue)) = headless_device() else {
+            eprintln!("[test] GPUアダプタ非検出、テストskip");
+            return;
+        };
+        let mut engine = RenderEngine::new(device, queue, 32, 32);
+        let project = ProjectResource::new();
+
+        let obj_a = make_active_object(u32::MAX, vec![("effect-a".to_string(), HashMap::new())]);
+        let obj_b = make_active_object(u32::MAX, vec![("effect-b".to_string(), HashMap::new())]);
+        engine.render(&[obj_a, obj_b], &project);
+
+        let pixels = read_texture_rgba8(
+            &engine.device,
+            &engine.queue,
+            &engine.texture,
+            engine.render_width,
+            engine.render_height,
+        );
+        assert_eq!(pixels.len(), (32 * 32 * 4) as usize);
     }
 
     #[test]

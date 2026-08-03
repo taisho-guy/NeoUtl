@@ -44,7 +44,7 @@ serde_json = "1.0"
 
 [package]
 name = "NeoUtl"
-version = "0.0.0"
+version = "0.4.0"
 edition = "2024"
 
 [dependencies]
