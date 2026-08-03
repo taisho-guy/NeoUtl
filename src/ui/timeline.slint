@@ -82,17 +82,12 @@ export component TimelineWindow inherits Window {
     callback context-menu-requested(int /* hit-id */, int /* frame */, int /* layer */);
 
     key-focus := FocusScope {
-        width: 100%;
-        height: 100%;
         key-pressed(event) => {
             root.raw-key-event(event.modifiers.control, event.modifiers.shift, event.modifiers.alt, KeyUtil.normalize-key(event));
             accept
         }
-    }
 
-    VerticalLayout {
-        width: 100%;
-        height: 100%;
+        VerticalLayout {
         Rectangle {
             height: 28px;
             background: #16161c;
@@ -215,6 +210,7 @@ export component TimelineWindow inherits Window {
                 }
             }
         }
+    }
     }
 
     // メニュー項目集合はRust側(timeline.rs::build_context_menu)のみが生成する。
