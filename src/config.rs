@@ -74,6 +74,10 @@ pub const UNIFORM_STRIDE_BYTES: u64 = 256;
 pub const MAX_EFFECT_UNIFORM_BYTES: u64 = 128;
 pub const MEDIA_UNIFORM_BYTES: u64 = 80;
 
+/// エフェクト付きオブジェクトのオフスクリーン個別処理上限数（render_at）。
+/// 超過分は末尾からeffects適用を省略しシーン直接合成のみ行う（過剰確保回避）。
+pub const MAX_EFFECT_OBJECTS: usize = 64;
+
 /// 再生速度可変範囲（%）
 pub const PLAYBACK_SPEED_MIN_PERCENT: i32 = 10;
 pub const PLAYBACK_SPEED_MAX_PERCENT: i32 = 400;
