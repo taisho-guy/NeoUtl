@@ -36,6 +36,7 @@ export component PreviewWindow inherits Window {
     callback show-properties();
     callback show-system-settings();
     callback show-project-settings();
+    callback show-keybindings();
     callback switch-project-tab(int);
     callback close-project-tab(int);
     callback raw-key-event(bool /* ctrl */, bool /* shift */, bool /* alt */, string /* key */);
@@ -102,6 +103,11 @@ export component PreviewWindow inherits Window {
             MenuItem {
                 title: "プロジェクト設定";
                 activated() => { root.show-project-settings(); }
+            }
+
+            MenuItem {
+                title: "ショートカット設定";
+                activated() => { root.show-keybindings(); }
             }
         }
 

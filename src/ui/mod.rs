@@ -1,3 +1,4 @@
+pub mod keybindings;
 pub mod launcher;
 mod preview;
 pub mod project_settings;
@@ -9,8 +10,8 @@ pub mod timeline;
 use crate::app_state::{self, AppState, ProjectSession, SharedAppState};
 use crate::project::ProjectMeta;
 use crate::{
-    LauncherWindow, PreviewWindow, ProjectSettingsWindow, PropertiesWindow, SceneSettingsWindow,
-    SystemSettingsWindow, TimelineWindow,
+    KeybindingsWindow, LauncherWindow, PreviewWindow, ProjectSettingsWindow, PropertiesWindow,
+    SceneSettingsWindow, SystemSettingsWindow, TimelineWindow,
 };
 use slint::ComponentHandle;
 use std::cell::RefCell;
@@ -27,6 +28,8 @@ struct AppHandles {
     scene_settings: SceneSettingsWindow,
     #[allow(dead_code)]
     project_settings: ProjectSettingsWindow,
+    #[allow(dead_code)]
+    keybindings: KeybindingsWindow,
 }
 
 /// ランチャーのコールバックを配線する。
@@ -100,6 +103,7 @@ fn build_main_windows(
     let settings = SystemSettingsWindow::new()?;
     let scene_settings_win = SceneSettingsWindow::new()?;
     let project_settings_win = ProjectSettingsWindow::new()?;
+    let keybindings_win = KeybindingsWindow::new()?;
 
     let gpu_slot: preview::GpuSlot = Rc::new(RefCell::new(None));
     preview::install_rendering_notifier(&preview, gpu_slot.clone());
@@ -107,10 +111,12 @@ fn build_main_windows(
     system_settings::setup(&settings, app_state::settings_world(state));
     scene_settings::setup(&scene_settings_win, state.clone(), timeline.as_weak());
     project_settings::setup(&project_settings_win, state.clone(), preview.as_weak());
+    keybindings::setup(&keybindings_win);
     for w in [
         settings.window(),
         scene_settings_win.window(),
         project_settings_win.window(),
+        keybindings_win.window(),
     ] {
         let _ = w.show();
         let _ = w.hide();
@@ -121,6 +127,7 @@ fn build_main_windows(
         props.as_weak(),
         settings.as_weak(),
         project_settings_win.as_weak(),
+        keybindings_win.as_weak(),
         state.clone(),
         gpu_slot,
     );
@@ -132,6 +139,7 @@ fn build_main_windows(
         state.clone(),
     );
     properties::setup(&props, preview.as_weak(), timeline.as_weak(), state.clone());
+
     Ok(AppHandles {
         preview,
         timeline,
@@ -139,5 +147,6 @@ fn build_main_windows(
         settings,
         scene_settings: scene_settings_win,
         project_settings: project_settings_win,
+        keybindings: keybindings_win,
     })
 }

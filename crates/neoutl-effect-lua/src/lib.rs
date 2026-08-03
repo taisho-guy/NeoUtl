@@ -109,11 +109,11 @@ pub fn load_dir(dir: &Path) -> Vec<LuaEffectSource> {
                 return None;
             }
             match load(&path) {
-            Ok(src) => Some(src),
-            Err(err) => {
-                eprintln!("[NeoUtl] Luaエフェクト読込失敗 {}: {err}", path.display());
-                None
-            }
+                Ok(src) => Some(src),
+                Err(err) => {
+                    eprintln!("[NeoUtl] Luaエフェクト読込失敗 {}: {err}", path.display());
+                    None
+                }
             }
         })
         .collect()
