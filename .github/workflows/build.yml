@@ -46,12 +46,14 @@ jobs:
             binary_name: NeoUtl.exe
             rust_target: x86_64-pc-windows-msvc
             vcpkg_triplet: x64-windows
+            msvc_arch: x64
           - os: windows-11-arm
             os_name: Windows(ARM64)
             artifact_name: neoutl-windows-arm64
             binary_name: NeoUtl.exe
             rust_target: aarch64-pc-windows-msvc
             vcpkg_triplet: arm64-windows
+            msvc_arch: arm64
     runs-on: ${{ matrix.os }}
 
     steps:
@@ -103,6 +105,18 @@ jobs:
           PKG_CONFIG: pkg-config
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: cargo xtask build --release
+
+      - name: MSVC開発者環境セットアップ(Windows x86_64)
+        # mlua vendored機能のLuaJIT配置(luajit-src crate)はmsvcbuild.batを直接実行して
+        # LuaJITを静的ビルドする。cc crateとは独立した経路のため、cl.exe/link.exe/LIB/INCLUDE
+        # を事前にPATH・環境変数へ展開しておく必要がある（未設定時はLuaJITビルド失敗で
+        # neoutl-lua-runtimeのコンパイルごと失敗する）。
+        # Windows ARM64はLuaJIT非対応のためvendored Lua5.4を使用し、これはcc crate経由の
+        # 通常ビルドでMSVCを自動検出するため本ステップ不要（x86_64のみ実行）。
+        if: runner.os == 'Windows' && matrix.msvc_arch == 'x64'
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: ${{ matrix.msvc_arch }}
 
       - name: ビルド(Windows / MSVC)
         if: runner.os == 'Windows'

@@ -32,6 +32,9 @@ pub const SYSTEM_DEFAULT_DEFAULT_SNAP: bool = true;
 pub const SYSTEM_DEFAULT_MAGNETIC_SNAP_RANGE: i32 = 10;
 pub const SYSTEM_DEFAULT_EXPORT_CONTAINER: i32 = 0;
 pub const SYSTEM_DEFAULT_EXPORT_CODEC: i32 = 0;
+/// プラグイン(objects/effects dylib)ホットリロードの既定有効状態。
+/// リリースビルドでは監視スレッド自体を起動しない（hot_reload::spawn_watcher呼び出し元をcfg分岐）。
+pub const SYSTEM_DEFAULT_HOT_RELOAD_ENABLED: bool = cfg!(debug_assertions);
 
 /// decode_backend列挙値（SystemSettingsResource::decode_backend）
 pub const DECODE_BACKEND_AUTO: i32 = 0;

@@ -68,7 +68,8 @@ pub fn setup(
         let (state, tw, pw) = (state.clone(), timeline.as_weak(), preview_weak.clone());
         timeline.on_add_object_at(move |frame, layer, kind_idx| {
             let Some(t) = tw.upgrade() else { return };
-            let Some(plugin) = registry().get(kind_idx as usize) else {
+            let registry_snapshot = registry();
+            let Some(plugin) = registry_snapshot.get(kind_idx as usize) else {
                 return;
             };
             let start = frame.max(0);
@@ -669,7 +670,8 @@ pub fn sync_active_session(state: &SharedAppState, timeline_weak: &Weak<Timeline
 }
 
 fn to_slint(data: &crate::ecs::TimelineData, fps: f64) -> TimelineObject {
-    let plugin = registry().get(data.kind as usize);
+    let registry_snapshot = registry();
+    let plugin = registry_snapshot.get(data.kind as usize);
     let waveform = data.media_path.as_deref().and_then(build_waveform_image);
     let waveform_duration_frames = data
         .media_path

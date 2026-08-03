@@ -149,6 +149,33 @@ impl LuaSystem {
         Ok(())
     }
 
+    /// 蓄積済みhook登録(pre_render/post_export)を全解除する。Lua側レジストリ参照を
+    /// remove_registry_valueで明示的に解放し、reload_dir再入毎の参照リークを防ぐ。
+    fn clear_hooks(&self) -> Result<(), SystemError> {
+        let mut regs = self.regs.lock().unwrap();
+        for key in regs.pre_render_hooks.drain(..) {
+            self.lua.remove_registry_value(key)?;
+        }
+        for key in regs.post_export_hooks.drain(..) {
+            self.lua.remove_registry_value(key)?;
+        }
+        Ok(())
+    }
+
+    /// dir配下のスクリプトを全解除・全再実行する（load_dirの再入安全版）。
+    /// hooks/effects/computesを事前に空化してからload_dirを呼ぶため、呼び出し元は
+    /// reload_dir直後にdrain_effects/drain_computesを呼べば当該dir由来分のみを得る。
+    pub fn reload_dir(&self, dir: &Path) -> Result<(), SystemError> {
+        self.clear_hooks()?;
+        {
+            let mut regs = self.regs.lock().unwrap();
+            regs.effects.clear();
+            regs.computes.clear();
+        }
+        self.load_dir(dir);
+        Ok(())
+    }
+
     /// GPUリダクション完了後、renderer側から結果スカラー配列を書き込む。
     /// Lua側は次回以降system.reduce_result(name)で読み出せる。
     pub fn publish_reduce_result(&self, name: &str, values: &[f32]) {
