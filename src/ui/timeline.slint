@@ -163,8 +163,8 @@ export component TimelineWindow inherits Window {
             }
         }
 
-            HorizontalLayout {
-                vertical-stretch: 1;
+        HorizontalLayout {
+            vertical-stretch: 1;
             layer-header := LayerHeader {
                 header-width: root.header-width * 1px;
                 layer-height: root.layer-height * 1px;
@@ -180,8 +180,8 @@ export component TimelineWindow inherits Window {
                 }
             }
 
-                view := TimelineView {
-                    horizontal-stretch: 1;
+            view := TimelineView {
+                horizontal-stretch: 1;
                 scale: root.zoom-scale;
                 frame-interval: root.frame-interval;
                 total-frames: root.total-frames;

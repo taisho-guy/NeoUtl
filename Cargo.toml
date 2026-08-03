@@ -4,6 +4,8 @@ members = [
     "crates/neoutl-shared-abi",
     "crates/neoutl-object-api",
     "crates/neoutl-effect-api",
+    "crates/neoutl-effect-lua",
+    "crates/neoutl-lua-runtime",
     "crates/neoutl-easing-api",
     "crates/neoutl-theme-api",
     "crates/easings/neoutl-easing-standard",
@@ -28,6 +30,9 @@ resolver = "2"
 neoutl-shared-abi = { path = "crates/neoutl-shared-abi" }
 neoutl-object-api = { path = "crates/neoutl-object-api" }
 neoutl-effect-api = { path = "crates/neoutl-effect-api" }
+neoutl-effect-lua = { path = "crates/neoutl-effect-lua" }
+neoutl-lua-runtime = { path = "crates/neoutl-lua-runtime" }
+mlua = { version = "0.12", features = ["luajit", "vendored", "send"] }
 neoutl-easing-api = { path = "crates/neoutl-easing-api" }
 neoutl-theme-api = { path = "crates/neoutl-theme-api" }
 neoutl-media-api = { path = "crates/neoutl-media-api" }
@@ -39,13 +44,15 @@ serde_json = "1.0"
 
 [package]
 name = "NeoUtl"
-version = "0.1.0"
+version = "0.0.0"
 edition = "2024"
 
 [dependencies]
 neoutl-shared-abi.workspace = true
 neoutl-object-api.workspace = true
 neoutl-effect-api.workspace = true
+neoutl-effect-lua.workspace = true
+neoutl-lua-runtime.workspace = true
 neoutl-easing-api.workspace = true
 neoutl-theme-api.workspace = true
 neoutl-media-api.workspace = true

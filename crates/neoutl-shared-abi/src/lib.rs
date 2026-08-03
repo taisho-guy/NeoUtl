@@ -95,3 +95,48 @@ pub struct WgslSource {
 }
 unsafe impl Send for WgslSource {}
 unsafe impl Sync for WgslSource {}
+
+/// ParamSchema(C ABI・'static寿命前提)の所有権付き複製。
+///
+/// 供給元の文字列寿命から切り離してホスト側で保持するための型。
+/// Lua供給エフェクト（'static寿命を持たない）とdylib供給エフェクトを同一型で
+/// 扱うためのブリッジ。ホスト側消費コード(ecs::effects, renderer::pipeline)は
+/// 以降この型のみを参照し、供給元固有の生存期間・unsafe変換を意識しない。
+#[derive(Clone, Debug, PartialEq)]
+pub struct ParamRowOwned {
+    pub key: String,
+    pub label: String,
+    pub kind: ParamKind,
+    pub min: f32,
+    pub max: f32,
+    pub step: f32,
+    pub default_float: f32,
+    pub enum_options: Vec<String>,
+}
+
+impl ParamSchema {
+    /// # Safety
+    /// self.key/label/enum_optionsが有効な'static文字列バイト列を指し続けていること
+    /// （dylibプラグインのstatic配列由来である場合に限り安全）。
+    pub unsafe fn to_owned_row(&self) -> ParamRowOwned {
+        unsafe {
+            ParamRowOwned {
+                key: self.key.as_str().to_owned(),
+                label: self.label.as_str().to_owned(),
+                kind: self.kind,
+                min: self.min,
+                max: self.max,
+                step: self.step,
+                default_float: self.default_float,
+                enum_options: if self.kind == ParamKind::Enum {
+                    split_enum_options(self.enum_options.as_str())
+                        .into_iter()
+                        .map(str::to_owned)
+                        .collect()
+                } else {
+                    Vec::new()
+                },
+            }
+        }
+    }
+}

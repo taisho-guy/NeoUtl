@@ -2,24 +2,20 @@ use shipyard::Component;
 
 use crate::ecs::types::{EffectInstance, EffectParam, Value};
 
-/// エフェクトメタデータ・パラメータスキーマはneoutl-effect-api経由のcdylibプラグインが
-/// 保持する（EFFECT_REGISTRY静的配列は廃止）。ホストはcrate::effects::loaderへ委譲する。
-pub use neoutl_effect_api::{EffectMeta, ParamKind};
-pub type ParamSchema = neoutl_effect_api::EffectParamSchema;
+/// エフェクトメタデータ・パラメータスキーマは`crate::effects::loader::EffectSource`
+/// （dylib・Lua両供給元を統合した型）が保持する。ホストはこの層でFFI・Luaいずれの
+/// 詳細も意識しない。
+pub use neoutl_shared_abi::{ParamKind, ParamRowOwned};
 
-pub fn find_effect(id: &str) -> Option<&'static EffectMeta> {
-    crate::effects::loader::by_id(id).map(|p| unsafe { &*((p.vtable.meta)()) })
+pub fn find_effect(id: &str) -> Option<&'static crate::effects::EffectSource> {
+    crate::effects::loader::by_id(id)
 }
 
-/// EffectMeta.param_schema_ptr/lenから'staticなParamSchemaスライスを得る。
-/// # Safety
-/// meta.param_schema_ptrはparam_schema_len個の有効なParamSchemaを指し続けること
-/// （cdylibプラグインのstatic配列を指すため、プロセス生存中は常に有効）。
-pub fn param_schema(meta: &EffectMeta) -> &'static [ParamSchema] {
-    if meta.param_schema_ptr.is_null() || meta.param_schema_len == 0 {
-        return &[];
-    }
-    unsafe { std::slice::from_raw_parts(meta.param_schema_ptr, meta.param_schema_len) }
+/// 指定エフェクトのパラメータスキーマを所有権付きで得る。
+/// dylib由来はunsafeな'static複製、Lua由来は既存Vecの複製であり、
+/// いずれもEffectSource::param_schemaへ委譲する（呼び出し元はこの区別を意識しない）。
+pub fn param_schema(source: &crate::effects::EffectSource) -> Vec<ParamRowOwned> {
+    source.param_schema()
 }
 
 /// Clipに付随するエフェクトの順序付きスタック。
@@ -32,9 +28,8 @@ impl EffectStack {
     pub fn push(&mut self, effect_id: impl Into<String>) {
         let effect_id = effect_id.into();
         let mut instance = EffectInstance::new(effect_id.clone());
-        if let Some(meta) = find_effect(&effect_id) {
-            for p in param_schema(meta) {
-                let key = unsafe { p.key.as_str() }.to_owned();
+        if let Some(source) = find_effect(&effect_id) {
+            for p in param_schema(source) {
                 let value = match p.kind {
                     ParamKind::Bool => Value::Bool(p.default_float != 0.0),
                     ParamKind::Enum => Value::Enum(p.default_float as u32),
@@ -45,7 +40,7 @@ impl EffectStack {
                     ParamKind::Separator | ParamKind::Group => continue,
                     ParamKind::Folder => Value::FilePath(String::new()),
                 };
-                instance.params.insert(key, EffectParam::new(value));
+                instance.params.insert(p.key, EffectParam::new(value));
             }
         }
         self.0.push(instance);
