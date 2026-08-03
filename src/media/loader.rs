@@ -182,7 +182,7 @@ fn is_dylib(path: &Path) -> bool {
 
 /// Vulkanデバイスをgpuvideo-decoderへ渡す。ネイティブリンクのため素の関数呼び出しであり、
 /// libloadingでの再オープンやextern "C"生ポインタ受け渡しを伴わない。
-#[cfg(not(target_os = "macos"))]
+#[cfg(target_os = "linux")]
 pub fn inject_gpuvideo_shared_device(device: std::sync::Arc<gpu_video::VulkanDevice>) {
     neoutl_media_gpuvideo_decoder::set_shared_device(device);
     eprintln!("[NeoUtl] gpu_video共有デバイス注入（ネイティブ呼び出し）");

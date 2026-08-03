@@ -269,7 +269,7 @@ fn read_texture_rgba(
 }
 
 /// gpuvideo-encoder(Vulkan HW)経路を試行し、初期化失敗時はNoneを返す。
-#[cfg(not(target_os = "macos"))]
+#[cfg(target_os = "linux")]
 fn try_create_gpuvideo_encoder(
     codec: ExportCodec,
     params: EncodeParameters,
@@ -295,7 +295,7 @@ fn try_create_gpuvideo_encoder(
     None
 }
 
-#[cfg(target_os = "macos")]
+#[cfg(not(target_os = "linux"))]
 fn try_create_gpuvideo_encoder(
     _codec: ExportCodec,
     _params: EncodeParameters,

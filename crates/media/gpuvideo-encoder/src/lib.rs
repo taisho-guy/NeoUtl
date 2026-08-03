@@ -1,8 +1,8 @@
 //! H.264/H.265 Vulkan HWエンコーダプラグイン。gpuvideo-decoderと同一のVulkanDeviceを
 //! 共有し、RGBA8UnormテクスチャをGPU内でNV12へ変換した上でエンコードする。
-//! Vulkan非対応のmacOSでは無効化する。
+//! Vulkan経路はLinuxのみで有効化する。
 
-#[cfg(not(target_os = "macos"))]
+#[cfg(target_os = "linux")]
 mod imp {
     use gpu_video::parameters::{
         ColorRange, ColorSpace, EncoderParametersH264, EncoderParametersH265, H265Profile,
@@ -256,11 +256,11 @@ mod imp {
     }
 }
 
-#[cfg(not(target_os = "macos"))]
+#[cfg(target_os = "linux")]
 pub use imp::*;
 
-/// macOS向け無効化スタブ。Vulkan非対応のため空配列を返す。
-#[cfg(target_os = "macos")]
+/// Linux以外向け無効化スタブ。Vulkan非対応のため空配列を返す。
+#[cfg(not(target_os = "linux"))]
 pub fn native_vtables() -> Vec<neoutl_media_api::EncoderVTable> {
     Vec::new()
 }
