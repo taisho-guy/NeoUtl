@@ -2,11 +2,8 @@ use neoutl_easing_api::{
     EasingEngineMeta, EasingEngineVTable, EditResultC, EditResultCode, KeyframeC,
 };
 use serde::{Deserialize, Serialize};
-use slint::{ComponentHandle, ModelRc, VecModel};
 use std::ffi::{CString, c_void};
 use std::sync::OnceLock;
-
-slint::include_modules!();
 
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 pub enum StandardEasing {
@@ -283,7 +280,8 @@ unsafe extern "C" fn evaluate_c(
     }
 }
 
-fn easing_kind_names() -> Vec<slint::SharedString> {
+#[cfg(any())]
+fn easing_kind_names() -> Vec<String> {
     [
         "Linear",
         "Step",
@@ -312,10 +310,11 @@ fn easing_kind_names() -> Vec<slint::SharedString> {
         "Random",
     ]
     .into_iter()
-    .map(slint::SharedString::from)
+    .map(String::from)
     .collect()
 }
 
+#[cfg(any())]
 fn easing_kind_index(kind: StandardEasing) -> i32 {
     match kind {
         StandardEasing::Linear => 0,
@@ -346,6 +345,7 @@ fn easing_kind_index(kind: StandardEasing) -> i32 {
     }
 }
 
+#[cfg(any())]
 fn easing_kind_from_index(
     index: i32,
     cp1: (f32, f32),
@@ -383,6 +383,7 @@ fn easing_kind_from_index(
     }
 }
 
+#[cfg(any())]
 fn preview_path_commands(kind: StandardEasing) -> String {
     const SAMPLES: i32 = 24;
     let mut cmd = String::new();
@@ -396,6 +397,7 @@ fn preview_path_commands(kind: StandardEasing) -> String {
     cmd
 }
 
+#[cfg(any())]
 unsafe extern "C" fn open_editor_window_c(
     _host_handle: *const c_void,
     keyframes_ptr: *const KeyframeC,
@@ -579,6 +581,25 @@ unsafe extern "C" fn open_editor_window_c(
 
     let _ = window.show();
     std::mem::forget(window);
+}
+
+unsafe extern "C" fn open_editor_window_c(
+    _host_handle: *const c_void,
+    _keyframes_ptr: *const KeyframeC,
+    _count: usize,
+    on_complete: unsafe extern "C" fn(*mut c_void, EditResultC),
+    user_data: *mut c_void,
+) {
+    unsafe {
+        on_complete(
+            user_data,
+            EditResultC {
+                code: EditResultCode::Cancel,
+                keyframes_ptr: std::ptr::null_mut(),
+                count: 0,
+            },
+        )
+    };
 }
 
 unsafe extern "C" fn serialize_c(

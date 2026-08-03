@@ -32,7 +32,6 @@ neoutl-object-api = { path = "crates/neoutl-object-api" }
 neoutl-effect-api = { path = "crates/neoutl-effect-api" }
 neoutl-effect-lua = { path = "crates/neoutl-effect-lua" }
 neoutl-lua-runtime = { path = "crates/neoutl-lua-runtime" }
-mlua = { version = "0.12", default-features = false, features = ["vendored", "send"] }
 neoutl-easing-api = { path = "crates/neoutl-easing-api" }
 neoutl-theme-api = { path = "crates/neoutl-theme-api" }
 neoutl-media-api = { path = "crates/neoutl-media-api" }
@@ -68,30 +67,32 @@ neoutl-media-gstreamer-decoder = { path = "crates/media/gstreamer-decoder" }
 neoutl-media-gpuvideo-encoder = { path = "crates/media/gpuvideo-encoder" }
 neoutl-media-gstreamer-encoder = { path = "crates/media/gstreamer-encoder" }
 neoutl-audio-plugin-host = { path = "crates/media/audio-plugin-host" }
-slint = { version = "1.17", default-features = false, features = [
-    "std",
-    "backend-winit",
-    "renderer-femtovg-wgpu",
-    "unstable-wgpu-29",
-    "compat-1-2",
-] }
 wgpu = "29"
 wgpu_text = "29"
 tokio = { version = "1.52", features = ["rt-multi-thread", "sync"] }
 bytemuck = { version = "1.25", features = ["derive"] }
 shipyard = "0.11"
-lucide-slint = "1"
 rust-yaml = { version = "1.1", features = ["serde"] }
 serde = { version = "1.0", features = ["derive"] }
 rfd = "0.17"
 pollster = "1.0"
+egui = "0.35"
+egui-wgpu = "0.35"
+egui-winit = "0.35"
+winit = "0.30.13"
+egui_extras = "0.35"
+egui_tiles = "0.16"
+egui_material_icons = "0.7"
+egui_code_editor = "0.3"
+egui_plot = "0.36"
+egui-system-fonts = "0.35"
+egui-elegance = "0.14"
+rust-i18n = "4.2"
 
 [dev-dependencies]
 tempfile = "3"
 
 [build-dependencies]
-lucide-slint = "1"
-slint-build = "1.17"
 neoutl-object-shader-build.workspace = true
 
 [target.'cfg(target_os = "linux")'.dependencies]

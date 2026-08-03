@@ -10,7 +10,9 @@ mod document;
 mod easings;
 mod ecs;
 mod effects;
+mod egui_loop;
 mod export;
+mod gpu_shared;
 mod hot_reload;
 mod media;
 mod objects;
@@ -19,8 +21,6 @@ mod renderer;
 mod shortcuts;
 mod theme;
 mod ui;
-
-slint::include_modules!();
 
 fn default_gst_plugin_dir() -> Option<std::path::PathBuf> {
     #[allow(unused_variables)]
@@ -84,8 +84,6 @@ fn configure_gst_plugin_path() {
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    use slint::ComponentHandle;
-
     let _ = project::begin_runtime_session();
 
     configure_gst_plugin_path();
@@ -102,74 +100,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     easings::loader::load_all(&easings::loader::default_easings_dir());
     audio::plugin_registry::load_all(&audio::plugin_registry::default_plugins_dir());
 
-    #[cfg(target_os = "linux")]
-    {
-        let gpu_instance =
-            gpu_video::VulkanInstance::new().map_err(|e| format!("VulkanInstance生成失敗: {e}"))?;
-        let gpu_adapter = gpu_instance
-            .create_adapter(&gpu_video::parameters::VulkanAdapterDescriptor {
-                compatible_surface: None,
-                ..Default::default()
-            })
-            .map_err(|e| format!("Vulkanアダプタ生成失敗: {e}"))?;
-        let gpu_device = gpu_adapter
-            .create_device(&gpu_video::parameters::VulkanDeviceDescriptor::default())
-            .map_err(|e| format!("Vulkanデバイス生成失敗: {e}"))?;
+    let shared_gpu = std::rc::Rc::new(gpu_shared::init_shared_gpu()?);
 
-        let wgpu_instance = gpu_instance.wgpu_instance().clone();
-        let wgpu_adapter = gpu_device.wgpu_adapter().clone();
-        let wgpu_device = gpu_device.wgpu_device().clone();
-        let wgpu_queue = gpu_device.wgpu_queue().clone();
+    let preview_slot = egui_loop::make_preview_slot();
+    egui_loop::run(shared_gpu, preview_slot)?;
 
-        media::loader::inject_gpuvideo_shared_device(gpu_device.clone());
-        neoutl_media_gpuvideo_encoder::set_shared_device(gpu_device);
-
-        renderer::pipeline::install_device_lost_watcher(&wgpu_device);
-
-        slint::BackendSelector::new()
-            .require_wgpu_29(slint::wgpu_29::WGPUConfiguration::Manual {
-                instance: wgpu_instance,
-                adapter: wgpu_adapter,
-                device: wgpu_device,
-                queue: wgpu_queue,
-            })
-            .select()?;
-    }
-    #[cfg(target_os = "macos")]
-    {
-        let mut wgpu_settings = slint::wgpu_29::WGPUSettings::default();
-        wgpu_settings.device_required_features |=
-            slint::wgpu_29::wgpu::Features::TEXTURE_FORMAT_NV12;
-        wgpu_settings.backends = slint::wgpu_29::wgpu::Backends::METAL;
-        wgpu_settings
-            .device_required_limits
-            .max_storage_buffers_per_shader_stage = 1;
-        slint::BackendSelector::new()
-            .require_wgpu_29(slint::wgpu_29::WGPUConfiguration::Automatic(wgpu_settings))
-            .select()?;
-    }
-    #[cfg(target_os = "windows")]
-    {
-        let mut wgpu_settings = slint::wgpu_29::WGPUSettings::default();
-        wgpu_settings.backends = slint::wgpu_29::wgpu::Backends::DX12;
-        wgpu_settings
-            .device_required_limits
-            .max_storage_buffers_per_shader_stage = 1;
-        slint::BackendSelector::new()
-            .require_wgpu_29(slint::wgpu_29::WGPUConfiguration::Automatic(wgpu_settings))
-            .select()?;
-    }
-
-    let launcher = LauncherWindow::new()?;
-    ui::install(&launcher);
-
-    launcher.window().on_close_requested(|| {
-        slint::quit_event_loop().ok();
-        slint::CloseRequestResponse::HideWindow
-    });
-
-    launcher.show()?;
-    slint::run_event_loop_until_quit()?;
     project::finish_runtime_session();
     Ok(())
 }
