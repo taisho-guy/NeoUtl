@@ -15,6 +15,10 @@ export component TimelineWindow inherits Window {
     title: "NeoUtl - 拡張編集";
     preferred-width: 720px;
     preferred-height: 540px;
+    min-width: 320px;
+    min-height: 240px;
+    max-width: 100000px;
+    max-height: 100000px;
     background: #0e0e12;
 
     in-out property <int> current-frame: 0;
@@ -82,12 +86,16 @@ export component TimelineWindow inherits Window {
     callback context-menu-requested(int /* hit-id */, int /* frame */, int /* layer */);
 
     key-focus := FocusScope {
+        width: 100%;
+        height: 100%;
         key-pressed(event) => {
             root.raw-key-event(event.modifiers.control, event.modifiers.shift, event.modifiers.alt, KeyUtil.normalize-key(event));
             accept
         }
 
         VerticalLayout {
+        width: 100%;
+        height: 100%;
         Rectangle {
             height: 28px;
             background: #16161c;

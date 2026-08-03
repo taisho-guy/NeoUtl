@@ -7,6 +7,10 @@ export component PreviewWindow inherits Window {
     title: "NeoUtl";
     preferred-width: 720px;
     preferred-height: 540px;
+    min-width: 320px;
+    min-height: 240px;
+    max-width: 100000px;
+    max-height: 100000px;
     background: #0e0e12;
 
     in-out property <image> video-frame;
@@ -126,12 +130,16 @@ export component PreviewWindow inherits Window {
     }
 
     root-focus := FocusScope {
+        width: 100%;
+        height: 100%;
         key-pressed(event) => {
             root.raw-key-event(event.modifiers.control, event.modifiers.shift, event.modifiers.alt, KeyUtil.normalize-key(event));
             accept
         }
 
         VerticalLayout {
+            width: 100%;
+            height: 100%;
             padding: 10px;
             spacing: 6px;
 

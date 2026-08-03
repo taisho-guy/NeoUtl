@@ -45,6 +45,8 @@ export component IconButton inherits Rectangle {
     background: touch.pressed ? #303038 : touch.has-hover ? #26262c : transparent;
 
     IconDisplay {
+        x: (root.width - root.icon-size) / 2;
+        y: (root.height - root.icon-size) / 2;
         icon: root.icon;
         stroke: root.stroke;
         size: root.icon-size;
