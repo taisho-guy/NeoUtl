@@ -102,7 +102,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     easings::loader::load_all(&easings::loader::default_easings_dir());
     audio::plugin_registry::load_all(&audio::plugin_registry::default_plugins_dir());
 
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(target_os = "linux")]
     {
         let gpu_instance =
             gpu_video::VulkanInstance::new().map_err(|e| format!("VulkanInstance生成失敗: {e}"))?;
@@ -141,6 +141,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         wgpu_settings.device_required_features |=
             slint::wgpu_29::wgpu::Features::TEXTURE_FORMAT_NV12;
         wgpu_settings.backends = slint::wgpu_29::wgpu::Backends::METAL;
+        slint::BackendSelector::new()
+            .require_wgpu_29(slint::wgpu_29::WGPUConfiguration::Automatic(wgpu_settings))
+            .select()?;
+    }
+    #[cfg(target_os = "windows")]
+    {
+        let mut wgpu_settings = slint::wgpu_29::WGPUSettings::default();
+        wgpu_settings.backends = slint::wgpu_29::wgpu::Backends::DX12;
         slint::BackendSelector::new()
             .require_wgpu_29(slint::wgpu_29::WGPUConfiguration::Automatic(wgpu_settings))
             .select()?;

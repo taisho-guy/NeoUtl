@@ -11,5 +11,5 @@ crate-type = ["cdylib", "rlib"]
 neoutl-media-api = { path = "../../neoutl-media-api" }
 wgpu = "29"
 
-[target.'cfg(not(target_os = "macos"))'.dependencies]
+[target.'cfg(target_os = "linux")'.dependencies]
 gpu-video = { version = "0.4", features = ["wgpu"] }

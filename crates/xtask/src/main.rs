@@ -32,7 +32,6 @@ const WORKSPACE_EXCLUDED_DIRS: &[&str] = &[
     "gstreamer-encoder",
     "gpuvideo-decoder",
     "gpuvideo-encoder",
-    "gstreamer-decoder",
 ];
 
 fn discover_crates(workspace_root: &Path, subdir: &str) -> Vec<DiscoveredCrate> {

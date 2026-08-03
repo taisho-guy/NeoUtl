@@ -1,8 +1,8 @@
 //! H.264ゼロコピー動画デコーダプラグイン。VulkanInstance(gpu-video crate)へ依存するため
-//! Vulkan非対応のmacOSでは無効化する。macOSではGStreamer/ffmpeg経路(CPUアップロード)へ
+//! Vulkan経路はLinuxのみで有効化する。その他のOSではGStreamer等のCPU経路へ
 //! 自動的にフォールバックする（media/loader.rsのid昇順拡張子解決による）。
 
-#[cfg(not(target_os = "macos"))]
+#[cfg(target_os = "linux")]
 mod imp {
     use gpu_video::parameters::{
         ColorRange, ColorSpace, DecoderParameters, WgpuConverterParameters,
@@ -1039,12 +1039,12 @@ mod imp {
     }
 }
 
-#[cfg(not(target_os = "macos"))]
+#[cfg(target_os = "linux")]
 pub use imp::*;
 
-/// macOS向け無効化スタブ。gpu-video(Vulkan)非対応のため実デコード機能を持たず、
+/// Linux以外向け無効化スタブ。gpu-video(Vulkan)非対応のため実デコード機能を持たず、
 /// MediaVTable登録もextensions_len=0のため実質何もマッチしない（安全側フォールバック）。
-#[cfg(target_os = "macos")]
+#[cfg(not(target_os = "linux"))]
 pub mod macos_stub {
     use neoutl_media_api::{MediaKind, MediaMeta, MediaVTable};
 
@@ -1072,5 +1072,5 @@ pub mod macos_stub {
     }
 }
 
-#[cfg(target_os = "macos")]
+#[cfg(not(target_os = "linux"))]
 pub use macos_stub::native_vtable;
