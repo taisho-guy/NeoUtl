@@ -1,6 +1,5 @@
 use crate::shortcuts::{self, ALL_COMMANDS, CommandId, OwnedBinding, Scope};
-use crate::{KeyBindingRow, KeybindingsWindow};
-use slint::{ComponentHandle, ModelRc, VecModel};
+use egui::{Context, Ui};
 
 fn scope_label(s: Scope) -> &'static str {
     match s {
@@ -26,117 +25,150 @@ fn key_display(b: &OwnedBinding) -> String {
     parts.join("+")
 }
 
-fn command_index(command: CommandId) -> i32 {
-    ALL_COMMANDS
-        .iter()
-        .position(|&c| c == command)
-        .map_or(0, |i| i as i32)
+#[derive(Clone)]
+struct Row {
+    command: CommandId,
+    label: String,
+    scope_label: &'static str,
+    key_display: String,
 }
 
-fn build_rows() -> Vec<KeyBindingRow> {
+fn build_rows() -> Vec<Row> {
     let keymap = shortcuts::active_keymap().lock().unwrap();
     ALL_COMMANDS
         .iter()
         .map(|&command| {
             let (scope, binding) = keymap.binding_of(command);
-            KeyBindingRow {
-                command_index: command_index(command),
+            Row {
+                command,
                 label: shortcuts::label(command).into(),
-                scope_label: scope_label(scope).into(),
-                key_display: key_display(&binding).into(),
-                conflict: false,
+                scope_label: scope_label(scope),
+                key_display: key_display(&binding),
             }
         })
         .collect()
 }
 
-fn sync(window: &KeybindingsWindow) {
-    let model: ModelRc<KeyBindingRow> = ModelRc::new(VecModel::from(build_rows()));
-    window.set_rows(model);
+pub struct KeybindingsWindow {
+    pub open: bool,
+    rows: Vec<Row>,
+    save_status: String,
+    conflict_message: String,
+    capturing: Option<CommandId>,
 }
 
-pub fn setup(window: &KeybindingsWindow) {
-    sync(window);
-
-    {
-        let weak = window.as_weak();
-        window.on_capture_binding(move |index, ctrl, shift, alt, key| {
-            let Some(&command) = ALL_COMMANDS.get(index as usize) else {
-                return;
-            };
-            if key.is_empty() {
-                return;
-            }
-            let binding = OwnedBinding {
-                ctrl,
-                shift,
-                alt,
-                key: key.to_string(),
-            };
-            let Some(win) = weak.upgrade() else {
-                return;
-            };
-            let mut keymap = shortcuts::active_keymap().lock().unwrap();
-            let (scope, _) = keymap.binding_of(command);
-            if let Some(other) = keymap.conflict_of(command, scope, &binding) {
-                win.set_conflict_message(format!("競合: {}", shortcuts::label(other)).into());
-                return;
-            }
-            win.set_conflict_message("".into());
-            keymap.set_binding(command, scope, binding);
-            drop(keymap);
-            sync(&win);
-        });
+impl KeybindingsWindow {
+    pub fn new() -> Self {
+        Self {
+            open: false,
+            rows: build_rows(),
+            save_status: String::new(),
+            conflict_message: String::new(),
+            capturing: None,
+        }
     }
 
-    {
-        let weak = window.as_weak();
-        window.on_reset_binding(move |index| {
-            let Some(&command) = ALL_COMMANDS.get(index as usize) else {
-                return;
-            };
-            shortcuts::active_keymap()
-                .lock()
-                .unwrap()
-                .reset_to_default(command);
-            if let Some(win) = weak.upgrade() {
-                sync(&win);
-            }
-        });
+    fn sync(&mut self) {
+        self.rows = build_rows();
     }
 
-    {
-        let weak = window.as_weak();
-        window.on_reset_all(move || {
-            shortcuts::active_keymap().lock().unwrap().reset_all();
-            if let Some(win) = weak.upgrade() {
-                sync(&win);
-            }
-        });
+    fn apply_capture(&mut self, command: CommandId, binding: OwnedBinding) {
+        let mut keymap = shortcuts::active_keymap().lock().unwrap();
+        let (scope, _) = keymap.binding_of(command);
+        if let Some(other) = keymap.conflict_of(command, scope, &binding) {
+            self.conflict_message = format!("競合: {}", shortcuts::label(other));
+            return;
+        }
+        self.conflict_message.clear();
+        keymap.set_binding(command, scope, binding);
+        drop(keymap);
+        self.sync();
     }
 
-    {
-        let weak = window.as_weak();
-        window.on_save_settings(move || {
-            let result = shortcuts::save_to_disk(&shortcuts::active_keymap().lock().unwrap());
-            if let Some(win) = weak.upgrade() {
-                win.set_save_status(match result {
-                    Ok(()) => "保存完了".into(),
-                    Err(_) => "保存失敗".into(),
-                });
-            }
-        });
-    }
+    pub fn show(&mut self, ctx: &Context, ui: &mut Ui) {
+        if !self.open {
+            return;
+        }
 
-    {
-        let weak = window.as_weak();
-        window.on_reload_settings(move || {
-            let loaded = shortcuts::load_from_disk().unwrap_or_default();
-            *shortcuts::active_keymap().lock().unwrap() = loaded;
-            if let Some(win) = weak.upgrade() {
-                sync(&win);
-                win.set_save_status("再読込完了".into());
+        if let Some(command) = self.capturing {
+            let binding = ctx.input(|i| {
+                let modifiers = i.modifiers;
+                i.events.iter().find_map(|e| match e {
+                    egui::Event::Key {
+                        key, pressed: true, ..
+                    } => Some(OwnedBinding {
+                        ctrl: modifiers.ctrl,
+                        shift: modifiers.shift,
+                        alt: modifiers.alt,
+                        key: key.name().to_string(),
+                    }),
+                    _ => None,
+                })
+            });
+            if let Some(binding) = binding {
+                self.capturing = None;
+                self.apply_capture(command, binding);
             }
+        }
+
+        egui::CentralPanel::default().show(ui, |ui| {
+            if !self.conflict_message.is_empty() {
+                ui.colored_label(egui::Color32::RED, &self.conflict_message);
+            }
+
+            egui::ScrollArea::vertical().show(ui, |ui| {
+                egui::Grid::new("keybindings_rows")
+                    .num_columns(4)
+                    .striped(true)
+                    .show(ui, |ui| {
+                        for row in self.rows.clone() {
+                            ui.label(&row.label);
+                            ui.label(row.scope_label);
+
+                            let capturing = self.capturing == Some(row.command);
+                            let text = if capturing {
+                                "入力待ち…".to_string()
+                            } else {
+                                row.key_display.clone()
+                            };
+                            if ui.button(text).clicked() {
+                                self.capturing = Some(row.command);
+                            }
+
+                            if ui.button("既定へ").clicked() {
+                                shortcuts::active_keymap()
+                                    .lock()
+                                    .unwrap()
+                                    .reset_to_default(row.command);
+                                self.sync();
+                            }
+                            ui.end_row();
+                        }
+                    });
+            });
+
+            ui.separator();
+            ui.horizontal(|ui| {
+                if ui.button("全て既定へ").clicked() {
+                    shortcuts::active_keymap().lock().unwrap().reset_all();
+                    self.sync();
+                }
+                if ui.button("保存").clicked() {
+                    let result =
+                        shortcuts::save_to_disk(&shortcuts::active_keymap().lock().unwrap());
+                    self.save_status = match result {
+                        Ok(()) => "保存完了".into(),
+                        Err(_) => "保存失敗".into(),
+                    };
+                }
+                if ui.button("再読込").clicked() {
+                    let loaded = shortcuts::load_from_disk().unwrap_or_default();
+                    *shortcuts::active_keymap().lock().unwrap() = loaded;
+                    self.sync();
+                    self.save_status = "再読込完了".into();
+                }
+                ui.label(&self.save_status);
+            });
         });
     }
 }

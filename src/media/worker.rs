@@ -2,8 +2,8 @@ use crate::config::{
     DECODE_PREFETCH_FAIL_THRESHOLD, DECODE_PREFETCH_RADIUS, DECODE_RING_CAPACITY,
     DECODE_WATCHDOG_TIMEOUT_MS,
 };
+use egui_wgpu::wgpu;
 use neoutl_media_api::VideoSource;
-use slint::wgpu_29::wgpu;
 use std::collections::{HashMap, VecDeque};
 use std::sync::atomic::{AtomicI64, Ordering};
 use std::sync::mpsc::{self, RecvTimeoutError};

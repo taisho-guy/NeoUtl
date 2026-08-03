@@ -457,7 +457,6 @@ mod imp {
     }
 
     pub struct GpuVideoDecoder {
-        track_id: u32,
         decoder: WgpuTexturesDecoder,
         converter: WgpuNv12ToRgbaConverter,
         width: u32,
@@ -638,7 +637,6 @@ mod imp {
             );
 
             Ok(Self {
-                track_id,
                 decoder,
                 converter,
                 width,

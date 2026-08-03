@@ -1,79 +1,100 @@
-use crate::LauncherWindow;
-use crate::ProjectListItem;
 use crate::project::{self, ProjectMeta};
-use slint::{ComponentHandle, Model, ModelRc, VecModel};
-use std::rc::Rc;
 
-fn refresh_list(window: &LauncherWindow) {
-    let items: Vec<ProjectListItem> = project::list_projects()
-        .into_iter()
-        .map(|p| ProjectListItem {
-            name: p.name.into(),
-            path: p.dir.to_string_lossy().to_string().into(),
-            width: p.width as i32,
-            height: p.height as i32,
-            fps: p.fps as i32,
-        })
-        .collect();
-    let model: Rc<dyn Model<Data = ProjectListItem>> = Rc::new(VecModel::from(items));
-    window.set_projects(ModelRc::from(model));
+pub struct LauncherPanel {
+    name: String,
+    fps: u32,
+    width: u32,
+    height: u32,
+    sample_rate: u32,
+    channels: u32,
+    status: String,
 }
 
-pub fn setup(window: &LauncherWindow, on_launch: Rc<dyn Fn(ProjectMeta)>) {
-    refresh_list(window);
-
-    {
-        let weak = window.as_weak();
-        window.on_refresh(move || {
-            if let Some(w) = weak.upgrade() {
-                refresh_list(&w);
-            }
-        });
+impl LauncherPanel {
+    pub fn new() -> Self {
+        Self {
+            name: String::new(),
+            fps: 30,
+            width: 1920,
+            height: 1080,
+            sample_rate: 48000,
+            channels: 2,
+            status: String::new(),
+        }
     }
-
-    {
-        let weak = window.as_weak();
-        let on_launch = on_launch.clone();
-        window.on_create_project(move |name, fps, width, height, sample_rate, channels| {
-            let trimmed = name.trim();
-            if trimmed.is_empty() {
-                if let Some(w) = weak.upgrade() {
-                    w.set_status_message("プロジェクト名を入力してください".into());
+    pub fn show(&mut self, ui: &mut egui::Ui) -> Option<ProjectMeta> {
+        let mut result = None;
+        ui.heading("NeoUtl - プロジェクト");
+        ui.separator();
+        ui.columns(2, |columns| {
+            columns[0].group(|ui| {
+                ui.heading("既存プロジェクト");
+                let projects = project::list_projects();
+                if projects.is_empty() {
+                    ui.colored_label(egui::Color32::GRAY, "プロジェクトがありません");
                 }
-                return;
-            }
-            let result = project::create_project(
-                trimmed,
-                fps.max(1) as u32,
-                width.max(1) as u32,
-                height.max(1) as u32,
-                sample_rate.max(1) as u32,
-                channels.max(1) as u32,
-            );
-            match result {
-                Ok(meta) => on_launch(meta),
-                Err(err) => {
-                    if let Some(w) = weak.upgrade() {
-                        w.set_status_message(format!("作成失敗: {err}").into());
+                for item in projects {
+                    if ui
+                        .button(format!(
+                            "{}\n{} × {}  {}fps",
+                            item.name, item.width, item.height, item.fps
+                        ))
+                        .clicked()
+                    {
+                        result = Some(item);
                     }
                 }
-            }
-        });
-    }
-
-    {
-        let weak = window.as_weak();
-        let on_launch = on_launch.clone();
-        window.on_open_project(move |path| {
-            let dir = std::path::PathBuf::from(path.as_str());
-            match project::load_project(&dir) {
-                Some(meta) => on_launch(meta),
-                None => {
-                    if let Some(w) = weak.upgrade() {
-                        w.set_status_message("プロジェクトを開けませんでした".into());
+            });
+            columns[1].group(|ui| {
+                ui.heading("新規プロジェクト");
+                ui.label("名前");
+                ui.text_edit_singleline(&mut self.name);
+                ui.add(
+                    egui::DragValue::new(&mut self.fps)
+                        .range(1..=240)
+                        .prefix("fps: "),
+                );
+                ui.add(
+                    egui::DragValue::new(&mut self.width)
+                        .range(16..=7680)
+                        .prefix("幅: "),
+                );
+                ui.add(
+                    egui::DragValue::new(&mut self.height)
+                        .range(16..=7680)
+                        .prefix("高さ: "),
+                );
+                ui.add(
+                    egui::DragValue::new(&mut self.sample_rate)
+                        .range(8000..=192000)
+                        .prefix("Hz: "),
+                );
+                ui.add(
+                    egui::DragValue::new(&mut self.channels)
+                        .range(1..=8)
+                        .prefix("ch: "),
+                );
+                if !self.status.is_empty() {
+                    ui.colored_label(egui::Color32::LIGHT_RED, &self.status);
+                }
+                if ui.button("作成して開く").clicked() {
+                    match project::create_project(
+                        &self.name,
+                        self.fps,
+                        self.width,
+                        self.height,
+                        self.sample_rate,
+                        self.channels,
+                    ) {
+                        Ok(meta) => {
+                            self.status.clear();
+                            result = Some(meta);
+                        }
+                        Err(err) => self.status = err.to_string(),
                     }
                 }
-            }
+            });
         });
+        result
     }
 }

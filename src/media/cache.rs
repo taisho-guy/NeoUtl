@@ -1,8 +1,8 @@
 use super::loader;
 use super::worker::DecodeWorker;
 use super::{MediaKind, detect_kind};
+use egui_wgpu::wgpu;
 use neoutl_media_api::{AudioBuffer, ImageSource, VideoSource};
-use slint::wgpu_29::wgpu;
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, OnceLock};

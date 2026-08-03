@@ -1,12 +1,9 @@
 // build.rs
-use std::{collections::HashMap, fs, path::PathBuf};
+use std::{fs, path::PathBuf};
 
 fn main() {
     println!("cargo:rerun-if-changed=assets/icon-shadowed.svg");
     println!("cargo:rerun-if-changed=assets/icon.svg");
-    let library = HashMap::from([("lucide".to_string(), PathBuf::from(lucide_slint::lib()))]);
-    let config = slint_build::CompilerConfiguration::new().with_library_paths(library);
-    slint_build::compile_with_config("src/app.slint", config).expect("Slint build failed");
     copy_data_themes();
     neoutl_object_shader_build::compile_object_shader("media", "src/renderer/slang/media.slang");
     neoutl_object_shader_build::compile_object_shader(

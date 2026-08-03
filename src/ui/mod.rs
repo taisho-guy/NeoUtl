@@ -1,152 +1,47 @@
+pub mod dialogs;
+pub mod effect_add_dialog;
+pub mod effect_catalog;
+pub mod export_dialog;
 pub mod keybindings;
 pub mod launcher;
-mod preview;
+pub mod preview;
 pub mod project_settings;
-pub mod properties;
-mod scene_settings;
+pub mod properties_panel;
+pub mod scene_settings;
 pub mod system_settings;
 pub mod timeline;
+pub mod types;
 
-use crate::app_state::{self, AppState, ProjectSession, SharedAppState};
-use crate::project::ProjectMeta;
-use crate::{
-    KeybindingsWindow, LauncherWindow, PreviewWindow, ProjectSettingsWindow, PropertiesWindow,
-    SceneSettingsWindow, SystemSettingsWindow, TimelineWindow,
-};
-use slint::ComponentHandle;
+use crate::app_state::{AppState, ProjectSession};
+use crate::egui_loop::PreviewSlot;
+use crate::gpu_shared::SharedGpu;
+use crate::project;
+use preview::{LegacyWindows, PreviewPanel};
+use properties_panel::PropertiesPanel;
 use std::cell::RefCell;
 use std::rc::Rc;
+use timeline::TimelineWindow;
 
-/// 本体ウィンドウ一式。最初のプロジェクト確定時に一度だけ生成する。
-struct AppHandles {
-    preview: PreviewWindow,
-    timeline: TimelineWindow,
-    props: PropertiesWindow,
-    #[allow(dead_code)]
-    settings: SystemSettingsWindow,
-    #[allow(dead_code)]
-    scene_settings: SceneSettingsWindow,
-    #[allow(dead_code)]
-    project_settings: ProjectSettingsWindow,
-    #[allow(dead_code)]
-    keybindings: KeybindingsWindow,
-}
-
-/// ランチャーのコールバックを配線する。
-/// 本体ウィンドウ群は最初のプロジェクト確定時に生成し、以後は使い回す。
-/// 2件目以降のプロジェクトはセッション追加とタブ反映のみ行う。
-pub fn install(launcher: &LauncherWindow) {
-    let state_slot: Rc<RefCell<Option<SharedAppState>>> = Rc::new(RefCell::new(None));
-    let handles_slot: Rc<RefCell<Option<AppHandles>>> = Rc::new(RefCell::new(None));
-
-    let add_session: Rc<dyn Fn(ProjectMeta)> = {
-        let state_slot = state_slot.clone();
-        let handles_slot = handles_slot.clone();
-        let launcher_weak = launcher.as_weak();
-
-        Rc::new(move |meta: ProjectMeta| {
-            let session = ProjectSession::new(meta);
-            let is_first = state_slot.borrow().is_none();
-
-            if is_first {
-                let state = AppState::new(session);
-                *state_slot.borrow_mut() = Some(state.clone());
-
-                match build_main_windows(&state, &launcher_weak) {
-                    Ok(handles) => {
-                        let _ = handles.preview.show();
-                        let _ = handles.timeline.show();
-                        let _ = handles.props.show();
-                        *handles_slot.borrow_mut() = Some(handles);
-                    }
-                    Err(err) => {
-                        eprintln!("[NeoUtl] 本体ウィンドウ生成失敗: {err}");
-                        return;
-                    }
-                }
-            } else {
-                let state = state_slot.borrow().as_ref().unwrap().clone();
-                {
-                    let mut s = state.lock().unwrap();
-                    s.sessions.push(session);
-                    s.active = s.sessions.len() - 1;
-                }
-                if let Some(h) = handles_slot.borrow().as_ref() {
-                    preview::sync_active_session(
-                        &state,
-                        &h.preview.as_weak(),
-                        &h.timeline.as_weak(),
-                        &h.props.as_weak(),
-                    );
-                    let _ = h.preview.show();
-                    let _ = h.timeline.show();
-                    let _ = h.props.show();
-                }
-            }
-
-            if let Some(l) = launcher_weak.upgrade() {
-                let _ = l.hide();
-            }
-        })
+pub fn install(gpu: Rc<SharedGpu>, slot: PreviewSlot) {
+    let Some(meta) = project::list_projects().into_iter().next() else {
+        return;
     };
-
-    launcher::setup(launcher, add_session);
+    start_project(meta, gpu, slot);
 }
 
-fn build_main_windows(
-    state: &SharedAppState,
-    _launcher_weak: &slint::Weak<LauncherWindow>,
-) -> Result<AppHandles, Box<dyn std::error::Error>> {
-    let preview = PreviewWindow::new()?;
-    let timeline = TimelineWindow::new()?;
-    let props = PropertiesWindow::new()?;
-    let settings = SystemSettingsWindow::new()?;
-    let scene_settings_win = SceneSettingsWindow::new()?;
-    let project_settings_win = ProjectSettingsWindow::new()?;
-    let keybindings_win = KeybindingsWindow::new()?;
-
-    let gpu_slot: preview::GpuSlot = Rc::new(RefCell::new(None));
-    preview::install_rendering_notifier(&preview, gpu_slot.clone());
-
-    system_settings::setup(&settings, app_state::settings_world(state));
-    scene_settings::setup(&scene_settings_win, state.clone(), timeline.as_weak());
-    project_settings::setup(&project_settings_win, state.clone(), preview.as_weak());
-    keybindings::setup(&keybindings_win);
-    for w in [
-        settings.window(),
-        scene_settings_win.window(),
-        project_settings_win.window(),
-        keybindings_win.window(),
-    ] {
-        let _ = w.show();
-        let _ = w.hide();
-    }
-    preview::setup(
-        &preview,
-        timeline.as_weak(),
-        props.as_weak(),
-        settings.as_weak(),
-        project_settings_win.as_weak(),
-        keybindings_win.as_weak(),
-        state.clone(),
-        gpu_slot,
-    );
-    timeline::setup(
-        &timeline,
-        preview.as_weak(),
-        props.as_weak(),
-        scene_settings_win.as_weak(),
-        state.clone(),
-    );
-    properties::setup(&props, preview.as_weak(), timeline.as_weak(), state.clone());
-
-    Ok(AppHandles {
-        preview,
-        timeline,
-        props,
-        settings,
-        scene_settings: scene_settings_win,
-        project_settings: project_settings_win,
-        keybindings: keybindings_win,
-    })
+pub fn start_project(meta: project::ProjectMeta, gpu: Rc<SharedGpu>, slot: PreviewSlot) {
+    let state = AppState::new(ProjectSession::new(meta));
+    let panel = Rc::new(RefCell::new(PreviewPanel::new(
+        gpu.device.clone(),
+        gpu.queue.clone(),
+        LegacyWindows {},
+    )));
+    panel.borrow_mut().sync_active_session(&state);
+    let dialogs = Rc::new(RefCell::new(dialogs::DialogSet::new(
+        crate::app_state::settings_world(&state).clone(),
+    )));
+    let timeline = Rc::new(RefCell::new(TimelineWindow::new()));
+    timeline.borrow_mut().open = true;
+    let properties = Rc::new(RefCell::new(PropertiesPanel::new()));
+    crate::egui_loop::set_preview(&slot, panel, dialogs, timeline, properties, state);
 }
