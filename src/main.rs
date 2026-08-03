@@ -141,6 +141,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         wgpu_settings.device_required_features |=
             slint::wgpu_29::wgpu::Features::TEXTURE_FORMAT_NV12;
         wgpu_settings.backends = slint::wgpu_29::wgpu::Backends::METAL;
+        wgpu_settings
+            .device_required_limits
+            .max_storage_buffers_per_shader_stage = 1;
         slint::BackendSelector::new()
             .require_wgpu_29(slint::wgpu_29::WGPUConfiguration::Automatic(wgpu_settings))
             .select()?;
@@ -149,6 +152,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     {
         let mut wgpu_settings = slint::wgpu_29::WGPUSettings::default();
         wgpu_settings.backends = slint::wgpu_29::wgpu::Backends::DX12;
+        wgpu_settings
+            .device_required_limits
+            .max_storage_buffers_per_shader_stage = 1;
         slint::BackendSelector::new()
             .require_wgpu_29(slint::wgpu_29::WGPUConfiguration::Automatic(wgpu_settings))
             .select()?;
