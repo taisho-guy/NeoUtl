@@ -149,11 +149,14 @@ fn build_all<'a>(
     if let Some(triple) = target {
         cmd.arg("--target").arg(triple);
     }
-    // neoutl-lua-runtimeのmlua採用言語(luajit/lua54)は[target.'cfg(...)']による
-    cmd.arg("-p")
-        .arg("neoutl-lua-runtime")
-        .arg("--features")
-        .arg(format!("neoutl-lua-runtime/{lua_feature}"));
+    // [target.'cfg(...)']による自動切替ではなく、常にこの明示featureで選択する。
+    const MLUA_CONSUMER_CRATES: &[&str] = &["neoutl-lua-runtime", "neoutl-effect-lua"];
+    for pkg in MLUA_CONSUMER_CRATES {
+        cmd.arg("-p")
+            .arg(pkg)
+            .arg("--features")
+            .arg(format!("{pkg}/{lua_feature}"));
+    }
 
     let mut package_count = 0usize;
     for (label, crates) in groups {

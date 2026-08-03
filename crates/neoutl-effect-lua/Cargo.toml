@@ -9,4 +9,9 @@ crate-type = ["rlib"]
 [dependencies]
 neoutl-shared-abi = { path = "../neoutl-shared-abi" }
 neoutl-effect-api = { path = "../neoutl-effect-api" }
-mlua = { version = "0.12", features = ["luajit", "vendored", "send"] }
+mlua = { version = "0.12", default-features = false, features = ["vendored", "send"] }
+
+[features]
+default = []
+luajit = ["mlua/luajit"]
+lua54 = ["mlua/lua54"]

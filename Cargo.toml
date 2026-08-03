@@ -32,7 +32,7 @@ neoutl-object-api = { path = "crates/neoutl-object-api" }
 neoutl-effect-api = { path = "crates/neoutl-effect-api" }
 neoutl-effect-lua = { path = "crates/neoutl-effect-lua" }
 neoutl-lua-runtime = { path = "crates/neoutl-lua-runtime" }
-mlua = { version = "0.12", features = ["luajit", "vendored", "send"] }
+mlua = { version = "0.12", default-features = false, features = ["vendored", "send"] }
 neoutl-easing-api = { path = "crates/neoutl-easing-api" }
 neoutl-theme-api = { path = "crates/neoutl-theme-api" }
 neoutl-media-api = { path = "crates/neoutl-media-api" }
