@@ -72,9 +72,9 @@ impl EffectCatalogState {
         let mut all: Vec<CatalogRow> = crate::effects::loader::registry()
             .iter()
             .map(|p| CatalogRow {
-                id: p.id.clone().into(),
-                name: p.name.clone().into(),
-                category: p.category.clone().into(),
+                id: p.id().to_owned().into(),
+                name: p.name().to_owned().into(),
+                category: p.category().to_owned().into(),
             })
             .collect();
         all.sort_by(|a, b| a.category.cmp(&b.category).then(a.name.cmp(&b.name)));
@@ -1536,7 +1536,7 @@ fn push_schema_rows(
 /// text: Text/FilePathの文字列値。対象外kindの行にはNoneを返せばよい。
 fn push_c_abi_param_rows(
     out: &mut Vec<ParamRow>,
-    schema: &[neoutl_shared_abi::ParamSchema],
+    schema: &[neoutl_shared_abi::ParamRowOwned],
     scope: GroupScope,
     group: &str,
     effect_index: i32,
@@ -1550,8 +1550,8 @@ fn push_c_abi_param_rows(
 ) {
     let mut collapsed = false;
     for s in schema {
-        let key = unsafe { s.key.as_str() };
-        let label = unsafe { s.label.as_str() };
+        let key = s.key.as_str();
+        let label = s.label.as_str();
         if s.kind == ParamKind::Group {
             let initial_open = s.default_float != 0.0;
             collapsed = !is_group_open(scope, label, initial_open);
@@ -1562,11 +1562,11 @@ fn push_c_abi_param_rows(
         let track = keyframes(key);
         let frames: Vec<i32> = track.iter().map(|k| k.frame).collect();
         let seg = resolve_segment(&track, clip_start, clip_end, current_frame, base);
-        let enum_options: Vec<SharedString> =
-            neoutl_shared_abi::split_enum_options(unsafe { s.enum_options.as_str() })
-                .into_iter()
-                .map(SharedString::from)
-                .collect();
+        let enum_options: Vec<SharedString> = s
+            .enum_options
+            .iter()
+            .map(|option| SharedString::from(option.as_str()))
+            .collect();
         let enum_index = if s.kind == ParamKind::Group {
             if collapsed { 0 } else { 1 }
         } else {
@@ -1646,11 +1646,15 @@ fn push_plugin_rows(
     }
     let schema =
         unsafe { std::slice::from_raw_parts(meta.property_schema_ptr, meta.property_schema_len) };
+    let schema: Vec<_> = schema
+        .iter()
+        .map(|row| unsafe { row.to_owned_row() })
+        .collect();
     let current = world.get_plugin_params(oid).unwrap_or_default();
     let track_options = empty_track_options();
     push_c_abi_param_rows(
         out,
-        schema,
+        &schema,
         GroupScope::Object(oid as i32),
         &plugin.name,
         -1,
@@ -2020,7 +2024,7 @@ fn refresh(props: &PropertiesWindow, world: &EcsWorld) {
         .map(|(i, e)| EffectRow {
             index: i as i32,
             name: find_effect(&e.effect_id)
-                .map_or(e.effect_id.as_str(), |m| m.name)
+                .map_or(e.effect_id.as_str(), |m| m.name())
                 .into(),
             enabled: e.enabled,
             dragging: false,
@@ -2041,9 +2045,9 @@ fn refresh(props: &PropertiesWindow, world: &EcsWorld) {
         let schema = param_schema(meta);
         push_c_abi_param_rows(
             &mut params,
-            schema,
+            &schema,
             GroupScope::Effect(id, i as i32),
-            meta.name,
+            meta.name(),
             i as i32,
             clip_start,
             clip_end,
@@ -2068,7 +2072,7 @@ fn refresh(props: &PropertiesWindow, world: &EcsWorld) {
                     .unwrap_or_else(|| {
                         schema
                             .iter()
-                            .find(|s| unsafe { s.key.as_str() } == key)
+                            .find(|s| s.key == key)
                             .map_or(0.0, |s| s.default_float)
                     })
             },

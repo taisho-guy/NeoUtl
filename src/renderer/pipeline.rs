@@ -85,6 +85,21 @@ pub struct RenderEngine {
     media_sampler: wgpu::Sampler,
     video_pipeline: wgpu::RenderPipeline,
     video_bind_group_layout: wgpu::BindGroupLayout,
+    /// システムレベルLua拡張。エフェクトLuaと共通のscripts/から
+    /// 読み込む常駐スクリプト群を保持する。GPUリソースの実体はLua側へ渡さない
+    /// （neoutl-lua-runtime crateドキュメント参照）。存在しない場合はNone
+    /// （LuaSystem::new失敗時、または該当ディレクトリ未使用時）。
+    lua_system: Option<neoutl_lua_runtime::LuaSystem>,
+    /// system.register_computeで登録されたWGSLソースから構築したコンピュートパイプライン。
+    /// key=ComputeDef.id。
+    lua_compute_pipelines: HashMap<String, wgpu::ComputePipeline>,
+    /// テクスチャRGBA平均値（"reduce系"の唯一の読み出し経路）を求める固定コンピュートパス。
+    /// ワークグループ毎の部分和をatomic加算で1バッファへ集約し、最終値をCPUへ1回だけ
+    /// map_asyncで読み出す。Lua側へはpublish_reduce_result経由でスカラー4要素のみ渡す。
+    reduce_mean_pipeline: wgpu::ComputePipeline,
+    reduce_mean_bind_group_layout: wgpu::BindGroupLayout,
+    reduce_mean_buffer: wgpu::Buffer,
+    reduce_mean_readback_buffer: wgpu::Buffer,
     /// SceneObjectのレンダリング結果キャッシュ。key=target_scene。
     /// render()呼び出し1回（トップレベル呼び出し1回、depth=0起点）につき
     /// クリアし、同一フレーム内で同一シーンを複数クリップが参照する際の
@@ -355,22 +370,128 @@ fn build_effect_pipelines_from_registry(
 ) -> HashMap<String, wgpu::RenderPipeline> {
     effects::registry()
         .iter()
-        .filter_map(|plugin| {
-            let src = unsafe { (plugin.vtable.wgsl)() };
-            if src.ptr.is_null() {
+        .filter_map(|source| {
+            let wgsl = source.wgsl_bytes();
+            if wgsl.is_empty() {
                 return None;
             }
-            let wgsl = unsafe { std::slice::from_raw_parts(src.ptr, src.len) };
-            match build_effect_pipeline(device, layout, wgsl, &plugin.name) {
-                Ok(pipeline) => Some((plugin.id.clone(), pipeline)),
+            match build_effect_pipeline(device, layout, wgsl, source.name()) {
+                Ok(pipeline) => Some((source.id().to_owned(), pipeline)),
                 Err(err) => {
                     eprintln!(
-                        "[NeoUtl] エフェクトプラグインのシェーダコンパイル失敗、除外して継続: id={} name={} 理由={err}",
-                        plugin.id, plugin.name
+                        "[NeoUtl] エフェクトのシェーダコンパイル失敗、除外して継続: id={} name={} 理由={err}",
+                        source.id(),
+                        source.name()
                     );
                     None
                 }
             }
+        })
+        .collect()
+}
+
+/// テクスチャRGBA平均を求める固定コンピュートシェーダ。
+/// acc[0..4)=r/g/b/a固定小数点和(SCALE倍・u32)、acc[4]=ピクセル数。
+/// CPU側でSCALE・ピクセル数で除して平均へ戻す（reduce_source_mean参照）。
+const REDUCE_MEAN_WGSL: &str = r#"
+@group(0) @binding(0) var src_tex: texture_2d<f32>;
+@group(0) @binding(1) var<storage, read_write> acc: array<atomic<u32>, 5>;
+
+const SCALE: f32 = 1000000.0;
+
+@compute @workgroup_size(8, 8)
+fn cs_main(@builtin(global_invocation_id) gid: vec3<u32>) {
+    let dims = textureDimensions(src_tex);
+    if (gid.x >= dims.x || gid.y >= dims.y) {
+        return;
+    }
+    let c = textureLoad(src_tex, vec2<i32>(gid.xy), 0);
+    atomicAdd(&acc[0], u32(clamp(c.r, 0.0, 1.0) * SCALE));
+    atomicAdd(&acc[1], u32(clamp(c.g, 0.0, 1.0) * SCALE));
+    atomicAdd(&acc[2], u32(clamp(c.b, 0.0, 1.0) * SCALE));
+    atomicAdd(&acc[3], u32(clamp(c.a, 0.0, 1.0) * SCALE));
+    atomicAdd(&acc[4], 1u);
+}
+"#;
+
+fn build_reduce_mean_pipeline(
+    device: &wgpu::Device,
+) -> (wgpu::ComputePipeline, wgpu::BindGroupLayout) {
+    let bgl = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+        label: Some("Reduce Mean BGL"),
+        entries: &[
+            wgpu::BindGroupLayoutEntry {
+                binding: 0,
+                visibility: wgpu::ShaderStages::COMPUTE,
+                ty: wgpu::BindingType::Texture {
+                    sample_type: wgpu::TextureSampleType::Float { filterable: false },
+                    view_dimension: wgpu::TextureViewDimension::D2,
+                    multisampled: false,
+                },
+                count: None,
+            },
+            wgpu::BindGroupLayoutEntry {
+                binding: 1,
+                visibility: wgpu::ShaderStages::COMPUTE,
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Storage { read_only: false },
+                    has_dynamic_offset: false,
+                    min_binding_size: None,
+                },
+                count: None,
+            },
+        ],
+    });
+    let layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+        label: Some("Reduce Mean Pipeline Layout"),
+        bind_group_layouts: &[Some(&bgl)],
+        immediate_size: 0,
+    });
+    let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+        label: Some("Reduce Mean Shader"),
+        source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(REDUCE_MEAN_WGSL)),
+    });
+    let pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+        label: Some("Reduce Mean Pipeline"),
+        layout: Some(&layout),
+        module: &shader,
+        entry_point: Some("cs_main"),
+        compilation_options: Default::default(),
+        cache: None,
+    });
+    (pipeline, bgl)
+}
+
+/// system.register_computeで登録されたコンピュートパス定義群からパイプラインを構築する。
+/// コンパイル失敗した定義は警告出力の上除外し、他定義の処理は継続する
+/// （build_effect_pipelines_from_registryと対称の除外方針）。
+fn build_lua_compute_pipelines(
+    device: &wgpu::Device,
+    defs: &[neoutl_lua_runtime::ComputeDef],
+) -> HashMap<String, wgpu::ComputePipeline> {
+    defs.iter()
+        .filter_map(|def| {
+            let error_scope = device.push_error_scope(wgpu::ErrorFilter::Validation);
+            let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+                label: Some(&def.id),
+                source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(def.wgsl.as_str())),
+            });
+            if let Some(err) = pollster::block_on(error_scope.pop()) {
+                eprintln!(
+                    "[NeoUtl] system.register_compute シェーダコンパイル失敗、除外: id={} 理由={err}",
+                    def.id
+                );
+                return None;
+            }
+            let pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+                label: Some(&def.id),
+                layout: None,
+                module: &shader,
+                entry_point: Some("cs_main"),
+                compilation_options: Default::default(),
+                cache: None,
+            });
+            Some((def.id.clone(), pipeline))
         })
         .collect()
 }
@@ -641,6 +762,42 @@ impl RenderEngine {
 
         let font = load_font().and_then(|f| FontArc::try_from_vec(f).ok());
 
+        let (reduce_mean_pipeline, reduce_mean_bind_group_layout) =
+            build_reduce_mean_pipeline(&device);
+        let reduce_mean_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("Reduce Mean Accumulator"),
+            size: 20,
+            usage: wgpu::BufferUsages::STORAGE
+                | wgpu::BufferUsages::COPY_DST
+                | wgpu::BufferUsages::COPY_SRC,
+            mapped_at_creation: false,
+        });
+        let reduce_mean_readback_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("Reduce Mean Readback"),
+            size: 20,
+            usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+
+        let lua_system = match neoutl_lua_runtime::LuaSystem::new() {
+            Ok(sys) => {
+                let scripts_dir = crate::effects::default_effects_dir()
+                    .parent()
+                    .map(|p| p.join("scripts"))
+                    .unwrap_or_else(|| std::path::PathBuf::from("scripts"));
+                sys.load_dir(&scripts_dir);
+                Some(sys)
+            }
+            Err(err) => {
+                eprintln!("[NeoUtl] LuaSystem初期化失敗、system拡張を無効化: {err}");
+                None
+            }
+        };
+        let lua_compute_pipelines = lua_system
+            .as_ref()
+            .map(|sys| build_lua_compute_pipelines(&device, &sys.drain_computes()))
+            .unwrap_or_default();
+
         Self {
             device,
             queue,
@@ -667,6 +824,101 @@ impl RenderEngine {
             video_pipeline,
             video_bind_group_layout,
             scene_texture_cache: HashMap::new(),
+            lua_system,
+            lua_compute_pipelines,
+            reduce_mean_pipeline,
+            reduce_mean_bind_group_layout,
+            reduce_mean_buffer,
+            reduce_mean_readback_buffer,
+        }
+    }
+
+    /// self.texture(現フレーム最終合成結果)のRGBA平均をGPU上で1回のコンピュートパスで
+    /// 求め、CPUへスカラー4要素のみ読み出す。ピクセル単位データはCPUへ一切渡さない。
+    pub fn reduce_source_mean(&self) -> [f32; 4] {
+        let zeros = [0u32; 5];
+        self.queue
+            .write_buffer(&self.reduce_mean_buffer, 0, bytemuck::cast_slice(&zeros));
+
+        let view = self
+            .texture
+            .create_view(&wgpu::TextureViewDescriptor::default());
+        let bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("Reduce Mean BG"),
+            layout: &self.reduce_mean_bind_group_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::TextureView(&view),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: self.reduce_mean_buffer.as_entire_binding(),
+                },
+            ],
+        });
+
+        let mut encoder = self
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("Reduce Mean Encoder"),
+            });
+        {
+            let mut cpass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
+                label: Some("Reduce Mean Pass"),
+                timestamp_writes: None,
+            });
+            cpass.set_pipeline(&self.reduce_mean_pipeline);
+            cpass.set_bind_group(0, &bind_group, &[]);
+            cpass.dispatch_workgroups(
+                self.render_width.div_ceil(8),
+                self.render_height.div_ceil(8),
+                1,
+            );
+        }
+        encoder.copy_buffer_to_buffer(
+            &self.reduce_mean_buffer,
+            0,
+            &self.reduce_mean_readback_buffer,
+            0,
+            20,
+        );
+        self.queue.submit([encoder.finish()]);
+
+        let slice = self.reduce_mean_readback_buffer.slice(..);
+        let (tx, rx) = std::sync::mpsc::channel();
+        slice.map_async(wgpu::MapMode::Read, move |result| {
+            tx.send(result).expect("map_async結果送信失敗");
+        });
+        self.device
+            .poll(wgpu::PollType::wait_indefinitely())
+            .expect("device poll失敗");
+        rx.recv()
+            .expect("map_async結果受信失敗")
+            .expect("バッファmap失敗");
+
+        let mapped = slice.get_mapped_range();
+        let raw: &[u32] = bytemuck::cast_slice(&mapped);
+        let count = (raw[4].max(1)) as f32;
+        const SCALE: f32 = 1_000_000.0;
+        let result = [
+            raw[0] as f32 / SCALE / count,
+            raw[1] as f32 / SCALE / count,
+            raw[2] as f32 / SCALE / count,
+            raw[3] as f32 / SCALE / count,
+        ];
+        drop(mapped);
+        self.reduce_mean_readback_buffer.unmap();
+        result
+    }
+
+    /// reduce_source_mean()を実行し、結果を"source_mean"という名前でLuaSystemへpublishする。
+    /// scripts/スクリプトはsystem.reduce_result("source_mean")で次回以降読み出せる
+    /// （スカラー4要素のみ、ピクセルバッファそのものは読み出せない）。
+    pub fn run_lua_reduce_hooks(&self) {
+        if let Some(sys) = &self.lua_system {
+            let values = self.reduce_source_mean();
+            sys.publish_reduce_result("source_mean", &values);
         }
     }
 
@@ -790,44 +1042,38 @@ impl RenderEngine {
 
         let mut src_is_ping = true;
         for (effect_id, params) in chain {
-            let Some(plugin) = effects::loader::by_id(effect_id) else {
+            let Some(source) = effects::loader::by_id(effect_id) else {
                 continue;
             };
             let Some(pipeline) = self.effect_pipelines.get(effect_id) else {
                 continue;
             };
-            let Some(meta) = crate::ecs::effects::find_effect(effect_id) else {
-                continue;
-            };
-            let schema = crate::ecs::effects::param_schema(meta);
+            let schema = source.param_schema();
             let values: Vec<f32> = schema
                 .iter()
                 .map(|s| {
-                    let key = unsafe { s.key.as_str() };
-                    params.get(key).map_or(s.default_float, |v| match v {
-                        Value::Number(n) => *n,
-                        Value::Bool(b) => {
-                            if *b {
-                                1.0
-                            } else {
-                                0.0
+                    params
+                        .get(s.key.as_str())
+                        .map_or(s.default_float, |v| match v {
+                            Value::Number(n) => *n,
+                            Value::Bool(b) => {
+                                if *b {
+                                    1.0
+                                } else {
+                                    0.0
+                                }
                             }
-                        }
-                        Value::Enum(idx) => *idx as f32,
-                        Value::Text(_) | Value::FilePath(_) | Value::TrackRef(_) => s.default_float,
-                    })
+                            Value::Enum(idx) => *idx as f32,
+                            Value::Text(_) | Value::FilePath(_) | Value::TrackRef(_) => {
+                                s.default_float
+                            }
+                        })
                 })
                 .collect();
 
-            let uniform_size = (unsafe { (plugin.vtable.uniform_size)() } as usize).max(16);
+            let uniform_size = (source.uniform_size() as usize).max(16);
             let mut bytes = vec![0u8; uniform_size];
-            unsafe {
-                (plugin.vtable.pack_uniform)(
-                    values.as_ptr(),
-                    values.len() as u32,
-                    bytes.as_mut_ptr(),
-                );
-            }
+            source.pack_uniform(&values, &mut bytes);
             self.queue
                 .write_buffer(&self.effect_uniform_buffer, 0, &bytes);
 
@@ -915,7 +1161,13 @@ impl RenderEngine {
         project: &ProjectResource,
     ) {
         self.scene_texture_cache.clear();
+        if let Some(sys) = &self.lua_system
+            && let Err(err) = sys.run_pre_render_hooks()
+        {
+            eprintln!("[NeoUtl] system.on_pre_render フック実行失敗: {err}");
+        }
         self.render_at(world, active_objects, project, 0);
+        self.run_lua_reduce_hooks();
     }
 
     /// SceneObjectの再帰評価を伴う本体。depthはMAX_SCENE_NESTING_DEPTH判定にのみ使う。

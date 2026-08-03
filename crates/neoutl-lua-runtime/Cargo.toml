@@ -1,0 +1,12 @@
+[package]
+name    = "neoutl-lua-runtime"
+version = "0.0.0"
+edition = "2024"
+
+[lib]
+crate-type = ["rlib"]
+
+[dependencies]
+neoutl-shared-abi = { path = "../neoutl-shared-abi" }
+neoutl-effect-lua = { path = "../neoutl-effect-lua" }
+mlua = { version = "0.12", features = ["luajit", "vendored", "send"] }

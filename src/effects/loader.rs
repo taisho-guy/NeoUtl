@@ -1,5 +1,7 @@
 use libloading::{Library, Symbol};
 use neoutl_effect_api::{ENTRY_SYMBOL, EffectVTable, EntryFn};
+use neoutl_effect_lua::LuaEffectSource;
+use neoutl_shared_abi::ParamRowOwned;
 use std::{
     ffi::OsStr,
     path::{Path, PathBuf},
@@ -14,48 +16,178 @@ pub struct EffectPlugin {
     _lib: Library,
 }
 
-static REGISTRY: OnceLock<Vec<EffectPlugin>> = OnceLock::new();
+/// エフェクト供給元。dylib(cdylib、`EffectVTable`経由)とLua(`neoutl-effect-lua`経由)を
+/// 単一の型で扱う。ホスト側消費コード(ecs::effects, renderer::pipeline)はこの型のみを
+/// 参照し、供給元固有のFFI呼び出し・生存期間管理を意識しない
+/// （dylib側のunsafe呼び出しはこのファイル内に閉じる）。
+pub enum EffectSource {
+    Native(EffectPlugin),
+    Lua(LuaEffectSource),
+}
 
-pub fn load_all(effects_dir: &Path) {
-    REGISTRY.get_or_init(|| {
-        let entries = match std::fs::read_dir(effects_dir) {
-            Ok(e) => e,
-            Err(err) => {
-                eprintln!("[NeoUtl] effects/ 読み込み失敗: {err}");
-                return Vec::new();
-            }
-        };
-        let candidates: Vec<PathBuf> = entries
-            .flatten()
-            .map(|e| e.path())
-            .filter(|p| is_dylib(p))
-            .collect();
-
-        let mut plugins: Vec<EffectPlugin> = candidates
-            .iter()
-            .filter_map(|path| match load_one(path) {
-                Ok(p) => Some(p),
-                Err(err) => {
-                    eprintln!("[NeoUtl] エフェクト読み込み失敗 {}: {err}", path.display());
-                    None
-                }
-            })
-            .collect();
-
-        plugins.sort_by(|a, b| a.id.cmp(&b.id));
-        for plugin in &plugins {
-            eprintln!("[NeoUtl] エフェクト登録: {} ({})", plugin.name, plugin.id);
+impl EffectSource {
+    pub fn id(&self) -> &str {
+        match self {
+            Self::Native(p) => &p.id,
+            Self::Lua(s) => &s.id,
         }
-        plugins
+    }
+
+    pub fn name(&self) -> &str {
+        match self {
+            Self::Native(p) => &p.name,
+            Self::Lua(s) => &s.name,
+        }
+    }
+
+    pub fn category(&self) -> &str {
+        match self {
+            Self::Native(p) => &p.category,
+            Self::Lua(s) => &s.category,
+        }
+    }
+
+    /// 現フレームで適用するWGSLフラグメントシェーダソース。
+    /// Native側はプラグインdylib内'staticバイト列への参照、Lua側はLuaEffectSource所有の
+    /// Stringへの参照であり、いずれもEffectSource自身より長生きしない前提で借用する。
+    pub fn wgsl_bytes(&self) -> &[u8] {
+        match self {
+            Self::Native(p) => {
+                let src = unsafe { (p.vtable.wgsl)() };
+                if src.ptr.is_null() {
+                    &[]
+                } else {
+                    unsafe { std::slice::from_raw_parts(src.ptr, src.len) }
+                }
+            }
+            Self::Lua(s) => s.wgsl.as_bytes(),
+        }
+    }
+
+    /// パラメータスキーマ。Native側はdylibの'static配列をunsafeで複製し、
+    /// Lua側は既に所有済みのVecをそのまま複製する
+    /// （複製コストは編集UI描画・エフェクト追加時のみ発生し、毎フレームapply_effect_chainでは
+    /// 呼び出し元がキャッシュ済みの値を使う想定）。
+    pub fn param_schema(&self) -> Vec<ParamRowOwned> {
+        match self {
+            Self::Native(p) => {
+                let meta = unsafe { &*((p.vtable.meta)()) };
+                if meta.param_schema_ptr.is_null() || meta.param_schema_len == 0 {
+                    return Vec::new();
+                }
+                let raw = unsafe {
+                    std::slice::from_raw_parts(meta.param_schema_ptr, meta.param_schema_len)
+                };
+                raw.iter().map(|s| unsafe { s.to_owned_row() }).collect()
+            }
+            Self::Lua(s) => s.param_schema.clone(),
+        }
+    }
+
+    /// Uniforms構造体の必要バイト数。両供給元とも
+    /// `neoutl_effect_api::uniform_size_std(param_schema.len())`に一致する
+    /// （共有レイアウト契約`array<vec4<f32>, N>`のため、供給元非依存に計算できる）。
+    pub fn uniform_size(&self) -> u32 {
+        match self {
+            Self::Native(p) => unsafe { (p.vtable.uniform_size)() },
+            Self::Lua(s) => neoutl_effect_api::uniform_size_std(s.param_schema.len() as u32),
+        }
+    }
+
+    /// パラメータ評価値列をUniformsバイト表現へ詰める。
+    /// Native側はプラグイン固有pack_uniform（全実装pack_uniform_std委譲済み）、
+    /// Lua側はホスト共有のpack_uniform_stdを直接呼ぶ（Lua独自packは提供しない、
+    /// レイアウト契約を単一実装に固定するため）。
+    pub fn pack_uniform(&self, params: &[f32], out: &mut [u8]) {
+        match self {
+            Self::Native(p) => unsafe {
+                (p.vtable.pack_uniform)(params.as_ptr(), params.len() as u32, out.as_mut_ptr());
+            },
+            Self::Lua(_) => unsafe {
+                neoutl_effect_api::pack_uniform_std(
+                    params.as_ptr(),
+                    params.len() as u32,
+                    out.as_mut_ptr(),
+                );
+            },
+        }
+    }
+}
+
+static REGISTRY: OnceLock<Vec<EffectSource>> = OnceLock::new();
+
+/// dylib(effects_dir)・Lua(scripts_dir)双方からエフェクトを収集し統合registryを構築する。
+/// id重複時は先勝ち（走査順: Native全件→Lua全件）とし、後続side loadでの
+/// 静かな上書きを避ける（システムAPI経由の動的登録drainは別経路、本registryとは独立）。
+pub fn load_all(effects_dir: &Path, scripts_dir: &Path) {
+    REGISTRY.get_or_init(|| {
+        let mut ids = std::collections::HashSet::new();
+        let mut sources = Vec::new();
+
+        for plugin in load_native(effects_dir) {
+            if ids.insert(plugin.id.clone()) {
+                sources.push(EffectSource::Native(plugin));
+            } else {
+                eprintln!("[NeoUtl] エフェクトID重複、除外: {}", plugin.id);
+            }
+        }
+        for lua_source in neoutl_effect_lua::load_dir(scripts_dir) {
+            if ids.insert(lua_source.id.clone()) {
+                sources.push(EffectSource::Lua(lua_source));
+            } else {
+                eprintln!("[NeoUtl] エフェクトID重複、除外: {}", lua_source.id);
+            }
+        }
+
+        sources.sort_by(|a, b| a.id().cmp(b.id()));
+        for s in &sources {
+            let kind = match s {
+                EffectSource::Native(_) => "native",
+                EffectSource::Lua(_) => "lua",
+            };
+            eprintln!(
+                "[NeoUtl] エフェクト登録: {} ({}) [{}]",
+                s.name(),
+                s.id(),
+                kind
+            );
+        }
+        sources
     });
 }
 
-pub fn registry() -> &'static [EffectPlugin] {
+pub fn registry() -> &'static [EffectSource] {
     REGISTRY.get().map_or(&[][..], Vec::as_slice)
 }
 
-pub fn by_id(id: &str) -> Option<&'static EffectPlugin> {
-    registry().iter().find(|p| p.id == id)
+pub fn by_id(id: &str) -> Option<&'static EffectSource> {
+    registry().iter().find(|p| p.id() == id)
+}
+
+fn load_native(effects_dir: &Path) -> Vec<EffectPlugin> {
+    let entries = match std::fs::read_dir(effects_dir) {
+        Ok(e) => e,
+        Err(err) => {
+            eprintln!("[NeoUtl] effects/ 読み込み失敗: {err}");
+            return Vec::new();
+        }
+    };
+    let candidates: Vec<PathBuf> = entries
+        .flatten()
+        .map(|e| e.path())
+        .filter(|p| is_dylib(p))
+        .collect();
+
+    candidates
+        .iter()
+        .filter_map(|path| match load_one(path) {
+            Ok(p) => Some(p),
+            Err(err) => {
+                eprintln!("[NeoUtl] エフェクト読み込み失敗 {}: {err}", path.display());
+                None
+            }
+        })
+        .collect()
 }
 
 pub fn default_effects_dir() -> PathBuf {
@@ -75,6 +207,14 @@ pub fn default_effects_dir() -> PathBuf {
     }
 
     exe_dir.join("effects")
+}
+
+/// dylib探索ディレクトリと兄弟の`scripts/`をLuaスクリプトディレクトリとする。
+pub fn default_effects_lua_dir() -> PathBuf {
+    default_effects_dir()
+        .parent()
+        .map(|p| p.join("scripts"))
+        .unwrap_or_else(|| PathBuf::from("scripts"))
 }
 
 fn load_one(path: &Path) -> Result<EffectPlugin, Box<dyn std::error::Error>> {

@@ -127,21 +127,47 @@ export component ExportDialog inherits Window {
                         }
                     }
                 }
+
                 Rectangle {
                     width: 56px;
                     height: 24px;
                     background: #1e1e24;
-                    Text { text: "保存"; color: #c8c8d2; font-size: 10px; horizontal-alignment: center; vertical-alignment: center; width: 100%; height: 100%; }
-                    TouchArea { clicked => { root.save-preset(); } }
+                    Text {
+                        text: "保存";
+                        color: #c8c8d2;
+                        font-size: 10px;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                        width: 100%;
+                        height: 100%;
+                    }
+
+                    TouchArea {
+                        clicked => { root.save-preset(); }
+                    }
                 }
+
                 Rectangle {
                     width: 56px;
                     height: 24px;
                     background: #1e1e24;
-                    Text { text: "削除"; color: #c8c8d2; font-size: 10px; horizontal-alignment: center; vertical-alignment: center; width: 100%; height: 100%; }
-                    TouchArea { enabled: root.selected-preset >= 0; clicked => { root.delete-preset(); } }
+                    Text {
+                        text: "削除";
+                        color: #c8c8d2;
+                        font-size: 10px;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                        width: 100%;
+                        height: 100%;
+                    }
+
+                    TouchArea {
+                        enabled: root.selected-preset >= 0;
+                        clicked => { root.delete-preset(); }
+                    }
                 }
             }
+
             TextInput {
                 height: 24px;
                 text <=> root.preset-name;

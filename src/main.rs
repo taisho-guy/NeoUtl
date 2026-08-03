@@ -92,7 +92,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     std::thread::spawn(neoutl_media_gstreamer_encoder::warm_up);
 
     objects::load_all(&objects::default_objects_dir());
-    effects::load_all(&effects::default_effects_dir());
+    effects::load_all(
+        &effects::default_effects_dir(),
+        &effects::default_effects_lua_dir(),
+    );
     media::loader::load_all(&media::loader::default_decoders_dir());
     theme::load_all(&theme::default_themes_dir());
     easings::loader::load_all(&easings::loader::default_easings_dir());

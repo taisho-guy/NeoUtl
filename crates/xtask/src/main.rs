@@ -247,6 +247,31 @@ fn stage_crates(
     }
 }
 
+fn stage_scripts(workspace_root: &Path, profile: &str, target: Option<&str>) {
+    let src_dir = workspace_root.join("scripts");
+    if !src_dir.is_dir() {
+        return;
+    }
+    let dst_dir = target_dir(workspace_root, profile, target).join("scripts");
+    copy_dir_recursive(&src_dir, &dst_dir).expect("Luaスクリプト配置失敗");
+    eprintln!("[xtask] 配置: scripts/（Lua）");
+}
+
+fn copy_dir_recursive(src: &Path, dst: &Path) -> std::io::Result<()> {
+    fs::create_dir_all(dst)?;
+    for entry in fs::read_dir(src)? {
+        let entry = entry?;
+        let path = entry.path();
+        let target = dst.join(entry.file_name());
+        if path.is_dir() {
+            copy_dir_recursive(&path, &target)?;
+        } else if path.extension().and_then(|e| e.to_str()) == Some("lua") {
+            fs::copy(path, target)?;
+        }
+    }
+    Ok(())
+}
+
 fn workspace_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .parent()
@@ -307,6 +332,7 @@ fn main() {
     stage_crates(&root, profile, target, "effects", &effects);
     stage_crates(&root, profile, target, "decoders", &decoders);
     stage_crates(&root, profile, target, "themes", &themes);
+    stage_scripts(&root, profile, target);
 
     if task != "run" {
         return;
