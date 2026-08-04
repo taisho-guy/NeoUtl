@@ -3,6 +3,8 @@
 #![warn(clippy::indexing_slicing)]
 #![warn(clippy::arithmetic_side_effects)]
 
+rust_i18n::i18n!("i18n", fallback = "ja");
+
 mod app_state;
 mod audio;
 mod config;
@@ -14,6 +16,7 @@ mod egui_loop;
 mod export;
 mod gpu_shared;
 mod hot_reload;
+mod localization;
 mod media;
 mod objects;
 mod project;
@@ -84,6 +87,7 @@ fn configure_gst_plugin_path() {
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
+    localization::initialize();
     let _ = project::begin_runtime_session();
 
     configure_gst_plugin_path();
