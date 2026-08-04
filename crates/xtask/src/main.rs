@@ -121,7 +121,7 @@ fn exe_filename(bin_name: &str) -> String {
     }
 }
 
-/// objects/effects/decoders/themes/NeoUtl本体を単一のcargo呼び出しへ集約してビルドする。
+/// objects/effects/decoders/NeoUtl本体を単一のcargo呼び出しへ集約してビルドする。
 /// 呼び出しを分割すると、cargoのfeature unification（resolver 2）が呼び出し単位で
 /// 独立に行われるため、要求パッケージ集合の違い（例: decoders単体呼び出しと
 /// NeoUtl本体呼び出しでwgpu等の要求feature集合が食い違う）により同一依存クレートが
@@ -328,8 +328,6 @@ fn main() {
     let objects = discover_crates(&root, "crates/objects");
     let effects = discover_crates(&root, "crates/effects");
     let decoders = discover_crates(&root, "crates/media");
-    let themes = discover_crates(&root, "crates/themes");
-
     build_all(
         &root,
         profile,
@@ -339,7 +337,6 @@ fn main() {
             ("objects", objects.as_slice()),
             ("effects", effects.as_slice()),
             ("decoders", decoders.as_slice()),
-            ("themes", themes.as_slice()),
         ],
         &["NeoUtl"],
         &lua_feature,
@@ -348,7 +345,6 @@ fn main() {
     stage_crates(&root, profile, target, "objects", &objects);
     stage_crates(&root, profile, target, "effects", &effects);
     stage_crates(&root, profile, target, "decoders", &decoders);
-    stage_crates(&root, profile, target, "themes", &themes);
     stage_scripts(&root, profile, target);
 
     if task != "run" {
