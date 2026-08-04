@@ -31,9 +31,9 @@ impl TimelineWindow {
         };
 
         let x = view_rect.min.x + self.frame_to_x(preview_start);
-        let y = view_rect.min.y + self.layer_to_y(preview_layer) + LAYER_HEIGHT * 0.1;
+        let h = LAYER_HEIGHT * 0.75;
+        let y = view_rect.min.y + self.layer_to_y(preview_layer) + (LAYER_HEIGHT - h) * 0.5;
         let w = ((preview_end - preview_start) as f32 * self.zoom_scale).max(4.0);
-        let h = LAYER_HEIGHT * 0.8;
         let clip_rect = Rect::from_min_size(Pos2::new(x, y), Vec2::new(w, h));
         if clip_rect.max.x < view_rect.min.x || clip_rect.min.x > view_rect.max.x {
             return;
@@ -65,10 +65,20 @@ impl TimelineWindow {
         let label_color = visuals.strong_text_color();
         let keyframe_color = visuals.warn_fg_color;
 
-        painter.rect_filled(clip_rect, 3.0, color);
+        {
+            let mut mesh = egui::Mesh::default();
+            let left_color = darken(color, 0.5);
+            mesh.colored_vertex(clip_rect.left_top(), left_color);
+            mesh.colored_vertex(clip_rect.left_bottom(), left_color);
+            mesh.colored_vertex(clip_rect.right_top(), color);
+            mesh.colored_vertex(clip_rect.right_bottom(), color);
+            mesh.add_triangle(0, 1, 2);
+            mesh.add_triangle(1, 3, 2);
+            painter.add(mesh);
+        }
         painter.rect_stroke(
             clip_rect,
-            3.0,
+            0.0,
             Stroke::new(
                 if obj.selected { 2.0 } else { 1.0 },
                 if obj.selected {
@@ -95,7 +105,8 @@ impl TimelineWindow {
                 } else {
                     Color32::from_white_alpha(166)
                 };
-                painter.image(
+                let clipped = painter.with_clip_rect(clip_rect.intersect(view_rect));
+                clipped.image(
                     tex,
                     wave_rect,
                     Rect::from_min_max(Pos2::ZERO, Pos2::new(1.0, 1.0)),
@@ -245,6 +256,46 @@ impl TimelineWindow {
             self.select_object(state, &(), obj.id, false);
             if let Some(pos) = body_resp.interact_pointer_pos() {
                 self.open_context_menu(ui, state, pos, obj.start_frame, obj.layer, obj.id);
+            }
+        }
+
+        if left_resp.drag_stopped() {
+            if let Some(drag) = self
+                .drag
+                .take_if(|d| d.id == obj.id && d.mode == DragMode::ResizeLeft)
+            {
+                let holder = crate::app_state::active_world(state);
+                holder.lock().unwrap().resize_object(
+                    obj.id as usize,
+                    drag.preview_start,
+                    drag.preview_end,
+                );
+            }
+        }
+        if right_resp.drag_stopped() {
+            if let Some(drag) = self
+                .drag
+                .take_if(|d| d.id == obj.id && d.mode == DragMode::ResizeRight)
+            {
+                let holder = crate::app_state::active_world(state);
+                holder.lock().unwrap().resize_object(
+                    obj.id as usize,
+                    drag.preview_start,
+                    drag.preview_end,
+                );
+            }
+        }
+        if body_resp.drag_stopped() {
+            if let Some(drag) = self
+                .drag
+                .take_if(|d| d.id == obj.id && d.mode == DragMode::Move)
+            {
+                let holder = crate::app_state::active_world(state);
+                holder.lock().unwrap().move_object(
+                    obj.id as usize,
+                    drag.preview_start,
+                    drag.preview_layer,
+                );
             }
         }
 
