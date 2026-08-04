@@ -33,11 +33,12 @@ pub fn effects_sidebar(ui: &mut egui::Ui, world: &mut EcsWorld, id: usize) {
         ui.weak("エフェクトはありません");
         return;
     }
+    let card = elegance::Theme::current(ui.ctx()).palette.card;
     let last = effects.len() - 1;
     for (index, inst) in effects.into_iter().enumerate() {
         ui.push_id(("effect_sidebar_row", id, index), |ui| {
             egui::Frame::default()
-                .fill(egui::Color32::from_rgb(0x16, 0x16, 0x1b))
+                .fill(card)
                 .corner_radius(3.0)
                 .inner_margin(4.0)
                 .show(ui, |ui| {

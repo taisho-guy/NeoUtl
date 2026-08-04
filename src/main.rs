@@ -96,7 +96,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         &effects::default_effects_lua_dir(),
     );
     media::loader::load_all(&media::loader::default_decoders_dir());
-    theme::load_all(&theme::default_themes_dir());
     easings::loader::load_all(&easings::loader::default_easings_dir());
     audio::plugin_registry::load_all(&audio::plugin_registry::default_plugins_dir());
 

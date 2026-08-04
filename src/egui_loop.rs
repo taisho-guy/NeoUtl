@@ -20,26 +20,6 @@ const SURFACE_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Bgra8Unorm;
 
 /// 旧Slint版(`properties.slint`等)の配色(#0e0e12系パネル/#24242c境界線/#8aabffアクセント)
 /// をegui::Visualsへ移植する。ウィンドウ生成のたびに一度だけ適用する。
-fn apply_neoutl_theme(ctx: &egui::Context) {
-    ctx.style_mut_of(egui::Theme::Dark, |style| {
-        let v = &mut style.visuals;
-        *v = egui::Visuals::dark();
-        v.panel_fill = egui::Color32::from_rgb(0x18, 0x18, 0x1e);
-        v.window_fill = egui::Color32::from_rgb(0x18, 0x18, 0x1e);
-        v.extreme_bg_color = egui::Color32::from_rgb(0x0e, 0x0e, 0x12);
-        v.faint_bg_color = egui::Color32::from_rgb(0x1c, 0x1c, 0x22);
-        v.hyperlink_color = egui::Color32::from_rgb(0x8a, 0xab, 0xff);
-        v.selection.bg_fill = egui::Color32::from_rgb(0x2a, 0x4d, 0xb8);
-        v.widgets.noninteractive.bg_fill = egui::Color32::from_rgb(0x1c, 0x1c, 0x22);
-        v.widgets.inactive.bg_fill = egui::Color32::from_rgb(0x1e, 0x1e, 0x24);
-        v.widgets.hovered.bg_fill = egui::Color32::from_rgb(0x26, 0x26, 0x30);
-        v.widgets.active.bg_fill = egui::Color32::from_rgb(0x2a, 0x4d, 0xb8);
-        style.spacing.item_spacing = egui::vec2(6.0, 6.0);
-        style.spacing.button_padding = egui::vec2(6.0, 3.0);
-    });
-    ctx.set_theme(egui::Theme::Dark);
-}
-
 pub struct RegisteredPreview {
     pub panel: Rc<RefCell<PreviewPanel>>,
     pub dialogs: Rc<RefCell<crate::ui::dialogs::DialogSet>>,
@@ -176,7 +156,7 @@ impl NativeWindow {
         surface.configure(&gpu.device, &config);
 
         let ctx = egui::Context::default();
-        apply_neoutl_theme(&ctx);
+        crate::theme::install(&ctx);
         set_with_region(&ctx, FontRegion::Japanese, FontStyle::Sans);
         let state = egui_winit::State::new(
             ctx.clone(),
@@ -199,6 +179,7 @@ impl NativeWindow {
     }
 
     fn redraw(&mut self, gpu: &SharedGpu, draw: impl FnOnce(&mut egui::Ui, &mut EguiRenderer)) {
+        crate::theme::install(&self.ctx);
         let raw_input = self.state.take_egui_input(&self.window);
         let mut draw = Some(draw);
         let output = self.ctx.run_ui(raw_input, |ui| {

@@ -1,8 +1,8 @@
 pub mod fields;
 
 use crate::ecs::{EcsWorld, resources::SystemSettingsResource};
-use crate::theme;
-use egui::{Color32, Context, Ui};
+use egui::{Context, Ui};
+use elegance::{BuiltInTheme, ThemeSwitcher};
 use fields::{choice_field, int_field, toggle_field};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
@@ -40,15 +40,6 @@ pub(crate) fn load_from_disk() -> Option<SystemSettingsResource> {
     rust_yaml::from_str(&content).ok()
 }
 
-fn theme_ids_and_names() -> (Vec<String>, Vec<String>) {
-    let ids = theme::registry()
-        .iter()
-        .map(|e| e.stable_id.clone())
-        .collect();
-    let names = theme::registry().iter().map(|e| e.name.clone()).collect();
-    (ids, names)
-}
-
 fn easing_engine_ids_and_names() -> (Vec<String>, Vec<String>) {
     let ids = crate::easings::loader::registry()
         .iter()
@@ -65,48 +56,17 @@ fn index_of(ids: &[String], id: &str) -> i32 {
     ids.iter().position(|i| i == id).map_or(0, |i| i as i32)
 }
 
-/// "#RRGGBB" / "RRGGBB" 形式のみ受理する。不正値はNoneを返し呼び出し側は変更を諦める。
-fn parse_hex_color(s: &str) -> Option<Color32> {
-    let s = s.trim_start_matches('#');
-    if s.len() != 6 {
-        return None;
-    }
-    let r = u8::from_str_radix(&s[0..2], 16).ok()?;
-    let g = u8::from_str_radix(&s[2..4], 16).ok()?;
-    let b = u8::from_str_radix(&s[4..6], 16).ok()?;
-    Some(Color32::from_rgb(r, g, b))
-}
-
-/// wallpaper_path未使用（空文字）で解決するため、壁紙連動テーマは既定色に留まる。
-fn resolve_theme_background(id: &str) -> Option<Color32> {
-    let entry = theme::by_stable_id(id)?;
-    let wallpaper = std::ffi::CString::new("").unwrap();
-    let ctx = neoutl_theme_api::ThemeContext {
-        wallpaper_path: wallpaper.as_ptr(),
-        unix_time_sec: std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map_or(0, |d| d.as_secs() as i64),
-    };
-    let colors = theme::resolve(entry, &ctx);
-    drop(wallpaper);
-    colors.background.as_deref().and_then(parse_hex_color)
-}
-
 pub struct SystemSettingsWindow {
     pub open: bool,
-    theme_background: Color32,
     selected_category: i32,
 
-    theme_ids: Vec<String>,
-    theme_names: Vec<String>,
-    theme_index: i32,
+    theme_choice: BuiltInTheme,
     easing_engine_ids: Vec<String>,
     easing_engine_names: Vec<String>,
     easing_engine_index: i32,
 
     autosave_enabled: bool,
     autosave_interval_sec: i32,
-    theme_dark: bool,
     ui_scale_percent: i32,
     worker_threads: i32,
     audio_max_block_size: i32,
@@ -125,28 +85,22 @@ impl SystemSettingsWindow {
             world_holder.lock().unwrap().set_system_settings(loaded);
         }
 
-        let (theme_ids, theme_names) = theme_ids_and_names();
         let (easing_engine_ids, easing_engine_names) = easing_engine_ids_and_names();
         let s = world_holder.lock().unwrap().get_system_settings();
 
         crate::media::runtime::set_worker_threads(s.worker_threads);
         crate::media::runtime::apply_decode_backend_env(s.decode_backend);
-        let theme_background =
-            resolve_theme_background(&s.theme_id).unwrap_or(Color32::from_rgb(0x0e, 0x0e, 0x12));
+        crate::theme::restore(&s.theme_id);
 
         Self {
             open: false,
-            theme_background,
             selected_category: 0,
-            theme_index: index_of(&theme_ids, &s.theme_id),
+            theme_choice: crate::theme::current(),
             easing_engine_index: index_of(&easing_engine_ids, &s.easing_engine_id),
-            theme_ids,
-            theme_names,
             easing_engine_ids,
             easing_engine_names,
             autosave_enabled: s.autosave_enabled,
             autosave_interval_sec: s.autosave_interval_sec,
-            theme_dark: s.theme_dark,
             ui_scale_percent: s.ui_scale_percent,
             worker_threads: s.worker_threads,
             audio_max_block_size: s.audio_max_block_size,
@@ -182,11 +136,11 @@ impl SystemSettingsWindow {
         crate::media::runtime::set_worker_threads(loaded.worker_threads);
         crate::media::runtime::apply_decode_backend_env(loaded.decode_backend);
 
-        self.theme_index = index_of(&self.theme_ids, &loaded.theme_id);
+        self.theme_choice = crate::theme::from_id(&loaded.theme_id);
+        crate::theme::set(self.theme_choice);
         self.easing_engine_index = index_of(&self.easing_engine_ids, &loaded.easing_engine_id);
         self.autosave_enabled = loaded.autosave_enabled;
         self.autosave_interval_sec = loaded.autosave_interval_sec;
-        self.theme_dark = loaded.theme_dark;
         self.ui_scale_percent = loaded.ui_scale_percent;
         self.worker_threads = loaded.worker_threads;
         self.audio_max_block_size = loaded.audio_max_block_size;
@@ -195,64 +149,57 @@ impl SystemSettingsWindow {
         self.magnetic_snap_range = loaded.magnetic_snap_range;
         self.export_container = loaded.export_container;
         self.export_codec = loaded.export_codec;
-        self.theme_background = resolve_theme_background(&loaded.theme_id)
-            .unwrap_or(Color32::from_rgb(0x0e, 0x0e, 0x12));
         self.save_status = "再読込完了".into();
     }
 
-    pub fn show(&mut self, ctx: &Context, ui: &mut Ui, world_holder: &Arc<Mutex<EcsWorld>>) {
+    pub fn show(&mut self, _ctx: &Context, ui: &mut Ui, world_holder: &Arc<Mutex<EcsWorld>>) {
         if !self.open {
             return;
         }
-        egui::CentralPanel::default()
-            .frame(
-                egui::Frame::central_panel(&ctx.style_of(egui::Theme::Dark))
-                    .fill(self.theme_background),
-            )
-            .show(ui, |ui| {
-                ui.horizontal(|ui| {
-                    ui.vertical(|ui| {
-                        ui.set_width(160.0);
-                        for (i, (label, icon)) in CATEGORIES.iter().enumerate() {
-                            let i = i as i32;
-                            let active = i == self.selected_category;
-                            let text = format!("{icon}  {label}");
-                            if ui.selectable_label(active, text).clicked() {
-                                self.selected_category = i;
-                            }
+        egui::CentralPanel::default().show(ui, |ui| {
+            ui.horizontal(|ui| {
+                ui.vertical(|ui| {
+                    ui.set_width(160.0);
+                    for (i, (label, icon)) in CATEGORIES.iter().enumerate() {
+                        let i = i as i32;
+                        let active = i == self.selected_category;
+                        let text = format!("{icon}  {label}");
+                        if ui.selectable_label(active, text).clicked() {
+                            self.selected_category = i;
                         }
-                    });
-                    ui.separator();
-                    ui.vertical(|ui| {
-                        egui::Grid::new("system_settings_page")
-                            .num_columns(2)
-                            .spacing([10.0, 10.0])
-                            .show(ui, |ui| match self.selected_category {
-                                0 => self.page_general(ui, world_holder),
-                                1 => self.page_appearance(ui, world_holder),
-                                2 => self.page_performance(ui, world_holder),
-                                3 => self.page_decode(ui, world_holder),
-                                4 => self.page_timeline_defaults(ui, world_holder),
-                                _ => self.page_export(ui, world_holder),
-                            });
-                    });
+                    }
                 });
-
                 ui.separator();
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    if ui.button("保存").clicked() {
-                        let s = world_holder.lock().unwrap().get_system_settings();
-                        self.save_status = match save_to_disk(&s) {
-                            Ok(()) => "保存完了".into(),
-                            Err(_) => "保存失敗".into(),
-                        };
-                    }
-                    if ui.button("再読込").clicked() {
-                        self.reload(world_holder);
-                    }
-                    ui.label(&self.save_status);
+                ui.vertical(|ui| {
+                    egui::Grid::new("system_settings_page")
+                        .num_columns(2)
+                        .spacing([10.0, 10.0])
+                        .show(ui, |ui| match self.selected_category {
+                            0 => self.page_general(ui, world_holder),
+                            1 => self.page_appearance(ui, world_holder),
+                            2 => self.page_performance(ui, world_holder),
+                            3 => self.page_decode(ui, world_holder),
+                            4 => self.page_timeline_defaults(ui, world_holder),
+                            _ => self.page_export(ui, world_holder),
+                        });
                 });
             });
+
+            ui.separator();
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                if ui.button("保存").clicked() {
+                    let s = world_holder.lock().unwrap().get_system_settings();
+                    self.save_status = match save_to_disk(&s) {
+                        Ok(()) => "保存完了".into(),
+                        Err(_) => "保存失敗".into(),
+                    };
+                }
+                if ui.button("再読込").clicked() {
+                    self.reload(world_holder);
+                }
+                ui.label(&self.save_status);
+            });
+        });
     }
 
     fn page_general(&mut self, ui: &mut egui::Ui, world_holder: &Arc<Mutex<EcsWorld>>) {
@@ -278,28 +225,20 @@ impl SystemSettingsWindow {
     }
 
     fn page_appearance(&mut self, ui: &mut egui::Ui, world_holder: &Arc<Mutex<EcsWorld>>) {
-        let mut theme_index = self.theme_index;
-        if choice_field(ui, "テーマ", &self.theme_names, &mut theme_index) {
-            self.theme_index = theme_index;
-            if let Some(id) = self.theme_ids.get(theme_index as usize).cloned() {
-                self.persist(world_holder, |s| s.theme_id.clone_from(&id));
-                self.theme_background =
-                    resolve_theme_background(&id).unwrap_or(self.theme_background);
-            }
+        ui.label("テーマ");
+        let resp = ui.add(ThemeSwitcher::new(&mut self.theme_choice).auto_install(false));
+        if resp.changed() {
+            crate::theme::set(self.theme_choice);
+            let id = crate::theme::id_of(self.theme_choice).to_string();
+            self.persist(world_holder, |s| s.theme_id = id);
         }
+        ui.end_row();
 
-        let mut theme_dark = self.theme_dark;
         let mut ui_scale_percent = self.ui_scale_percent;
-        let changed = toggle_field(ui, "ダークテーマ", &mut theme_dark)
-            | int_field(ui, "UIスケール（%）", &mut ui_scale_percent, 50, 200);
-        if changed {
-            self.theme_dark = theme_dark;
+        if int_field(ui, "UIスケール（%）", &mut ui_scale_percent, 50, 200) {
             self.ui_scale_percent = ui_scale_percent;
-            let (dark, scale) = (self.theme_dark, self.ui_scale_percent);
-            self.persist(world_holder, |s| {
-                s.theme_dark = dark;
-                s.ui_scale_percent = scale;
-            });
+            let scale = self.ui_scale_percent;
+            self.persist(world_holder, |s| s.ui_scale_percent = scale);
         }
 
         let mut easing_engine_index = self.easing_engine_index;
