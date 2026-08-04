@@ -2,7 +2,7 @@ use crate::app_state::SharedAppState;
 use crate::gpu_shared::SharedGpu;
 use crate::ui::launcher::LauncherPanel;
 use crate::ui::preview::PreviewPanel;
-use crate::ui::properties_panel::PropertiesPanel;
+use crate::ui::properties::PropertiesPanel;
 use crate::ui::timeline::TimelineWindow;
 use egui_system_fonts::{FontRegion, FontStyle, set_with_region};
 use egui_wgpu::Renderer as EguiRenderer;
