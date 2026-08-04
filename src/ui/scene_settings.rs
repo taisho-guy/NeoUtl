@@ -1,5 +1,6 @@
 use crate::app_state::{self, SharedAppState};
 use crate::ecs::SceneSettings;
+use crate::localization::tr;
 use crate::project;
 use crate::ui::system_settings::fields::{
     choice_field, float_field, int_field, name_field, toggle_field,
@@ -145,18 +146,18 @@ impl SceneSettingsWindow {
             return false;
         }
         let title = if self.is_creation_mode {
-            "新規シーン作成"
+            tr("新規シーン作成")
         } else {
-            "シーン設定"
+            tr("シーン設定")
         };
         let section_color = egui::Color32::from_rgb(0x8a, 0xab, 0xff);
 
-        ctx.send_viewport_cmd(egui::ViewportCommand::Title(title.to_string()));
+        ctx.send_viewport_cmd(egui::ViewportCommand::Title(title));
         let mut confirmed = false;
         let mut close_requested = false;
         egui::CentralPanel::default().show(ui, |ui| {
             ui.group(|ui| {
-                ui.colored_label(section_color, "基本設定");
+                ui.colored_label(section_color, tr("基本設定"));
                 egui::Grid::new("scene_settings_basic")
                     .num_columns(2)
                     .show(ui, |ui| {
@@ -168,7 +169,7 @@ impl SceneSettingsWindow {
             });
 
             ui.group(|ui| {
-                ui.colored_label(section_color, "編集とスナップ");
+                ui.colored_label(section_color, tr("編集とスナップ"));
                 egui::Grid::new("scene_settings_snap")
                     .num_columns(2)
                     .show(ui, |ui| {
@@ -196,7 +197,7 @@ impl SceneSettingsWindow {
 
             if self.grid_mode == 1 {
                 ui.group(|ui| {
-                    ui.colored_label(section_color, "BPM設定");
+                    ui.colored_label(section_color, tr("BPM設定"));
                     egui::Grid::new("scene_settings_bpm")
                         .num_columns(2)
                         .show(ui, |ui| {
@@ -209,7 +210,7 @@ impl SceneSettingsWindow {
 
             if self.grid_mode == 2 {
                 ui.group(|ui| {
-                    ui.colored_label(section_color, "フレーム設定");
+                    ui.colored_label(section_color, tr("フレーム設定"));
                     egui::Grid::new("scene_settings_frame")
                         .num_columns(2)
                         .show(ui, |ui| {
@@ -220,10 +221,10 @@ impl SceneSettingsWindow {
 
             ui.add_space(ui.available_height() - 32.0);
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                if ui.button("OK").clicked() {
+                if ui.button(tr("OK")).clicked() {
                     confirmed = true;
                 }
-                if ui.button("キャンセル").clicked() {
+                if ui.button(tr("キャンセル")).clicked() {
                     close_requested = true;
                 }
             });

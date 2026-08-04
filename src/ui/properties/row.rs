@@ -7,6 +7,7 @@
 //! ドラッグスクラブはegui::DragValueの標準挙動（ドラッグ距離*speed）をそのまま用いる。
 
 use super::segment::Segment;
+use crate::localization::effect_param_label;
 use std::collections::HashMap;
 use std::sync::Mutex;
 
@@ -110,7 +111,10 @@ pub fn property_row(
         }
 
         if ui
-            .add_sized([BUTTON_W, ROW_HEIGHT], egui::Button::new(label).small())
+            .add_sized(
+                [BUTTON_W, ROW_HEIGHT],
+                egui::Button::new(effect_param_label(label)).small(),
+            )
             .clicked()
         {
             out.label_clicked = true;

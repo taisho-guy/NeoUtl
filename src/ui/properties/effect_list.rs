@@ -3,6 +3,7 @@ use crate::ecs::EcsWorld;
 use crate::ecs::TimelineData;
 use crate::ecs::effects::{find_effect, param_schema};
 use crate::ecs::types::Value;
+use crate::localization::{effect_param_label, tr};
 use neoutl_shared_abi::ParamKind;
 use std::collections::HashMap;
 use std::sync::Mutex;
@@ -30,7 +31,7 @@ fn toggle_group_open(object_id: usize, effect_index: i32, label: &str) {
 pub fn effects_sidebar(ui: &mut egui::Ui, world: &mut EcsWorld, id: usize) {
     let effects = world.get_effects(id);
     if effects.is_empty() {
-        ui.weak("エフェクトはありません");
+        ui.weak(tr("エフェクトはありません"));
         return;
     }
     let card = elegance::Theme::current(ui.ctx()).palette.card;
@@ -75,7 +76,7 @@ pub fn effects_section(
 ) {
     let effects = world.get_effects(id);
     if effects.is_empty() {
-        ui.label("エフェクトはありません");
+        ui.label(tr("エフェクトはありません"));
         return;
     }
     let (clip_start, clip_end) = clip_bounds(world, id);
@@ -106,7 +107,7 @@ pub fn effects_section(
             });
 
             let Some(source) = find_effect(&inst.effect_id) else {
-                ui.small("(エフェクト定義が見つかりません)");
+                ui.small(tr("(エフェクト定義が見つかりません)"));
                 return;
             };
             let schema = param_schema(&source);
@@ -117,7 +118,7 @@ pub fn effects_section(
                     let initial_open = s.default_float != 0.0;
                     let open = is_group_open(id, index as i32, &s.label, initial_open);
                     if ui
-                        .selectable_label(open, format!("▸ {}", s.label))
+                        .selectable_label(open, format!("▸ {}", effect_param_label(&s.label)))
                         .clicked()
                     {
                         toggle_group_open(id, index as i32, &s.label);
@@ -199,7 +200,7 @@ fn param_widget(
     objects: &[TimelineData],
 ) -> Option<Value> {
     ui.horizontal(|ui| {
-        ui.label(&s.label);
+        ui.label(effect_param_label(&s.label));
         match s.kind {
             ParamKind::Bool => {
                 let mut b = match current {
@@ -216,14 +217,17 @@ fn param_widget(
                 let current_label = s
                     .enum_options
                     .get(index as usize)
-                    .cloned()
+                    .map(|o| effect_param_label(o))
                     .unwrap_or_default();
                 let mut changed = false;
                 egui::ComboBox::from_id_salt(("effect_enum", object_id, effect_index, &s.key))
                     .selected_text(current_label)
                     .show_ui(ui, |ui| {
                         for (i, opt) in s.enum_options.iter().enumerate() {
-                            if ui.selectable_value(&mut index, i as u32, opt).changed() {
+                            if ui
+                                .selectable_value(&mut index, i as u32, effect_param_label(opt))
+                                .changed()
+                            {
                                 changed = true;
                             }
                         }
@@ -248,7 +252,7 @@ fn param_widget(
                 if ui.text_edit_singleline(&mut t).changed() {
                     changed = true;
                 }
-                if ui.button("参照…").clicked() {
+                if ui.button(tr("参照…")).clicked() {
                     let dialog = rfd::FileDialog::new();
                     let picked = if s.kind == ParamKind::Folder {
                         dialog.pick_folder()
@@ -268,7 +272,7 @@ fn param_widget(
                     _ => -1,
                 };
                 let current_label = if track_ref < 0 {
-                    "未選択".to_string()
+                    tr("未選択")
                 } else {
                     format!("Object {track_ref}")
                 };
@@ -276,7 +280,10 @@ fn param_widget(
                 egui::ComboBox::from_id_salt(("effect_track", object_id, effect_index, &s.key))
                     .selected_text(current_label)
                     .show_ui(ui, |ui| {
-                        if ui.selectable_value(&mut track_ref, -1, "未選択").changed() {
+                        if ui
+                            .selectable_value(&mut track_ref, -1, tr("未選択"))
+                            .changed()
+                        {
                             changed = true;
                         }
                         for o in objects {

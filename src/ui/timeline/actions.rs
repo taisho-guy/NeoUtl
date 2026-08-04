@@ -1,6 +1,7 @@
 use super::TimelineWindow;
 use crate::app_state::{self, SharedAppState};
 use crate::ecs::components::{MediaSource, ShapeParams, TextContent};
+use crate::localization::tr;
 use crate::objects::registry;
 use crate::ui::preview::PreviewPanel;
 use std::cell::RefCell;
@@ -105,7 +106,8 @@ impl TimelineWindow {
                     .find(|&id| !world.would_create_scene_cycle(host_scene, id));
                 let Some(default_target) = default_target else {
                     eprintln!(
-                        "[NeoUtl] シーンオブジェクト追加を中止: 配置可能なシーンがありません"
+                        "{}",
+                        tr("[NeoUtl] シーンオブジェクト追加を中止: 配置可能なシーンがありません")
                     );
                     return;
                 };
@@ -302,7 +304,11 @@ impl TimelineWindow {
                 drop(world);
                 preview_panel.borrow_mut().refresh_total_frames(state);
             } else {
-                eprintln!("[NeoUtl] シーン削除を拒否: id={id}（他シーンのSceneObjectから参照中）");
+                eprintln!(
+                    "{}",
+                    tr("[NeoUtl] シーン削除を拒否: id={id}（他シーンのSceneObjectから参照中）")
+                        .replace("{id}", &id.to_string())
+                );
             }
         }
     }

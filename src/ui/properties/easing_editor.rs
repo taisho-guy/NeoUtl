@@ -12,6 +12,7 @@
 
 use crate::ecs::EcsWorld;
 use crate::ecs::types::Keyframe;
+use crate::localization::{effect_param_label, tr};
 use egui_plot::{Line, Plot, PlotPoint, PlotPoints, Points};
 use neoutl_easing_standard::{StandardEasing, ease, encode_payload, parse_payload};
 use std::sync::Mutex;
@@ -163,11 +164,13 @@ pub fn show(ctx: &egui::Context, ui: &mut egui::Ui, world: &mut EcsWorld) -> boo
     let (target, label) = state;
     let track = track_of(world, &target);
 
-    ui.heading(format!("イージング編集: {label}"));
+    ui.heading(format!("イージング編集: {}", effect_param_label(&label)));
     ui.separator();
 
     if track.is_empty() {
-        ui.weak("キーフレームがありません。プロパティ行の＋KFで追加してください。");
+        ui.weak(tr(
+            "キーフレームがありません。プロパティ行の＋KFで追加してください。",
+        ));
         return true;
     }
 
@@ -199,7 +202,7 @@ pub fn show(ctx: &egui::Context, ui: &mut egui::Ui, world: &mut EcsWorld) -> boo
         });
 
     ui.separator();
-    ui.label("キーフレーム / 区間イージング");
+    ui.label(tr("キーフレーム / 区間イージング"));
 
     let mut removed: Option<i32> = None;
     let mut updated: Option<(i32, i32, f32, String, Vec<u8>)> = None;
@@ -373,7 +376,7 @@ pub fn show(ctx: &egui::Context, ui: &mut egui::Ui, world: &mut EcsWorld) -> boo
     }
 
     ui.separator();
-    if ui.button("閉じる").clicked() {
+    if ui.button(tr("閉じる")).clicked() {
         close();
     }
     let _ = ctx;
