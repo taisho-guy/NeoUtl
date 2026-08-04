@@ -277,10 +277,14 @@ impl EguiMainWindow {
         if self.slot.borrow().is_none() || self.project_windows_created {
             return;
         }
-        for native in self.windows.values() {
-            if native.kind == WindowKind::Launcher {
-                native.window.set_visible(false);
-            }
+        let launcher_ids: Vec<WindowId> = self
+            .windows
+            .iter()
+            .filter(|(_, native)| native.kind == WindowKind::Launcher)
+            .map(|(id, _)| *id)
+            .collect();
+        for id in launcher_ids {
+            self.windows.remove(&id);
         }
         self.add_window(event_loop, WindowKind::Preview);
         self.add_window(event_loop, WindowKind::Timeline);

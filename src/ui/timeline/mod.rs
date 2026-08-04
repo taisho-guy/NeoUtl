@@ -31,6 +31,7 @@ const HANDLE_WIDTH: f32 = 10.0;
 const KEYFRAME_SIZE: f32 = 8.0;
 const SCENE_TAB_HEIGHT: f32 = 28.0;
 
+#[derive(PartialEq)]
 enum DragMode {
     Move,
     ResizeLeft,
