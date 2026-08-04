@@ -1,3 +1,4 @@
+use crate::localization::tr;
 use crate::ui::types::{ContextMenuItem, ObjectKindItem};
 use egui::Color32;
 
@@ -37,21 +38,21 @@ pub(super) fn build_context_menu(
     if hit_id >= 0 {
         return vec![
             ContextMenuItem {
-                label: "削除".into(),
+                label: tr("削除"),
                 action: 1,
                 kind: -1,
                 enabled: true,
                 icon: "trash".into(),
             },
             ContextMenuItem {
-                label: "再生位置で分割".into(),
+                label: tr("再生位置で分割"),
                 action: 0,
                 kind: -1,
                 enabled: true,
                 icon: "scissors".into(),
             },
             ContextMenuItem {
-                label: "複製".into(),
+                label: tr("複製"),
                 action: 7,
                 kind: -1,
                 enabled: true,
@@ -59,14 +60,14 @@ pub(super) fn build_context_menu(
             },
             sep(),
             ContextMenuItem {
-                label: "切り取り".into(),
+                label: tr("切り取り"),
                 action: 8,
                 kind: -1,
                 enabled: true,
                 icon: "scissors".into(),
             },
             ContextMenuItem {
-                label: "コピー".into(),
+                label: tr("コピー"),
                 action: 9,
                 kind: -1,
                 enabled: true,
@@ -75,9 +76,9 @@ pub(super) fn build_context_menu(
             sep(),
             ContextMenuItem {
                 label: if ripple_mode {
-                    "リップルモード: オン".into()
+                    tr("リップルモード: オン")
                 } else {
-                    "リップルモード: オフ".into()
+                    tr("リップルモード: オフ")
                 },
                 action: 3,
                 kind: -1,
@@ -89,7 +90,7 @@ pub(super) fn build_context_menu(
     let mut items: Vec<ContextMenuItem> = kinds
         .iter()
         .map(|k| ContextMenuItem {
-            label: format!("{}を追加", k.name),
+            label: tr("{}を追加").replace("{}", &k.name),
             action: 2,
             kind: k.kind,
             enabled: true,
@@ -98,21 +99,21 @@ pub(super) fn build_context_menu(
         .collect();
     items.push(sep());
     items.push(ContextMenuItem {
-        label: "元に戻す".into(),
+        label: tr("元に戻す"),
         action: 5,
         kind: -1,
         enabled: true,
         icon: "undo".into(),
     });
     items.push(ContextMenuItem {
-        label: "やり直す".into(),
+        label: tr("やり直す"),
         action: 6,
         kind: -1,
         enabled: true,
         icon: "redo".into(),
     });
     items.push(ContextMenuItem {
-        label: "貼り付け".into(),
+        label: tr("貼り付け"),
         action: 10,
         kind: -1,
         enabled: !clipboard_empty,

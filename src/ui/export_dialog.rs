@@ -1,5 +1,6 @@
 use crate::app_state::SharedAppState;
 use crate::export::{EncoderBackend, ExportCodec, ExportJob, ExportPreset};
+use crate::localization::tr;
 use egui::{Context, Ui};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
@@ -124,7 +125,7 @@ impl ExportDialog {
             self.presets.push(preset);
         }
         let _ = crate::export::save_export_presets(&self.presets);
-        self.status_text = "プリセットを保存しました".into();
+        self.status_text = tr("プリセットを保存しました");
     }
 
     fn delete_preset(&mut self) {
@@ -138,7 +139,7 @@ impl ExportDialog {
         let _ = crate::export::save_export_presets(&self.presets);
         self.selected_preset = -1;
         self.preset_name.clear();
-        self.status_text = "プリセットを削除しました".into();
+        self.status_text = tr("プリセットを削除しました");
     }
 
     fn pick_output_path(&mut self) {
@@ -198,7 +199,7 @@ impl ExportDialog {
         queue.enqueue(job, project_dir);
         queue.start(state.clone());
         self.is_exporting = false;
-        self.status_text = "レンダーキューに追加しました".into();
+        self.status_text = tr("レンダーキューに追加しました");
     }
 
     pub fn show(&mut self, _ctx: &Context, ui: &mut Ui, state: &SharedAppState) {
@@ -210,54 +211,54 @@ impl ExportDialog {
 
         let mut close_requested = false;
         egui::CentralPanel::default().show(ui, |ui| {
-            ui.label("書き出しプリセット");
+            ui.label(tr("書き出しプリセット"));
             ui.horizontal(|ui| {
                 let current = self
                     .presets
                     .get(self.selected_preset.max(0) as usize)
-                    .map(|p| p.name.as_str())
-                    .unwrap_or("(未選択)");
-                if ui.button(current).clicked() && !self.presets.is_empty() {
+                    .map(|p| p.name.clone())
+                    .unwrap_or_else(|| tr("(未選択)"));
+                if ui.button(&current).clicked() && !self.presets.is_empty() {
                     let next = (self.selected_preset + 1).rem_euclid(self.presets.len() as i32);
                     self.selected_preset = next;
                     self.apply_preset(next as usize);
                 }
-                if ui.button("保存").clicked() {
+                if ui.button(tr("保存")).clicked() {
                     self.save_preset();
                 }
-                ui.add_enabled(self.selected_preset >= 0, egui::Button::new("削除"))
+                ui.add_enabled(self.selected_preset >= 0, egui::Button::new(tr("削除")))
                     .clicked()
                     .then(|| self.delete_preset());
             });
             ui.text_edit_singleline(&mut self.preset_name);
 
-            ui.label("出力ファイル");
+            ui.label(tr("出力ファイル"));
             ui.horizontal(|ui| {
                 let display = if self.output_path.is_empty() {
-                    "未選択"
+                    tr("未選択")
                 } else {
-                    &self.output_path
+                    self.output_path.clone()
                 };
                 ui.label(display);
-                ui.add_enabled(!self.is_exporting, egui::Button::new("選択..."))
+                ui.add_enabled(!self.is_exporting, egui::Button::new(tr("選択...")))
                     .clicked()
                     .then(|| self.pick_output_path());
             });
 
-            ui.label("映像コーデック");
+            ui.label(tr("映像コーデック"));
             ui.horizontal(|ui| {
                 ui.selectable_value(&mut self.codec, 0, "H.264");
                 ui.selectable_value(&mut self.codec, 1, "H.265");
             });
 
-            ui.label("エンコーダー");
+            ui.label(tr("エンコーダー"));
             ui.horizontal(|ui| {
-                ui.selectable_value(&mut self.backend, 0, "自動(HW優先)");
-                ui.selectable_value(&mut self.backend, 1, "GPU HW固定");
-                ui.selectable_value(&mut self.backend, 2, "ソフトウェア");
+                ui.selectable_value(&mut self.backend, 0, tr("自動(HW優先)"));
+                ui.selectable_value(&mut self.backend, 1, tr("GPU HW固定"));
+                ui.selectable_value(&mut self.backend, 2, tr("ソフトウェア"));
             });
 
-            ui.label("コンテナ");
+            ui.label(tr("コンテナ"));
             ui.horizontal(|ui| {
                 ui.selectable_value(&mut self.mkv_container, false, "MP4 + AAC");
                 ui.selectable_value(&mut self.mkv_container, true, "MKV + Opus");
@@ -265,13 +266,13 @@ impl ExportDialog {
 
             ui.horizontal(|ui| {
                 ui.vertical(|ui| {
-                    ui.label("平均ビットレート(kbps)");
+                    ui.label(tr("平均ビットレート(kbps)"));
                     ui.add(
                         egui::DragValue::new(&mut self.average_bitrate_kbps).range(500..=200000),
                     );
                 });
                 ui.vertical(|ui| {
-                    ui.label("最大ビットレート(kbps)");
+                    ui.label(tr("最大ビットレート(kbps)"));
                     ui.add(egui::DragValue::new(&mut self.max_bitrate_kbps).range(500..=200000));
                 });
             });
@@ -283,17 +284,21 @@ impl ExportDialog {
                     0
                 };
                 ui.vertical(|ui| {
-                    ui.label("開始フレーム");
+                    ui.label(tr("開始フレーム"));
                     ui.add(egui::DragValue::new(&mut self.start_frame).range(0..=end_max));
                 });
                 ui.vertical(|ui| {
-                    ui.label("終了フレーム");
+                    ui.label(tr("終了フレーム"));
                     ui.add(egui::DragValue::new(&mut self.end_frame).range(1..=self.total_frames));
                 });
             });
 
             if self.is_exporting {
-                ui.label(format!("書き出し中: {progress_current} / {progress_total}"));
+                ui.label(
+                    tr("書き出し中: {progress_current} / {progress_total}")
+                        .replace("{progress_current}", &progress_current.to_string())
+                        .replace("{progress_total}", &progress_total.to_string()),
+                );
                 let fraction = if progress_total > 0 {
                     progress_current as f32 / progress_total as f32
                 } else {
@@ -315,15 +320,15 @@ impl ExportDialog {
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 let start_enabled = !self.is_exporting && !self.output_path.is_empty();
                 if ui
-                    .add_enabled(start_enabled, egui::Button::new("書き出し"))
+                    .add_enabled(start_enabled, egui::Button::new(tr("書き出し")))
                     .clicked()
                 {
                     self.start_export(state);
                 }
                 let close_label = if self.is_exporting {
-                    "中止"
+                    tr("中止")
                 } else {
-                    "閉じる"
+                    tr("閉じる")
                 };
                 if ui.button(close_label).clicked() {
                     if self.is_exporting {

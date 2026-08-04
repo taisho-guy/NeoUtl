@@ -2,6 +2,8 @@
 //! segment.rsが担う）。ドラッグ中点は`dragging`引数でセッション状態を呼び出し側に
 //! 持たせ、フレーム単位のスナップ位置を返す。
 
+use crate::localization::tr;
+
 pub struct TrackOutcome {
     pub point_clicked: Option<i32>,
     pub add_point: Option<i32>,
@@ -154,14 +156,14 @@ pub fn keyframe_track(
         };
         match fixed_nearest {
             Some((idx, f, d)) if d <= POINT_RADIUS * 2.5 && !hit_endpoint(idx) => {
-                if ui.button("キーフレーム削除").clicked() {
+                if ui.button(tr("キーフレーム削除")).clicked() {
                     remove_cell.set(Some(f));
                     ui.close();
                 }
             }
             _ => {
                 let f = frame_at(pos_x);
-                if ui.button("キーフレーム追加").clicked() {
+                if ui.button(tr("キーフレーム追加")).clicked() {
                     add_cell.set(Some(f));
                     ui.close();
                 }

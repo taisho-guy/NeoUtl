@@ -1,4 +1,5 @@
 use crate::app_state::{self, SharedAppState};
+use crate::localization::tr;
 use crate::project;
 use crate::ui::system_settings::fields::{choice_field, name_field};
 use egui::{Context, Ui};
@@ -67,7 +68,7 @@ impl ProjectSettingsWindow {
         let mut close_requested = false;
         egui::CentralPanel::default().show(ui, |ui| {
             ui.group(|ui| {
-                ui.colored_label(egui::Color32::from_rgb(0x8a, 0xab, 0xff), "基本設定");
+                ui.colored_label(egui::Color32::from_rgb(0x8a, 0xab, 0xff), tr("基本設定"));
                 egui::Grid::new("project_settings_basic")
                     .num_columns(2)
                     .show(ui, |ui| {
@@ -78,7 +79,7 @@ impl ProjectSettingsWindow {
             ui.group(|ui| {
                 ui.colored_label(
                     egui::Color32::from_rgb(0x8a, 0xab, 0xff),
-                    "音声フォーマット",
+                    tr("音声フォーマット"),
                 );
                 egui::Grid::new("project_settings_audio")
                     .num_columns(2)
@@ -118,10 +119,10 @@ impl ProjectSettingsWindow {
 
             ui.add_space(ui.available_height() - 32.0);
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                if ui.button("OK").clicked() {
+                if ui.button(tr("OK")).clicked() {
                     confirmed = true;
                 }
-                if ui.button("キャンセル").clicked() {
+                if ui.button(tr("キャンセル")).clicked() {
                     close_requested = true;
                 }
             });

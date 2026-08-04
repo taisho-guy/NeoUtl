@@ -1,3 +1,4 @@
+use crate::localization::tr;
 use crate::project::{self, ProjectMeta};
 
 pub struct LauncherPanel {
@@ -24,14 +25,14 @@ impl LauncherPanel {
     }
     pub fn show(&mut self, ui: &mut egui::Ui) -> Option<ProjectMeta> {
         let mut result = None;
-        ui.heading("NeoUtl - プロジェクト");
+        ui.heading(tr("NeoUtl - プロジェクト"));
         ui.separator();
         ui.columns(2, |columns| {
             columns[0].group(|ui| {
-                ui.heading("既存プロジェクト");
+                ui.heading(tr("既存プロジェクト"));
                 let projects = project::list_projects();
                 if projects.is_empty() {
-                    ui.colored_label(egui::Color32::GRAY, "プロジェクトがありません");
+                    ui.colored_label(egui::Color32::GRAY, tr("プロジェクトがありません"));
                 }
                 for item in projects {
                     if ui
@@ -46,8 +47,8 @@ impl LauncherPanel {
                 }
             });
             columns[1].group(|ui| {
-                ui.heading("新規プロジェクト");
-                ui.label("名前");
+                ui.heading(tr("新規プロジェクト"));
+                ui.label(tr("名前"));
                 ui.text_edit_singleline(&mut self.name);
                 ui.add(
                     egui::DragValue::new(&mut self.fps)
@@ -57,12 +58,12 @@ impl LauncherPanel {
                 ui.add(
                     egui::DragValue::new(&mut self.width)
                         .range(16..=7680)
-                        .prefix("幅: "),
+                        .prefix(tr("幅: ")),
                 );
                 ui.add(
                     egui::DragValue::new(&mut self.height)
                         .range(16..=7680)
-                        .prefix("高さ: "),
+                        .prefix(tr("高さ: ")),
                 );
                 ui.add(
                     egui::DragValue::new(&mut self.sample_rate)
@@ -77,7 +78,7 @@ impl LauncherPanel {
                 if !self.status.is_empty() {
                     ui.colored_label(egui::Color32::LIGHT_RED, &self.status);
                 }
-                if ui.button("作成して開く").clicked() {
+                if ui.button(tr("作成して開く")).clicked() {
                     match project::create_project(
                         &self.name,
                         self.fps,
