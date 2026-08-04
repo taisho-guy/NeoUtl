@@ -2,13 +2,14 @@ use super::{RangeSelect, TimelineWindow};
 use crate::app_state::{self, SharedAppState};
 use crate::ui::preview::PreviewPanel;
 use crate::ui::types::{LayerState, TimelineObject};
-use egui::{Color32, Pos2, Rect, Sense, Stroke, Vec2};
+use egui::{Pos2, Rect, Sense, Stroke, Vec2};
 use std::cell::RefCell;
 use std::rc::Rc;
 
 /// Slint `timeline/timeline-view.slint` 相当。
 /// グリッド(grid.rs)・クリップ(clip_item.rs)を合成し、背景ドラッグ選択と
 /// 右クリックメニュー起動(open_context_menu, context_menu.rs)を仲介する。
+/// 配色は `ui.visuals()` (アプリ全体テーマ) から取得し、独自の固定色は持たない。
 impl TimelineWindow {
     pub(super) fn timeline_view(
         &mut self,
@@ -23,12 +24,18 @@ impl TimelineWindow {
         layer_states: &[LayerState],
         content_height: f32,
     ) {
+        let visuals = ui.visuals().clone();
+        let bg = visuals.extreme_bg_color;
+        let select_fill = visuals.selection.bg_fill.gamma_multiply(0.4);
+        let select_stroke = visuals.selection.bg_fill;
+        let accent = visuals.warn_fg_color;
+
         let (rect, response) = ui.allocate_exact_size(
             Vec2::new(ui.available_width(), content_height),
             Sense::click_and_drag(),
         );
         let painter = ui.painter_at(rect);
-        painter.rect_filled(rect, 0.0, Color32::from_rgb(0x17, 0x17, 0x1b));
+        painter.rect_filled(rect, 0.0, bg);
 
         self.draw_grid(&painter, rect, layer_count);
 
@@ -38,15 +45,11 @@ impl TimelineWindow {
             let a = rect.min + range.anchor.to_vec2();
             let c = rect.min + range.cur.to_vec2();
             let sel = Rect::from_two_pos(a, c);
-            painter.rect_filled(
-                sel,
-                0.0,
-                Color32::from_rgba_unmultiplied(0x4a, 0x8f, 0xff, 0x33),
-            );
+            painter.rect_filled(sel, 0.0, select_fill);
             painter.rect_stroke(
                 sel,
                 0.0,
-                Stroke::new(1.0, Color32::from_rgb(0x4a, 0x8f, 0xff)),
+                Stroke::new(1.0, select_stroke),
                 egui::StrokeKind::Outside,
             );
         }
@@ -74,7 +77,7 @@ impl TimelineWindow {
                 Pos2::new(playhead_x, rect.min.y),
                 Pos2::new(playhead_x, rect.max.y),
             ],
-            Stroke::new(2.0, Color32::from_rgba_unmultiplied(0xff, 0x45, 0x00, 0x88)),
+            Stroke::new(2.0, accent),
         );
 
         if response.hovered() {

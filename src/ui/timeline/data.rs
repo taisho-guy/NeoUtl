@@ -69,6 +69,7 @@ impl TimelineWindow {
         let visible_peaks = peaks.as_ref();
         let width = 512usize;
         let height = 48usize;
+        let wave_color = ctx.style_of(ctx.theme()).visuals.selection.bg_fill;
         let mut pixels = vec![Color32::TRANSPARENT; width * height];
         for x in 0..width {
             let Some(peak) = visible_peaks.get(x * visible_peaks.len() / width) else {
@@ -79,7 +80,7 @@ impl TimelineWindow {
             let bottom = ((1.0 - peak.min.clamp(-1.0, 1.0)) * center as f32).round() as i32;
             for y in top.max(0)..bottom.min(height as i32) {
                 if let Some(px) = pixels.get_mut(y as usize * width + x) {
-                    *px = Color32::from_rgba_unmultiplied(92, 177, 255, 210);
+                    *px = wave_color.gamma_multiply(0.82);
                 }
             }
         }

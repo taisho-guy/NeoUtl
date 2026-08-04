@@ -28,6 +28,17 @@ const HEIGHT: f32 = 12.0;
 static DRAG_ORIGIN: std::sync::Mutex<Option<std::collections::HashMap<egui::Id, i32>>> =
     std::sync::Mutex::new(None);
 
+/// 右クリックメニュー表示中に参照する「メニューを開いた瞬間のヒット判定」の保持先。
+/// `response.context_menu`のクロージャは開いている間ずっと毎フレーム呼ばれ続け、
+/// そのたびに現在のポインタ位置で削除/追加を再判定すると、メニュー項目へカーソルを
+/// 動かした時点でポインタがトラック矩形の外に出て`nearest`がNoneになり、
+/// 「削除」ボタンが同じ位置で「追加」ボタンに変貌する（結果、削除しようとした操作が
+/// 誤って際限なくキーフレームを追加してしまう）。開いた瞬間の判定をここに固定し、
+/// メニュー表示中は再判定しない。
+static CONTEXT_HIT: std::sync::Mutex<
+    Option<std::collections::HashMap<egui::Id, (Option<(usize, i32, f32)>, f32)>>,
+> = std::sync::Mutex::new(None);
+
 pub fn keyframe_track(
     ui: &mut egui::Ui,
     id_source: impl std::hash::Hash + std::fmt::Debug,
@@ -127,10 +138,21 @@ pub fn keyframe_track(
 
     let add_cell = std::cell::Cell::new(None);
     let remove_cell = std::cell::Cell::new(None);
+
+    if response.secondary_clicked() {
+        if let Some(pos) = response.interact_pointer_pos() {
+            let mut hits = CONTEXT_HIT.lock().unwrap();
+            let hits = hits.get_or_insert_with(std::collections::HashMap::new);
+            hits.insert(track_id, (nearest, pos.x));
+        }
+    }
+
     response.context_menu(|ui| {
-        let pointer = ui.ctx().pointer_interact_pos();
-        let Some(pos) = pointer else { return };
-        match nearest {
+        let hits = CONTEXT_HIT.lock().unwrap();
+        let Some(&(fixed_nearest, pos_x)) = hits.as_ref().and_then(|m| m.get(&track_id)) else {
+            return;
+        };
+        match fixed_nearest {
             Some((idx, f, d)) if d <= POINT_RADIUS * 2.5 && !hit_endpoint(idx) => {
                 if ui.button("キーフレーム削除").clicked() {
                     remove_cell.set(Some(f));
@@ -138,7 +160,7 @@ pub fn keyframe_track(
                 }
             }
             _ => {
-                let f = frame_at(pos.x);
+                let f = frame_at(pos_x);
                 if ui.button("キーフレーム追加").clicked() {
                     add_cell.set(Some(f));
                     ui.close();

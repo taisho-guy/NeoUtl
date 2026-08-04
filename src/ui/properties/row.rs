@@ -64,10 +64,19 @@ pub fn property_row(
     let mut start_v = segment.start_value;
     let mut end_v = segment.end_value;
 
+    const VALUE_W: f32 = 70.0;
+    const BUTTON_W: f32 = 100.0;
+    const ROW_HEIGHT: f32 = 22.0;
+    let spacing = ui.spacing().item_spacing.x;
+    let fixed_w = VALUE_W * 2.0 + BUTTON_W + spacing * 4.0;
+    let slider_w = ((ui.available_width() - fixed_w) / 2.0).max(60.0);
+
     ui.horizontal(|ui| {
         let slider_l = ui.add_sized(
-            [ui.available_width() * 0.28, 22.0],
-            egui::Slider::new(&mut start_v, min..=max).show_value(false),
+            [slider_w, ROW_HEIGHT],
+            egui::Slider::new(&mut start_v, min..=max)
+                .show_value(false)
+                .trailing_fill(true),
         );
         if slider_l.changed() {
             if !left_active {
@@ -82,7 +91,7 @@ pub fn property_row(
         }
 
         let drag_l = ui.add_sized(
-            [56.0, 22.0],
+            [VALUE_W, ROW_HEIGHT],
             egui::DragValue::new(&mut start_v)
                 .range(min..=max)
                 .speed(speed),
@@ -100,14 +109,14 @@ pub fn property_row(
         }
 
         if ui
-            .add_sized([74.0, 22.0], egui::Button::new(label).small())
+            .add_sized([BUTTON_W, ROW_HEIGHT], egui::Button::new(label).small())
             .clicked()
         {
             out.label_clicked = true;
         }
 
         let drag_r = ui.add_sized(
-            [56.0, 22.0],
+            [VALUE_W, ROW_HEIGHT],
             egui::DragValue::new(&mut end_v)
                 .range(min..=max)
                 .speed(speed),
@@ -124,7 +133,12 @@ pub fn property_row(
             out.end_release = true;
         }
 
-        let slider_r = ui.add(egui::Slider::new(&mut end_v, min..=max).show_value(false));
+        let slider_r = ui.add_sized(
+            [slider_w, ROW_HEIGHT],
+            egui::Slider::new(&mut end_v, min..=max)
+                .show_value(false)
+                .trailing_fill(true),
+        );
         if slider_r.changed() {
             if !right_active {
                 right_active = true;

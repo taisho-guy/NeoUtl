@@ -257,7 +257,9 @@ impl PreviewPanel {
         });
     }
 
+    /// QML `RowLayout{ readonly property int _tabH: 28 }` 対応。
     fn tab_bar(&mut self, ui: &mut egui::Ui, state: &SharedAppState) {
+        ui.set_min_height(28.0);
         ui.horizontal(|ui| {
             let (names, active_index) = {
                 let s = state.lock().unwrap();
@@ -282,10 +284,39 @@ impl PreviewPanel {
         });
     }
 
+    /// QML `MainWindow.qml` 再生コントロールバー(Rectangle height:38, RowLayout)の直接対応。
+    /// 並び順: シークバー(fillWidth) → フレームカウンタ → 前後/再生ボタン群 → 速度SpinBox。
     fn playback_controls(&mut self, ui: &mut egui::Ui, state: &SharedAppState) {
+        ui.set_min_height(38.0);
         ui.horizontal(|ui| {
+            let mut frame = self.current_frame;
+            let slider = ui.add_sized(
+                [ui.available_width() - 220.0, 20.0],
+                egui::Slider::new(&mut frame, 0..=self.total_frames.max(1)).show_value(false),
+            );
+            if slider.changed() {
+                self.apply_frame(frame, state);
+                if self.is_playing {
+                    self.playback_anchor = Some((Instant::now(), self.current_frame));
+                }
+            }
+
+            let digits = self.total_frames.max(1).to_string().len();
+            ui.monospace(format!(
+                "{:0width$} / {}",
+                self.current_frame,
+                self.total_frames,
+                width = digits
+            ));
+
+            if ui.add_sized([32.0, 32.0], egui::Button::new("⏮")).clicked() {
+                self.apply_frame(self.current_frame - 1, state);
+            }
             let icon = if self.is_playing { "⏸" } else { "▶" };
-            if ui.button(icon).clicked() {
+            if ui
+                .add_sized([32.0, 32.0], egui::Button::new(icon))
+                .clicked()
+            {
                 self.is_playing = !self.is_playing;
                 let mixer = app_state::active_audio_mixer(state);
                 if self.is_playing {
@@ -296,33 +327,22 @@ impl PreviewPanel {
                     mixer.lock().unwrap().pause();
                 }
             }
-            if ui.button("⏮").clicked() {
-                self.apply_frame(self.current_frame - 1, state);
-            }
-            if ui.button("⏭").clicked() {
+            if ui.add_sized([32.0, 32.0], egui::Button::new("⏭")).clicked() {
                 self.apply_frame(self.current_frame + 1, state);
             }
 
-            let mut frame = self.current_frame;
-            if ui
-                .add(egui::Slider::new(&mut frame, 0..=self.total_frames.max(1)))
-                .changed()
-            {
-                self.apply_frame(frame, state);
-                if self.is_playing {
-                    self.playback_anchor = Some((Instant::now(), self.current_frame));
-                }
-            }
-
+            ui.label("速度");
             let mut speed = self.speed_percent;
             if ui
-                .add(
-                    egui::Slider::new(
-                        &mut speed,
-                        crate::config::PLAYBACK_SPEED_MIN_PERCENT
-                            ..=crate::config::PLAYBACK_SPEED_MAX_PERCENT,
-                    )
-                    .text("速度%"),
+                .add_sized(
+                    [80.0, 28.0],
+                    egui::DragValue::new(&mut speed)
+                        .range(
+                            crate::config::PLAYBACK_SPEED_MIN_PERCENT
+                                ..=crate::config::PLAYBACK_SPEED_MAX_PERCENT,
+                        )
+                        .custom_formatter(|v, _| format!("{:.1}x", v / 100.0))
+                        .speed(1.0),
                 )
                 .changed()
             {
@@ -331,7 +351,6 @@ impl PreviewPanel {
                     self.playback_anchor = Some((Instant::now(), self.current_frame));
                 }
             }
-            ui.label(format!("{} / {}", self.current_frame, self.total_frames));
         });
     }
 
@@ -358,24 +377,35 @@ impl PreviewPanel {
     ) {
         self.menu_bar(ui, state);
         self.tab_bar(ui, state);
-        self.playback_controls(ui, state);
 
         self.render_frame(egui_renderer, state);
 
-        let Some(texture_id) = self.texture_id else {
-            return;
-        };
-        let (w, h) = self.texture_dims;
-        let aspect = w as f32 / h.max(1) as f32;
-        let avail = ui.available_size();
-        let size = if avail.x / avail.y > aspect {
-            egui::vec2(avail.y * aspect, avail.y)
-        } else {
-            egui::vec2(avail.x, avail.x / aspect)
-        };
-        ui.centered_and_justified(|ui| {
-            ui.add(egui::Image::new((texture_id, size)).fit_to_exact_size(size));
+        const PLAYBACK_BAR_HEIGHT: f32 = 38.0;
+        let total_height = ui.available_height();
+        let image_height = (total_height - PLAYBACK_BAR_HEIGHT).max(0.0);
+
+        ui.allocate_ui(egui::vec2(ui.available_width(), image_height), |ui| {
+            if let Some(texture_id) = self.texture_id {
+                let (w, h) = self.texture_dims;
+                let aspect = w as f32 / h.max(1) as f32;
+                let avail = ui.available_size();
+                let size = if avail.x / avail.y > aspect {
+                    egui::vec2(avail.y * aspect, avail.y)
+                } else {
+                    egui::vec2(avail.x, avail.x / aspect)
+                };
+                ui.centered_and_justified(|ui| {
+                    ui.add(egui::Image::new((texture_id, size)).fit_to_exact_size(size));
+                });
+            }
         });
+
+        ui.allocate_ui(
+            egui::vec2(ui.available_width(), PLAYBACK_BAR_HEIGHT),
+            |ui| {
+                self.playback_controls(ui, state);
+            },
+        );
 
         if self.is_playing {
             self.advance_playback(state);

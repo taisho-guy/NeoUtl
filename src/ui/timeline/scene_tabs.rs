@@ -16,23 +16,28 @@ impl TimelineWindow {
         scene_tabs: &[SceneTabItem],
         dialogs: &Rc<RefCell<DialogSet>>,
     ) {
-        ui.horizontal(|ui| {
-            for tab in scene_tabs {
-                ui.horizontal(|ui| {
-                    if ui.selectable_label(tab.active, &tab.name).clicked() {
-                        self.switch_scene_tab(state, preview_panel, tab.id);
-                    }
-                    if ui.small_button("⚙").clicked() {
-                        dialogs.borrow_mut().open_scene_edit(state, tab.id);
-                    }
-                    if ui.small_button("✕").clicked() {
-                        self.close_scene_tab(state, preview_panel, tab.id);
-                    }
-                });
-            }
-            if ui.button("＋").clicked() {
-                dialogs.borrow_mut().open_scene_create(state);
-            }
-        });
+        ui.allocate_ui_with_layout(
+            egui::Vec2::new(ui.available_width(), super::SCENE_TAB_HEIGHT),
+            egui::Layout::left_to_right(egui::Align::Center),
+            |ui| {
+                ui.set_min_height(super::SCENE_TAB_HEIGHT);
+                for tab in scene_tabs {
+                    ui.horizontal(|ui| {
+                        if ui.selectable_label(tab.active, &tab.name).clicked() {
+                            self.switch_scene_tab(state, preview_panel, tab.id);
+                        }
+                        if tab.id != 0 && ui.small_button("✕").clicked() {
+                            self.close_scene_tab(state, preview_panel, tab.id);
+                        }
+                    });
+                }
+                if ui
+                    .add_sized([40.0, super::SCENE_TAB_HEIGHT], egui::Button::new("＋"))
+                    .clicked()
+                {
+                    dialogs.borrow_mut().open_scene_create(state);
+                }
+            },
+        );
     }
 }
