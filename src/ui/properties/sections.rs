@@ -139,12 +139,14 @@ pub fn text_section(ui: &mut egui::Ui, world: &mut EcsWorld, id: usize) {
     for schema in TEXT_SCHEMA {
         match schema.kind {
             ParamKind::Text => {
-                ui.horizontal(|ui| {
-                    ui.label(schema.label);
-                    if ui.text_edit_multiline(&mut content.text).changed() {
-                        world.set_text(id, content.text.clone(), content.font_size);
-                    }
-                });
+                ui.label(schema.label);
+                let width = ui.available_width();
+                if ui
+                    .add_sized([width, 80.0], egui::TextEdit::multiline(&mut content.text))
+                    .changed()
+                {
+                    world.set_text(id, content.text.clone(), content.font_size);
+                }
             }
             ParamKind::Float => {
                 let value = content.get_param(schema.key).unwrap_or(0.0);

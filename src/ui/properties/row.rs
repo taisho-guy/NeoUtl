@@ -72,6 +72,7 @@ pub fn property_row(
     let slider_w = ((ui.available_width() - fixed_w) / 2.0).max(60.0);
 
     ui.horizontal(|ui| {
+        ui.spacing_mut().slider_width = slider_w;
         let slider_l = ui.add_sized(
             [slider_w, ROW_HEIGHT],
             egui::Slider::new(&mut start_v, min..=max)
