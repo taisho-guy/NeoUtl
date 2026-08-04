@@ -18,6 +18,28 @@ use winit::window::{Window, WindowId};
 
 const SURFACE_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Bgra8Unorm;
 
+/// 旧Slint版(`properties.slint`等)の配色(#0e0e12系パネル/#24242c境界線/#8aabffアクセント)
+/// をegui::Visualsへ移植する。ウィンドウ生成のたびに一度だけ適用する。
+fn apply_neoutl_theme(ctx: &egui::Context) {
+    ctx.style_mut_of(egui::Theme::Dark, |style| {
+        let v = &mut style.visuals;
+        *v = egui::Visuals::dark();
+        v.panel_fill = egui::Color32::from_rgb(0x18, 0x18, 0x1e);
+        v.window_fill = egui::Color32::from_rgb(0x18, 0x18, 0x1e);
+        v.extreme_bg_color = egui::Color32::from_rgb(0x0e, 0x0e, 0x12);
+        v.faint_bg_color = egui::Color32::from_rgb(0x1c, 0x1c, 0x22);
+        v.hyperlink_color = egui::Color32::from_rgb(0x8a, 0xab, 0xff);
+        v.selection.bg_fill = egui::Color32::from_rgb(0x2a, 0x4d, 0xb8);
+        v.widgets.noninteractive.bg_fill = egui::Color32::from_rgb(0x1c, 0x1c, 0x22);
+        v.widgets.inactive.bg_fill = egui::Color32::from_rgb(0x1e, 0x1e, 0x24);
+        v.widgets.hovered.bg_fill = egui::Color32::from_rgb(0x26, 0x26, 0x30);
+        v.widgets.active.bg_fill = egui::Color32::from_rgb(0x2a, 0x4d, 0xb8);
+        style.spacing.item_spacing = egui::vec2(6.0, 6.0);
+        style.spacing.button_padding = egui::vec2(6.0, 3.0);
+    });
+    ctx.set_theme(egui::Theme::Dark);
+}
+
 pub struct RegisteredPreview {
     pub panel: Rc<RefCell<PreviewPanel>>,
     pub dialogs: Rc<RefCell<crate::ui::dialogs::DialogSet>>,
@@ -61,6 +83,7 @@ enum WindowKind {
     Keybindings,
     Export,
     EffectAdd,
+    EasingEditor,
 }
 
 impl WindowKind {
@@ -76,6 +99,7 @@ impl WindowKind {
             Self::Keybindings => "ショートカット設定",
             Self::Export => "メディアの書き出し",
             Self::EffectAdd => "エフェクト追加",
+            Self::EasingEditor => "NeoUtl - イージング編集",
         }
     }
 
@@ -89,6 +113,7 @@ impl WindowKind {
             Self::Keybindings => (720, 540),
             Self::Export => (620, 560),
             Self::EffectAdd => (420, 560),
+            Self::EasingEditor => (560, 520),
         }
     }
 
@@ -104,6 +129,7 @@ impl WindowKind {
                 | Self::Keybindings
                 | Self::Export
                 | Self::EffectAdd
+                | Self::EasingEditor
         )
     }
 }
@@ -150,6 +176,7 @@ impl NativeWindow {
         surface.configure(&gpu.device, &config);
 
         let ctx = egui::Context::default();
+        apply_neoutl_theme(&ctx);
         set_with_region(&ctx, FontRegion::Japanese, FontStyle::Sans);
         let state = egui_winit::State::new(
             ctx.clone(),
@@ -291,6 +318,7 @@ impl EguiMainWindow {
             WindowKind::Keybindings => p.dialogs.borrow().keybindings.open,
             WindowKind::Export => p.dialogs.borrow().export_dialog.open,
             WindowKind::EffectAdd => p.properties.borrow().effect_add.open,
+            WindowKind::EasingEditor => crate::ui::properties::easing_editor::is_open(),
             _ => return None,
         })
     }
@@ -305,6 +333,7 @@ impl EguiMainWindow {
             WindowKind::Keybindings,
             WindowKind::Export,
             WindowKind::EffectAdd,
+            WindowKind::EasingEditor,
         ] {
             let Some(desired_open) = self.dialog_open_state(kind) else {
                 continue;
@@ -338,6 +367,11 @@ impl EguiMainWindow {
             WindowKind::Keybindings => p.dialogs.borrow_mut().keybindings.open = open,
             WindowKind::Export => p.dialogs.borrow_mut().export_dialog.open = open,
             WindowKind::EffectAdd => p.properties.borrow_mut().effect_add.open = open,
+            WindowKind::EasingEditor => {
+                if !open {
+                    crate::ui::properties::easing_editor::close();
+                }
+            }
             _ => {}
         }
     }
@@ -444,6 +478,18 @@ impl EguiMainWindow {
                         p.properties
                             .borrow_mut()
                             .show_effect_add(ui.ctx(), &p.state);
+                    });
+                }
+            }
+            WindowKind::EasingEditor => {
+                if let Some(p) = self.slot.borrow().as_ref() {
+                    native.redraw(&self.gpu, |ui, _| {
+                        let ctx = ui.ctx().clone();
+                        let holder = crate::app_state::active_world(&p.state);
+                        let mut world = holder.lock().unwrap();
+                        if !crate::ui::properties::easing_editor::show(&ctx, ui, &mut world) {
+                            crate::ui::properties::easing_editor::close();
+                        }
                     });
                 }
             }

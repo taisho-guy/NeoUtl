@@ -25,6 +25,47 @@ fn toggle_group_open(object_id: usize, effect_index: i32, label: &str) {
     *entry = !*entry;
 }
 
+/// 左サイドバー用の簡易一覧。有効トグル・並び替え・削除のみを扱い、
+/// パラメータ編集は右側`effects_section`(詳細)に委ねる（旧properties.slint踏襲）。
+pub fn effects_sidebar(ui: &mut egui::Ui, world: &mut EcsWorld, id: usize) {
+    let effects = world.get_effects(id);
+    if effects.is_empty() {
+        ui.weak("エフェクトはありません");
+        return;
+    }
+    let last = effects.len() - 1;
+    for (index, inst) in effects.into_iter().enumerate() {
+        ui.push_id(("effect_sidebar_row", id, index), |ui| {
+            egui::Frame::default()
+                .fill(egui::Color32::from_rgb(0x16, 0x16, 0x1b))
+                .corner_radius(3.0)
+                .inner_margin(4.0)
+                .show(ui, |ui| {
+                    ui.horizontal(|ui| {
+                        let mut enabled = inst.enabled;
+                        if ui.checkbox(&mut enabled, "").changed() {
+                            world.set_effect_enabled(id, index, enabled);
+                        }
+                        ui.add(egui::Label::new(&inst.effect_id).truncate());
+                        ui.add_enabled_ui(index > 0, |ui| {
+                            if ui.small_button("↑").clicked() {
+                                world.reorder_effect(id, index, index - 1);
+                            }
+                        });
+                        ui.add_enabled_ui(index < last, |ui| {
+                            if ui.small_button("↓").clicked() {
+                                world.reorder_effect(id, index, index + 1);
+                            }
+                        });
+                        if ui.small_button("✕").clicked() {
+                            world.remove_effect(id, index);
+                        }
+                    });
+                });
+        });
+    }
+}
+
 pub fn effects_section(
     ui: &mut egui::Ui,
     world: &mut EcsWorld,
@@ -116,6 +157,11 @@ pub fn effects_section(
                             ui,
                             world,
                             (id, index, &s.key),
+                            super::easing_editor::TrackTarget::Effect {
+                                object_id: id,
+                                effect_index: index,
+                                key: s.key.clone(),
+                            },
                             &s.label,
                             min,
                             max,
