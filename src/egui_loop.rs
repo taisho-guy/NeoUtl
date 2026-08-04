@@ -134,7 +134,7 @@ impl NativeWindow {
                 .create_window(
                     Window::default_attributes()
                         .with_title(kind.title())
-                        .with_inner_size(winit::dpi::PhysicalSize::new(width, height)),
+                        .with_inner_size(winit::dpi::LogicalSize::new(width as f64, height as f64)),
                 )
                 .expect("eguiウィンドウ生成失敗"),
         );
@@ -217,6 +217,13 @@ impl NativeWindow {
         };
         self.renderer
             .update_buffers(&gpu.device, &gpu.queue, &mut encoder, &primitives, &screen);
+        let bg = self.ctx.style_of(self.ctx.theme()).visuals.panel_fill;
+        let clear_color = wgpu::Color {
+            r: (bg.r() as f64 / 255.0).powf(2.2),
+            g: (bg.g() as f64 / 255.0).powf(2.2),
+            b: (bg.b() as f64 / 255.0).powf(2.2),
+            a: 1.0,
+        };
         {
             let mut pass = encoder
                 .begin_render_pass(&wgpu::RenderPassDescriptor {
@@ -226,7 +233,7 @@ impl NativeWindow {
                         depth_slice: None,
                         resolve_target: None,
                         ops: wgpu::Operations {
-                            load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
+                            load: wgpu::LoadOp::Clear(clear_color),
                             store: wgpu::StoreOp::Store,
                         },
                     })],
@@ -399,7 +406,7 @@ impl EguiMainWindow {
                 if let Some(p) = self.slot.borrow().as_ref() {
                     native.redraw(&self.gpu, |ui, _| {
                         let ctx = ui.ctx().clone();
-                        p.properties.borrow_mut().show(&ctx, ui, &p.state);
+                        p.properties.borrow_mut().show(&ctx, ui, &p.state, &p.panel);
                     });
                 }
             }

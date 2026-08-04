@@ -143,6 +143,46 @@ pub fn activate_session_by_dir(
     Ok(())
 }
 
+/// 既存セッションなら切替、未読込ならディスクから読み込み新規セッションとして追加する。
+pub fn open_project_session(state: &SharedAppState, dir: &std::path::Path) -> Result<(), String> {
+    if activate_session_by_dir(state, dir).is_ok() {
+        return Ok(());
+    }
+    let meta = project::load_project(dir)
+        .ok_or_else(|| format!("プロジェクト読込失敗: {}", dir.display()))?;
+    let mut s = state.lock().unwrap();
+    s.sessions.push(ProjectSession::new(meta));
+    s.active = s.sessions.len() - 1;
+    Ok(())
+}
+
+/// アクティブセッションと同一設定(fps/解像度/音声)で新規プロジェクトを作成し追加する。
+pub fn new_project_session(state: &SharedAppState) -> std::io::Result<()> {
+    let (fps, width, height, audio_sample_rate, audio_channels) = {
+        let s = state.lock().unwrap();
+        let m = &s.sessions[s.active].meta;
+        (
+            m.fps,
+            m.width,
+            m.height,
+            m.audio_sample_rate,
+            m.audio_channels,
+        )
+    };
+    let meta = project::create_project(
+        "Untitled",
+        fps,
+        width,
+        height,
+        audio_sample_rate,
+        audio_channels,
+    )?;
+    let mut s = state.lock().unwrap();
+    s.sessions.push(ProjectSession::new(meta));
+    s.active = s.sessions.len() - 1;
+    Ok(())
+}
+
 /// システム設定は全プロジェクト共通のため、先頭セッションのEcsWorldへ固定する。
 pub fn settings_world(state: &SharedAppState) -> Arc<Mutex<EcsWorld>> {
     let s = state.lock().unwrap();
