@@ -1,3 +1,4 @@
+use crate::localization::tr;
 use crate::ui::types::CatalogRow;
 use egui::Context;
 
@@ -43,7 +44,7 @@ impl EffectAddDialog {
         let mut open = self.open;
         let mut close_clicked = false;
         let mut confirmed_id = None;
-        egui::Window::new("エフェクト追加")
+        egui::Window::new(tr("エフェクト追加"))
             .open(&mut open)
             .default_size([420.0, 560.0])
             .show(ctx, |ui| {
@@ -52,7 +53,10 @@ impl EffectAddDialog {
                 ui.horizontal(|ui| {
                     for (mode, label) in [(0, "カテゴリ順"), (1, "名前順"), (2, "最近使用")]
                     {
-                        if ui.selectable_label(self.sort_mode == mode, label).clicked() {
+                        if ui
+                            .selectable_label(self.sort_mode == mode, tr(label))
+                            .clicked()
+                        {
                             self.sort_mode = mode;
                         }
                     }
@@ -63,7 +67,7 @@ impl EffectAddDialog {
                     .show(ui, |ui| {
                         ui.horizontal(|ui| {
                             if ui
-                                .selectable_label(self.category_filter.is_empty(), "全て")
+                                .selectable_label(self.category_filter.is_empty(), tr("全て"))
                                 .clicked()
                             {
                                 self.category_filter.clear();
@@ -86,7 +90,7 @@ impl EffectAddDialog {
                     if rows.is_empty() {
                         ui.colored_label(
                             egui::Color32::from_rgb(0x55, 0x55, 0x5e),
-                            "該当するエフェクトがありません",
+                            tr("該当するエフェクトがありません"),
                         );
                     }
                     for row in &rows {
@@ -111,7 +115,7 @@ impl EffectAddDialog {
 
                 ui.separator();
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    if ui.button("閉じる").clicked() {
+                    if ui.button(tr("閉じる")).clicked() {
                         close_clicked = true;
                     }
                 });

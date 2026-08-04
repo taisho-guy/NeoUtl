@@ -1,3 +1,4 @@
+use crate::localization::{effect_category, effect_name};
 use crate::ui::effect_add_dialog::EffectCatalogSource;
 use crate::ui::types::CatalogRow;
 use std::sync::Mutex;
@@ -26,8 +27,8 @@ impl EffectCatalogState {
             .iter()
             .map(|p| CatalogRow {
                 id: p.id().to_owned(),
-                name: p.name().to_owned(),
-                category: p.category().to_owned(),
+                name: effect_name(p.name()),
+                category: effect_category(p.category()),
             })
             .collect();
         all.sort_by(|a, b| a.category.cmp(&b.category).then(a.name.cmp(&b.name)));
