@@ -25,10 +25,11 @@ mod view;
 use util::egui_key_name;
 
 const HEADER_WIDTH: f32 = 60.0;
-const LAYER_HEIGHT: f32 = 24.0;
+const LAYER_HEIGHT: f32 = 30.0;
 const RULER_HEIGHT: f32 = 32.0;
-const HANDLE_WIDTH: f32 = 6.0;
+const HANDLE_WIDTH: f32 = 10.0;
 const KEYFRAME_SIZE: f32 = 8.0;
+const SCENE_TAB_HEIGHT: f32 = 28.0;
 
 enum DragMode {
     Move,
@@ -240,6 +241,7 @@ impl TimelineWindow {
         self.ruler(ui, state, preview_panel, current_frame, total_frames);
 
         let content_height = ui.available_height();
+        ui.spacing_mut().item_spacing.x = 0.0;
         ui.horizontal(|ui| {
             self.layer_header(
                 ui,

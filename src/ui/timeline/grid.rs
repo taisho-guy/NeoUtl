@@ -18,11 +18,12 @@ impl TimelineWindow {
             if i % 2 == 0 {
                 painter.rect_filled(row, 0.0, Color32::from_rgba_unmultiplied(255, 255, 255, 5));
             }
-            painter.rect_stroke(
-                row,
-                0.0,
+            painter.line_segment(
+                [
+                    Pos2::new(row.min.x, row.max.y),
+                    Pos2::new(row.max.x, row.max.y),
+                ],
                 Stroke::new(1.0, Color32::from_rgba_unmultiplied(255, 255, 255, 13)),
-                egui::StrokeKind::Inside,
             );
         }
 

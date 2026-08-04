@@ -2,11 +2,14 @@ use super::{HEADER_WIDTH, LAYER_HEIGHT, TimelineWindow};
 use crate::app_state::SharedAppState;
 use crate::ui::preview::PreviewPanel;
 use crate::ui::types::LayerState;
-use egui::{Color32, Pos2, Rect, Sense, Stroke, Vec2};
+use egui::{Pos2, Rect, Sense, Stroke, Vec2};
 use std::cell::RefCell;
 use std::rc::Rc;
 
 /// Slint `timeline/layer-header.slint` 相当。
+/// 配色は `ui.visuals()` (アプリ全体テーマ) から取得し、独自の固定色は持たない。
+/// 行の区切りは下辺1本の罫線のみとし、選択行のみ枠線で強調する
+/// (上下辺を重ねて描画すると境界が二重線になり凸凹に見えるため)。
 impl TimelineWindow {
     pub(super) fn layer_header(
         &mut self,
@@ -17,12 +20,24 @@ impl TimelineWindow {
         layer_states: &[LayerState],
         content_height: f32,
     ) {
+        let visuals = ui.visuals().clone();
+        let base_bg = visuals.panel_fill;
+        let stripe_bg = visuals.faint_bg_color;
+        let hidden_bg = visuals.extreme_bg_color;
+        let locked_bg = visuals.warn_fg_color.gamma_multiply(0.25);
+        let selected_bg = visuals.selection.bg_fill;
+        let separator = visuals.widgets.noninteractive.bg_stroke.color;
+        let text_normal = visuals.text_color();
+        let text_weak = visuals.weak_text_color();
+        let text_locked = visuals.warn_fg_color;
+        let text_selected = visuals.strong_text_color();
+
         let (rect, response) = ui.allocate_exact_size(
             Vec2::new(HEADER_WIDTH, content_height),
             Sense::click_and_drag(),
         );
         let painter = ui.painter_at(rect);
-        painter.rect_filled(rect, 0.0, Color32::from_rgb(0x20, 0x20, 0x28));
+        painter.rect_filled(rect, 0.0, base_bg);
 
         for i in 0..layer_count {
             let y = rect.min.y + self.layer_to_y(i);
@@ -42,39 +57,42 @@ impl TimelineWindow {
                 Pos2::new(rect.min.x, y),
                 Vec2::new(HEADER_WIDTH, LAYER_HEIGHT),
             );
-            let bg = if !ls.visible {
-                Color32::from_rgb(0x16, 0x16, 0x1a)
+            let bg = if selected {
+                selected_bg
+            } else if !ls.visible {
+                hidden_bg
             } else if ls.locked {
-                Color32::from_rgb(0x4a, 0x2a, 0x2a)
-            } else if selected {
-                Color32::from_rgb(0x35, 0x35, 0x4a)
+                locked_bg
             } else if i % 2 == 0 {
-                Color32::from_rgb(0x24, 0x24, 0x2c)
+                stripe_bg
             } else {
-                Color32::from_rgb(0x20, 0x20, 0x28)
+                base_bg
             };
             painter.rect_filled(row, 0.0, bg);
-            painter.rect_stroke(
-                row,
-                0.0,
-                Stroke::new(
-                    if selected { 2.0 } else { 1.0 },
-                    if selected {
-                        Color32::from_rgb(0x6a, 0x8f, 0xff)
-                    } else {
-                        Color32::from_rgb(0x2a, 0x2a, 0x32)
-                    },
-                ),
-                egui::StrokeKind::Outside,
-            );
-            let text_color = if !ls.visible {
-                Color32::from_rgb(0x55, 0x55, 0x60)
-            } else if ls.locked {
-                Color32::from_rgb(0xff, 0xb0, 0xb0)
-            } else if selected {
-                Color32::WHITE
+            if selected {
+                painter.rect_stroke(
+                    row,
+                    0.0,
+                    Stroke::new(2.0, selected_bg.gamma_multiply(1.4)),
+                    egui::StrokeKind::Inside,
+                );
             } else {
-                Color32::from_rgb(0xcc, 0xcc, 0xd6)
+                painter.line_segment(
+                    [
+                        Pos2::new(row.min.x, row.max.y),
+                        Pos2::new(row.max.x, row.max.y),
+                    ],
+                    Stroke::new(1.0, separator),
+                );
+            }
+            let text_color = if !ls.visible {
+                text_weak
+            } else if ls.locked {
+                text_locked
+            } else if selected {
+                text_selected
+            } else {
+                text_normal
             };
             painter.text(
                 row.center(),
@@ -111,7 +129,7 @@ impl TimelineWindow {
                     egui::Align2::LEFT_TOP,
                     "🔒",
                     egui::FontId::proportional(9.0),
-                    Color32::from_rgb(0xff, 0xb0, 0xb0),
+                    text_locked,
                 );
             }
             if !ls.visible {
@@ -120,7 +138,7 @@ impl TimelineWindow {
                     egui::Align2::LEFT_TOP,
                     "—",
                     egui::FontId::proportional(8.0),
-                    Color32::from_rgb(0x55, 0x55, 0x60),
+                    text_weak,
                 );
             }
         }

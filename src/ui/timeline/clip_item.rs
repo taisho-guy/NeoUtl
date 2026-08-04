@@ -60,6 +60,11 @@ impl TimelineWindow {
         } else {
             base
         };
+        let visuals = ui.visuals().clone();
+        let selected_outline = visuals.selection.bg_fill.gamma_multiply(1.6);
+        let label_color = visuals.strong_text_color();
+        let keyframe_color = visuals.warn_fg_color;
+
         painter.rect_filled(clip_rect, 3.0, color);
         painter.rect_stroke(
             clip_rect,
@@ -67,7 +72,7 @@ impl TimelineWindow {
             Stroke::new(
                 if obj.selected { 2.0 } else { 1.0 },
                 if obj.selected {
-                    Color32::WHITE
+                    selected_outline
                 } else {
                     darken(base, 0.3)
                 },
@@ -104,7 +109,7 @@ impl TimelineWindow {
             egui::Align2::LEFT_CENTER,
             &obj.label,
             egui::FontId::proportional(10.0),
-            Color32::WHITE,
+            label_color,
         );
 
         for &f in &obj.keyframe_frames {
@@ -117,11 +122,11 @@ impl TimelineWindow {
                 + (f + dragged_delta - obj.start_frame) as f32 * clip_rect.width() / span;
             let ky = clip_rect.center().y;
             let marker_rect = Rect::from_center_size(Pos2::new(kx, ky), Vec2::splat(KEYFRAME_SIZE));
-            painter.rect_filled(marker_rect, 0.0, Color32::from_rgb(0xff, 0xd2, 0x3a));
+            painter.rect_filled(marker_rect, 0.0, keyframe_color);
             painter.rect_stroke(
                 marker_rect,
                 0.0,
-                Stroke::new(1.0, Color32::from_rgb(0x8a, 0x6a, 0x10)),
+                Stroke::new(1.0, darken(keyframe_color, 0.4)),
                 egui::StrokeKind::Outside,
             );
 

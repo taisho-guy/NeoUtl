@@ -46,6 +46,8 @@ fn value_at(track: &[Keyframe], frame: i32, base_value: f32) -> f32 {
 
 /// current_frameを含む区間の境界フレーム・値を確定する。
 /// 戻り値のstart_frame/end_frameが、PropertyRow左右セグメントの書き込み先フレームとなる。
+/// clip_start == clip_end (新規シーン等、尺0のクリップ) の場合は境界が1点のみとなり、
+/// start/end とも同一フレームの区間として扱う（境界外参照によるパニックを防ぐ）。
 pub fn resolve_segment(
     track: &[Keyframe],
     clip_start: i32,
@@ -61,7 +63,7 @@ pub fn resolve_segment(
         Err(i) => i.saturating_sub(1).min(last_idx.saturating_sub(1)),
     };
     let start_frame = bounds[idx];
-    let end_frame = bounds[idx + 1];
+    let end_frame = bounds[(idx + 1).min(last_idx)];
     Segment {
         start_frame,
         end_frame,
