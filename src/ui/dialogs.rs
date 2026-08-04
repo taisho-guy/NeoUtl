@@ -62,6 +62,9 @@ impl DialogSet {
         if std::mem::take(&mut preview.open_keybindings) {
             self.keybindings.open = true;
         }
+        if std::mem::take(&mut preview.open_export) {
+            self.export_dialog.open = true;
+        }
     }
 
     /// PreviewPanelの開要求フラグを読み取りリセットしたのち、開いている

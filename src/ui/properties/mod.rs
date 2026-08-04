@@ -8,6 +8,9 @@ mod track;
 use crate::app_state::{self, SharedAppState};
 use crate::ui::effect_add_dialog::EffectAddDialog;
 use crate::ui::effect_catalog::EffectCatalogState;
+use crate::ui::preview::PreviewPanel;
+use std::cell::RefCell;
+use std::rc::Rc;
 
 pub struct PropertiesPanel {
     pub open: bool,
@@ -36,7 +39,16 @@ impl PropertiesPanel {
         }
     }
 
-    pub fn show(&mut self, _ctx: &egui::Context, ui: &mut egui::Ui, state: &SharedAppState) {
+    pub fn show(
+        &mut self,
+        _ctx: &egui::Context,
+        ui: &mut egui::Ui,
+        state: &SharedAppState,
+        preview_panel: &Rc<RefCell<PreviewPanel>>,
+    ) {
+        if std::mem::take(&mut preview_panel.borrow_mut().open_properties) {
+            self.open = true;
+        }
         if !self.open {
             return;
         }

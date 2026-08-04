@@ -39,6 +39,8 @@ pub struct PreviewPanel {
     pub open_project_settings: bool,
     pub open_keybindings: bool,
     pub open_timeline: bool,
+    pub open_export: bool,
+    pub open_properties: bool,
 }
 
 impl PreviewPanel {
@@ -59,6 +61,8 @@ impl PreviewPanel {
             open_project_settings: false,
             open_keybindings: false,
             open_timeline: false,
+            open_export: false,
+            open_properties: false,
         }
     }
 
@@ -213,8 +217,30 @@ impl PreviewPanel {
     fn menu_bar(&mut self, ui: &mut egui::Ui, state: &SharedAppState) {
         egui::MenuBar::new().ui(ui, |ui| {
             ui.menu_button("ファイル", |ui| {
-                if ui.button("保存").clicked() {
+                if ui.button("新規プロジェクト").clicked() {
+                    let _ = app_state::new_project_session(state);
+                    ui.close();
+                }
+                if ui.button("プロジェクトを開く").clicked() {
+                    if let Some(dir) = rfd::FileDialog::new().pick_folder() {
+                        let _ = app_state::open_project_session(state, &dir);
+                    }
+                    ui.close();
+                }
+                if ui.button("上書き保存").clicked() {
                     app_state::save_all(state);
+                    ui.close();
+                }
+                if ui.button("名前を付けて保存").clicked() {
+                    if let Some(dir) = rfd::FileDialog::new().pick_folder() {
+                        let world_holder = app_state::active_world(state);
+                        let doc = world_holder.lock().unwrap().to_document();
+                        let _ = crate::project::save_document(&dir, &doc);
+                    }
+                    ui.close();
+                }
+                if ui.button("メディアの書き出し").clicked() {
+                    self.open_export = true;
                     ui.close();
                 }
                 ui.separator();
@@ -232,15 +258,7 @@ impl PreviewPanel {
                     app_state::redo_active(state);
                     ui.close();
                 }
-            });
-            ui.menu_button("表示", |ui| {
-                if ui.button("拡張編集").clicked() {
-                    self.open_timeline = true;
-                    ui.close();
-                }
-                if ui.button("プロパティ").clicked() {
-                    ui.close();
-                }
+                ui.separator();
                 if ui.button("システム設定").clicked() {
                     self.open_system_settings = true;
                     ui.close();
@@ -249,8 +267,18 @@ impl PreviewPanel {
                     self.open_project_settings = true;
                     ui.close();
                 }
-                if ui.button("キー割り当て").clicked() {
+                if ui.button("ショートカット設定").clicked() {
                     self.open_keybindings = true;
+                    ui.close();
+                }
+            });
+            ui.menu_button("表示", |ui| {
+                if ui.button("拡張編集").clicked() {
+                    self.open_timeline = true;
+                    ui.close();
+                }
+                if ui.button("プロパティ").clicked() {
+                    self.open_properties = true;
                     ui.close();
                 }
             });
