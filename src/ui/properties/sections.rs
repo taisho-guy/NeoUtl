@@ -16,6 +16,7 @@ pub(super) fn float_row(
     ui: &mut egui::Ui,
     world: &mut EcsWorld,
     id_source: impl std::hash::Hash + Copy + std::fmt::Debug,
+    target: super::easing_editor::TrackTarget,
     label: &str,
     min: f32,
     max: f32,
@@ -27,11 +28,10 @@ pub(super) fn float_row(
     mut set_kf: impl FnMut(&mut EcsWorld, i32, f32, String, Vec<u8>),
     mut remove_kf: impl FnMut(&mut EcsWorld, i32),
 ) {
-    let row_id = ui.make_persistent_id(id_source);
     let segment = resolve_segment(track, clip_start, clip_end, current_frame, base_value);
     let outcome = property_row(ui, id_source, label, segment, min, max);
     if outcome.label_clicked {
-        super::easing_editor::toggle(row_id);
+        super::easing_editor::toggle(target, label);
     }
 
     if let Some(v) = outcome.start_value {
@@ -68,12 +68,6 @@ pub(super) fn float_row(
             set_kf(world, to, v, e, p);
         }
     }
-
-    let ctx = ui.ctx().clone();
-    super::easing_editor::show(&ctx, row_id, label, track, |action| match action {
-        super::easing_editor::Action::Set(f, v, e, p) => set_kf(world, f, v, e, p),
-        super::easing_editor::Action::Remove(f) => remove_kf(world, f),
-    });
 }
 
 pub(super) fn engine_of(track: &[crate::ecs::types::Keyframe], frame: i32) -> (String, Vec<u8>) {
@@ -113,6 +107,10 @@ pub fn transform_section(ui: &mut egui::Ui, world: &mut EcsWorld, id: usize) {
                     ui,
                     world,
                     (id, "transform", schema.key),
+                    super::easing_editor::TrackTarget::Object {
+                        object_id: id,
+                        key: schema.key.to_string(),
+                    },
                     schema.label,
                     min,
                     max,
@@ -156,6 +154,10 @@ pub fn text_section(ui: &mut egui::Ui, world: &mut EcsWorld, id: usize) {
                     ui,
                     world,
                     (id, "text", schema.key),
+                    super::easing_editor::TrackTarget::Object {
+                        object_id: id,
+                        key: schema.key.to_string(),
+                    },
                     schema.label,
                     min,
                     max,
@@ -189,6 +191,10 @@ pub fn shape_section(ui: &mut egui::Ui, world: &mut EcsWorld, id: usize) {
             ui,
             world,
             (id, "shape", schema.key),
+            super::easing_editor::TrackTarget::Object {
+                object_id: id,
+                key: schema.key.to_string(),
+            },
             schema.label,
             min,
             max,

@@ -1,4 +1,4 @@
-mod easing_editor;
+pub mod easing_editor;
 mod effect_list;
 mod row;
 mod sections;
@@ -46,26 +46,57 @@ impl PropertiesPanel {
         if self.selected.is_none() || !self.selected.is_some_and(|id| world.object_exists(id)) {
             self.selected = objects.first().map(|o| o.id as usize);
         }
-        egui::CentralPanel::default().show(ui, |ui| {
-            ui.heading("プロパティ");
-            let Some(id) = self.selected else {
+        let Some(id) = self.selected else {
+            egui::CentralPanel::default().show(ui, |ui| {
+                ui.heading("プロパティ");
                 ui.label("オブジェクトを選択してください");
-                return;
-            };
-            ui.small(format!("Object {id} / frame {}", world.current_frame()));
-            if ui.button("＋エフェクト追加").clicked() {
-                self.effect_add.open();
-            }
-            ui.separator();
+            });
+            return;
+        };
 
-            sections::transform_section(ui, &mut world, id);
-            sections::text_section(ui, &mut world, id);
-            sections::shape_section(ui, &mut world, id);
-            sections::audio_section(ui, &mut world, id);
+        egui::Panel::left("properties_effect_sidebar")
+            .resizable(true)
+            .default_size(180.0)
+            .size_range(140.0..=320.0)
+            .frame(
+                egui::Frame::default()
+                    .fill(egui::Color32::from_rgb(0x13, 0x13, 0x18))
+                    .inner_margin(6.0),
+            )
+            .show(ui, |ui| {
+                ui.horizontal(|ui| {
+                    ui.colored_label(egui::Color32::from_rgb(0x8a, 0xab, 0xff), "エフェクト");
+                    if ui.small_button("＋追加").clicked() {
+                        self.effect_add.open();
+                    }
+                });
+                ui.separator();
+                egui::ScrollArea::vertical()
+                    .id_salt("properties_effect_sidebar_scroll")
+                    .auto_shrink([false, false])
+                    .show(ui, |ui| {
+                        effect_list::effects_sidebar(ui, &mut world, id);
+                    });
+            });
 
-            ui.separator();
-            ui.colored_label(egui::Color32::from_rgb(0x8a, 0xab, 0xff), "エフェクト");
-            effect_list::effects_section(ui, &mut world, id, &objects);
+        egui::CentralPanel::default().show(ui, |ui| {
+            egui::ScrollArea::vertical()
+                .id_salt("properties_main_scroll")
+                .auto_shrink([false, false])
+                .show(ui, |ui| {
+                    ui.heading("プロパティ");
+                    ui.small(format!("Object {id} / frame {}", world.current_frame()));
+                    ui.separator();
+
+                    sections::transform_section(ui, &mut world, id);
+                    sections::text_section(ui, &mut world, id);
+                    sections::shape_section(ui, &mut world, id);
+                    sections::audio_section(ui, &mut world, id);
+
+                    ui.separator();
+                    ui.colored_label(egui::Color32::from_rgb(0x8a, 0xab, 0xff), "エフェクト詳細");
+                    effect_list::effects_section(ui, &mut world, id, &objects);
+                });
         });
     }
 }
