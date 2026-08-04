@@ -54,18 +54,16 @@ impl PropertiesPanel {
             return;
         };
 
+        let palette = elegance::Theme::current(ui.ctx()).palette;
+
         egui::Panel::left("properties_effect_sidebar")
             .resizable(true)
             .default_size(180.0)
             .size_range(140.0..=320.0)
-            .frame(
-                egui::Frame::default()
-                    .fill(egui::Color32::from_rgb(0x13, 0x13, 0x18))
-                    .inner_margin(6.0),
-            )
+            .frame(egui::Frame::default().fill(palette.bg).inner_margin(6.0))
             .show(ui, |ui| {
                 ui.horizontal(|ui| {
-                    ui.colored_label(egui::Color32::from_rgb(0x8a, 0xab, 0xff), "エフェクト");
+                    ui.colored_label(palette.focus, "エフェクト");
                     if ui.small_button("＋追加").clicked() {
                         self.effect_add.open();
                     }
@@ -94,7 +92,7 @@ impl PropertiesPanel {
                     sections::audio_section(ui, &mut world, id);
 
                     ui.separator();
-                    ui.colored_label(egui::Color32::from_rgb(0x8a, 0xab, 0xff), "エフェクト詳細");
+                    ui.colored_label(palette.focus, "エフェクト詳細");
                     effect_list::effects_section(ui, &mut world, id, &objects);
                 });
         });

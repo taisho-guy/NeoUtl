@@ -7,11 +7,9 @@ members = [
     "crates/neoutl-effect-lua",
     "crates/neoutl-lua-runtime",
     "crates/neoutl-easing-api",
-    "crates/neoutl-theme-api",
     "crates/easings/neoutl-easing-standard",
     "crates/objects/*",
     "crates/effects/*",
-    "crates/themes/*",
     "crates/neoutl-media-api",
     "crates/media/gstreamer-decoder",
     "crates/media/symphonia-decoder",
@@ -33,7 +31,6 @@ neoutl-effect-api = { path = "crates/neoutl-effect-api" }
 neoutl-effect-lua = { path = "crates/neoutl-effect-lua" }
 neoutl-lua-runtime = { path = "crates/neoutl-lua-runtime" }
 neoutl-easing-api = { path = "crates/neoutl-easing-api" }
-neoutl-theme-api = { path = "crates/neoutl-theme-api" }
 neoutl-media-api = { path = "crates/neoutl-media-api" }
 neoutl-easing-standard = { path = "crates/easings/neoutl-easing-standard" }
 neoutl-effect-shader-build = { path = "crates/neoutl-effect-shader-build" }
@@ -53,7 +50,6 @@ neoutl-effect-api.workspace = true
 neoutl-effect-lua.workspace = true
 neoutl-lua-runtime.workspace = true
 neoutl-easing-api.workspace = true
-neoutl-theme-api.workspace = true
 neoutl-media-api.workspace = true
 neoutl-easing-standard.workspace = true
 toml.workspace = true

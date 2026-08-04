@@ -34,7 +34,6 @@ dependencies = [
  "neoutl-object-api",
  "neoutl-object-shader-build",
  "neoutl-shared-abi",
- "neoutl-theme-api",
  "notify",
  "pollster 1.0.1",
  "rfd",
@@ -3343,20 +3342,6 @@ dependencies = [
 [[package]]
 name = "neoutl-shared-abi"
 version = "0.0.0"
-
-[[package]]
-name = "neoutl-theme-api"
-version = "0.0.0"
-dependencies = [
- "serde",
-]
-
-[[package]]
-name = "neoutl-theme-neon-graphite"
-version = "0.0.0"
-dependencies = [
- "neoutl-theme-api",
-]
 
 [[package]]
 name = "new_debug_unreachable"
