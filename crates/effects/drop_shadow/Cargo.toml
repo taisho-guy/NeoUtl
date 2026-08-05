@@ -8,6 +8,7 @@ name       = "neoutl_effect_drop_shadow"
 crate-type = ["cdylib"]
 
 [dependencies]
+rust-i18n.workspace = true
 neoutl-effect-api = { path = "../../neoutl-effect-api" }
 
 [build-dependencies]

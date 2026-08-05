@@ -733,3 +733,6 @@ pub fn mux_encoded(
     }
     Ok(())
 }
+rust_i18n::i18n!("../../i18n");
+#[macro_use]
+extern crate rust_i18n;

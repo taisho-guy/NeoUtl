@@ -8,6 +8,7 @@ name       = "neoutl_media_gpuvideo_decoder"
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
+rust-i18n.workspace = true
 neoutl-media-api = { path = "../../neoutl-media-api" }
 wgpu = "29"
 symphonia = { version = "0.6", features = ["isomp4", "mkv"] }

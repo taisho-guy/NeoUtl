@@ -1072,3 +1072,6 @@ pub mod macos_stub {
 
 #[cfg(not(target_os = "linux"))]
 pub use macos_stub::native_vtable;
+rust_i18n::i18n!("../../i18n");
+#[macro_use]
+extern crate rust_i18n;

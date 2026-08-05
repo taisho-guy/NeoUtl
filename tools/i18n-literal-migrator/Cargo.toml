@@ -1,0 +1,19 @@
+[package]
+name = "i18n-literal-migrator"
+version = "0.1.0"
+edition = "2024"
+description = "Safely wrap Rust string literals in rust-i18n t! macros"
+license = "MIT"
+
+# Keep this utility as a genuinely independent cargo project.
+[workspace]
+
+[dependencies]
+anyhow = "1"
+clap = { version = "4", features = ["derive"] }
+proc-macro2 = { version = "1", features = ["span-locations"] }
+quote = "1"
+syn = { version = "3", features = ["full", "parsing", "visit-mut"] }
+
+[dev-dependencies]
+tempfile = "3"

@@ -50,3 +50,6 @@ pub fn load_clap(path: &Path, plugin_id: &str) -> Result<ClapWrapper, PluginErro
     let id = discover::clap_plugin_id_cstring(plugin_id)?;
     ClapWrapper::load(path, &id)
 }
+rust_i18n::i18n!("../../i18n");
+#[macro_use]
+extern crate rust_i18n;

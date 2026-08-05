@@ -4,6 +4,10 @@ use std::{
     process::Command,
 };
 
+rust_i18n::i18n!("../../i18n");
+#[macro_use]
+extern crate rust_i18n;
+
 mod slang;
 
 struct DiscoveredCrate {

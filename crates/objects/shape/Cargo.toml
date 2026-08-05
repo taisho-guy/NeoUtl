@@ -8,6 +8,7 @@ name       = "neoutl_object_shape"
 crate-type = ["cdylib"]
 
 [dependencies]
+rust-i18n.workspace = true
 neoutl-object-api = { path = "../../neoutl-object-api" }
 
 [build-dependencies]
