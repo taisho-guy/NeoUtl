@@ -3,7 +3,7 @@ use clap::Parser;
 use proc_macro2::Span;
 use quote::quote;
 use std::{fs, path::{Path, PathBuf}};
-use syn::{File, Expr, spanned::Spanned, visit_mut::VisitMut};
+use syn::{File, Expr, Lit, spanned::Spanned, visit_mut::VisitMut};
 
 #[derive(Parser, Debug)]
 #[command(about = "Wrap Rust string literals in rust-i18n t! macros")]
@@ -35,6 +35,19 @@ impl VisitMut for Migrator {
 
     fn visit_expr_macro_mut(&mut self, expr: &mut syn::ExprMacro) {
         self.visit_macro_mut(&mut expr.mac);
+    }
+
+    fn visit_expr_call_mut(&mut self, call: &mut syn::ExprCall) {
+        let syn::Expr::Path(path) = call.func.as_ref() else { return; };
+        let Some(segment) = path.path.segments.last() else { return; };
+        if !matches!(segment.ident.to_string().as_str(), "tr" | "effect_name" | "effect_category" | "effect_param_label") {
+            return;
+        }
+        let Some(Expr::Lit(argument)) = call.args.first() else { return; };
+        let Lit::Str(lit) = &argument.lit else { return; };
+        if call.args.len() != 1 { return; }
+        let replacement: Expr = syn::parse_quote!(t!(#lit));
+        self.replacements.push((call.span(), quote!(#replacement).to_string()));
     }
 
     fn visit_macro_mut(&mut self, mac: &mut syn::Macro) {
@@ -166,5 +179,11 @@ mod tests {
     fn translates_output_macros_and_format_arguments() {
         let source = "fn main() { eprintln!(\"キューをスキップ: {error}\"); }\n";
         assert_eq!(rewrite(source).unwrap(), "fn main() { eprintln ! (\"{}\" , t ! (\"キューをスキップ: %{arg0}\" , arg0 = format ! (\"{}\" , error))); }\n");
+    }
+
+    #[test]
+    fn translates_fixed_tr_calls_but_leaves_dynamic_calls() {
+        let source = "fn ui(label: &str) { ui.heading(tr(\"NeoUtl - プロジェクト\")); ui.label(tr(label)); }\n";
+        assert_eq!(rewrite(source).unwrap(), "fn ui(label: &str) { ui.heading(t ! (\"NeoUtl - プロジェクト\")); ui.label(tr(label)); }\n");
     }
 }

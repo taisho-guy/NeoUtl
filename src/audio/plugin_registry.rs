@@ -53,8 +53,8 @@ pub fn load_all(plugins_dir: &Path) {
         entries.sort_by(|a, b| a.name.cmp(&b.name));
         for entry in &entries {
             eprintln!(
-                "[NeoUtl] audioプラグイン登録: {} ({:?}, {})",
-                entry.name, entry.format, entry.plugin_id
+                "{}",
+                t!("[NeoUtl] audioプラグイン登録: %{arg0} ({:?}, %{arg2})")
             );
         }
         entries
@@ -157,9 +157,8 @@ pub fn resolve(path: &Path, format: PluginFormat) -> Option<PluginCatalogEntry> 
     };
     if entries.is_empty() {
         eprintln!(
-            "[NeoUtl] audioプラグインのメタデータ取得失敗: {:?} {}",
-            format,
-            path.display()
+            "{}",
+            t!("[NeoUtl] audioプラグインのメタデータ取得失敗: {:?} %{arg1}")
         );
     }
     entries.into_iter().next()

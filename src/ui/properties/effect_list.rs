@@ -31,7 +31,7 @@ fn toggle_group_open(object_id: usize, effect_index: i32, label: &str) {
 pub fn effects_sidebar(ui: &mut egui::Ui, world: &mut EcsWorld, id: usize) {
     let effects = world.get_effects(id);
     if effects.is_empty() {
-        ui.weak(tr("エフェクトはありません"));
+        ui.weak(t!("エフェクトはありません"));
         return;
     }
     let card = elegance::Theme::current(ui.ctx()).palette.card;
@@ -76,7 +76,7 @@ pub fn effects_section(
 ) {
     let effects = world.get_effects(id);
     if effects.is_empty() {
-        ui.label(tr("エフェクトはありません"));
+        ui.label(t!("エフェクトはありません"));
         return;
     }
     let (clip_start, clip_end) = clip_bounds(world, id);
@@ -107,7 +107,7 @@ pub fn effects_section(
             });
 
             let Some(source) = find_effect(&inst.effect_id) else {
-                ui.small(tr("(エフェクト定義が見つかりません)"));
+                ui.small(t!("(エフェクト定義が見つかりません)"));
                 return;
             };
             let schema = param_schema(&source);
@@ -252,7 +252,7 @@ fn param_widget(
                 if ui.text_edit_singleline(&mut t).changed() {
                     changed = true;
                 }
-                if ui.button(tr("参照…")).clicked() {
+                if ui.button(t!("参照…")).clicked() {
                     let dialog = rfd::FileDialog::new();
                     let picked = if s.kind == ParamKind::Folder {
                         dialog.pick_folder()
@@ -272,7 +272,7 @@ fn param_widget(
                     _ => -1,
                 };
                 let current_label = if track_ref < 0 {
-                    tr("未選択")
+                    t!("未選択")
                 } else {
                     format!("Object {track_ref}")
                 };
@@ -281,7 +281,7 @@ fn param_widget(
                     .selected_text(current_label)
                     .show_ui(ui, |ui| {
                         if ui
-                            .selectable_value(&mut track_ref, -1, tr("未選択"))
+                            .selectable_value(&mut track_ref, -1, t!("未選択"))
                             .changed()
                         {
                             changed = true;

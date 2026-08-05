@@ -156,14 +156,14 @@ pub fn keyframe_track(
         };
         match fixed_nearest {
             Some((idx, f, d)) if d <= POINT_RADIUS * 2.5 && !hit_endpoint(idx) => {
-                if ui.button(tr("キーフレーム削除")).clicked() {
+                if ui.button(t!("キーフレーム削除")).clicked() {
                     remove_cell.set(Some(f));
                     ui.close();
                 }
             }
             _ => {
                 let f = frame_at(pos_x);
-                if ui.button(tr("キーフレーム追加")).clicked() {
+                if ui.button(t!("キーフレーム追加")).clicked() {
                     add_cell.set(Some(f));
                     ui.close();
                 }

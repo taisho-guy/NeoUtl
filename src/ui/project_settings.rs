@@ -68,7 +68,7 @@ impl ProjectSettingsWindow {
         let mut close_requested = false;
         egui::CentralPanel::default().show(ui, |ui| {
             ui.group(|ui| {
-                ui.colored_label(egui::Color32::from_rgb(0x8a, 0xab, 0xff), tr("基本設定"));
+                ui.colored_label(egui::Color32::from_rgb(0x8a, 0xab, 0xff), t!("基本設定"));
                 egui::Grid::new("project_settings_basic")
                     .num_columns(2)
                     .show(ui, |ui| {
@@ -79,7 +79,7 @@ impl ProjectSettingsWindow {
             ui.group(|ui| {
                 ui.colored_label(
                     egui::Color32::from_rgb(0x8a, 0xab, 0xff),
-                    tr("音声フォーマット"),
+                    t!("音声フォーマット"),
                 );
                 egui::Grid::new("project_settings_audio")
                     .num_columns(2)
@@ -119,10 +119,10 @@ impl ProjectSettingsWindow {
 
             ui.add_space(ui.available_height() - 32.0);
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                if ui.button(tr("OK")).clicked() {
+                if ui.button(t!("OK")).clicked() {
                     confirmed = true;
                 }
-                if ui.button(tr("キャンセル")).clicked() {
+                if ui.button(t!("キャンセル")).clicked() {
                     close_requested = true;
                 }
             });

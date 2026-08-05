@@ -217,22 +217,22 @@ impl PreviewPanel {
 
     fn menu_bar(&mut self, ui: &mut egui::Ui, state: &SharedAppState) {
         egui::MenuBar::new().ui(ui, |ui| {
-            ui.menu_button(tr("ファイル"), |ui| {
-                if ui.button(tr("新規プロジェクト")).clicked() {
+            ui.menu_button(t!("ファイル"), |ui| {
+                if ui.button(t!("新規プロジェクト")).clicked() {
                     let _ = app_state::new_project_session(state);
                     ui.close();
                 }
-                if ui.button(tr("プロジェクトを開く")).clicked() {
+                if ui.button(t!("プロジェクトを開く")).clicked() {
                     if let Some(dir) = rfd::FileDialog::new().pick_folder() {
                         let _ = app_state::open_project_session(state, &dir);
                     }
                     ui.close();
                 }
-                if ui.button(tr("上書き保存")).clicked() {
+                if ui.button(t!("上書き保存")).clicked() {
                     app_state::save_all(state);
                     ui.close();
                 }
-                if ui.button(tr("名前を付けて保存")).clicked() {
+                if ui.button(t!("名前を付けて保存")).clicked() {
                     if let Some(dir) = rfd::FileDialog::new().pick_folder() {
                         let world_holder = app_state::active_world(state);
                         let doc = world_holder.lock().unwrap().to_document();
@@ -240,45 +240,45 @@ impl PreviewPanel {
                     }
                     ui.close();
                 }
-                if ui.button(tr("メディアの書き出し")).clicked() {
+                if ui.button(t!("メディアの書き出し")).clicked() {
                     self.open_export = true;
                     ui.close();
                 }
                 ui.separator();
-                if ui.button(tr("終了")).clicked() {
+                if ui.button(t!("終了")).clicked() {
                     app_state::save_all(state);
                     std::process::exit(0);
                 }
             });
-            ui.menu_button(tr("編集"), |ui| {
-                if ui.button(tr("元に戻す")).clicked() {
+            ui.menu_button(t!("編集"), |ui| {
+                if ui.button(t!("元に戻す")).clicked() {
                     app_state::undo_active(state);
                     ui.close();
                 }
-                if ui.button(tr("やり直し")).clicked() {
+                if ui.button(t!("やり直し")).clicked() {
                     app_state::redo_active(state);
                     ui.close();
                 }
                 ui.separator();
-                if ui.button(tr("システム設定")).clicked() {
+                if ui.button(t!("システム設定")).clicked() {
                     self.open_system_settings = true;
                     ui.close();
                 }
-                if ui.button(tr("プロジェクト設定")).clicked() {
+                if ui.button(t!("プロジェクト設定")).clicked() {
                     self.open_project_settings = true;
                     ui.close();
                 }
-                if ui.button(tr("ショートカット設定")).clicked() {
+                if ui.button(t!("ショートカット設定")).clicked() {
                     self.open_keybindings = true;
                     ui.close();
                 }
             });
-            ui.menu_button(tr("表示"), |ui| {
-                if ui.button(tr("拡張編集")).clicked() {
+            ui.menu_button(t!("表示"), |ui| {
+                if ui.button(t!("拡張編集")).clicked() {
                     self.open_timeline = true;
                     ui.close();
                 }
-                if ui.button(tr("プロパティ")).clicked() {
+                if ui.button(t!("プロパティ")).clicked() {
                     self.open_properties = true;
                     ui.close();
                 }
@@ -360,7 +360,7 @@ impl PreviewPanel {
                 self.apply_frame(self.current_frame + 1, state);
             }
 
-            ui.label(tr("速度"));
+            ui.label(t!("速度"));
             let mut speed = self.speed_percent;
             if ui
                 .add_sized(

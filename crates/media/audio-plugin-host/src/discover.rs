@@ -24,8 +24,11 @@ pub fn discover_vst3(dir: &Path) -> Vec<PluginCatalogEntry> {
         vst3_host::discovery::discover_plugins_safe(&[dir.to_path_buf()], Duration::from_secs(3));
     if let Some(err) = report.error {
         eprintln!(
-            "[NeoUtl] vst3 safe discover 利用不可 {}: {err}",
-            dir.display()
+            "{}",
+            t!(
+                "[NeoUtl] vst3 safe discover 利用不可 %{arg0}: %{arg1}",
+                arg1 = format!("{}", err)
+            )
         );
         return Vec::new();
     }
@@ -122,22 +125,28 @@ fn collect_files(dir: &Path, extension: &str, files: &mut Vec<PathBuf>) {
 
 fn discover_clap_file_impl(path: &Path) -> Vec<PluginCatalogEntry> {
     let Some(path_str) = path.to_str() else {
-        eprintln!("[NeoUtl] clap discover: non-UTF8 path {}", path.display());
+        eprintln!("{}", t!("[NeoUtl] clap discover: non-UTF8 path %{arg0}"));
         return Vec::new();
     };
 
     let entry = match unsafe { PluginEntry::load(path_str) } {
         Ok(e) => e,
         Err(err) => {
-            eprintln!("[NeoUtl] clap discover 読込失敗 {}: {err}", path.display());
+            eprintln!(
+                "{}",
+                t!(
+                    "[NeoUtl] clap discover 読込失敗 %{arg0}: %{arg1}",
+                    arg1 = format!("{}", err)
+                )
+            );
             return Vec::new();
         }
     };
 
     let Some(factory) = entry.get_factory::<PluginFactory>() else {
         eprintln!(
-            "[NeoUtl] clap discover: PluginFactory未提供 {}",
-            path.display()
+            "{}",
+            t!("[NeoUtl] clap discover: PluginFactory未提供 %{arg0}")
         );
         return Vec::new();
     };

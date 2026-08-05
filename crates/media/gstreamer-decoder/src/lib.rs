@@ -345,7 +345,10 @@ fn extract_nv12_bytes(buffer: &gst::BufferRef, width: u32, height: u32) -> Resul
             arg1 = format!("{}", y_plane_size + uv_plane_size)
         )
         .to_string();
-        eprintln!("[gstreamer-decoder] {msg}");
+        eprintln!(
+            "{}",
+            t!("[gstreamer-decoder] %{arg0}", arg0 = format!("{}", msg))
+        );
         return Err(msg);
     }
     Ok(data[..y_plane_size + uv_plane_size].to_vec())
@@ -999,7 +1002,10 @@ impl VideoSource for GstDecoder {
                     arg1 = format!("{e}")
                 )
                 .to_string();
-                eprintln!("[gstreamer-decoder] {msg}");
+                eprintln!(
+                    "{}",
+                    t!("[gstreamer-decoder] %{arg0}", arg0 = format!("{}", msg))
+                );
                 msg
             })
             .and_then(|inner| inner)?;

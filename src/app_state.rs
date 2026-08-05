@@ -70,7 +70,13 @@ impl ProjectSession {
         }
 
         let audio_mixer = AudioMixer::new(meta.audio_sample_rate).unwrap_or_else(|err| {
-            eprintln!("[NeoUtl] audio_mixer初期化失敗: {err}");
+            eprintln!(
+                "{}",
+                t!(
+                    "[NeoUtl] audio_mixer初期化失敗: %{arg0}",
+                    arg0 = format!("{}", err)
+                )
+            );
             AudioMixer::silent()
         });
 
@@ -212,7 +218,13 @@ pub fn autosave_active(state: &SharedAppState) -> bool {
         s.sessions[active].last_autosave = Instant::now();
     }
     if let Err(err) = &result {
-        eprintln!("[NeoUtl] オートセーブ失敗: {err}");
+        eprintln!(
+            "{}",
+            t!(
+                "[NeoUtl] オートセーブ失敗: %{arg0}",
+                arg0 = format!("{}", err)
+            )
+        );
     }
     result.is_ok()
 }
@@ -222,7 +234,13 @@ pub fn save_all(state: &SharedAppState) {
     for session in &mut s.sessions {
         let world = session.world.lock().unwrap();
         if let Err(err) = crate::project::save_from_world(&world) {
-            eprintln!("[NeoUtl] プロジェクト保存失敗: {err}");
+            eprintln!(
+                "{}",
+                t!(
+                    "[NeoUtl] プロジェクト保存失敗: %{arg0}",
+                    arg0 = format!("{}", err)
+                )
+            );
         } else {
             session.dirty = false;
         }
@@ -236,7 +254,13 @@ pub fn save_active(state: &SharedAppState) -> bool {
         crate::project::save_from_world(&world)
     };
     if let Err(err) = &result {
-        eprintln!("[NeoUtl] プロジェクト保存失敗: {err}");
+        eprintln!(
+            "{}",
+            t!(
+                "[NeoUtl] プロジェクト保存失敗: %{arg0}",
+                arg0 = format!("{}", err)
+            )
+        );
     }
     if result.is_ok() {
         let mut s = state.lock().unwrap();

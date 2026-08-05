@@ -90,7 +90,7 @@ pub(super) fn build_context_menu(
     let mut items: Vec<ContextMenuItem> = kinds
         .iter()
         .map(|k| ContextMenuItem {
-            label: tr("{}を追加").replace("{}", &k.name),
+            label: t!("{}を追加").replace("{}", &k.name),
             action: 2,
             kind: k.kind,
             enabled: true,
@@ -99,21 +99,21 @@ pub(super) fn build_context_menu(
         .collect();
     items.push(sep());
     items.push(ContextMenuItem {
-        label: tr("元に戻す"),
+        label: t!("元に戻す"),
         action: 5,
         kind: -1,
         enabled: true,
         icon: "undo".into(),
     });
     items.push(ContextMenuItem {
-        label: tr("やり直す"),
+        label: t!("やり直す"),
         action: 6,
         kind: -1,
         enabled: true,
         icon: "redo".into(),
     });
     items.push(ContextMenuItem {
-        label: tr("貼り付け"),
+        label: t!("貼り付け"),
         action: 10,
         kind: -1,
         enabled: !clipboard_empty,

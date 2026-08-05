@@ -61,8 +61,8 @@ impl PropertiesPanel {
         }
         let Some(id) = self.selected else {
             egui::CentralPanel::default().show(ui, |ui| {
-                ui.heading(tr("プロパティ"));
-                ui.label(tr("オブジェクトを選択してください"));
+                ui.heading(t!("プロパティ"));
+                ui.label(t!("オブジェクトを選択してください"));
             });
             return;
         };
@@ -76,8 +76,8 @@ impl PropertiesPanel {
             .frame(egui::Frame::default().fill(palette.bg).inner_margin(6.0))
             .show(ui, |ui| {
                 ui.horizontal(|ui| {
-                    ui.colored_label(palette.focus, tr("エフェクト"));
-                    if ui.small_button(tr("＋追加")).clicked() {
+                    ui.colored_label(palette.focus, t!("エフェクト"));
+                    if ui.small_button(t!("＋追加")).clicked() {
                         self.effect_add.open();
                     }
                 });
@@ -95,7 +95,7 @@ impl PropertiesPanel {
                 .id_salt("properties_main_scroll")
                 .auto_shrink([false, false])
                 .show(ui, |ui| {
-                    ui.heading(tr("プロパティ"));
+                    ui.heading(t!("プロパティ"));
                     ui.small(format!("Object {id} / frame {}", world.current_frame()));
                     ui.separator();
 
@@ -105,7 +105,7 @@ impl PropertiesPanel {
                     sections::audio_section(ui, &mut world, id);
 
                     ui.separator();
-                    ui.colored_label(palette.focus, tr("エフェクト詳細"));
+                    ui.colored_label(palette.focus, t!("エフェクト詳細"));
                     effect_list::effects_section(ui, &mut world, id, &objects);
                 });
         });

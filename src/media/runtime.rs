@@ -42,7 +42,13 @@ pub fn handle() -> tokio::runtime::Handle {
     RUNTIME
         .get_or_init(|| {
             let threads = effective_thread_count();
-            eprintln!("[media-runtime] デコードスレッドプール起動: worker_threads={threads}");
+            eprintln!(
+                "{}",
+                t!(
+                    "[media-runtime] デコードスレッドプール起動: worker_threads=%{arg0}",
+                    arg0 = format!("{}", threads)
+                )
+            );
             tokio::runtime::Builder::new_multi_thread()
                 .worker_threads(threads)
                 .thread_name("neoutl-decode")

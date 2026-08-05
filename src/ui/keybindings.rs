@@ -4,10 +4,10 @@ use egui::{Context, Ui};
 
 fn scope_label(s: Scope) -> String {
     match s {
-        Scope::Global => tr("全体"),
-        Scope::Timeline => tr("タイムライン"),
-        Scope::Properties => tr("設定ダイアログ"),
-        Scope::Preview => tr("プレビュー"),
+        Scope::Global => t!("全体"),
+        Scope::Timeline => t!("タイムライン"),
+        Scope::Properties => t!("設定ダイアログ"),
+        Scope::Preview => t!("プレビュー"),
     }
 }
 
@@ -77,7 +77,7 @@ impl KeybindingsWindow {
         let mut keymap = shortcuts::active_keymap().lock().unwrap();
         let (scope, _) = keymap.binding_of(command);
         if let Some(other) = keymap.conflict_of(command, scope, &binding) {
-            self.conflict_message = tr("競合: {}").replace("{}", &shortcuts::label(other));
+            self.conflict_message = t!("競合: {}").replace("{}", &shortcuts::label(other));
             return;
         }
         self.conflict_message.clear();
@@ -128,7 +128,7 @@ impl KeybindingsWindow {
 
                             let capturing = self.capturing == Some(row.command);
                             let text = if capturing {
-                                tr("入力待ち…")
+                                t!("入力待ち…")
                             } else {
                                 row.key_display.clone()
                             };
@@ -136,7 +136,7 @@ impl KeybindingsWindow {
                                 self.capturing = Some(row.command);
                             }
 
-                            if ui.button(tr("既定へ")).clicked() {
+                            if ui.button(t!("既定へ")).clicked() {
                                 shortcuts::active_keymap()
                                     .lock()
                                     .unwrap()
@@ -150,23 +150,23 @@ impl KeybindingsWindow {
 
             ui.separator();
             ui.horizontal(|ui| {
-                if ui.button(tr("全て既定へ")).clicked() {
+                if ui.button(t!("全て既定へ")).clicked() {
                     shortcuts::active_keymap().lock().unwrap().reset_all();
                     self.sync();
                 }
-                if ui.button(tr("保存")).clicked() {
+                if ui.button(t!("保存")).clicked() {
                     let result =
                         shortcuts::save_to_disk(&shortcuts::active_keymap().lock().unwrap());
                     self.save_status = match result {
-                        Ok(()) => tr("保存完了"),
-                        Err(_) => tr("保存失敗"),
+                        Ok(()) => t!("保存完了"),
+                        Err(_) => t!("保存失敗"),
                     };
                 }
-                if ui.button(tr("再読込")).clicked() {
+                if ui.button(t!("再読込")).clicked() {
                     let loaded = shortcuts::load_from_disk().unwrap_or_default();
                     *shortcuts::active_keymap().lock().unwrap() = loaded;
                     self.sync();
-                    self.save_status = tr("再読込完了");
+                    self.save_status = t!("再読込完了");
                 }
                 ui.label(&self.save_status);
             });

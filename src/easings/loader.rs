@@ -61,7 +61,13 @@ pub fn load_all(easings_dir: &Path) {
                 .filter(|p| is_dylib(p))
                 .collect(),
             Err(err) => {
-                eprintln!("[NeoUtl] easings/ 読み込み通知: {err} (組み込み標準エンジンのみ使用)");
+                eprintln!(
+                    "{}",
+                    t!(
+                        "[NeoUtl] easings/ 読み込み通知: %{arg0} (組み込み標準エンジンのみ使用)",
+                        arg0 = format!("{}", err)
+                    )
+                );
                 Vec::new()
             }
         };
@@ -75,8 +81,11 @@ pub fn load_all(easings_dir: &Path) {
                 }
                 Err(err) => {
                     eprintln!(
-                        "[NeoUtl] イージングエンジン読み込み失敗 {}: {err}",
-                        path.display()
+                        "{}",
+                        t!(
+                            "[NeoUtl] イージングエンジン読み込み失敗 %{arg0}: %{arg1}",
+                            arg1 = format!("{}", err)
+                        )
                     );
                 }
             }
@@ -85,8 +94,8 @@ pub fn load_all(easings_dir: &Path) {
         plugins.sort_by(|a, b| a.id.cmp(&b.id));
         for plugin in &plugins {
             eprintln!(
-                "[NeoUtl] イージングエンジン登録: {} ({})",
-                plugin.name, plugin.id
+                "{}",
+                t!("[NeoUtl] イージングエンジン登録: %{arg0} (%{arg1})")
             );
         }
         plugins

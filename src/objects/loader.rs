@@ -43,7 +43,13 @@ pub fn load_all(objects_dir: &Path) {
     let entries = match std::fs::read_dir(objects_dir) {
         Ok(e) => e,
         Err(err) => {
-            eprintln!("[NeoUtl] objects/ 読み込み失敗: {err}");
+            eprintln!(
+                "{}",
+                t!(
+                    "[NeoUtl] objects/ 読み込み失敗: %{arg0}",
+                    arg0 = format!("{}", err)
+                )
+            );
             return;
         }
     };
@@ -58,7 +64,13 @@ pub fn load_all(objects_dir: &Path) {
         .filter_map(|path| match load_one(path) {
             Ok(p) => Some(Arc::new(p)),
             Err(err) => {
-                eprintln!("[NeoUtl] プラグイン読み込み失敗 {}: {err}", path.display());
+                eprintln!(
+                    "{}",
+                    t!(
+                        "[NeoUtl] プラグイン読み込み失敗 %{arg0}: %{arg1}",
+                        arg1 = format!("{}", err)
+                    )
+                );
                 None
             }
         })
@@ -71,8 +83,8 @@ pub fn load_all(objects_dir: &Path) {
             .expect("初回ロード直後は単一所有")
             .kind_id = kind_id;
         eprintln!(
-            "[NeoUtl] プラグイン登録: {} ({}, kind_id={})",
-            plugin.name, plugin.stable_id, plugin.kind_id
+            "{}",
+            t!("[NeoUtl] プラグイン登録: %{arg0} (%{arg1}, kind_id=%{arg2})")
         );
     }
     registry_swap().store(Arc::new(plugins));
@@ -132,7 +144,14 @@ pub fn reload_one(path: &Path) -> Result<(), String> {
         })
         .collect();
     registry_swap().store(Arc::new(next));
-    eprintln!("[NeoUtl] プラグイン再ロード完了: {stable_id} (kind_id={kind_id})");
+    eprintln!(
+        "{}",
+        t!(
+            "[NeoUtl] プラグイン再ロード完了: %{arg0} (kind_id=%{arg1})",
+            arg0 = format!("{}", stable_id),
+            arg1 = format!("{}", kind_id)
+        )
+    );
     Ok(())
 }
 

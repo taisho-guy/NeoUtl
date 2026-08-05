@@ -285,7 +285,11 @@ fn try_create_gpuvideo_encoder(
                 Ok(enc) => return Some(enc),
                 Err(e) => {
                     eprintln!(
-                        "[NeoUtl][export] gpuvideo-encoder初期化失敗、gstreamer-encoderへ縮退: {e}"
+                        "{}",
+                        t!(
+                            "[NeoUtl][export] gpuvideo-encoder初期化失敗、gstreamer-encoderへ縮退: %{arg0}",
+                            arg0 = format!("{}", e)
+                        )
                     );
                     return None;
                 }
@@ -391,7 +395,11 @@ pub fn run(state: &SharedAppState, mut job: ExportJob) -> Result<(), String> {
                             return Err(format!("gpuvideo-encoder(GPU HW)エンコード失敗: {e}"));
                         }
                         eprintln!(
-                            "[NeoUtl][export] gpuvideo-encoder失敗、gstreamer-encoder全体経路へ縮退: {e}"
+                            "{}",
+                            t!(
+                                "[NeoUtl][export] gpuvideo-encoder失敗、gstreamer-encoder全体経路へ縮退: %{arg0}",
+                                arg0 = format!("{}", e)
+                            )
                         );
                         gpuvideo_encoder = None;
                         chunks.clear();

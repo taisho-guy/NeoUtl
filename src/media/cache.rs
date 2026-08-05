@@ -280,7 +280,7 @@ impl MediaCache {
                     arg0 = format!("{}", path.display())
                 )
                 .to_string();
-                eprintln!("[media-cache] {err}");
+                eprintln!("{}", t!("[media-cache] %{arg0}", arg0 = format!("{}", err)));
                 PathEntry::Failed(err)
             }
             Some(MediaKind::Video) => match open_video(path) {
@@ -366,9 +366,8 @@ impl MediaCache {
 
     pub fn schedule_prefetch_failure_with_reason(path: PathBuf, reason: String) {
         eprintln!(
-            "[media-cache] schedule prefetch failure path={} reason={}",
-            path.display(),
-            reason
+            "{}",
+            t!("[media-cache] schedule prefetch failure path=%{arg0} reason=%{arg1}")
         );
         super::runtime::handle().spawn_blocking(move || {
             crate::media::cache::global().handle_prefetch_failure_with_reason(&path, reason);
@@ -432,11 +431,10 @@ impl MediaCache {
         match result {
             Ok((decoder, plugin_id)) => {
                 eprintln!(
-                    "[media-cache] fallback apply/open success path={} plugin={} gen={} fps={}",
-                    path.display(),
-                    plugin_id,
-                    generation_after,
-                    decoder.fps()
+                    "{}",
+                    t!(
+                        "[media-cache] fallback apply/open success path=%{arg0} plugin=%{arg1} gen=%{arg2} fps=%{arg3}"
+                    )
                 );
                 video.width = decoder.width();
                 video.height = decoder.height();
@@ -447,8 +445,11 @@ impl MediaCache {
             }
             Err(err) => {
                 eprintln!(
-                    "[media-cache] fallback apply/open failed path={} reason={err}",
-                    path.display()
+                    "{}",
+                    t!(
+                        "[media-cache] fallback apply/open failed path=%{arg0} reason=%{arg1}",
+                        arg1 = format!("{}", err)
+                    )
                 );
                 *guard = PathEntry::Failed(err);
             }
