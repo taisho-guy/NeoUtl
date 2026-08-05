@@ -383,7 +383,7 @@ impl MediaCache {
             existing.clone()
         };
 
-        let (generation_after, failed_plugins, old_workers) = {
+        let (failed_plugins, old_workers) = {
             let mut guard = entry.lock().unwrap();
             let PathEntry::Video(video) = &mut *guard else {
                 return;
@@ -415,9 +415,8 @@ impl MediaCache {
                 inst.last_index = None;
             }
 
-            let generation_after = video.generation;
             let failed_plugins = video.failed_plugins.clone();
-            (generation_after, failed_plugins, old_workers)
+            (failed_plugins, old_workers)
         };
 
         drop(old_workers);

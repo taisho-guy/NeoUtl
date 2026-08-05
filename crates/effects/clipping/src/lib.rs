@@ -96,5 +96,4 @@ pub unsafe extern "C" fn neoutl_effect_entry() -> *const EffectVTable {
 
 const _: neoutl_effect_api::EntryFn = neoutl_effect_entry;
 rust_i18n::i18n!("../../../i18n");
-#[macro_use]
 extern crate rust_i18n;

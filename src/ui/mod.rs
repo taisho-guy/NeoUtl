@@ -22,13 +22,6 @@ use std::cell::RefCell;
 use std::rc::Rc;
 use timeline::TimelineWindow;
 
-pub fn install(gpu: Rc<SharedGpu>, slot: PreviewSlot) {
-    let Some(meta) = project::list_projects().into_iter().next() else {
-        return;
-    };
-    start_project(meta, gpu, slot);
-}
-
 pub fn start_project(meta: project::ProjectMeta, gpu: Rc<SharedGpu>, slot: PreviewSlot) {
     let state = AppState::new(ProjectSession::new(meta));
     let panel = Rc::new(RefCell::new(PreviewPanel::new(

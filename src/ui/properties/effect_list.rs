@@ -3,7 +3,7 @@ use crate::ecs::EcsWorld;
 use crate::ecs::TimelineData;
 use crate::ecs::effects::{find_effect, param_schema};
 use crate::ecs::types::Value;
-use crate::localization::{effect_param_label, tr};
+use crate::localization::effect_param_label;
 use neoutl_shared_abi::ParamKind;
 use std::collections::HashMap;
 use std::sync::Mutex;

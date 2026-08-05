@@ -2,8 +2,6 @@
 //! segment.rsが担う）。ドラッグ中点は`dragging`引数でセッション状態を呼び出し側に
 //! 持たせ、フレーム単位のスナップ位置を返す。
 
-use crate::localization::tr;
-
 pub struct TrackOutcome {
     pub point_clicked: Option<i32>,
     pub add_point: Option<i32>,

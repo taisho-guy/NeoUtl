@@ -6,7 +6,6 @@ mod segment;
 mod track;
 
 use crate::app_state::{self, SharedAppState};
-use crate::localization::tr;
 use crate::ui::effect_add_dialog::EffectAddDialog;
 use crate::ui::effect_catalog::EffectCatalogState;
 use crate::ui::preview::PreviewPanel;

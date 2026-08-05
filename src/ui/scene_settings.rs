@@ -1,6 +1,5 @@
 use crate::app_state::{self, SharedAppState};
 use crate::ecs::SceneSettings;
-use crate::localization::tr;
 use crate::project;
 use crate::ui::system_settings::fields::{
     choice_field, float_field, int_field, name_field, toggle_field,

@@ -106,13 +106,29 @@ pub type SharedAppState = Arc<Mutex<AppState>>;
 
 impl AppState {
     pub fn new(first: ProjectSession) -> SharedAppState {
-        Arc::new(Mutex::new(Self {
+        let state = Arc::new(Mutex::new(Self {
             sessions: vec![first],
             active: 0,
             clipboard: Vec::new(),
             render_queue: crate::export::RenderQueue::new(),
-        }))
+        }));
+        start_autosave_worker(&state);
+        state
     }
+}
+
+/// UIフレームとは独立して自動保存を監視する。保存処理自体もこのスレッドで行うため、
+/// プレビュー描画・入力処理を自動保存で停止させない。
+fn start_autosave_worker(state: &SharedAppState) {
+    let state = Arc::clone(state);
+    let _ = std::thread::Builder::new()
+        .name("neoutl-autosave".to_owned())
+        .spawn(move || {
+            loop {
+                std::thread::sleep(std::time::Duration::from_secs(1));
+                autosave_if_due(&state);
+            }
+        });
 }
 
 pub fn active_world(state: &SharedAppState) -> Arc<Mutex<EcsWorld>> {
@@ -227,6 +243,24 @@ pub fn autosave_active(state: &SharedAppState) -> bool {
         );
     }
     result.is_ok()
+}
+
+/// システム設定の周期に従ってアクティブプロジェクトを自動保存する。
+pub fn autosave_if_due(state: &SharedAppState) {
+    let (enabled, due) = {
+        let world = active_world(state);
+        let settings = world.lock().unwrap().get_system_settings();
+        let s = state.lock().unwrap();
+        let session = &s.sessions[s.active];
+        (
+            settings.autosave_enabled,
+            session.last_autosave.elapsed()
+                >= std::time::Duration::from_secs(settings.autosave_interval_sec.max(1) as u64),
+        )
+    };
+    if enabled && due {
+        let _ = autosave_active(state);
+    }
 }
 
 pub fn save_all(state: &SharedAppState) {

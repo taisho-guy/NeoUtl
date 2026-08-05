@@ -63,7 +63,6 @@
 "[NeoUtl] audio_mixer: デコード失敗 %{arg0}: %{arg1}": "[NeoUtl] audio_mixer: デコード失敗 %{arg0}: %{arg1}"
 "[NeoUtl] audio_mixer: 出力再構築失敗: %{arg0}": "[NeoUtl] audio_mixer: 出力再構築失敗: %{arg0}"
 "[NeoUtl] audio_mixer初期化失敗: %{arg0}": "[NeoUtl] audio_mixer初期化失敗: %{arg0}"
-"[NeoUtl] audioプラグインのメタデータ取得失敗: {:?} %{arg1}": "[NeoUtl] audioプラグインのメタデータ取得失敗: {:?} %{arg1}"
 "[NeoUtl] audioプラグイン登録: %{arg0} (%{arg1}, %{arg2})": "[NeoUtl] audioプラグイン登録: %{arg0} (%{arg1}, %{arg2})"
 "[NeoUtl] clap discover 読込失敗 %{arg0}: %{arg1}": "[NeoUtl] clap discover 読込失敗 %{arg0}: %{arg1}"
 "[NeoUtl] clap discover: PluginFactory未提供 %{arg0}": "[NeoUtl] clap discover: PluginFactory未提供 %{arg0}"

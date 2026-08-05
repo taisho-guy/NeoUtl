@@ -84,5 +84,4 @@ pub unsafe extern "C" fn neoutl_object_entry() -> *const ObjectVTable {
 
 const _: EntryFn = neoutl_object_entry;
 rust_i18n::i18n!("../../../i18n");
-#[macro_use]
 extern crate rust_i18n;

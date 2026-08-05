@@ -1,4 +1,3 @@
-use crate::localization::tr;
 use crate::shortcuts::{self, ALL_COMMANDS, CommandId, OwnedBinding, Scope};
 use egui::{Context, Ui};
 

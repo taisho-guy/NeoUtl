@@ -215,7 +215,8 @@ pub fn ensure_installed(workspace_root: &Path, offline: bool) {
             eprintln!(
                 "{}",
                 t!(
-                    "[xtask][slang] --offline指定のため更新確認をスキップ: システム導入済みslangcを利用 (%{arg0})"
+                    "[xtask][slang] --offline指定のため更新確認をスキップ: システム導入済みslangcを利用 (%{arg0})",
+                    arg0 = system_slangc.display()
                 )
             );
             return;
@@ -246,7 +247,8 @@ pub fn ensure_installed(workspace_root: &Path, offline: bool) {
                     "{}",
                     t!(
                         "[xtask][slang] 更新確認失敗（%{arg0}）。システム導入済みslangcを利用します (%{arg1})",
-                        arg0 = format!("{}", err)
+                        arg0 = format!("{}", err),
+                        arg1 = system_slangc.display()
                     )
                 );
                 return;
