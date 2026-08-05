@@ -73,7 +73,7 @@ impl TimelineWindow {
             .enumerate()
             .map(|(kind_id, plugin)| ObjectKindItem {
                 kind: kind_id as i32,
-                name: plugin.name.clone(),
+                name: crate::localization::object_name(&plugin.name),
             })
             .collect();
         let items = build_context_menu(hit_id, self.ripple_mode, clipboard_empty, &kinds);

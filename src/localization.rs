@@ -90,3 +90,7 @@ pub fn effect_category(source: &str) -> String {
 pub fn effect_param_label(source: &str) -> String {
     tr(source)
 }
+
+pub fn object_name(source: &str) -> String {
+    tr(source)
+}
