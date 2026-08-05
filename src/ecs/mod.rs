@@ -531,31 +531,6 @@ impl EcsWorld {
         self.update_total_frames();
     }
 
-    pub fn find_object_at(&self, frame: i32, layer: i32) -> i32 {
-        self.world.run(
-            |scenes: UniqueView<SceneResource>,
-             object_ids: View<ObjectId>,
-             time_ranges: View<TimeRange>,
-             layers: View<Layer>,
-             scene_ids: View<SceneId>| {
-                let active = scenes.active_scene;
-                for (_entity, (id, range, l, s)) in (&object_ids, &time_ranges, &layers, &scene_ids)
-                    .iter()
-                    .with_id()
-                {
-                    if s.0 == active
-                        && l.0 == layer
-                        && frame >= range.start_frame
-                        && frame < range.end_frame
-                    {
-                        return id.0 as i32;
-                    }
-                }
-                -1
-            },
-        )
-    }
-
     fn find_entity(&self, object_id: usize) -> Option<shipyard::EntityId> {
         self.world.run(|object_ids: View<ObjectId>| {
             object_ids
@@ -988,16 +963,6 @@ impl EcsWorld {
         );
     }
 
-    pub fn get_global_matrix(&self, object_id: usize) -> Option<[f32; 16]> {
-        let entity = self.find_entity(object_id)?;
-        self.world
-            .run(|matrices: View<GlobalMatrix>| matrices.get(entity).ok().map(|m| m.0))
-    }
-
-    pub fn get_camera(&self) -> Camera {
-        self.world.run(|camera: UniqueView<Camera>| *camera)
-    }
-
     pub fn set_camera(&mut self, camera: Camera) {
         self.world
             .run(|mut slot: UniqueViewMut<Camera>| *slot = camera);
@@ -1015,89 +980,6 @@ impl EcsWorld {
                 stack.push(effect_id);
             }
         });
-    }
-
-    /// VST3/CLAPプラグインをPluginChain末尾へ追加する。エンティティ未付与の場合は
-    /// PluginChainを新規付与する（EffectStackはadd_object時に必ず付与されるが、
-    /// PluginChainはaudioオブジェクトのみが対象のため遅延付与とする）。
-    pub fn add_plugin(
-        &mut self,
-        object_id: usize,
-        format: neoutl_audio_plugin_host::PluginFormat,
-        path: std::path::PathBuf,
-        plugin_id: String,
-        param_info: Vec<neoutl_audio_plugin_host::PluginParamInfo>,
-    ) {
-        let Some(entity) = self.find_entity(object_id) else {
-            return;
-        };
-        let has_chain = self
-            .world
-            .run(|chains: View<PluginChain>| chains.get(entity).is_ok());
-        if !has_chain {
-            self.world.add_component(entity, PluginChain::default());
-        }
-        self.world.run(|mut chains: ViewMut<PluginChain>| {
-            if let Ok(mut chain) = (&mut chains).get(entity) {
-                chain.push(format, path, plugin_id);
-                if let Some(instance) = chain.0.last_mut() {
-                    instance.param_info = param_info;
-                }
-            }
-        });
-    }
-
-    pub fn remove_plugin(&mut self, object_id: usize, index: usize) {
-        let Some(entity) = self.find_entity(object_id) else {
-            return;
-        };
-        self.world.run(|mut chains: ViewMut<PluginChain>| {
-            if let Ok(mut chain) = (&mut chains).get(entity) {
-                chain.remove(index);
-            }
-        });
-    }
-
-    pub fn reorder_plugin(&mut self, object_id: usize, from: usize, to: usize) {
-        let Some(entity) = self.find_entity(object_id) else {
-            return;
-        };
-        self.world.run(|mut chains: ViewMut<PluginChain>| {
-            if let Ok(mut chain) = (&mut chains).get(entity) {
-                chain.reorder(from, to);
-            }
-        });
-    }
-
-    pub fn set_plugin_bypass(&mut self, object_id: usize, index: usize, bypass: bool) {
-        let Some(entity) = self.find_entity(object_id) else {
-            return;
-        };
-        self.world.run(|mut chains: ViewMut<PluginChain>| {
-            if let Ok(mut chain) = (&mut chains).get(entity) {
-                chain.set_bypass(index, bypass);
-            }
-        });
-    }
-
-    pub fn set_plugin_param(&mut self, object_id: usize, index: usize, param_id: u32, value: f64) {
-        let Some(entity) = self.find_entity(object_id) else {
-            return;
-        };
-        self.world.run(|mut chains: ViewMut<PluginChain>| {
-            if let Ok(mut chain) = (&mut chains).get(entity) {
-                chain.set_param(index, param_id, value);
-            }
-        });
-    }
-
-    pub fn get_plugin_chain(
-        &self,
-        object_id: usize,
-    ) -> Option<Vec<audio_plugins::PluginInstanceRef>> {
-        let entity = self.find_entity(object_id)?;
-        self.world
-            .run(|chains: View<PluginChain>| chains.get(entity).ok().map(|c| c.0.clone()))
     }
 
     pub fn reorder_effect(&mut self, object_id: usize, from: usize, to: usize) {
@@ -1236,34 +1118,6 @@ impl EcsWorld {
         })
     }
 
-    pub fn get_effect_instance(&self, object_id: usize, index: usize) -> Option<EffectInstance> {
-        let entity = self.find_entity(object_id)?;
-        self.world
-            .run(|stacks: View<EffectStack>| stacks.get(entity).ok()?.0.get(index).cloned())
-    }
-
-    pub fn insert_effect(&mut self, object_id: usize, index: usize, instance: EffectInstance) {
-        let Some(entity) = self.find_entity(object_id) else {
-            return;
-        };
-        self.world.run(|mut stacks: ViewMut<EffectStack>| {
-            if let Ok(mut stack) = (&mut stacks).get(entity) {
-                stack.insert(index, instance);
-            }
-        });
-    }
-
-    pub fn duplicate_effect(&mut self, object_id: usize, index: usize) {
-        let Some(entity) = self.find_entity(object_id) else {
-            return;
-        };
-        self.world.run(|mut stacks: ViewMut<EffectStack>| {
-            if let Ok(mut stack) = (&mut stacks).get(entity) {
-                stack.duplicate(index);
-            }
-        });
-    }
-
     pub fn get_text(&self, object_id: usize) -> Option<TextContent> {
         let entity = self.find_entity(object_id)?;
         self.world
@@ -1288,46 +1142,6 @@ impl EcsWorld {
             .run(|shapes: View<ShapeParams>| shapes.get(entity).ok().copied())
     }
 
-    pub fn set_shape(&mut self, object_id: usize, shape: ShapeParams) {
-        let Some(entity) = self.find_entity(object_id) else {
-            return;
-        };
-        self.world.run(|mut shapes: ViewMut<ShapeParams>| {
-            if let Ok(mut slot) = (&mut shapes).get(entity) {
-                *slot = shape;
-            }
-        });
-    }
-
-    pub fn get_media(&self, object_id: usize) -> Option<MediaSource> {
-        let entity = self.find_entity(object_id)?;
-        self.world
-            .run(|media: View<MediaSource>| media.get(entity).ok().cloned())
-    }
-
-    pub fn get_scene_object(&self, object_id: usize) -> Option<SceneObject> {
-        let entity = self.find_entity(object_id)?;
-        self.world
-            .run(|scene_objects: View<SceneObject>| scene_objects.get(entity).ok().copied())
-    }
-
-    pub fn get_object_scene_id(&self, object_id: usize) -> Option<i32> {
-        let entity = self.find_entity(object_id)?;
-        self.world
-            .run(|scene_ids: View<SceneId>| scene_ids.get(entity).ok().map(|s| s.0))
-    }
-
-    pub fn set_media_trim(&mut self, object_id: usize, trim_in_frame: i64) {
-        let Some(entity) = self.find_entity(object_id) else {
-            return;
-        };
-        self.world.run(|mut media: ViewMut<MediaSource>| {
-            if let Ok(mut slot) = (&mut media).get(entity) {
-                slot.trim_in_frame = trim_in_frame;
-            }
-        });
-    }
-
     pub fn set_audio_params(&mut self, object_id: usize, volume: f32, pan: f32, mute: bool) {
         let Some(entity) = self.find_entity(object_id) else {
             return;
@@ -1345,18 +1159,6 @@ impl EcsWorld {
         let entity = self.find_entity(object_id)?;
         self.world
             .run(|audio: View<AudioParams>| audio.get(entity).ok().copied())
-    }
-
-    pub fn get_kind_id(&self, object_id: usize) -> Option<u32> {
-        let entity = self.find_entity(object_id)?;
-        self.world
-            .run(|kinds: View<KindId>| kinds.get(entity).ok().map(|k| k.0))
-    }
-
-    pub fn get_plugin_params(&self, object_id: usize) -> Option<HashMap<String, f32>> {
-        let entity = self.find_entity(object_id)?;
-        self.world
-            .run(|params: View<PluginParams>| params.get(entity).ok().map(|p| p.0.clone()))
     }
 
     /// ネイティブパラメータ（Transform/TextContent/ShapeParams/AudioParams）のkeyへ
@@ -1414,17 +1216,6 @@ impl EcsWorld {
         })
     }
 
-    /// オブジェクトの絶対フレーム範囲 (start_frame, end_frame) を返す。
-    /// 中間点区間UIの両端境界として使う。エンティティ不在時は(0,1)。
-    pub fn get_time_range(&self, object_id: usize) -> (i32, i32) {
-        let Some(entity) = self.find_entity(object_id) else {
-            return (0, 1);
-        };
-        self.world
-            .run(|t: View<TimeRange>| t.get(entity).ok().map(|r| (r.start_frame, r.end_frame)))
-            .unwrap_or((0, 1))
-    }
-
     pub fn get_keyframes(&self, object_id: usize, key: &str) -> Vec<crate::ecs::types::Keyframe> {
         let Some(entity) = self.find_entity(object_id) else {
             return Vec::new();
@@ -1475,27 +1266,6 @@ impl EcsWorld {
         });
     }
 
-    /// エフェクトパラメータの中間点をドラッグ移動する。移動先に既存点がある場合は失敗する。
-    pub fn move_effect_keyframe(
-        &mut self,
-        object_id: usize,
-        index: usize,
-        key: &str,
-        old_frame: i32,
-        new_frame: i32,
-    ) -> bool {
-        let Some(entity) = self.find_entity(object_id) else {
-            return false;
-        };
-        self.world.run(|mut stacks: ViewMut<EffectStack>| {
-            (&mut stacks)
-                .get(entity)
-                .ok()
-                .map(|mut s| s.move_keyframe(index, key, old_frame, new_frame))
-                .unwrap_or(false)
-        })
-    }
-
     pub fn get_effect_keyframes(
         &self,
         object_id: usize,
@@ -1514,18 +1284,6 @@ impl EcsWorld {
                 .map(|p| p.keyframes.clone())
                 .unwrap_or_default()
         })
-    }
-
-    pub fn set_plugin_param_value(&mut self, object_id: usize, key: &str, value: f32) {
-        let Some(entity) = self.find_entity(object_id) else {
-            return;
-        };
-        let mut params = self
-            .world
-            .run(|p: View<PluginParams>| p.get(entity).ok().map(|s| s.0.clone()))
-            .unwrap_or_default();
-        params.insert(key.to_string(), value);
-        self.world.add_component(entity, PluginParams(params));
     }
 
     pub fn add_scene(&mut self, name: impl Into<String>) -> i32 {
@@ -1595,26 +1353,6 @@ impl EcsWorld {
                 referrers
             },
         )
-    }
-
-    /// entityが持つSceneObjectのtarget_sceneを変更する。循環参照となる場合は
-    /// 変更を行わずfalseを返す（呼び出し側はUIへの拒否通知に用いる）。
-    pub fn set_scene_object_target(&mut self, object_id: usize, target_scene: i32) -> bool {
-        let Some(entity) = self.find_entity(object_id) else {
-            return false;
-        };
-        let host_scene = self
-            .world
-            .run(|scene_ids: View<SceneId>| scene_ids.get(entity).map(|s| s.0));
-        let Ok(host_scene) = host_scene else {
-            return false;
-        };
-        if self.would_create_scene_cycle(host_scene, target_scene) {
-            return false;
-        }
-        self.world
-            .add_component(entity, SceneObject { target_scene });
-        true
     }
 
     /// scene_idを削除する。他シーンのSceneObjectから参照中であれば削除せずfalseを返す。

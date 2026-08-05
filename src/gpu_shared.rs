@@ -4,7 +4,6 @@ use std::sync::Arc;
 /// winit surface・egui_wgpu::Renderer・RenderEngineの3者へ配る単一のDevice/Queue。
 pub struct SharedGpu {
     pub instance: wgpu::Instance,
-    pub adapter: wgpu::Adapter,
     pub device: Arc<wgpu::Device>,
     pub queue: Arc<wgpu::Queue>,
 }
@@ -33,9 +32,9 @@ pub fn init_shared_gpu() -> Result<SharedGpu, Box<dyn std::error::Error>> {
         neoutl_media_gpuvideo_encoder::set_shared_device(gpu_device);
         crate::renderer::pipeline::install_device_lost_watcher(&device);
 
+        let _ = adapter;
         return Ok(SharedGpu {
             instance,
-            adapter,
             device: Arc::new(device),
             queue: Arc::new(queue),
         });
@@ -79,9 +78,9 @@ pub fn init_shared_gpu() -> Result<SharedGpu, Box<dyn std::error::Error>> {
 
         crate::renderer::pipeline::install_device_lost_watcher(&device);
 
+        let _ = adapter;
         Ok(SharedGpu {
             instance,
-            adapter,
             device: Arc::new(device),
             queue: Arc::new(queue),
         })

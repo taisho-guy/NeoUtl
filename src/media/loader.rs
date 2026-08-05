@@ -1,9 +1,10 @@
+use arc_swap::ArcSwap;
 use libloading::{Library, Symbol};
-use neoutl_media_api::{ENTRY_SYMBOL, EntryFn, MediaKind, MediaVTable};
+use neoutl_media_api::{AudioBuffer, ENTRY_SYMBOL, EntryFn, MediaKind, MediaVTable};
 use std::{
     ffi::OsStr,
     path::{Path, PathBuf},
-    sync::OnceLock,
+    sync::{Arc, OnceLock},
 };
 
 pub struct MediaPlugin {
@@ -11,144 +12,146 @@ pub struct MediaPlugin {
     pub name: String,
     pub kind: MediaKind,
     pub extensions: Vec<String>,
-    pub vtable: &'static MediaVTable,
-    /// dylibロードで得たプラグインのみSome。ネイティブリンクプラグイン（gpuvideo/gstreamer）は
+    pub vtable: MediaVTable,
     _lib: Option<Library>,
 }
 
-static REGISTRY: OnceLock<Vec<MediaPlugin>> = OnceLock::new();
-static GPUVIDEO_VTABLE: OnceLock<MediaVTable> = OnceLock::new();
-static GSTREAMER_VTABLE: OnceLock<MediaVTable> = OnceLock::new();
-
-pub fn load_all(decoders_dir: &Path) {
-    REGISTRY.get_or_init(|| {
-        let mut plugins: Vec<MediaPlugin> = Vec::new();
-        plugins.extend(native_plugins());
-
-        let entries = match std::fs::read_dir(decoders_dir) {
-            Ok(e) => e,
-            Err(err) => {
-                eprintln!(
-                    "{}",
-                    t!(
-                        "[NeoUtl] decoders/ 読み込み失敗: %{arg0}",
-                        arg0 = format!("{}", err)
-                    )
-                );
-                plugins.sort_by(|a, b| a.id.cmp(&b.id));
-                return plugins;
-            }
-        };
-        let candidates: Vec<PathBuf> = entries
-            .flatten()
-            .map(|e| e.path())
-            .filter(|p| is_dylib(p))
-            .collect();
-
-        plugins.extend(candidates.iter().filter_map(|path| match load_one(path) {
-            Ok(p) => Some(p),
-            Err(err) => {
-                eprintln!(
-                    "{}",
-                    t!(
-                        "[NeoUtl] デコーダ読み込み失敗 %{arg0}: %{arg1}",
-                        arg1 = format!("{}", err)
-                    )
-                );
-                None
-            }
-        }));
-
-        plugins.sort_by(|a, b| a.id.cmp(&b.id));
-        for plugin in &plugins {
-            eprintln!(
-                "{}",
-                t!(
-                    "[NeoUtl] デコーダ登録: %{arg0} (%{arg1}, 拡張子=%{arg2})",
-                    arg0 = format!("{}", plugin.id),
-                    arg1 = format!("{}", plugin.name),
-                    arg2 = format!("{:?}", plugin.extensions)
-                )
-            );
-        }
-        plugins
-    });
+fn registry_swap() -> &'static ArcSwap<Vec<Arc<MediaPlugin>>> {
+    static SWAP: OnceLock<ArcSwap<Vec<Arc<MediaPlugin>>>> = OnceLock::new();
+    SWAP.get_or_init(|| ArcSwap::new(Arc::new(Vec::new())))
 }
 
-/// gpu-video/GStreamerに依存するデコーダを本体と同一コンパイル単位のまま登録する。
-/// libloading/extern "C"境界を経由しないため、wgpu::Device等の複雑な型を跨いだ
-/// ABI不一致（as_hal()のNone化）が構造的に発生しない。
-fn native_plugins() -> Vec<MediaPlugin> {
-    let mut plugins = Vec::new();
-
-    let gpuvideo_vtable = GPUVIDEO_VTABLE.get_or_init(neoutl_media_gpuvideo_decoder::native_vtable);
-    if let Some(plugin) = build_native_plugin(gpuvideo_vtable) {
-        plugins.push(plugin);
-    }
-
-    let gstreamer_vtable =
-        GSTREAMER_VTABLE.get_or_init(neoutl_media_gstreamer_decoder::native_vtable);
-    if let Some(plugin) = build_native_plugin(gstreamer_vtable) {
-        plugins.push(plugin);
-    }
-
-    plugins
-}
-
-fn build_native_plugin(vtable: &'static MediaVTable) -> Option<MediaPlugin> {
+/// MediaVTable + 保持元Libraryの所有権からMediaPluginを構築する。
+/// meta().id/name/extensionsはdylib静的領域参照のため、この時点で全てownedへ複製する
+/// （Library解放後もMediaPlugin単体で有効であることを保証するため）。
+fn from_vtable(vtable: MediaVTable, lib: Option<Library>) -> MediaPlugin {
     let meta = (vtable.meta)();
-    if meta.extensions_len == 0 {
-        return None;
-    }
-    let extensions: Vec<String> =
+    let extensions =
         unsafe { std::slice::from_raw_parts(meta.extensions_ptr, meta.extensions_len) }
             .iter()
             .map(|s| s.to_ascii_lowercase())
             .collect();
-    Some(MediaPlugin {
+    MediaPlugin {
         id: meta.id.to_owned(),
         name: meta.name.to_owned(),
         kind: meta.kind,
         extensions,
         vtable,
-        _lib: None,
-    })
+        _lib: lib,
+    }
 }
 
-pub fn registry() -> &'static [MediaPlugin] {
-    REGISTRY.get().map_or(&[][..], Vec::as_slice)
+/// NeoUtl本体へgpu_video共有デバイス注入のため直接静的リンクされるデコーダ。
+/// dlsymプラグインではないためdecoders/走査対象から外れ、ここで自己登録する。
+fn native_plugins() -> Vec<MediaPlugin> {
+    vec![
+        from_vtable(gpuvideo_native_vtable(), None),
+        from_vtable(neoutl_media_gstreamer_decoder::native_vtable(), None),
+    ]
 }
 
-/// 拡張子（小文字・ドット無し）に対応する最初のプラグインを返す。
-/// 複数プラグインが同一拡張子を宣言する場合はid昇順で先着したものが採用される。
-pub fn find_by_extension(ext: &str) -> Option<&'static MediaPlugin> {
+#[cfg(target_os = "linux")]
+fn gpuvideo_native_vtable() -> MediaVTable {
+    neoutl_media_gpuvideo_decoder::native_vtable()
+}
+
+#[cfg(not(target_os = "linux"))]
+fn gpuvideo_native_vtable() -> MediaVTable {
+    neoutl_media_gpuvideo_decoder::macos_stub::native_vtable()
+}
+
+pub fn load_all(decoders_dir: &Path) {
+    let mut plugins: Vec<MediaPlugin> = native_plugins();
+
+    match std::fs::read_dir(decoders_dir) {
+        Ok(entries) => {
+            let candidates: Vec<PathBuf> = entries
+                .flatten()
+                .map(|e| e.path())
+                .filter(|p| is_dylib(p))
+                .collect();
+            for path in candidates {
+                match load_one(&path) {
+                    Ok(plugin) => plugins.push(plugin),
+                    Err(err) => eprintln!(
+                        "{}",
+                        t!(
+                            "[NeoUtl] デコーダ読み込み失敗 %{arg0}: %{arg1}",
+                            arg0 = format!("{}", path.display()),
+                            arg1 = format!("{}", err)
+                        )
+                    ),
+                }
+            }
+        }
+        Err(err) => eprintln!(
+            "{}",
+            t!(
+                "[NeoUtl] decoders/ 読み込み失敗: %{arg0}",
+                arg0 = format!("{}", err)
+            )
+        ),
+    }
+
+    plugins.sort_by(|a, b| a.id.cmp(&b.id));
+    for plugin in &plugins {
+        eprintln!(
+            "{}",
+            t!(
+                "[NeoUtl] デコーダ登録: %{arg0} (%{arg1})",
+                arg0 = format!("{}", plugin.id),
+                arg1 = format!("{}", plugin.name)
+            )
+        );
+    }
+    registry_swap().store(Arc::new(plugins.into_iter().map(Arc::new).collect()));
+}
+
+pub fn registry() -> Arc<Vec<Arc<MediaPlugin>>> {
+    registry_swap().load_full()
+}
+
+/// 拡張子に一致する最初のプラグイン（id昇順）。動画はVulkanゼロコピー経路優先、
+/// 非対応環境ではGStreamer等のCPU経路へ自動フォールバックする序列がid昇順に一致する。
+pub fn find_by_extension(ext: &str) -> Option<Arc<MediaPlugin>> {
     registry()
         .iter()
         .find(|p| p.extensions.iter().any(|e| e == ext))
+        .cloned()
 }
 
-/// 拡張子（小文字・ドット無し）に対応する全プラグインをid昇順で返す。
-/// open_video等が先頭から順に試行し、失敗時は次候補へフォールバックする用途。
-/// registry()自体がid昇順ソート済みのため、フィルタのみで順序は保たれる。
-pub fn find_all_by_extension(ext: &str) -> Vec<&'static MediaPlugin> {
+/// 拡張子に一致する全プラグイン（id昇順）。フォールバック候補列挙用。
+pub fn find_all_by_extension(ext: &str) -> Vec<Arc<MediaPlugin>> {
     registry()
         .iter()
         .filter(|p| p.extensions.iter().any(|e| e == ext))
+        .cloned()
         .collect()
 }
 
-/// pathの拡張子に対応するdecode_audio実装プラグインを検索し全読み込みデコードする。
-/// AudioMixer::mix_entityの未キャッシュ時経路として使用する。
-pub fn decode_audio(path: &Path) -> Result<neoutl_media_api::AudioBuffer, String> {
+pub fn decode_audio(path: &Path) -> Result<AudioBuffer, String> {
     let ext = path
         .extension()
-        .and_then(OsStr::to_str)
+        .and_then(|e| e.to_str())
         .map(str::to_ascii_lowercase)
-        .ok_or_else(|| format!("拡張子なし: {}", path.display()))?;
-    find_all_by_extension(&ext)
-        .into_iter()
-        .find_map(|plugin| plugin.vtable.decode_audio)
-        .ok_or_else(|| format!("decode_audio対応プラグイン未検出: {ext}"))?(path)
+        .ok_or_else(|| {
+            t!("拡張子なし: %{arg0}", arg0 = format!("{}", path.display())).to_string()
+        })?;
+    let plugin = find_by_extension(&ext).ok_or_else(|| {
+        t!(
+            "音声デコーダ未登録: %{arg0}",
+            arg0 = format!("{}", path.display())
+        )
+        .to_string()
+    })?;
+    let decode_fn = plugin.vtable.decode_audio.ok_or_else(|| {
+        t!(
+            "プラグイン%{arg0}はdecode_audio未実装",
+            arg0 = format!("{}", plugin.id)
+        )
+        .to_string()
+    })?;
+    decode_fn(path)
 }
 
 pub fn default_decoders_dir() -> PathBuf {
@@ -170,24 +173,25 @@ pub fn default_decoders_dir() -> PathBuf {
     exe_dir.join("decoders")
 }
 
+/// main.rs::gpu_shared::init_shared_gpuが起動時に一度だけ呼ぶ。gpuvideo-decoder crate内
+/// SHARED_DEVICEへ委譲し、同一VulkanDeviceをデコード経路へ共有する（Linux限定機能）。
+#[cfg(target_os = "linux")]
+pub fn inject_gpuvideo_shared_device(device: Arc<gpu_video::VulkanDevice>) {
+    neoutl_media_gpuvideo_decoder::set_shared_device(device);
+}
+
 fn load_one(path: &Path) -> Result<MediaPlugin, Box<dyn std::error::Error>> {
     let lib = unsafe { Library::new(path) }?;
     let entry: Symbol<EntryFn> = unsafe { lib.get(ENTRY_SYMBOL) }?;
-    let vtable: &'static MediaVTable = unsafe { &*entry() };
-    let meta = (vtable.meta)();
-    let extensions: Vec<String> =
-        unsafe { std::slice::from_raw_parts(meta.extensions_ptr, meta.extensions_len) }
-            .iter()
-            .map(|s| s.to_ascii_lowercase())
-            .collect();
-    Ok(MediaPlugin {
-        id: meta.id.to_owned(),
-        name: meta.name.to_owned(),
-        kind: meta.kind,
-        extensions,
-        vtable,
-        _lib: Some(lib),
-    })
+    let vtable_ptr = unsafe { entry() };
+    let vtable_ref: &MediaVTable = unsafe { &*vtable_ptr };
+    let vtable = MediaVTable {
+        meta: vtable_ref.meta,
+        open_video: vtable_ref.open_video,
+        open_image: vtable_ref.open_image,
+        decode_audio: vtable_ref.decode_audio,
+    };
+    Ok(from_vtable(vtable, Some(lib)))
 }
 
 fn is_dylib(path: &Path) -> bool {
@@ -195,15 +199,4 @@ fn is_dylib(path: &Path) -> bool {
         path.extension().and_then(OsStr::to_str),
         Some("so" | "dylib" | "dll")
     )
-}
-
-/// Vulkanデバイスをgpuvideo-decoderへ渡す。ネイティブリンクのため素の関数呼び出しであり、
-/// libloadingでの再オープンやextern "C"生ポインタ受け渡しを伴わない。
-#[cfg(target_os = "linux")]
-pub fn inject_gpuvideo_shared_device(device: std::sync::Arc<gpu_video::VulkanDevice>) {
-    neoutl_media_gpuvideo_decoder::set_shared_device(device);
-    eprintln!(
-        "{}",
-        t!("[NeoUtl] gpu_video共有デバイス注入（ネイティブ呼び出し）")
-    );
 }

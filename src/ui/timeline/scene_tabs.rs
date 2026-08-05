@@ -23,8 +23,12 @@ impl TimelineWindow {
                 ui.set_min_height(super::SCENE_TAB_HEIGHT);
                 for tab in scene_tabs {
                     ui.horizontal(|ui| {
-                        if ui.selectable_label(tab.active, &tab.name).clicked() {
+                        let label = ui.selectable_label(tab.active, &tab.name);
+                        if label.clicked() {
                             self.switch_scene_tab(state, preview_panel, tab.id);
+                        }
+                        if label.double_clicked() {
+                            dialogs.borrow_mut().open_scene_edit(state, tab.id);
                         }
                         if tab.id != 0 && ui.small_button("✕").clicked() {
                             self.close_scene_tab(state, preview_panel, tab.id);

@@ -6,7 +6,6 @@ use crate::ui::preview::PreviewPanel;
 use crate::ui::project_settings::ProjectSettingsWindow;
 use crate::ui::scene_settings::SceneSettingsWindow;
 use crate::ui::system_settings::SystemSettingsWindow;
-use egui::{Context, Ui};
 use std::cell::RefCell;
 use std::rc::Rc;
 use std::sync::{Arc, Mutex};
@@ -20,7 +19,6 @@ pub struct DialogSet {
     pub scene_settings: SceneSettingsWindow,
     pub keybindings: KeybindingsWindow,
     pub export_dialog: ExportDialog,
-    world_holder: Arc<Mutex<EcsWorld>>,
 }
 
 impl DialogSet {
@@ -31,7 +29,6 @@ impl DialogSet {
             scene_settings: SceneSettingsWindow::new(),
             keybindings: KeybindingsWindow::new(),
             export_dialog: ExportDialog::new(),
-            world_holder,
         }
     }
 
@@ -63,26 +60,7 @@ impl DialogSet {
             self.keybindings.open = true;
         }
         if std::mem::take(&mut preview.open_export) {
-            self.export_dialog.open = true;
+            self.export_dialog.open(state);
         }
-    }
-
-    /// PreviewPanelの開要求フラグを読み取りリセットしたのち、開いている
-    /// ダイアログを毎フレーム`show`する。エクスポート起動は既存のエクスポート
-    /// メニュー動線（timeline.rs/mod.rs側）が`export_dialog.open`を直接立てる。
-    pub fn show(
-        &mut self,
-        ctx: &Context,
-        ui: &mut Ui,
-        state: &SharedAppState,
-        preview_panel: &Rc<RefCell<PreviewPanel>>,
-    ) {
-        self.sync_preview_requests(state, preview_panel);
-
-        self.system_settings.show(ctx, ui, &self.world_holder);
-        let _ = self.project_settings.show(ctx, ui, state);
-        let _ = self.scene_settings.show(ctx, ui, state);
-        self.keybindings.show(ctx, ui);
-        self.export_dialog.show(ctx, ui, state);
     }
 }

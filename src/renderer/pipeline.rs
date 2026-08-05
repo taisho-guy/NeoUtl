@@ -67,7 +67,6 @@ pub struct RenderEngine {
     pub texture: wgpu::Texture,
     pub depth_texture: wgpu::Texture,
     pub uniform_buffer: wgpu::Buffer,
-    pub bind_group_layout: wgpu::BindGroupLayout,
     pub bind_group: wgpu::BindGroup,
     /// テキスト描画に使う共有フォント。オブジェクト単位のオフスクリーン
     /// テクスチャ寸法算出（media::text::measure）にも同一フォントを用いる。
@@ -954,7 +953,6 @@ impl RenderEngine {
             texture,
             depth_texture,
             uniform_buffer,
-            bind_group_layout,
             bind_group,
             font,
             text_targets: HashMap::new(),
@@ -2129,16 +2127,13 @@ mod tests {
     ) -> ActiveObject {
         ActiveObject {
             kind_id,
-            start_frame: 0,
             source_frame: 0,
             clip_instance: kind_id as u64,
             text_content: None,
             shape_params: None,
             media_source: None,
-            global_matrix: [0.0; 16],
             mvp: [0.0; 16],
             opacity: 1.0,
-            audio: Default::default(),
             effects,
             nested_scene: None,
         }

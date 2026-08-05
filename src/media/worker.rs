@@ -250,7 +250,6 @@ pub struct DecodeWorker {
     requested: Arc<AtomicI64>,
     signal: Arc<(Mutex<bool>, Condvar)>,
     store: Arc<Mutex<TextureStore>>,
-    last_ready_index: Arc<Mutex<Option<i64>>>,
     last_error: Arc<Mutex<Option<String>>>,
 
     task: Option<tokio::task::JoinHandle<()>>,
@@ -279,14 +278,12 @@ impl DecodeWorker {
         let requested = Arc::new(AtomicI64::new(NONE_SENTINEL));
         let signal = Arc::new((Mutex::new(false), Condvar::new()));
         let store = Arc::new(Mutex::new(TextureStore::new()));
-        let last_ready_index = Arc::new(Mutex::new(None));
         let last_error = Arc::new(Mutex::new(None));
         let worker_thread_id = Arc::new(Mutex::new(None));
 
         let requested_t = requested.clone();
         let signal_t = signal.clone();
         let store_t = store.clone();
-        let last_ready_index_t = last_ready_index.clone();
         let last_error_t = last_error.clone();
         let worker_thread_id_t = worker_thread_id.clone();
         let on_fail_t = on_fail.clone();
@@ -310,7 +307,6 @@ impl DecodeWorker {
                     match result {
                         Ok(tex) => {
                             store_t.lock().unwrap().put(index, tex);
-                            *last_ready_index_t.lock().unwrap() = Some(index);
                             *last_error_t.lock().unwrap() = None;
                             if critical {
                                 consecutive_target_fails = 0;
@@ -420,7 +416,6 @@ impl DecodeWorker {
             requested,
             signal,
             store,
-            last_ready_index,
             last_error,
             task: Some(task),
             worker_thread_id,
@@ -432,15 +427,6 @@ impl DecodeWorker {
         let (lock, cvar) = &*self.signal;
         *lock.lock().unwrap() = true;
         cvar.notify_one();
-    }
-
-    pub fn last_ready_index(&self) -> Option<i64> {
-        *self.last_ready_index.lock().unwrap()
-    }
-
-    /// frame_indexのVRAMテクスチャが準備完了済みか判定する。
-    pub fn is_ready(&self, frame_index: i64) -> bool {
-        self.store.lock().unwrap().contains(frame_index)
     }
 
     /// UIスレッド専用・非ブロッキング。VRAMテクスチャストアへの読み取りのみを行い、

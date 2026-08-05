@@ -147,10 +147,10 @@ pub fn rescale_for_source(global: &GlobalMatrix, source_w: f32, source_h: f32) -
     GlobalMatrix(m)
 }
 
-/// 投影方式。2Dシーン既定はOrtho、3Dオブジェクトが1つでも存在すればPerspective選択も可能。
+/// 投影方式。全オブジェクトへ常にPerspectiveを適用する（過去のOrtho切替は
+/// X/Y軸回転時の描画消失バグの原因だったため廃止、ecs/systems.rs::projection_for参照）。
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Projection {
-    Ortho,
     Perspective { fov_deg: f32 },
 }
 
@@ -245,31 +245,6 @@ pub fn compute_view_matrix(cam: &Camera) -> [f32; 16] {
     ]
 }
 
-/// 2Dシーン用の正射影。world座標=プロジェクトのピクセル座標として扱う
-/// （原点中心、+Yを上向き）。深度テストなし前提でz奥行きは素通しする。
-pub fn compute_ortho_matrix(project_width: f32, project_height: f32) -> [f32; 16] {
-    let (l, r) = (-project_width * 0.5, project_width * 0.5);
-    let (b, t) = (-project_height * 0.5, project_height * 0.5);
-    [
-        2.0 / (r - l),
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        2.0 / (t - b),
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        -1.0,
-        0.0,
-        -(r + l) / (r - l),
-        -(t + b) / (t - b),
-        0.0,
-        1.0,
-    ]
-}
-
 pub fn compute_perspective_matrix(fov_deg: f32, aspect: f32, near: f32, far: f32) -> [f32; 16] {
     let f = 1.0 / (fov_deg.to_radians() * 0.5).tan();
     let range_inv = 1.0 / (near - far);
@@ -294,13 +269,7 @@ pub fn compute_perspective_matrix(fov_deg: f32, aspect: f32, near: f32, far: f32
 }
 
 /// dimensionalityとCameraからMVPを合成する唯一の窓口。
-/// project_width/project_height はピクセル単位のプロジェクト解像度で、
-/// Orthoではworld座標系そのものの基準として、Perspectiveではaspect算出のみに用いる。
-///
-/// Orthoは3DカメラのView行列を適用しない。Camera::for_resolutionが導出するpos_zは
-/// Perspective専用の値であり、これをOrtho側のz軸へ適用するとclip_zが[0,1]から
-/// 大幅に逸脱し、頂点シェーダの時点で全ジオメトリがクリップされ何も描画されなくなる
-/// （2Dオブジェクトはz奥行きをそのまま素通しする設計のため、Viewは不要かつ有害）。
+/// project_width/project_height はピクセル単位のプロジェクト解像度で、aspect算出に用いる。
 pub fn compute_mvp(
     global: &GlobalMatrix,
     cam: &Camera,
@@ -309,10 +278,6 @@ pub fn compute_mvp(
     projection: Projection,
 ) -> [f32; 16] {
     match projection {
-        Projection::Ortho => {
-            let proj = compute_ortho_matrix(project_width, project_height);
-            mat4_mul(&proj, &global.0)
-        }
         Projection::Perspective { fov_deg } => {
             let view = compute_view_matrix(cam);
             let aspect = project_width.max(1.0) / project_height.max(1.0);

@@ -104,6 +104,8 @@ pub fn save_export_presets(presets: &[ExportPreset]) -> Result<(), String> {
 pub enum QueueState {
     Idle,
     Running,
+    /// 中断UI未実装のため未使用（RenderQueue::cancel_current実装済み、呼び出し元未配置）。
+    #[allow(dead_code)]
     Paused,
     CancelRequested,
     Completed,
@@ -114,6 +116,8 @@ pub struct QueuedJob {
     pub project_dir: PathBuf,
     pub id: u64,
 }
+/// 中断UI未実装のため各フィールドは現状cancel_current内でのみ参照される。
+#[allow(dead_code)]
 pub struct JobHandle {
     pub id: u64,
     pub cancel: Arc<std::sync::atomic::AtomicBool>,
@@ -132,6 +136,9 @@ pub struct RenderQueue {
     inner: Arc<Mutex<QueueInner>>,
 }
 
+/// エクスポート中断UIは未実装（export_dialog側にキャンセルボタン未配置）。
+/// バックエンドの中断経路は実装済みのため、UI実装までallowで保持する。
+#[allow(dead_code)]
 impl RenderQueue {
     pub fn new() -> Self {
         Self {
