@@ -81,6 +81,7 @@ pub struct SystemSettingsWindow {
 
     check_update_on_startup: bool,
     update_status: Arc<Mutex<UpdateStatus>>,
+    crash_reporting_enabled: bool,
 
     save_status: String,
 }
@@ -122,6 +123,7 @@ impl SystemSettingsWindow {
             export_codec: s.export_codec,
             check_update_on_startup: s.check_update_on_startup,
             update_status,
+            crash_reporting_enabled: s.crash_reporting_enabled,
             save_status: String::new(),
         }
     }
@@ -163,6 +165,7 @@ impl SystemSettingsWindow {
         self.export_container = loaded.export_container;
         self.export_codec = loaded.export_codec;
         self.check_update_on_startup = loaded.check_update_on_startup;
+        self.crash_reporting_enabled = loaded.crash_reporting_enabled;
         self.save_status = t!("再読込完了");
     }
 
@@ -433,6 +436,23 @@ impl SystemSettingsWindow {
         if ui.button(t!("今すぐ確認")).clicked() {
             update::spawn_check(self.update_status.clone());
         }
+        ui.end_row();
+
+        ui.separator();
+        ui.end_row();
+
+        let mut crash_reporting_enabled = self.crash_reporting_enabled;
+        if toggle_field(
+            ui,
+            "エラー発生時に匿名の診断情報をGlitchTipへ送信",
+            &mut crash_reporting_enabled,
+        ) {
+            self.crash_reporting_enabled = crash_reporting_enabled;
+            self.persist(world_holder, |s| {
+                s.crash_reporting_enabled = crash_reporting_enabled;
+            });
+        }
+        ui.label(t!("変更は次回起動時から反映されます"));
         ui.end_row();
     }
 }

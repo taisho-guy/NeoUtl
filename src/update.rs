@@ -237,6 +237,9 @@ fn apply_update(info: &UpdateInfo, state: &Arc<Mutex<UpdateStatus>>) -> Result<(
 pub fn spawn_apply(state: Arc<Mutex<UpdateStatus>>, info: UpdateInfo) {
     std::thread::spawn(move || {
         let result = apply_update(&info, &state);
+        if let Err(err) = &result {
+            crate::crash_report::capture_message(&format!("[NeoUtl][update] 自己更新失敗: {err}"));
+        }
         *state.lock().unwrap() = match result {
             Ok(()) => UpdateStatus::Installed,
             Err(err) => UpdateStatus::Error(err),

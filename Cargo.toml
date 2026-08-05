@@ -43,7 +43,7 @@ zip = "8"
 
 [package]
 name = "NeoUtl"
-version = "0.4.0"
+version = "0.5.0"
 edition = "2024"
 
 [dependencies]
@@ -67,6 +67,7 @@ neoutl-media-gpuvideo-encoder = { path = "crates/media/gpuvideo-encoder" }
 neoutl-media-gstreamer-encoder = { path = "crates/media/gstreamer-encoder" }
 neoutl-audio-plugin-host = { path = "crates/media/audio-plugin-host" }
 self-replace = "1"
+sentry = { version = "0.49", default-features = false, features = ["backtrace", "contexts", "panic"] }
 semver = "1"
 tempfile = "3"
 wgpu = "29"

@@ -224,6 +224,9 @@ pub struct SystemSettingsResource {
     pub export_codec: i32,
     #[serde(default)]
     pub check_update_on_startup: bool,
+    /// GlitchTip(Sentry)へのクラッシュ/エラー匿名送信。既定無効（オプトイン）。
+    #[serde(default)]
+    pub crash_reporting_enabled: bool,
 }
 
 impl Default for SystemSettingsResource {
@@ -249,6 +252,7 @@ impl SystemSettingsResource {
             export_container: config::SYSTEM_DEFAULT_EXPORT_CONTAINER,
             export_codec: config::SYSTEM_DEFAULT_EXPORT_CODEC,
             check_update_on_startup: config::SYSTEM_DEFAULT_CHECK_UPDATE_ON_STARTUP,
+            crash_reporting_enabled: config::SYSTEM_DEFAULT_CRASH_REPORTING_ENABLED,
         }
     }
 }

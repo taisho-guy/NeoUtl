@@ -34,6 +34,10 @@ pub const SYSTEM_DEFAULT_EXPORT_CONTAINER: i32 = 0;
 pub const SYSTEM_DEFAULT_EXPORT_CODEC: i32 = 0;
 /// 起動時アップデート自動チェックの既定有効状態
 pub const SYSTEM_DEFAULT_CHECK_UPDATE_ON_STARTUP: bool = false;
+/// GlitchTip(Sentry)クラッシュレポート送信の既定有効状態（オプトイン）
+pub const SYSTEM_DEFAULT_CRASH_REPORTING_ENABLED: bool = false;
+/// GlitchTipプロジェクトDSN。公開リポジトリにつき秘匿不要（送信先固定のみで悪用余地なし）
+pub const SENTRY_DSN: &str = "https://a5c5db74531842109880e0e97e054915@app.glitchtip.com/26533";
 /// プラグイン(objects/effects dylib)ホットリロードの既定有効状態。
 /// リリースビルドでは監視スレッド自体を起動しない（hot_reload::spawn_watcher呼び出し元をcfg分岐）。
 pub const SYSTEM_DEFAULT_HOT_RELOAD_ENABLED: bool = cfg!(debug_assertions);

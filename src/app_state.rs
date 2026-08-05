@@ -70,13 +70,10 @@ impl ProjectSession {
         }
 
         let audio_mixer = AudioMixer::new(meta.audio_sample_rate).unwrap_or_else(|err| {
-            eprintln!(
-                "{}",
-                t!(
-                    "[NeoUtl] audio_mixer初期化失敗: %{arg0}",
-                    arg0 = format!("{}", err)
-                )
-            );
+            report_error(&t!(
+                "[NeoUtl] audio_mixer初期化失敗: %{arg0}",
+                arg0 = format!("{}", err)
+            ));
             AudioMixer::silent()
         });
 
@@ -90,6 +87,19 @@ impl ProjectSession {
             last_autosave: Instant::now(),
         }
     }
+}
+
+/// メッセージのみの失敗（エラー型が不定・既に文字列化済み）: ログ出力+メッセージ送信。
+fn report_error(msg: &str) {
+    eprintln!("{msg}");
+    crate::crash_report::capture_message(msg);
+}
+
+/// I/Oエラー系の失敗（プロジェクト保存・オートセーブ）: ログ出力+構造化エラー送信。
+/// std::io::Errorはstd::error::Errorを実装するためスタックトレース付きで送信できる。
+fn report_io_error(context: &str, err: &std::io::Error) {
+    eprintln!("{context}: {err}");
+    crate::crash_report::capture_error(err);
 }
 
 pub struct AppState {
@@ -234,13 +244,7 @@ pub fn autosave_active(state: &SharedAppState) -> bool {
         s.sessions[active].last_autosave = Instant::now();
     }
     if let Err(err) = &result {
-        eprintln!(
-            "{}",
-            t!(
-                "[NeoUtl] オートセーブ失敗: %{arg0}",
-                arg0 = format!("{}", err)
-            )
-        );
+        report_io_error("[NeoUtl] オートセーブ失敗", err);
     }
     result.is_ok()
 }
@@ -268,13 +272,7 @@ pub fn save_all(state: &SharedAppState) {
     for session in &mut s.sessions {
         let world = session.world.lock().unwrap();
         if let Err(err) = crate::project::save_from_world(&world) {
-            eprintln!(
-                "{}",
-                t!(
-                    "[NeoUtl] プロジェクト保存失敗: %{arg0}",
-                    arg0 = format!("{}", err)
-                )
-            );
+            report_io_error("[NeoUtl] プロジェクト保存失敗", &err);
         } else {
             session.dirty = false;
         }
@@ -288,13 +286,7 @@ pub fn save_active(state: &SharedAppState) -> bool {
         crate::project::save_from_world(&world)
     };
     if let Err(err) = &result {
-        eprintln!(
-            "{}",
-            t!(
-                "[NeoUtl] プロジェクト保存失敗: %{arg0}",
-                arg0 = format!("{}", err)
-            )
-        );
+        report_io_error("[NeoUtl] プロジェクト保存失敗", err);
     }
     if result.is_ok() {
         let mut s = state.lock().unwrap();
@@ -358,13 +350,7 @@ pub fn save_session(state: &SharedAppState, index: usize) -> bool {
         crate::project::save_from_world(&world)
     };
     if let Err(err) = &result {
-        eprintln!(
-            "{}",
-            t!(
-                "[NeoUtl] プロジェクト保存失敗: %{arg0}",
-                arg0 = format!("{}", err)
-            )
-        );
+        report_io_error("[NeoUtl] プロジェクト保存失敗", err);
     }
     if result.is_ok() {
         let mut s = state.lock().unwrap();
