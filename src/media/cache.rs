@@ -114,7 +114,7 @@ fn ext_of(path: &Path) -> Result<String, String> {
     path.extension()
         .and_then(|e| e.to_str())
         .map(str::to_ascii_lowercase)
-        .ok_or_else(|| format!("拡張子なし: {}", path.display()))
+        .ok_or_else(|| t!("拡張子なし: %{arg0}", arg0 = format!("{}", path.display())).to_string())
 }
 
 /// 拡張子に対応する動画デコーダプラグインをloader::decoder_priority順（同値はid昇順）で
@@ -129,20 +129,33 @@ fn open_video_excluding(
     path: &Path,
     excluded_plugins: &HashSet<String>,
 ) -> Result<(Box<dyn VideoSource>, String), String> {
-    eprintln!("[media-cache] open_video開始: {}", path.display());
+    eprintln!(
+        "{}",
+        t!(
+            "[media-cache] open_video開始: %{arg0}",
+            arg0 = format!("{}", path.display())
+        )
+    );
     let ext = ext_of(path)?;
     let candidates = loader::find_all_by_extension(&ext);
     if candidates.is_empty() {
-        return Err(format!("動画デコーダ未登録: {}", path.display()));
+        return Err(t!(
+            "動画デコーダ未登録: %{arg0}",
+            arg0 = format!("{}", path.display())
+        )
+        .to_string());
     }
 
     let mut failures: Vec<String> = Vec::new();
     for plugin in candidates {
         if excluded_plugins.contains(&plugin.id) {
             eprintln!(
-                "[media-cache] open_video候補除外（過去に連続失敗）: {} (plugin={})",
-                path.display(),
-                plugin.id
+                "{}",
+                t!(
+                    "[media-cache] open_video候補除外（過去に連続失敗）: %{arg0} (plugin=%{arg1})",
+                    arg0 = format!("{}", path.display()),
+                    arg1 = format!("{}", plugin.id)
+                )
             );
             continue;
         }
@@ -152,27 +165,35 @@ fn open_video_excluding(
         match open_fn(path) {
             Ok(decoder) => {
                 eprintln!(
-                    "[media-cache] open_video成功: {} (plugin={})",
-                    path.display(),
-                    plugin.id
+                    "{}",
+                    t!(
+                        "[media-cache] open_video成功: %{arg0} (plugin=%{arg1})",
+                        arg0 = format!("{}", path.display()),
+                        arg1 = format!("{}", plugin.id)
+                    )
                 );
                 return Ok((decoder, plugin.id.clone()));
             }
             Err(err) => {
                 eprintln!(
-                    "[media-cache] open_videoフォールバック: {} (plugin={}) 理由={err}",
-                    path.display(),
-                    plugin.id
+                    "{}",
+                    t!(
+                        "[media-cache] open_videoフォールバック: %{arg0} (plugin=%{arg1}) 理由=%{arg2}",
+                        arg0 = format!("{}", path.display()),
+                        arg1 = format!("{}", plugin.id),
+                        arg2 = format!("{err}")
+                    )
                 );
                 failures.push(format!("{}: {err}", plugin.id));
             }
         }
     }
-    Err(format!(
-        "全デコーダで開けませんでした: {} [{}]",
-        path.display(),
-        failures.join(" / ")
-    ))
+    Err(t!(
+        "全デコーダで開けませんでした: %{arg0} [%{arg1}]",
+        arg0 = format!("{}", path.display()),
+        arg1 = format!("{}", failures.join(" / "))
+    )
+    .to_string())
 }
 
 fn open_video(path: &Path) -> Result<(Box<dyn VideoSource>, String), String> {
@@ -181,23 +202,39 @@ fn open_video(path: &Path) -> Result<(Box<dyn VideoSource>, String), String> {
 
 fn open_image(path: &Path) -> Result<Box<dyn ImageSource>, String> {
     let ext = ext_of(path)?;
-    let plugin = loader::find_by_extension(&ext)
-        .ok_or_else(|| format!("画像デコーダ未登録: {}", path.display()))?;
-    let open_fn = plugin
-        .vtable
-        .open_image
-        .ok_or_else(|| format!("プラグイン{}はopen_image未実装", plugin.id))?;
+    let plugin = loader::find_by_extension(&ext).ok_or_else(|| {
+        t!(
+            "画像デコーダ未登録: %{arg0}",
+            arg0 = format!("{}", path.display())
+        )
+        .to_string()
+    })?;
+    let open_fn = plugin.vtable.open_image.ok_or_else(|| {
+        t!(
+            "プラグイン%{arg0}はopen_image未実装",
+            arg0 = format!("{}", plugin.id)
+        )
+        .to_string()
+    })?;
     open_fn(path)
 }
 
 fn decode_audio(path: &Path) -> Result<AudioBuffer, String> {
     let ext = ext_of(path)?;
-    let plugin = loader::find_by_extension(&ext)
-        .ok_or_else(|| format!("音声デコーダ未登録: {}", path.display()))?;
-    let decode_fn = plugin
-        .vtable
-        .decode_audio
-        .ok_or_else(|| format!("プラグイン{}はdecode_audio未実装", plugin.id))?;
+    let plugin = loader::find_by_extension(&ext).ok_or_else(|| {
+        t!(
+            "音声デコーダ未登録: %{arg0}",
+            arg0 = format!("{}", path.display())
+        )
+        .to_string()
+    })?;
+    let decode_fn = plugin.vtable.decode_audio.ok_or_else(|| {
+        t!(
+            "プラグイン%{arg0}はdecode_audio未実装",
+            arg0 = format!("{}", plugin.id)
+        )
+        .to_string()
+    })?;
     decode_fn(path)
 }
 
@@ -229,13 +266,20 @@ impl MediaCache {
                 return existing.clone();
             }
         }
-        eprintln!("[media-cache] 新規load: {}", path.display());
+        eprintln!(
+            "{}",
+            t!(
+                "[media-cache] 新規load: %{arg0}",
+                arg0 = format!("{}", path.display())
+            )
+        );
         let built = match detect_kind(path) {
             None => {
-                let err = format!(
-                    "未対応の拡張子（対応デコーダプラグイン未検出）: {}",
-                    path.display()
-                );
+                let err = t!(
+                    "未対応の拡張子（対応デコーダプラグイン未検出）: %{arg0}",
+                    arg0 = format!("{}", path.display())
+                )
+                .to_string();
                 eprintln!("[media-cache] {err}");
                 PathEntry::Failed(err)
             }
@@ -252,7 +296,14 @@ impl MediaCache {
                     failed_plugins: HashSet::new(),
                 }),
                 Err(err) => {
-                    eprintln!("[media-cache] load失敗: {} 理由={err}", path.display());
+                    eprintln!(
+                        "{}",
+                        t!(
+                            "[media-cache] load失敗: %{arg0} 理由=%{arg1}",
+                            arg0 = format!("{}", path.display()),
+                            arg1 = format!("{err}")
+                        )
+                    );
                     PathEntry::Failed(err)
                 }
             },
@@ -262,14 +313,28 @@ impl MediaCache {
                     texture: None,
                 }),
                 Err(err) => {
-                    eprintln!("[media-cache] load失敗: {} 理由={err}", path.display());
+                    eprintln!(
+                        "{}",
+                        t!(
+                            "[media-cache] load失敗: %{arg0} 理由=%{arg1}",
+                            arg0 = format!("{}", path.display()),
+                            arg1 = format!("{err}")
+                        )
+                    );
                     PathEntry::Failed(err)
                 }
             },
             Some(MediaKind::Audio) => match decode_audio(path) {
                 Ok(buf) => PathEntry::Audio(Arc::new(buf)),
                 Err(err) => {
-                    eprintln!("[media-cache] load失敗: {} 理由={err}", path.display());
+                    eprintln!(
+                        "{}",
+                        t!(
+                            "[media-cache] load失敗: %{arg0} 理由=%{arg1}",
+                            arg0 = format!("{}", path.display()),
+                            arg1 = format!("{err}")
+                        )
+                    );
                     PathEntry::Failed(err)
                 }
             },
@@ -326,11 +391,14 @@ impl MediaCache {
             };
 
             eprintln!(
-                "[media-cache] prefetch failure path={} plugin={} gen={} -> gen+1 旧worker/pending無効化 reason={}",
-                path.display(),
-                video.plugin_id,
-                video.generation,
-                reason
+                "{}",
+                t!(
+                    "[media-cache] prefetch failure path=%{arg0} plugin=%{arg1} gen=%{arg2} -> gen+1 旧worker/pending無効化 reason=%{arg3}",
+                    arg0 = format!("{}", path.display()),
+                    arg1 = format!("{}", video.plugin_id),
+                    arg2 = format!("{}", video.generation),
+                    arg3 = format!("{}", reason)
+                )
             );
 
             video.failed_plugins.insert(video.plugin_id.clone());
@@ -429,9 +497,12 @@ impl MediaCache {
                         d
                     } else {
                         let (d, _) = open_video_excluding(path, &failed_plugins).map_err(|e| {
-                            format!(
-                                "追加インスタンス用デコーダを開けません: {e} / plugin={plugin_id}"
+                            t!(
+                                "追加インスタンス用デコーダを開けません: %{arg0} / plugin=%{arg1}",
+                                arg0 = format!("{e}"),
+                                arg1 = format!("{plugin_id}")
                             )
+                            .to_string()
                         })?;
                         d
                     };
@@ -495,10 +566,11 @@ impl MediaCache {
                 }
                 Ok(image.texture.clone().unwrap())
             }
-            PathEntry::Audio(_) => Err(format!(
-                "音声ファイルに映像フレームは存在しません: {}",
-                path.display()
-            )),
+            PathEntry::Audio(_) => Err(t!(
+                "音声ファイルに映像フレームは存在しません: %{arg0}",
+                arg0 = format!("{}", path.display())
+            )
+            .to_string()),
             PathEntry::Failed(err) => Err(err.clone()),
         }
     }
@@ -506,64 +578,87 @@ impl MediaCache {
     /// ソース映像/画像のピクセル寸法を返す。open時点で確定済みの値のみ参照するため
     /// デコードスレッドの完了状況に依存しない。
     pub fn dimensions(&self, path: &Path) -> Result<(u32, u32), String> {
-        let entry = self
-            .entry_existing(path)
-            .ok_or_else(|| format!("メディアがまだロードされていません: {}", path.display()))?;
+        let entry = self.entry_existing(path).ok_or_else(|| {
+            t!(
+                "メディアがまだロードされていません: %{arg0}",
+                arg0 = format!("{}", path.display())
+            )
+            .to_string()
+        })?;
         let guard = entry.lock().unwrap();
         match &*guard {
             PathEntry::Video(video) => Ok((video.width, video.height)),
             PathEntry::Image(image) => Ok((image.decoder.width(), image.decoder.height())),
-            PathEntry::Audio(_) => Err(format!(
-                "音声ファイルに映像寸法は存在しません: {}",
-                path.display()
-            )),
+            PathEntry::Audio(_) => Err(t!(
+                "音声ファイルに映像寸法は存在しません: %{arg0}",
+                arg0 = format!("{}", path.display())
+            )
+            .to_string()),
             PathEntry::Failed(err) => Err(err.clone()),
         }
     }
 
     /// ソース動画のフレームレート。プロジェクトFPSとの比率換算に用いる（画像/音声は不使用）。
     pub fn source_fps(&self, path: &Path) -> Result<f64, String> {
-        let entry = self
-            .entry_existing(path)
-            .ok_or_else(|| format!("メディアがまだロードされていません: {}", path.display()))?;
+        let entry = self.entry_existing(path).ok_or_else(|| {
+            t!(
+                "メディアがまだロードされていません: %{arg0}",
+                arg0 = format!("{}", path.display())
+            )
+            .to_string()
+        })?;
 
         let guard = entry.lock().unwrap();
 
         match &*guard {
             PathEntry::Video(video) => Ok(video.fps),
             PathEntry::Image(_) => Ok(0.0),
-            PathEntry::Audio(_) => Err(format!(
-                "音声ファイルにFPSは存在しません: {}",
-                path.display()
-            )),
+            PathEntry::Audio(_) => Err(t!(
+                "音声ファイルにFPSは存在しません: %{arg0}",
+                arg0 = format!("{}", path.display())
+            )
+            .to_string()),
             PathEntry::Failed(err) => Err(err.clone()),
         }
     }
 
     #[allow(dead_code)]
     pub fn total_frames(&self, path: &Path) -> Result<i64, String> {
-        let entry = self
-            .entry_existing(path)
-            .ok_or_else(|| format!("メディアがまだロードされていません: {}", path.display()))?;
+        let entry = self.entry_existing(path).ok_or_else(|| {
+            t!(
+                "メディアがまだロードされていません: %{arg0}",
+                arg0 = format!("{}", path.display())
+            )
+            .to_string()
+        })?;
         let guard = entry.lock().unwrap();
         match &*guard {
             PathEntry::Video(video) => Ok(video.total_frames),
-            _ => Err(format!(
-                "映像フレーム総数が存在しません: {}",
-                path.display()
-            )),
+            _ => Err(t!(
+                "映像フレーム総数が存在しません: %{arg0}",
+                arg0 = format!("{}", path.display())
+            )
+            .to_string()),
         }
     }
 
     pub fn audio(&self, path: &Path) -> Result<Arc<AudioBuffer>, String> {
-        let entry = self
-            .entry_existing(path)
-            .ok_or_else(|| format!("メディアがまだロードされていません: {}", path.display()))?;
+        let entry = self.entry_existing(path).ok_or_else(|| {
+            t!(
+                "メディアがまだロードされていません: %{arg0}",
+                arg0 = format!("{}", path.display())
+            )
+            .to_string()
+        })?;
         let guard = entry.lock().unwrap();
         match &*guard {
             PathEntry::Audio(buffer) => Ok(buffer.clone()),
             PathEntry::Failed(err) => Err(err.clone()),
-            _ => Err(format!("音声トラックが見つかりません: {}", path.display())),
+            _ => Err(t!(
+                "音声トラックが見つかりません: %{arg0}",
+                arg0 = format!("{}", path.display())
+            )
+            .to_string()),
         }
     }
 

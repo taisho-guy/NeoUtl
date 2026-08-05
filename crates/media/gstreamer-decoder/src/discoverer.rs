@@ -27,23 +27,27 @@ pub fn discover(path: &Path) -> Result<DiscoveredVideo, String> {
     let discoverer = gst_pbutils::Discoverer::new(DISCOVER_TIMEOUT).map_err(|e| e.to_string())?;
     let info = discoverer
         .discover_uri(&uri)
-        .map_err(|e| format!("Discoverer解析失敗: {e}"))?;
+        .map_err(|e| t!("Discoverer解析失敗: %{arg0}", arg0 = format!("{e}")).to_string())?;
 
     let video_streams = info.video_streams();
     let video_stream = video_streams.first().ok_or_else(|| {
-        format!(
-            "Discoverer: 映像ストリームが検出されませんでした: {}",
-            path.display()
+        t!(
+            "Discoverer: 映像ストリームが検出されませんでした: %{arg0}",
+            arg0 = format!("{}", path.display())
         )
+        .to_string()
     })?;
 
     let width = video_stream.width();
     let height = video_stream.height();
     if width == 0 || height == 0 {
-        return Err(format!(
-            "Discoverer: 映像寸法が不正 (width={width} height={height}): {}",
-            path.display()
-        ));
+        return Err(t!(
+            "Discoverer: 映像寸法が不正 (width=%{arg0} height=%{arg1}): %{arg2}",
+            arg0 = format!("{width}"),
+            arg1 = format!("{height}"),
+            arg2 = format!("{}", path.display())
+        )
+        .to_string());
     }
 
     let framerate = video_stream.framerate();
@@ -53,8 +57,11 @@ pub fn discover(path: &Path) -> Result<DiscoveredVideo, String> {
         fps_num as f64 / fps_denom as f64
     } else {
         eprintln!(
-            "[gstreamer-decoder] Discoverer: フレームレート未申告のためフォールバック値30.0を使用（VFR疑い）: {}",
-            path.display()
+            "{}",
+            t!(
+                "[gstreamer-decoder] Discoverer: フレームレート未申告のためフォールバック値30.0を使用（VFR疑い）: %{arg0}",
+                arg0 = format!("{}", path.display())
+            )
         );
         30.0
     };
@@ -64,9 +71,17 @@ pub fn discover(path: &Path) -> Result<DiscoveredVideo, String> {
     let has_audio = !info.audio_streams().is_empty();
 
     eprintln!(
-        "[gstreamer-decoder] Discoverer解析完了: width={width} height={height} fps={fps} \
-         duration_ns={duration_ns} seekable={seekable} has_audio={has_audio}: {}",
-        path.display()
+        "{}",
+        t!(
+            "[gstreamer-decoder] Discoverer解析完了: width=%{arg0} height=%{arg1} fps=%{arg2} duration_ns=%{arg3} seekable=%{arg4} has_audio=%{arg5}: %{arg6}",
+            arg0 = format!("{width}"),
+            arg1 = format!("{height}"),
+            arg2 = format!("{fps}"),
+            arg3 = format!("{duration_ns}"),
+            arg4 = format!("{seekable}"),
+            arg5 = format!("{has_audio}"),
+            arg6 = format!("{}", path.display())
+        )
     );
 
     Ok(DiscoveredVideo {

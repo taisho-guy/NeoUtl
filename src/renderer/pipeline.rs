@@ -26,7 +26,13 @@ pub fn is_device_lost() -> bool {
 
 /// device.lost()完了時に呼ぶ。以後render()は早期returnし、UI側モーダル表示対象になる。
 fn mark_device_lost(reason: &str) {
-    eprintln!("[NeoUtl] GPUデバイスロスト検知: {reason}");
+    eprintln!(
+        "{}",
+        t!(
+            "[NeoUtl] GPUデバイスロスト検知: %{arg0}",
+            arg0 = format!("{reason}")
+        )
+    );
     DEVICE_LOST.store(true, Ordering::Relaxed);
 }
 
@@ -179,11 +185,14 @@ fn load_font() -> Option<Vec<u8>> {
     ];
     for path in &candidates {
         if let Ok(bytes) = std::fs::read(path) {
-            eprintln!("[NeoUtl] フォント: {path}");
+            eprintln!(
+                "{}",
+                t!("[NeoUtl] フォント: %{arg0}", arg0 = format!("{path}"))
+            );
             return Some(bytes);
         }
     }
-    eprintln!("[NeoUtl] フォント未検出: テキスト描画無効");
+    eprintln!("{}", t!("[NeoUtl] フォント未検出: テキスト描画無効"));
     None
 }
 
@@ -232,7 +241,8 @@ fn try_create_shader_module(
     wgsl: &[u8],
     label: &str,
 ) -> Result<wgpu::ShaderModule, String> {
-    let text = std::str::from_utf8(wgsl).map_err(|err| format!("WGSLソースが非UTF-8: {err}"))?;
+    let text = std::str::from_utf8(wgsl)
+        .map_err(|err| t!("WGSLソースが非UTF-8: %{arg0}", arg0 = format!("{err}")).to_string())?;
     let error_scope = device.push_error_scope(wgpu::ErrorFilter::Validation);
     let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
         label: Some(label),
@@ -309,10 +319,7 @@ fn build_pipelines_from_registry(
             match build_pipeline(device, layout, wgsl, &plugin.name) {
                 Ok(pipeline) => Some((plugin.kind_id, (pipeline, vertex_count))),
                 Err(err) => {
-                    eprintln!(
-                        "[NeoUtl] オブジェクトプラグインのシェーダコンパイル失敗、除外して継続: kind_id={} name={} 理由={err}",
-                        plugin.kind_id, plugin.name
-                    );
+                    eprintln!("{}", t!("[NeoUtl] オブジェクトプラグインのシェーダコンパイル失敗、除外して継続: kind_id=%{arg0} name=%{arg1} 理由=%{arg2}", arg0 = format!("{}", plugin.kind_id), arg1 = format!("{}", plugin.name), arg2 = format!("{err}")));
                     None
                 }
             }
@@ -399,11 +406,7 @@ fn build_effect_pipelines_from_registry(
             match build_effect_pipeline(device, layout, wgsl, source.name()) {
                 Ok(pipeline) => Some((source.id().to_owned(), pipeline)),
                 Err(err) => {
-                    eprintln!(
-                        "[NeoUtl] エフェクトのシェーダコンパイル失敗、除外して継続: id={} name={} 理由={err}",
-                        source.id(),
-                        source.name()
-                    );
+                    eprintln!("{}", t!("[NeoUtl] エフェクトのシェーダコンパイル失敗、除外して継続: id=%{arg0} name=%{arg1} 理由=%{arg2}", arg0 = format!("{}", source.id()), arg1 = format!("{}", source.name()), arg2 = format!("{err}")));
                     None
                 }
             }
@@ -498,10 +501,7 @@ fn build_lua_compute_pipelines(
                 source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(def.wgsl.as_str())),
             });
             if let Some(err) = pollster::block_on(error_scope.pop()) {
-                eprintln!(
-                    "[NeoUtl] system.register_compute シェーダコンパイル失敗、除外: id={} 理由={err}",
-                    def.id
-                );
+                eprintln!("{}", t!("[NeoUtl] system.register_compute シェーダコンパイル失敗、除外: id=%{arg0} 理由=%{arg1}", arg0 = format!("{}", def.id), arg1 = format!("{err}")));
                 return None;
             }
             let pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
@@ -933,7 +933,13 @@ impl RenderEngine {
                 Some(sys)
             }
             Err(err) => {
-                eprintln!("[NeoUtl] LuaSystem初期化失敗、system拡張を無効化: {err}");
+                eprintln!(
+                    "{}",
+                    t!(
+                        "[NeoUtl] LuaSystem初期化失敗、system拡張を無効化: %{arg0}",
+                        arg0 = format!("{err}")
+                    )
+                );
                 None
             }
         };
@@ -1040,14 +1046,14 @@ impl RenderEngine {
         let slice = self.reduce_mean_readback_buffer.slice(..);
         let (tx, rx) = std::sync::mpsc::channel();
         slice.map_async(wgpu::MapMode::Read, move |result| {
-            tx.send(result).expect("map_async結果送信失敗");
+            tx.send(result).expect(&t!("map_async結果送信失敗"));
         });
         self.device
             .poll(wgpu::PollType::wait_indefinitely())
-            .expect("device poll失敗");
+            .expect(&t!("device poll失敗"));
         rx.recv()
-            .expect("map_async結果受信失敗")
-            .expect("バッファmap失敗");
+            .expect(&t!("map_async結果受信失敗"))
+            .expect(&t!("バッファmap失敗"));
 
         let mapped = slice.get_mapped_range();
         let raw: &[u32] = bytemuck::cast_slice(&mapped);
@@ -1093,8 +1099,12 @@ impl RenderEngine {
     ) -> Option<wgpu::Texture> {
         if depth >= config::MAX_SCENE_NESTING_DEPTH {
             eprintln!(
-                "[NeoUtl] シーンネスト深度上限({})到達 target_scene={target_scene}: 非描画",
-                config::MAX_SCENE_NESTING_DEPTH
+                "{}",
+                t!(
+                    "[NeoUtl] シーンネスト深度上限(%{arg0})到達 target_scene=%{arg1}: 非描画",
+                    arg0 = format!("{}", config::MAX_SCENE_NESTING_DEPTH),
+                    arg1 = format!("{target_scene}")
+                )
             );
             return None;
         }
@@ -1127,7 +1137,14 @@ impl RenderEngine {
         self.effect_pong = create_effect_texture(&self.device, width, height);
         self.effect_object_pool.clear();
         self.effect_object_depth = create_depth_texture(&self.device, width, height);
-        eprintln!("[NeoUtl] レンダーターゲット変更: {width}×{height}");
+        eprintln!(
+            "{}",
+            t!(
+                "[NeoUtl] レンダーターゲット変更: %{arg0}×%{arg1}",
+                arg0 = format!("{width}"),
+                arg1 = format!("{height}")
+            )
+        );
     }
 
     /// ActiveObjectのMVP・不透明度・図形パラメータを標準Uniformバッファへ書き込み、
@@ -1567,7 +1584,13 @@ impl RenderEngine {
         if let Some(sys) = &self.lua_system
             && let Err(err) = sys.run_pre_render_hooks()
         {
-            eprintln!("[NeoUtl] system.on_pre_render フック実行失敗: {err}");
+            eprintln!(
+                "{}",
+                t!(
+                    "[NeoUtl] system.on_pre_render フック実行失敗: %{arg0}",
+                    arg0 = format!("{err}")
+                )
+            );
         }
         self.render_at(world, active_objects, project, 0);
         self.run_lua_reduce_hooks();
@@ -1595,8 +1618,12 @@ impl RenderEngine {
     fn apply_object_reload(&mut self, path: &std::path::Path) {
         if let Err(err) = crate::objects::loader::reload_one(path) {
             eprintln!(
-                "[NeoUtl] ホットリロード失敗（objects） {}: {err}",
-                path.display()
+                "{}",
+                t!(
+                    "[NeoUtl] ホットリロード失敗（objects） %{arg0}: %{arg1}",
+                    arg0 = format!("{}", path.display()),
+                    arg1 = format!("{err}")
+                )
             );
             return;
         }
@@ -1607,8 +1634,12 @@ impl RenderEngine {
     fn apply_effect_reload(&mut self, path: &std::path::Path) {
         if let Err(err) = crate::effects::loader::reload_one(path) {
             eprintln!(
-                "[NeoUtl] ホットリロード失敗（effects） {}: {err}",
-                path.display()
+                "{}",
+                t!(
+                    "[NeoUtl] ホットリロード失敗（effects） %{arg0}: %{arg1}",
+                    arg0 = format!("{}", path.display()),
+                    arg1 = format!("{err}")
+                )
             );
             return;
         }
@@ -1626,8 +1657,12 @@ impl RenderEngine {
         };
         if let Err(err) = sys.reload_dir(&self.scripts_dir) {
             eprintln!(
-                "[NeoUtl] ホットリロード失敗（scripts） {}: {err}",
-                self.scripts_dir.display()
+                "{}",
+                t!(
+                    "[NeoUtl] ホットリロード失敗（scripts） %{arg0}: %{arg1}",
+                    arg0 = format!("{}", self.scripts_dir.display()),
+                    arg1 = format!("{err}")
+                )
             );
             return;
         }
@@ -1636,8 +1671,11 @@ impl RenderEngine {
         crate::effects::loader::reload_lua(sys.drain_effects());
         self.rebuild_all_effect_pipelines();
         eprintln!(
-            "[NeoUtl] scriptsホットリロード完了: {}",
-            self.scripts_dir.display()
+            "{}",
+            t!(
+                "[NeoUtl] scriptsホットリロード完了: %{arg0}",
+                arg0 = format!("{}", self.scripts_dir.display())
+            )
         );
     }
 
@@ -1683,18 +1721,25 @@ impl RenderEngine {
                             Ok(texture) => Some(texture),
                             Err(err) => {
                                 eprintln!(
-                                    "[NeoUtl] フレーム取得失敗 kind_id={} path={} frame={}: {err}",
-                                    obj.kind_id,
-                                    src.path.display(),
-                                    obj.source_frame
+                                    "{}",
+                                    t!(
+                                        "[NeoUtl] フレーム取得失敗 kind_id=%{arg0} path=%{arg1} frame=%{arg2}: %{arg3}",
+                                        arg0 = format!("{}", obj.kind_id),
+                                        arg1 = format!("{}", src.path.display()),
+                                        arg2 = format!("{}", obj.source_frame),
+                                        arg3 = format!("{err}")
+                                    )
                                 );
                                 None
                             }
                         }
                     } else {
                         eprintln!(
-                            "[NeoUtl] MediaSource未設定 kind_id={}: 映像/画像オブジェクトにパスが割当てられていません",
-                            obj.kind_id
+                            "{}",
+                            t!(
+                                "[NeoUtl] MediaSource未設定 kind_id=%{arg0}: 映像/画像オブジェクトにパスが割当てられていません",
+                                arg0 = format!("{}", obj.kind_id)
+                            )
                         );
                         None
                     }
@@ -1783,7 +1828,7 @@ impl RenderEngine {
                 let target = self
                     .text_targets
                     .get_mut(&obj.clip_instance)
-                    .expect("直前にinsert済み");
+                    .expect(&t!("直前にinsert済み"));
 
                 let section = crate::media::text::build_section(tc, target.width, target.height);
                 {
@@ -2023,14 +2068,14 @@ mod tests {
         let slice = output_buffer.slice(..);
         let (tx, rx) = std::sync::mpsc::channel();
         slice.map_async(wgpu::MapMode::Read, move |result| {
-            tx.send(result).expect("map_async結果送信失敗");
+            tx.send(result).expect(&t!("map_async結果送信失敗"));
         });
         device
             .poll(wgpu::PollType::wait_indefinitely())
-            .expect("device poll失敗");
+            .expect(&t!("device poll失敗"));
         rx.recv()
-            .expect("map_async結果受信失敗")
-            .expect("バッファmap失敗");
+            .expect(&t!("map_async結果受信失敗"))
+            .expect(&t!("バッファmap失敗"));
 
         let padded = slice.get_mapped_range();
         let mut dense = Vec::with_capacity((unpadded_bytes_per_row * height) as usize);
@@ -2047,7 +2092,7 @@ mod tests {
     #[test]
     fn render_engine_new_succeeds() {
         let Some((device, queue)) = headless_device() else {
-            eprintln!("[test] GPUアダプタ非検出、テストskip");
+            eprintln!("{}", t!("[test] GPUアダプタ非検出、テストskip"));
             return;
         };
         let engine = RenderEngine::new(device, queue, 64, 64);
@@ -2058,7 +2103,7 @@ mod tests {
     #[test]
     fn render_empty_scene_clears_target() {
         let Some((device, queue)) = headless_device() else {
-            eprintln!("[test] GPUアダプタ非検出、テストskip");
+            eprintln!("{}", t!("[test] GPUアダプタ非検出、テストskip"));
             return;
         };
         let mut engine = RenderEngine::new(device, queue, 32, 32);
@@ -2104,7 +2149,7 @@ mod tests {
     #[test]
     fn effect_chain_does_not_leak_to_adjacent_object() {
         let Some((device, queue)) = headless_device() else {
-            eprintln!("[test] GPUアダプタ非検出、テストskip");
+            eprintln!("{}", t!("[test] GPUアダプタ非検出、テストskip"));
             return;
         };
         let mut engine = RenderEngine::new(device, queue, 32, 32);
@@ -2133,7 +2178,7 @@ mod tests {
     #[test]
     fn distinct_effect_chains_render_independently() {
         let Some((device, queue)) = headless_device() else {
-            eprintln!("[test] GPUアダプタ非検出、テストskip");
+            eprintln!("{}", t!("[test] GPUアダプタ非検出、テストskip"));
             return;
         };
         let mut engine = RenderEngine::new(device, queue, 32, 32);
@@ -2156,7 +2201,7 @@ mod tests {
     #[test]
     fn resize_render_target_updates_dimensions_and_survives_render() {
         let Some((device, queue)) = headless_device() else {
-            eprintln!("[test] GPUアダプタ非検出、テストskip");
+            eprintln!("{}", t!("[test] GPUアダプタ非検出、テストskip"));
             return;
         };
         let mut engine = RenderEngine::new(device, queue, 64, 64);

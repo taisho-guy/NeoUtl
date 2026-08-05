@@ -12,7 +12,7 @@ static GST_INIT: Once = Once::new();
 
 fn ensure_gst_init() {
     GST_INIT.call_once(|| {
-        gst::init().expect("gstreamer初期化失敗");
+        gst::init().expect(&t!("gstreamer初期化失敗"));
         log_hardware_encoder_availability();
     });
 }
@@ -50,11 +50,19 @@ fn log_hardware_encoder_availability() {
         .collect();
     if found.is_empty() {
         eprintln!(
-            "[gstreamer-encoder] ハードウェアH.264/HEVCエンコーダ要素が未登録です。\
-             ソフトウェアエンコーダ(x264enc/x265enc)へ縮退します。"
+            "{}",
+            t!(
+                "[gstreamer-encoder] ハードウェアH.264/HEVCエンコーダ要素が未登録です。ソフトウェアエンコーダ(x264enc/x265enc)へ縮退します。"
+            )
         );
     } else {
-        eprintln!("[gstreamer-encoder] ハードウェアエンコーダ検出: {found:?}");
+        eprintln!(
+            "{}",
+            t!(
+                "[gstreamer-encoder] ハードウェアエンコーダ検出: %{arg0}",
+                arg0 = format!("{found:?}")
+            )
+        );
     }
 }
 
@@ -196,10 +204,12 @@ pub fn export(
     ensure_gst_init();
 
     if source.fps_num <= 0 || source.fps_denom <= 0 {
-        return Err(format!(
-            "不正なフレームレート: {}/{}",
-            source.fps_num, source.fps_denom
-        ));
+        return Err(t!(
+            "不正なフレームレート: %{arg0}/%{arg1}",
+            arg0 = format!("{}", source.fps_num),
+            arg1 = format!("{}", source.fps_denom)
+        )
+        .to_string());
     }
     if audio.is_some() != preset.audio_caps().is_some() {
         return Err("presetの音声有無とaudio引数の有無が不一致".to_owned());
@@ -227,15 +237,15 @@ pub fn export(
 
     let videoconvert = gst::ElementFactory::make("videoconvert")
         .build()
-        .map_err(|e| format!("videoconvert生成失敗: {e}"))?;
+        .map_err(|e| t!("videoconvert生成失敗: %{arg0}", arg0 = format!("{e}")).to_string())?;
     let encodebin = gst::ElementFactory::make("encodebin2")
         .property("profile", &profile)
         .build()
-        .map_err(|e| format!("encodebin2生成失敗: {e}"))?;
+        .map_err(|e| t!("encodebin2生成失敗: %{arg0}", arg0 = format!("{e}")).to_string())?;
     let filesink = gst::ElementFactory::make("filesink")
         .property("location", output_path.to_string_lossy().as_ref())
         .build()
-        .map_err(|e| format!("filesink生成失敗: {e}"))?;
+        .map_err(|e| t!("filesink生成失敗: %{arg0}", arg0 = format!("{e}")).to_string())?;
 
     macro_rules! fail {
         ($err:expr) => {{
@@ -254,10 +264,22 @@ pub fn export(
         .map_err(|e| e.to_string())?;
 
     if let Err(e) = gst::Element::link(appsrc.upcast_ref::<gst::Element>(), &videoconvert) {
-        fail!(format!("appsrc -> videoconvertリンク失敗: {e}"));
+        fail!(
+            t!(
+                "appsrc -> videoconvertリンク失敗: %{arg0}",
+                arg0 = format!("{e}")
+            )
+            .to_string()
+        );
     }
     if let Err(e) = gst::Element::link(&encodebin, &filesink) {
-        fail!(format!("encodebin2 -> filesinkリンク失敗: {e}"));
+        fail!(
+            t!(
+                "encodebin2 -> filesinkリンク失敗: %{arg0}",
+                arg0 = format!("{e}")
+            )
+            .to_string()
+        );
     }
 
     let Some(video_sink_pad) = encodebin.request_pad_simple("video_%u") else {
@@ -267,7 +289,13 @@ pub fn export(
         fail!("videoconvert srcパッド未取得".to_owned());
     };
     if let Err(e) = convert_src_pad.link(&video_sink_pad) {
-        fail!(format!("videoconvert -> encodebin2リンク失敗: {e:?}"));
+        fail!(
+            t!(
+                "videoconvert -> encodebin2リンク失敗: %{arg0}",
+                arg0 = format!("{e:?}")
+            )
+            .to_string()
+        );
     }
 
     let audio_appsrc = if let Some(audio) = &audio {
@@ -284,10 +312,10 @@ pub fn export(
             .build();
         let audioconvert = gst::ElementFactory::make("audioconvert")
             .build()
-            .map_err(|e| format!("audioconvert生成失敗: {e}"))?;
+            .map_err(|e| t!("audioconvert生成失敗: %{arg0}", arg0 = format!("{e}")).to_string())?;
         let audioresample = gst::ElementFactory::make("audioresample")
             .build()
-            .map_err(|e| format!("audioresample生成失敗: {e}"))?;
+            .map_err(|e| t!("audioresample生成失敗: %{arg0}", arg0 = format!("{e}")).to_string())?;
         pipeline
             .add_many([
                 audio_appsrc.upcast_ref::<gst::Element>(),
@@ -300,7 +328,7 @@ pub fn export(
             &audioconvert,
             &audioresample,
         ]) {
-            fail!(format!("音声チェーンリンク失敗: {e}"));
+            fail!(t!("音声チェーンリンク失敗: %{arg0}", arg0 = format!("{e}")).to_string());
         }
         let Some(audio_sink_pad) = encodebin.request_pad_simple("audio_%u") else {
             fail!("encodebin2: 音声シンクパッド要求失敗".to_owned());
@@ -309,7 +337,13 @@ pub fn export(
             fail!("audioresample srcパッド未取得".to_owned());
         };
         if let Err(e) = resample_src_pad.link(&audio_sink_pad) {
-            fail!(format!("audioresample -> encodebin2リンク失敗: {e:?}"));
+            fail!(
+                t!(
+                    "audioresample -> encodebin2リンク失敗: %{arg0}",
+                    arg0 = format!("{e:?}")
+                )
+                .to_string()
+            );
         }
         Some(audio_appsrc)
     } else {
@@ -317,7 +351,7 @@ pub fn export(
     };
 
     if let Err(e) = pipeline.set_state(gst::State::Playing) {
-        fail!(format!("PLAYING遷移失敗: {e}"));
+        fail!(t!("PLAYING遷移失敗: %{arg0}", arg0 = format!("{e}")).to_string());
     }
 
     let frame_duration_ns = 1_000_000_000u64 * source.fps_denom as u64 / source.fps_num as u64;
@@ -329,14 +363,26 @@ pub fn export(
     for frame_index in 0..source.total_frames {
         let bytes = match produce_frame(frame_index) {
             Ok(b) => b,
-            Err(e) => fail!(format!("フレーム{frame_index}生成失敗: {e}")),
+            Err(e) => fail!(
+                t!(
+                    "フレーム%{arg0}生成失敗: %{arg1}",
+                    arg0 = format!("{frame_index}"),
+                    arg1 = format!("{e}")
+                )
+                .to_string()
+            ),
         };
         let expected_len = (source.width * source.height * 4) as usize;
         if bytes.len() != expected_len {
-            fail!(format!(
-                "フレーム{frame_index}のバイト長不一致: 期待={expected_len} 実際={}",
-                bytes.len()
-            ));
+            fail!(
+                t!(
+                    "フレーム%{arg0}のバイト長不一致: 期待=%{arg1} 実際=%{arg2}",
+                    arg0 = format!("{frame_index}"),
+                    arg1 = format!("{expected_len}"),
+                    arg2 = format!("{}", bytes.len())
+                )
+                .to_string()
+            );
         }
 
         let pts = gst::ClockTime::from_nseconds(frame_index as u64 * frame_duration_ns);
@@ -349,7 +395,14 @@ pub fn export(
             buffer_mut.set_duration(gst::ClockTime::from_nseconds(frame_duration_ns));
         }
         if let Err(e) = appsrc.push_buffer(buffer) {
-            fail!(format!("appsrc push失敗(frame={frame_index}): {e:?}"));
+            fail!(
+                t!(
+                    "appsrc push失敗(frame=%{arg0}): %{arg1}",
+                    arg0 = format!("{frame_index}"),
+                    arg1 = format!("{e:?}")
+                )
+                .to_string()
+            );
         }
 
         if let (Some(audio_appsrc), Some(produce_audio)) =
@@ -365,17 +418,24 @@ pub fn export(
                 buffer_mut.set_duration(gst::ClockTime::from_nseconds(frame_duration_ns));
             }
             if let Err(e) = audio_appsrc.push_buffer(audio_buffer) {
-                fail!(format!("音声appsrc push失敗(frame={frame_index}): {e:?}"));
+                fail!(
+                    t!(
+                        "音声appsrc push失敗(frame=%{arg0}): %{arg1}",
+                        arg0 = format!("{frame_index}"),
+                        arg1 = format!("{e:?}")
+                    )
+                    .to_string()
+                );
             }
         }
     }
 
     if let Err(e) = appsrc.end_of_stream() {
-        fail!(format!("EOS送出失敗: {e:?}"));
+        fail!(t!("EOS送出失敗: %{arg0}", arg0 = format!("{e:?}")).to_string());
     }
     if let Some(audio_appsrc) = &audio_appsrc {
         if let Err(e) = audio_appsrc.end_of_stream() {
-            fail!(format!("音声EOS送出失敗: {e:?}"));
+            fail!(t!("音声EOS送出失敗: %{arg0}", arg0 = format!("{e:?}")).to_string());
         }
     }
 
@@ -390,12 +450,16 @@ pub fn export(
                 let src = err
                     .src()
                     .map(|s| s.path_string().to_string())
-                    .unwrap_or_else(|| "不明".to_owned());
-                encode_error = Some(format!(
-                    "エンコード中にエラー: 要素={src} 理由={} 詳細={:?}",
-                    err.error(),
-                    err.debug()
-                ));
+                    .unwrap_or_else(|| t!("不明").to_string());
+                encode_error = Some(
+                    t!(
+                        "エンコード中にエラー: 要素=%{arg0} 理由=%{arg1} 詳細=%{arg2}",
+                        arg0 = format!("{src}"),
+                        arg1 = format!("{}", err.error()),
+                        arg2 = format!("{:?}", err.debug())
+                    )
+                    .to_string(),
+                );
                 break;
             }
             _ => {}
@@ -466,14 +530,14 @@ pub fn mux_encoded(
         neoutl_media_api::VideoCodec::H265 => "h265parse",
     })
     .build()
-    .map_err(|e| format!("パーサ生成失敗: {e}"))?;
+    .map_err(|e| t!("パーサ生成失敗: %{arg0}", arg0 = format!("{e}")).to_string())?;
     let muxer = gst::ElementFactory::make(container.muxer_element())
         .build()
-        .map_err(|e| format!("mux要素生成失敗: {e}"))?;
+        .map_err(|e| t!("mux要素生成失敗: %{arg0}", arg0 = format!("{e}")).to_string())?;
     let filesink = gst::ElementFactory::make("filesink")
         .property("location", output_path.to_string_lossy().as_ref())
         .build()
-        .map_err(|e| format!("filesink生成失敗: {e}"))?;
+        .map_err(|e| t!("filesink生成失敗: %{arg0}", arg0 = format!("{e}")).to_string())?;
 
     macro_rules! fail {
         ($err:expr) => {{
@@ -492,10 +556,16 @@ pub fn mux_encoded(
         .map_err(|e| e.to_string())?;
     if let Err(e) = gst::Element::link_many([appsrc.upcast_ref::<gst::Element>(), &parser, &muxer])
     {
-        fail!(format!("appsrc -> parser -> muxリンク失敗: {e}"));
+        fail!(
+            t!(
+                "appsrc -> parser -> muxリンク失敗: %{arg0}",
+                arg0 = format!("{e}")
+            )
+            .to_string()
+        );
     }
     if let Err(e) = gst::Element::link(&muxer, &filesink) {
-        fail!(format!("mux -> filesinkリンク失敗: {e}"));
+        fail!(t!("mux -> filesinkリンク失敗: %{arg0}", arg0 = format!("{e}")).to_string());
     }
 
     let audio_appsrc = if let Some(audio) = &audio {
@@ -512,16 +582,16 @@ pub fn mux_encoded(
             .build();
         let audioconvert = gst::ElementFactory::make("audioconvert")
             .build()
-            .map_err(|e| format!("audioconvert生成失敗: {e}"))?;
+            .map_err(|e| t!("audioconvert生成失敗: %{arg0}", arg0 = format!("{e}")).to_string())?;
         let audioresample = gst::ElementFactory::make("audioresample")
             .build()
-            .map_err(|e| format!("audioresample生成失敗: {e}"))?;
+            .map_err(|e| t!("audioresample生成失敗: %{arg0}", arg0 = format!("{e}")).to_string())?;
         let opusenc = gst::ElementFactory::make(match container {
             MuxContainer::Mp4 => "avenc_aac",
             MuxContainer::Mkv => "opusenc",
         })
         .build()
-        .map_err(|e| format!("音声エンコーダ生成失敗: {e}"))?;
+        .map_err(|e| t!("音声エンコーダ生成失敗: %{arg0}", arg0 = format!("{e}")).to_string())?;
         pipeline
             .add_many([
                 audio_appsrc.upcast_ref::<gst::Element>(),
@@ -536,10 +606,16 @@ pub fn mux_encoded(
             &audioresample,
             &opusenc,
         ]) {
-            fail!(format!("音声チェーンリンク失敗: {e}"));
+            fail!(t!("音声チェーンリンク失敗: %{arg0}", arg0 = format!("{e}")).to_string());
         }
         if let Err(e) = gst::Element::link(&opusenc, &muxer) {
-            fail!(format!("音声エンコーダ -> muxリンク失敗: {e}"));
+            fail!(
+                t!(
+                    "音声エンコーダ -> muxリンク失敗: %{arg0}",
+                    arg0 = format!("{e}")
+                )
+                .to_string()
+            );
         }
         Some(audio_appsrc)
     } else {
@@ -547,7 +623,7 @@ pub fn mux_encoded(
     };
 
     if let Err(e) = pipeline.set_state(gst::State::Playing) {
-        fail!(format!("PLAYING遷移失敗: {e}"));
+        fail!(t!("PLAYING遷移失敗: %{arg0}", arg0 = format!("{e}")).to_string());
     }
 
     let frame_duration_ns = 1_000_000_000u64 * fps_denom as u64 / fps_num.max(1) as u64;
@@ -561,7 +637,13 @@ pub fn mux_encoded(
         let chunk = match produce_video() {
             Ok(Some(c)) => c,
             Ok(None) => break,
-            Err(e) => fail!(format!("エンコード済みチャンク取得失敗: {e}")),
+            Err(e) => fail!(
+                t!(
+                    "エンコード済みチャンク取得失敗: %{arg0}",
+                    arg0 = format!("{e}")
+                )
+                .to_string()
+            ),
         };
         let (data, pts_i64, _keyframe) = chunk;
         let pts = gst::ClockTime::from_nseconds(pts_i64.max(0) as u64);
@@ -574,7 +656,14 @@ pub fn mux_encoded(
             buffer_mut.set_duration(gst::ClockTime::from_nseconds(frame_duration_ns));
         }
         if let Err(e) = appsrc.push_buffer(buffer) {
-            fail!(format!("appsrc push失敗(frame={frame_index}): {e:?}"));
+            fail!(
+                t!(
+                    "appsrc push失敗(frame=%{arg0}): %{arg1}",
+                    arg0 = format!("{frame_index}"),
+                    arg1 = format!("{e:?}")
+                )
+                .to_string()
+            );
         }
         if let (Some(audio_appsrc), Some(produce_audio)) =
             (audio_appsrc.as_ref(), produce_audio.as_mut())
@@ -589,7 +678,14 @@ pub fn mux_encoded(
                 buffer_mut.set_duration(gst::ClockTime::from_nseconds(frame_duration_ns));
             }
             if let Err(e) = audio_appsrc.push_buffer(audio_buffer) {
-                fail!(format!("音声appsrc push失敗(frame={frame_index}): {e:?}"));
+                fail!(
+                    t!(
+                        "音声appsrc push失敗(frame=%{arg0}): %{arg1}",
+                        arg0 = format!("{frame_index}"),
+                        arg1 = format!("{e:?}")
+                    )
+                    .to_string()
+                );
             }
         }
         frame_index += 1;
@@ -597,11 +693,11 @@ pub fn mux_encoded(
     }
 
     if let Err(e) = appsrc.end_of_stream() {
-        fail!(format!("EOS送出失敗: {e:?}"));
+        fail!(t!("EOS送出失敗: %{arg0}", arg0 = format!("{e:?}")).to_string());
     }
     if let Some(audio_appsrc) = &audio_appsrc {
         if let Err(e) = audio_appsrc.end_of_stream() {
-            fail!(format!("音声EOS送出失敗: {e:?}"));
+            fail!(t!("音声EOS送出失敗: %{arg0}", arg0 = format!("{e:?}")).to_string());
         }
     }
 
@@ -616,12 +712,16 @@ pub fn mux_encoded(
                 let src = err
                     .src()
                     .map(|s| s.path_string().to_string())
-                    .unwrap_or_else(|| "不明".to_owned());
-                encode_error = Some(format!(
-                    "mux中にエラー: 要素={src} 理由={} 詳細={:?}",
-                    err.error(),
-                    err.debug()
-                ));
+                    .unwrap_or_else(|| t!("不明").to_string());
+                encode_error = Some(
+                    t!(
+                        "mux中にエラー: 要素=%{arg0} 理由=%{arg1} 詳細=%{arg2}",
+                        arg0 = format!("{src}"),
+                        arg1 = format!("{}", err.error()),
+                        arg2 = format!("{:?}", err.debug())
+                    )
+                    .to_string(),
+                );
                 break;
             }
             _ => {}
