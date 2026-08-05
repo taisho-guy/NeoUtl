@@ -73,10 +73,6 @@ impl PreviewPanel {
         self.session_generation
     }
 
-    pub fn current_frame(&self) -> i32 {
-        self.current_frame
-    }
-
     /// タイムライン側での構造編集（追加・削除・分割・複製・移動・貼り付け等）確定後、
     /// 総フレーム数のみをworldから再取得する。オブジェクト一覧自体はTimelineWindowが
     /// 毎フレームworldから直接読み出すため、ここでは同期しない。

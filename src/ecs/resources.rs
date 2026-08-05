@@ -79,14 +79,6 @@ impl LayerStates {
         Self(vec![(true, false); count])
     }
 
-    pub fn visible(&self, layer: usize) -> bool {
-        self.0.get(layer).map_or(true, |s| s.0)
-    }
-
-    pub fn locked(&self, layer: usize) -> bool {
-        self.0.get(layer).map_or(false, |s| s.1)
-    }
-
     pub fn set_visible(&mut self, layer: usize, v: bool) {
         if let Some(s) = self.0.get_mut(layer) {
             s.0 = v;
@@ -100,11 +92,9 @@ impl LayerStates {
     }
 }
 
-/// グリッドモード（AviQtl::UI::SceneData::gridMode相当）。
-/// 0: Auto（秒/フレーム）, 1: BPM（音楽）, 2: Frame（フレーム数固定）
+/// グリッドモード（AviQtl::UI::SceneData::gridMode相当）。BPM/Frameモードは未実装のため
+/// 現状はAutoのみを保持する。
 pub const GRID_MODE_AUTO: i32 = 0;
-pub const GRID_MODE_BPM: i32 = 1;
-pub const GRID_MODE_FRAME: i32 = 2;
 
 /// シーン単体の設定（AviQtl::UI::SceneData 相当。グリッド・スナップはシーン単位で保持する）。
 /// `Serialize`/`Deserialize`をプロジェクトファイルへの直接永続化に用いる。

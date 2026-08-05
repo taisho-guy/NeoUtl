@@ -246,11 +246,6 @@ impl MediaCache {
         }
     }
 
-    /// デコード完了時のUI再描画要求を登録する。preview.rsのセットアップ時に一度だけ呼ぶ。
-    pub fn set_redraw_callback(&self, callback: Arc<dyn Fn() + Send + Sync>) {
-        *self.redraw.lock().unwrap() = Some(callback);
-    }
-
     fn redraw_handle(&self) -> Arc<dyn Fn() + Send + Sync> {
         self.redraw
             .lock()
@@ -360,10 +355,6 @@ impl MediaCache {
     /// 候補が尽きた場合はエントリをFailedへ遷移させ、以後の再試行を止める。
     /// worker自体は既にon_fail呼び出し直後に終了しているため、ここでは
     /// pending_decoder/workerを新しいものへ差し替えるのみでよい。
-    pub fn handle_prefetch_failure(&self, path: &Path) {
-        self.handle_prefetch_failure_with_reason(path, "prefetch連続失敗".to_string());
-    }
-
     pub fn schedule_prefetch_failure_with_reason(path: PathBuf, reason: String) {
         eprintln!(
             "{}",
@@ -667,10 +658,6 @@ impl MediaCache {
     pub fn load_audio(&self, path: &Path) -> Result<Arc<AudioBuffer>, String> {
         let _ = self.entry(path);
         self.audio(path)
-    }
-
-    pub fn evict(&self, path: &Path) {
-        self.entries.lock().unwrap().remove(path);
     }
 }
 

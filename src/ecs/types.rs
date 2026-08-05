@@ -24,17 +24,7 @@ pub struct Keyframe {
     pub edit_seq: u64,
 }
 
-impl Keyframe {
-    pub fn new(frame: i32, value: f32, engine_id: String, engine_payload: Vec<u8>) -> Self {
-        Self {
-            frame,
-            value,
-            engine_id,
-            engine_payload,
-            edit_seq: next_edit_seq(),
-        }
-    }
-}
+impl Keyframe {}
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub enum Value {
@@ -122,21 +112,6 @@ impl EffectParam {
 
     pub fn remove_keyframe(&mut self, frame: i32) {
         self.keyframes.retain(|k| k.frame != frame);
-    }
-
-    pub fn move_keyframe(&mut self, old_frame: i32, new_frame: i32) -> bool {
-        if old_frame == new_frame {
-            return true;
-        }
-        if self.keyframes.iter().any(|k| k.frame == new_frame) {
-            return false;
-        }
-        let Some(k) = self.keyframes.iter_mut().find(|k| k.frame == old_frame) else {
-            return false;
-        };
-        k.frame = new_frame;
-        self.keyframes.sort_by_key(|k| k.frame);
-        true
     }
 
     pub fn split_at(&mut self, split_frame: i32) -> EffectParam {

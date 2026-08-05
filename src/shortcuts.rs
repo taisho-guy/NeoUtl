@@ -505,17 +505,3 @@ pub fn resolve_active(
         .unwrap()
         .resolve(scope, ctrl, shift, alt, key)
 }
-
-/// 既定配列のみを用いた解決。カスタム上書きを未使用の呼び出し元向けに維持する。
-pub fn resolve(scope: Scope, ctrl: bool, shift: bool, alt: bool, key: &str) -> Option<CommandId> {
-    DEFAULT_KEYMAP
-        .iter()
-        .find(|(_, s, b)| {
-            (*s == scope || *s == Scope::Global)
-                && b.ctrl == ctrl
-                && b.shift == shift
-                && b.alt == alt
-                && b.key.eq_ignore_ascii_case(key)
-        })
-        .map(|(cmd, _, _)| *cmd)
-}

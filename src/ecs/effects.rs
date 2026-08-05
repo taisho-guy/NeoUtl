@@ -52,19 +52,6 @@ impl EffectStack {
         }
     }
 
-    /// 指定位置へEffectInstanceを挿入する（貼り付け用）。indexが末尾超過の場合は末尾へ追加する。
-    pub fn insert(&mut self, index: usize, instance: EffectInstance) {
-        let index = index.min(self.0.len());
-        self.0.insert(index, instance);
-    }
-
-    /// 指定位置のEffectInstanceを直後へ複製する。
-    pub fn duplicate(&mut self, index: usize) {
-        if let Some(item) = self.0.get(index).cloned() {
-            self.0.insert(index + 1, item);
-        }
-    }
-
     pub fn set_enabled(&mut self, index: usize, enabled: bool) {
         if let Some(e) = self.0.get_mut(index) {
             e.enabled = enabled;
@@ -133,21 +120,6 @@ impl EffectStack {
             && let Some(p) = e.params.get_mut(key)
         {
             p.remove_keyframe(frame);
-        }
-    }
-
-    /// 指定エフェクト・パラメータの中間点をold_frameからnew_frameへ移動する。
-    /// 対象が存在しない、または移動先に既存点がある場合はfalseを返す。
-    pub fn move_keyframe(
-        &mut self,
-        index: usize,
-        key: &str,
-        old_frame: i32,
-        new_frame: i32,
-    ) -> bool {
-        match self.0.get_mut(index).and_then(|e| e.params.get_mut(key)) {
-            Some(p) => p.move_keyframe(old_frame, new_frame),
-            None => false,
         }
     }
 

@@ -15,9 +15,6 @@ pub struct Peak {
 pub struct WaveformAsset {
     pub path: PathBuf,
     pub levels: Vec<Arc<[Peak]>>,
-    pub sample_rate: u32,
-    pub channels: u16,
-    pub frames: usize,
 }
 
 static CACHE: OnceLock<RwLock<HashMap<PathBuf, Arc<WaveformAsset>>>> = OnceLock::new();
@@ -50,9 +47,6 @@ pub fn build(path: &Path, audio: &AudioBuffer) -> Arc<WaveformAsset> {
     Arc::new(WaveformAsset {
         path: path.to_path_buf(),
         levels,
-        sample_rate: audio.sample_rate,
-        channels: audio.channels,
-        frames: audio.frame_count(),
     })
 }
 

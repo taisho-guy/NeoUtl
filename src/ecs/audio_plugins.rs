@@ -29,20 +29,6 @@ pub struct PluginInstanceRef {
     pub param_info: Vec<PluginParamInfo>,
 }
 
-impl PluginInstanceRef {
-    pub fn new(format: PluginFormat, path: PathBuf, plugin_id: String) -> Self {
-        Self {
-            instance_uid: next_plugin_instance_uid(),
-            format,
-            path,
-            plugin_id,
-            bypass: false,
-            params: HashMap::new(),
-            param_info: Vec::new(),
-        }
-    }
-}
-
 /// audioオブジェクトに付随するプラグイン（VST3/CLAP）の順序付きチェーン。
 /// EffectStackの音声版に相当し、永続化・UI操作の骨格を同一に保つ。
 #[derive(Clone, Debug, Default, Component, Serialize, Deserialize)]
@@ -66,35 +52,6 @@ impl PluginChain {
                     );
                 }
             }
-        }
-    }
-
-    pub fn push(&mut self, format: PluginFormat, path: PathBuf, plugin_id: String) {
-        self.0.push(PluginInstanceRef::new(format, path, plugin_id));
-    }
-
-    pub fn remove(&mut self, index: usize) {
-        if index < self.0.len() {
-            self.0.remove(index);
-        }
-    }
-
-    pub fn reorder(&mut self, from: usize, to: usize) {
-        if from < self.0.len() && to < self.0.len() {
-            let item = self.0.remove(from);
-            self.0.insert(to, item);
-        }
-    }
-
-    pub fn set_bypass(&mut self, index: usize, bypass: bool) {
-        if let Some(entry) = self.0.get_mut(index) {
-            entry.bypass = bypass;
-        }
-    }
-
-    pub fn set_param(&mut self, index: usize, param_id: u32, value: f64) {
-        if let Some(entry) = self.0.get_mut(index) {
-            entry.params.insert(param_id, value);
         }
     }
 }

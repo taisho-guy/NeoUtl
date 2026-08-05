@@ -105,13 +105,6 @@ pub fn by_kind_id(kind_id: u32) -> Option<Arc<ObjectPlugin>> {
     registry().iter().find(|p| p.kind_id == kind_id).cloned()
 }
 
-pub fn by_stable_id(stable_id: &str) -> Option<Arc<ObjectPlugin>> {
-    registry()
-        .iter()
-        .find(|p| p.stable_id == stable_id)
-        .cloned()
-}
-
 /// 単一プラグインファイルの再ロード。既存stable_id一致エントリのみ差し替える。
 /// 未一致（新規プラグイン）は対象外としエラーを返す（kind_id空間の実行時拡張は別課題）。
 /// シンボル欠落・メタ不整合時は現行registryを変更せずエラーを返す。

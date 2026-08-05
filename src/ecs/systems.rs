@@ -16,7 +16,6 @@ use std::collections::HashMap;
 
 pub struct ActiveObject {
     pub kind_id: u32,
-    pub start_frame: i32,
     pub source_frame: i64,
     /// ObjectId由来のクリップ識別子。MediaCache::frame_atのinstance_keyとして渡し、
     /// 同一ソースファイルを複数クリップが同時参照する際のデコードセッション分離に用いる。
@@ -24,10 +23,8 @@ pub struct ActiveObject {
     pub text_content: Option<TextContent>,
     pub shape_params: Option<ShapeParams>,
     pub media_source: Option<MediaSource>,
-    pub global_matrix: [f32; 16],
     pub mvp: [f32; 16],
     pub opacity: f32,
-    pub audio: AudioParams,
     pub effects: Vec<(String, HashMap<String, Value>)>,
     /// SCENE_STABLE_IDオブジェクトのみSome((target_scene, local_frame))。
     /// local_frameはtarget_scene側の評価フレーム（0.4.0時点は
@@ -113,7 +110,7 @@ pub fn get_active_objects_system_at(
             object_ids,
             scene_objects,
         ): SelectorGroupViews,
-         (transforms, keyframe_tracks, audio_params, effect_stacks): PayloadGroupViews| {
+         (transforms, keyframe_tracks, _audio_params, effect_stacks): PayloadGroupViews| {
             let project_width = project.width.max(1) as f32;
             let project_height = project.height.max(1) as f32;
             let mut active = Vec::new();
@@ -138,11 +135,6 @@ pub fn get_active_objects_system_at(
                 let mut shape = shape_params.get(id).ok().copied();
                 if let (Some(sp), Some(kt)) = (shape.as_mut(), keyframes) {
                     kt.apply(sp, current);
-                }
-
-                let mut audio = audio_params.get(id).copied().unwrap_or_default();
-                if let Some(kt) = keyframes {
-                    kt.apply(&mut audio, current);
                 }
 
                 let media_source = media_sources.get(id).ok().cloned();
@@ -195,16 +187,13 @@ pub fn get_active_objects_system_at(
 
                 active.push(ActiveObject {
                     kind_id: kind.0,
-                    start_frame: range.start_frame,
                     clip_instance: object_ids.get(id).map_or(0, |o| o.0 as u64),
                     source_frame,
                     text_content,
                     shape_params: shape,
                     media_source,
-                    global_matrix: matrix.0,
                     mvp,
                     opacity,
-                    audio,
                     effects,
                     nested_scene,
                 });
