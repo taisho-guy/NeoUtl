@@ -135,6 +135,7 @@ pub fn load_all(effects_dir: &Path, scripts_dir: &Path) {
         }
     }
     for lua_source in neoutl_effect_lua::load_dir(scripts_dir) {
+        crate::localization::load_plugin_catalog(&lua_source.script_path);
         if ids.insert(lua_source.id.clone()) {
             sources.push(Arc::new(EffectSource::Lua(lua_source)));
         } else {
@@ -150,7 +151,12 @@ pub fn load_all(effects_dir: &Path, scripts_dir: &Path) {
         };
         eprintln!(
             "{}",
-            t!("[NeoUtl] エフェクト登録: %{arg0} (%{arg1}) [%{arg2}]")
+            t!(
+                "[NeoUtl] エフェクト登録: %{arg0} (%{arg1}) [%{arg2}]",
+                arg0 = format!("{}", s.id()),
+                arg1 = format!("{}", s.name()),
+                arg2 = format!("{}", kind)
+            )
         );
     }
     registry_swap().store(Arc::new(sources));
@@ -305,6 +311,7 @@ pub fn default_effects_lua_dir() -> PathBuf {
 }
 
 fn load_one(path: &Path) -> Result<EffectPlugin, Box<dyn std::error::Error>> {
+    crate::localization::load_plugin_catalog(path);
     let lib = unsafe { Library::new(path) }?;
     let entry: Symbol<EntryFn> = unsafe { lib.get(ENTRY_SYMBOL) }?;
     let vtable: &'static EffectVTable = unsafe { &*entry() };

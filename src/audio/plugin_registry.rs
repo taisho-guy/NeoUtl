@@ -54,7 +54,12 @@ pub fn load_all(plugins_dir: &Path) {
         for entry in &entries {
             eprintln!(
                 "{}",
-                t!("[NeoUtl] audioプラグイン登録: %{arg0} ({:?}, %{arg2})")
+                t!(
+                    "[NeoUtl] audioプラグイン登録: %{arg0} (%{arg1}, %{arg2})",
+                    arg0 = format!("{}", entry.name),
+                    arg1 = format!("{:?}", entry.format),
+                    arg2 = format!("{}", entry.path.display())
+                )
             );
         }
         entries

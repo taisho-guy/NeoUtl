@@ -243,6 +243,9 @@ pub fn get_active_audio_system(
             for (id, (range, scene, media_source)) in
                 (&time_ranges, &scene_ids, &media_sources).iter().with_id()
             {
+                if !matches!(media_source.kind, MediaKind::Audio) {
+                    continue;
+                }
                 if !is_active_at(range, scene, active_scene, frame) {
                     continue;
                 }
