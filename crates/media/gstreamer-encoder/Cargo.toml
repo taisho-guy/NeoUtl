@@ -13,4 +13,4 @@ neoutl-media-api = { path = "../../neoutl-media-api" }
 gstreamer = "0.25"
 gstreamer-app = "0.25"
 gstreamer-pbutils = "0.25"
-bytemuck = { version = "1.25", features = ["derive"] }
+bytemuck = { version = "1", features = ["derive"] }

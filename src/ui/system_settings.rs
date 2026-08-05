@@ -2,19 +2,21 @@ pub mod fields;
 
 use crate::ecs::{EcsWorld, resources::SystemSettingsResource};
 use crate::localization::tr;
+use crate::update::{self, UpdateStatus};
 use egui::{Context, Ui};
 use elegance::{BuiltInTheme, ThemeSwitcher};
 use fields::{choice_field, int_field, toggle_field};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
-const CATEGORIES: [(&str, &str); 6] = [
+const CATEGORIES: [(&str, &str); 7] = [
     ("一般", ""),
     ("外観", ""),
     ("パフォーマンス", ""),
     ("デコード", ""),
     ("タイムライン", ""),
     ("エクスポート", ""),
+    ("アップデート", ""),
 ];
 
 fn settings_path() -> PathBuf {
@@ -77,6 +79,9 @@ pub struct SystemSettingsWindow {
     export_container: i32,
     export_codec: i32,
 
+    check_update_on_startup: bool,
+    update_status: Arc<Mutex<UpdateStatus>>,
+
     save_status: String,
 }
 
@@ -92,6 +97,11 @@ impl SystemSettingsWindow {
         crate::media::runtime::set_worker_threads(s.worker_threads);
         crate::media::runtime::apply_decode_backend_env(s.decode_backend);
         crate::theme::restore(&s.theme_id);
+
+        let update_status = Arc::new(Mutex::new(UpdateStatus::Idle));
+        if s.check_update_on_startup {
+            update::spawn_check(update_status.clone());
+        }
 
         Self {
             open: false,
@@ -110,6 +120,8 @@ impl SystemSettingsWindow {
             magnetic_snap_range: s.magnetic_snap_range,
             export_container: s.export_container,
             export_codec: s.export_codec,
+            check_update_on_startup: s.check_update_on_startup,
+            update_status,
             save_status: String::new(),
         }
     }
@@ -150,6 +162,7 @@ impl SystemSettingsWindow {
         self.magnetic_snap_range = loaded.magnetic_snap_range;
         self.export_container = loaded.export_container;
         self.export_codec = loaded.export_codec;
+        self.check_update_on_startup = loaded.check_update_on_startup;
         self.save_status = t!("再読込完了");
     }
 
@@ -164,7 +177,14 @@ impl SystemSettingsWindow {
                     for (i, (label, icon)) in CATEGORIES.iter().enumerate() {
                         let i = i as i32;
                         let active = i == self.selected_category;
-                        let text = format!("{icon}  {}", tr(label));
+                        let is_update_category = i as usize == CATEGORIES.len() - 1;
+                        let has_update = is_update_category
+                            && matches!(
+                                *self.update_status.lock().unwrap(),
+                                UpdateStatus::Available(_)
+                            );
+                        let mark = if has_update { " ●" } else { "" };
+                        let text = format!("{icon}  {}{mark}", tr(label));
                         if ui.selectable_label(active, text).clicked() {
                             self.selected_category = i;
                         }
@@ -181,7 +201,8 @@ impl SystemSettingsWindow {
                             2 => self.page_performance(ui, world_holder),
                             3 => self.page_decode(ui, world_holder),
                             4 => self.page_timeline_defaults(ui, world_holder),
-                            _ => self.page_export(ui, world_holder),
+                            5 => self.page_export(ui, world_holder),
+                            _ => self.page_update(ui, world_holder),
                         });
                 });
             });
@@ -349,5 +370,69 @@ impl SystemSettingsWindow {
             self.export_codec = export_codec;
             self.persist(world_holder, |s| s.export_codec = export_codec);
         }
+    }
+
+    fn page_update(&mut self, ui: &mut egui::Ui, world_holder: &Arc<Mutex<EcsWorld>>) {
+        let mut check_update_on_startup = self.check_update_on_startup;
+        if toggle_field(
+            ui,
+            "起動時にアップデートを確認",
+            &mut check_update_on_startup,
+        ) {
+            self.check_update_on_startup = check_update_on_startup;
+            self.persist(world_holder, |s| {
+                s.check_update_on_startup = check_update_on_startup;
+            });
+        }
+
+        ui.label("");
+        ui.end_row();
+
+        let status = self.update_status.lock().unwrap().clone();
+        match status {
+            UpdateStatus::Idle => {
+                ui.label(t!("未確認"));
+                ui.end_row();
+            }
+            UpdateStatus::Checking => {
+                ui.label(t!("確認中..."));
+                ui.end_row();
+            }
+            UpdateStatus::UpToDate => {
+                ui.label(t!("最新版です"));
+                ui.end_row();
+            }
+            UpdateStatus::Available(info) => {
+                ui.label(t!(
+                    "新バージョン: %{arg0}",
+                    arg0 = format!("{}", info.version)
+                ));
+                ui.end_row();
+                ui.label(&info.notes);
+                ui.end_row();
+                if ui.button(t!("今すぐ更新")).clicked() {
+                    update::spawn_apply(self.update_status.clone(), info.clone());
+                }
+                ui.end_row();
+            }
+            UpdateStatus::Downloading(fraction) => {
+                ui.label(t!("ダウンロード中"));
+                ui.add(egui::ProgressBar::new(fraction));
+                ui.end_row();
+            }
+            UpdateStatus::Installed => {
+                ui.label(t!("更新完了。再起動してください"));
+                ui.end_row();
+            }
+            UpdateStatus::Error(err) => {
+                ui.label(t!("エラー: %{arg0}", arg0 = format!("{err}")));
+                ui.end_row();
+            }
+        }
+
+        if ui.button(t!("今すぐ確認")).clicked() {
+            update::spawn_check(self.update_status.clone());
+        }
+        ui.end_row();
     }
 }

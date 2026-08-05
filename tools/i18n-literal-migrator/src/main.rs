@@ -8,10 +8,8 @@ use syn::{File, Expr, Lit, spanned::Spanned, visit_mut::VisitMut};
 #[derive(Parser, Debug)]
 #[command(about = "Wrap Rust string literals in rust-i18n t! macros")]
 struct Args {
-    /// Rust source files or directories to process.
     #[arg(required = true)]
     paths: Vec<PathBuf>,
-    /// Only report changes; do not write files.
     #[arg(short = 'n', long)]
     check: bool,
 }
@@ -29,8 +27,6 @@ impl Migrator {
 }
 
 impl VisitMut for Migrator {
-    // Documentation comments are represented by syn as `#[doc = "..."]`.
-    // They are not runtime messages and must never be translated.
     fn visit_attribute_mut(&mut self, _attribute: &mut syn::Attribute) {}
 
     fn visit_expr_macro_mut(&mut self, expr: &mut syn::ExprMacro) {
@@ -90,9 +86,6 @@ impl VisitMut for Migrator {
         self.replacements.push((span, replacement.to_string()));
     }
 
-    // Ordinary string literals are intentionally left untouched. Values such
-    // as environment variable names, paths, format templates, and API keys
-    // are not user-facing messages and must not be sent through t!().
     fn visit_expr_lit_mut(&mut self, _expr: &mut syn::ExprLit) {}
 }
 

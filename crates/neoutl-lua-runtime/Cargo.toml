@@ -12,7 +12,6 @@ neoutl-shared-abi = { path = "../neoutl-shared-abi" }
 neoutl-effect-lua = { path = "../neoutl-effect-lua" }
 mlua = { version = "0.12", default-features = false, features = ["vendored", "send"] }
 
-# （defaultを空にすることで、[target.'cfg(...)']による自動切替がCargoのfeature統一で
 [features]
 default = []
 luajit = ["mlua/luajit"]

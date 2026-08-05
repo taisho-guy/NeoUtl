@@ -222,6 +222,8 @@ pub struct SystemSettingsResource {
     pub export_container: i32,
     /// 0: H.264 / 1: HEVC / 2: AV1
     pub export_codec: i32,
+    #[serde(default)]
+    pub check_update_on_startup: bool,
 }
 
 impl Default for SystemSettingsResource {
@@ -246,6 +248,7 @@ impl SystemSettingsResource {
             magnetic_snap_range: config::SYSTEM_DEFAULT_MAGNETIC_SNAP_RANGE,
             export_container: config::SYSTEM_DEFAULT_EXPORT_CONTAINER,
             export_codec: config::SYSTEM_DEFAULT_EXPORT_CODEC,
+            check_update_on_startup: config::SYSTEM_DEFAULT_CHECK_UPDATE_ON_STARTUP,
         }
     }
 }
