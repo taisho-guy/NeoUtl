@@ -2,8 +2,13 @@ use crate::app_state::{self, SharedAppState};
 use crate::ecs::resources::ProjectResource;
 use crate::ecs::systems::get_active_objects_system;
 use crate::renderer::RenderEngine;
+use crate::shortcuts::{self, CommandId, Scope};
+use crate::ui::dialogs::DialogSet;
+use crate::ui::timeline::util::egui_key_name;
 use egui_wgpu::Renderer as EguiRenderer;
 use egui_wgpu::wgpu;
+use std::cell::RefCell;
+use std::rc::Rc;
 use std::sync::Arc;
 use std::time::Instant;
 
@@ -282,7 +287,13 @@ impl PreviewPanel {
     }
 
     /// QML `RowLayout{ readonly property int _tabH: 28 }` 対応。
-    fn tab_bar(&mut self, ui: &mut egui::Ui, state: &SharedAppState) {
+    /// 各タブに閉じるボタン(×)を併設する。closable判定はセッション数>1のみ。
+    fn tab_bar(
+        &mut self,
+        ui: &mut egui::Ui,
+        state: &SharedAppState,
+        dialogs: &Rc<RefCell<DialogSet>>,
+    ) {
         ui.set_min_height(28.0);
         ui.horizontal(|ui| {
             let (names, active_index) = {
@@ -294,18 +305,136 @@ impl PreviewPanel {
                     .collect();
                 (names, s.active)
             };
+            let closable = names.len() > 1;
+            let mut switch_target: Option<usize> = None;
+            let mut close_target: Option<usize> = None;
             for (i, name) in names.iter().enumerate() {
-                if ui.selectable_label(i == active_index, name).clicked() && i != active_index {
-                    {
-                        let mut s = state.lock().unwrap();
-                        s.active = i;
+                ui.horizontal(|ui| {
+                    if ui.selectable_label(i == active_index, name).clicked() && i != active_index {
+                        switch_target = Some(i);
                     }
-                    self.playback_anchor = None;
-                    self.texture_id = None;
-                    self.sync_active_session(state);
+                    if closable && ui.small_button("×").clicked() {
+                        close_target = Some(i);
+                    }
+                });
+            }
+            if let Some(i) = switch_target {
+                {
+                    let mut s = state.lock().unwrap();
+                    s.active = i;
                 }
+                self.playback_anchor = None;
+                self.texture_id = None;
+                self.sync_active_session(state);
+            }
+            if let Some(i) = close_target {
+                dialogs.borrow_mut().request_close_session(state, i);
             }
         });
+    }
+
+    /// active_indexをdelta分循環移動する（Ctrl+Tab/Ctrl+Shift+Tab用）。
+    fn switch_relative(&mut self, state: &SharedAppState, delta: i32) {
+        {
+            let mut s = state.lock().unwrap();
+            let len = s.sessions.len() as i32;
+            if len <= 1 {
+                return;
+            }
+            s.active = (s.active as i32 + delta).rem_euclid(len) as usize;
+        }
+        self.playback_anchor = None;
+        self.texture_id = None;
+        self.sync_active_session(state);
+    }
+
+    /// プロジェクトタブ切替・クローズのグローバルショートカット処理。
+    /// メニュー/タブバーとは独立し、フォーカス位置に関わらず常時解決する。
+    fn handle_project_shortcuts(
+        &mut self,
+        ui: &egui::Ui,
+        state: &SharedAppState,
+        dialogs: &Rc<RefCell<DialogSet>>,
+    ) {
+        let (ctrl, shift, alt, keys) = ui.input(|i| {
+            (
+                i.modifiers.ctrl,
+                i.modifiers.shift,
+                i.modifiers.alt,
+                i.events
+                    .iter()
+                    .filter_map(|e| match e {
+                        egui::Event::Key {
+                            key, pressed: true, ..
+                        } => Some(egui_key_name(*key)),
+                        _ => None,
+                    })
+                    .collect::<Vec<_>>(),
+            )
+        });
+        for key in keys {
+            let Some(cmd) = shortcuts::resolve_active(Scope::Global, ctrl, shift, alt, &key) else {
+                continue;
+            };
+            match cmd {
+                CommandId::NextProjectTab => self.switch_relative(state, 1),
+                CommandId::PrevProjectTab => self.switch_relative(state, -1),
+                CommandId::CloseProjectTab => {
+                    let active = state.lock().unwrap().active;
+                    dialogs.borrow_mut().request_close_session(state, active);
+                }
+                _ => {}
+            }
+        }
+    }
+
+    /// dialogs.confirm_close_sessionが立っている間、保存確認モーダルを表示する。
+    /// 「保存して閉じる」「保存せず閉じる」「キャンセル」の3択。
+    fn confirm_close_dialog(
+        &mut self,
+        ctx: &egui::Context,
+        state: &SharedAppState,
+        dialogs: &Rc<RefCell<DialogSet>>,
+    ) {
+        let Some(index) = dialogs.borrow().confirm_close_session else {
+            return;
+        };
+        let mut save_and_close = false;
+        let mut discard_and_close = false;
+        let mut cancel = false;
+        egui::Window::new(t!("未保存の変更"))
+            .collapsible(false)
+            .resizable(false)
+            .show(ctx, |ui| {
+                ui.label(t!(
+                    "保存されていない変更があります。閉じる前に保存しますか？"
+                ));
+                ui.horizontal(|ui| {
+                    if ui.button(t!("保存して閉じる")).clicked() {
+                        save_and_close = true;
+                    }
+                    if ui.button(t!("保存せず閉じる")).clicked() {
+                        discard_and_close = true;
+                    }
+                    if ui.button(t!("キャンセル")).clicked() {
+                        cancel = true;
+                    }
+                });
+            });
+        if save_and_close {
+            app_state::save_session(state, index);
+            let _ = app_state::close_session(state, index);
+        } else if discard_and_close {
+            let _ = app_state::close_session(state, index);
+        } else if !cancel {
+            return;
+        }
+        dialogs.borrow_mut().confirm_close_session = None;
+        if save_and_close || discard_and_close {
+            self.playback_anchor = None;
+            self.texture_id = None;
+            self.sync_active_session(state);
+        }
     }
 
     /// QML `MainWindow.qml` 再生コントロールバー(Rectangle height:38, RowLayout)の直接対応。
@@ -398,9 +527,12 @@ impl PreviewPanel {
         ui: &mut egui::Ui,
         egui_renderer: &mut EguiRenderer,
         state: &SharedAppState,
+        dialogs: &Rc<RefCell<DialogSet>>,
     ) {
+        self.handle_project_shortcuts(ui, state, dialogs);
         self.menu_bar(ui, state);
-        self.tab_bar(ui, state);
+        self.tab_bar(ui, state, dialogs);
+        self.confirm_close_dialog(&ui.ctx().clone(), state, dialogs);
 
         self.render_frame(egui_renderer, state);
 
