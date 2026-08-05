@@ -1103,3 +1103,6 @@ pub fn native_vtable() -> MediaVTable {
         decode_audio: None,
     }
 }
+rust_i18n::i18n!("../../i18n");
+#[macro_use]
+extern crate rust_i18n;

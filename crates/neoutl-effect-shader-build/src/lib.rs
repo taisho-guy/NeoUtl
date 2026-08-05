@@ -61,3 +61,6 @@ pub fn compile_effect_fragment(label: &str, fragment_relpath: &str) {
     println!("cargo:rerun-if-changed={}", fragment_path.display());
     println!("cargo:rerun-if-env-changed=SLANG_DIR");
 }
+rust_i18n::i18n!("../../i18n");
+#[macro_use]
+extern crate rust_i18n;

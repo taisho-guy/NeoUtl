@@ -243,3 +243,6 @@ fn install_system_table(lua: &Lua, regs: &Arc<Mutex<Registrations>>) -> mlua::Re
     lua.globals().set("system", system)?;
     Ok(())
 }
+rust_i18n::i18n!("../../i18n");
+#[macro_use]
+extern crate rust_i18n;
