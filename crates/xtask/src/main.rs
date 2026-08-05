@@ -41,7 +41,14 @@ fn discover_crates(workspace_root: &Path, subdir: &str) -> Vec<DiscoveredCrate> 
     let entries = match fs::read_dir(&scan_dir) {
         Ok(e) => e,
         Err(err) => {
-            eprintln!("[xtask] {} 読取失敗: {err}", scan_dir.display());
+            eprintln!(
+                "{}",
+                t!(
+                    "[xtask] %{arg0} 読取失敗: %{arg1}",
+                    arg0 = format!("{}", scan_dir.display()),
+                    arg1 = format!("{err}")
+                )
+            );
             return result;
         }
     };
@@ -63,7 +70,13 @@ fn discover_crates(workspace_root: &Path, subdir: &str) -> Vec<DiscoveredCrate> 
             continue;
         };
         let Ok(doc) = text.parse::<toml::Table>() else {
-            eprintln!("[xtask] 解析失敗: {}", manifest_path.display());
+            eprintln!(
+                "{}",
+                t!(
+                    "[xtask] 解析失敗: %{arg0}",
+                    arg0 = format!("{}", manifest_path.display())
+                )
+            );
             continue;
         };
 
@@ -160,7 +173,10 @@ fn build_all<'a>(
     let mut package_count = 0usize;
     for (label, crates) in groups {
         if crates.is_empty() {
-            eprintln!("[xtask] {label}クレート0件");
+            eprintln!(
+                "{}",
+                t!("[xtask] %{arg0}クレート0件", arg0 = format!("{label}"))
+            );
             continue;
         }
         for c in *crates {
@@ -174,15 +190,24 @@ fn build_all<'a>(
     }
 
     if package_count == 0 {
-        eprintln!("[xtask] ビルド対象パッケージ0件のためcargo呼び出しを省略");
+        eprintln!(
+            "{}",
+            t!("[xtask] ビルド対象パッケージ0件のためcargo呼び出しを省略")
+        );
         return;
     }
 
     slang::apply_build_env(&mut cmd, workspace_root);
 
-    let status = cmd.status().expect("cargo build 起動失敗");
+    let status = cmd.status().expect(&t!("cargo build 起動失敗"));
     if !status.success() {
-        panic!("[xtask] 統合ビルド失敗: exit={status}");
+        panic!(
+            "{}",
+            t!(
+                "[xtask] 統合ビルド失敗: exit=%{arg0}",
+                arg0 = format!("{status}")
+            )
+        );
     }
 }
 
@@ -204,9 +229,15 @@ fn build_vst3_helpers(workspace_root: &Path, profile: &str, target: Option<&str>
     if offline {
         cmd.arg("--offline");
     }
-    let status = cmd.status().expect("vst3-host-probeビルド起動失敗");
+    let status = cmd.status().expect(&t!("vst3-host-probeビルド起動失敗"));
     if !status.success() {
-        panic!("[xtask] vst3-host-probeビルド失敗: exit={status}");
+        panic!(
+            "{}",
+            t!(
+                "[xtask] vst3-host-probeビルド失敗: exit=%{arg0}",
+                arg0 = format!("{status}")
+            )
+        );
     }
 
     let mut helper = Command::new("cargo");
@@ -227,9 +258,17 @@ fn build_vst3_helpers(workspace_root: &Path, profile: &str, target: Option<&str>
     if offline {
         helper.arg("--offline");
     }
-    let status = helper.status().expect("vst3-host-helperビルド起動失敗");
+    let status = helper
+        .status()
+        .expect(&t!("vst3-host-helperビルド起動失敗"));
     if !status.success() {
-        panic!("[xtask] vst3-host-helperビルド失敗: exit={status}");
+        panic!(
+            "{}",
+            t!(
+                "[xtask] vst3-host-helperビルド失敗: exit=%{arg0}",
+                arg0 = format!("{status}")
+            )
+        );
     }
 }
 
@@ -242,15 +281,30 @@ fn stage_crates(
 ) {
     let out_dir = target_dir(workspace_root, profile, target);
     let dest_dir = out_dir.join(dest_subdir);
-    fs::create_dir_all(&dest_dir).expect("配置先ディレクトリ作成失敗");
+    fs::create_dir_all(&dest_dir).expect(&t!("配置先ディレクトリ作成失敗"));
 
     for c in crates {
         let filename = dylib_filename(&c.lib_name);
         let src = out_dir.join(&filename);
         let dst = dest_dir.join(&filename);
         match fs::copy(&src, &dst) {
-            Ok(_) => eprintln!("[xtask] 配置: {dest_subdir}/{filename}"),
-            Err(err) => eprintln!("[xtask] 配置失敗 {filename}: {err} (src={})", src.display()),
+            Ok(_) => eprintln!(
+                "{}",
+                t!(
+                    "[xtask] 配置: %{arg0}/%{arg1}",
+                    arg0 = format!("{dest_subdir}"),
+                    arg1 = format!("{filename}")
+                )
+            ),
+            Err(err) => eprintln!(
+                "{}",
+                t!(
+                    "[xtask] 配置失敗 %{arg0}: %{arg1} (src=%{arg2})",
+                    arg0 = format!("{filename}"),
+                    arg1 = format!("{err}"),
+                    arg2 = format!("{}", src.display())
+                )
+            ),
         }
     }
 }
@@ -261,8 +315,8 @@ fn stage_scripts(workspace_root: &Path, profile: &str, target: Option<&str>) {
         return;
     }
     let dst_dir = target_dir(workspace_root, profile, target).join("scripts");
-    copy_dir_recursive(&src_dir, &dst_dir).expect("Luaスクリプト配置失敗");
-    eprintln!("[xtask] 配置: scripts/（Lua）");
+    copy_dir_recursive(&src_dir, &dst_dir).expect(&t!("Luaスクリプト配置失敗"));
+    eprintln!("{}", t!("[xtask] 配置: scripts/（Lua）"));
 }
 
 fn copy_dir_recursive(src: &Path, dst: &Path) -> std::io::Result<()> {
@@ -284,7 +338,7 @@ fn workspace_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .parent()
         .and_then(Path::parent)
-        .expect("workspace root解決失敗")
+        .expect(&t!("workspace root解決失敗"))
         .to_path_buf()
 }
 
@@ -390,9 +444,9 @@ fn generate_japanese_i18n(root: &Path) {
         output.push_str(&format!("\"{escaped}\": \"{escaped}\"\n"));
     }
     let dir = root.join("i18n");
-    fs::create_dir_all(&dir).expect("i18nディレクトリ作成失敗");
-    fs::write(dir.join("ja.yml"), output).expect("日本語翻訳ファイル作成失敗");
-    eprintln!("[xtask] i18n/ja.ymlを生成しました");
+    fs::create_dir_all(&dir).expect(&t!("i18nディレクトリ作成失敗"));
+    fs::write(dir.join("ja.yml"), output).expect(&t!("日本語翻訳ファイル作成失敗"));
+    eprintln!("{}", t!("[xtask] i18n/ja.ymlを生成しました"));
 }
 
 fn collect_source_files(dir: &Path, files: &mut Vec<PathBuf>) {

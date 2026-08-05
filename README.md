@@ -136,7 +136,7 @@ NeoUtlはRust言語で実装されています。
 
 |項目|採用クレート|
 |---|---|
-|GUI|[Slint](https://slint.dev/)|
+|GUI|[egui](https://www.egui.rs/)|
 |プレビュー|[wgpu](https://wgpu.rs/)|
 |シェーダ|[Slang](https://shader-slang.org/)|
 |ECS|[Shipyard](https://github.com/leudz/shipyard)|

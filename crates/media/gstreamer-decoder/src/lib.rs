@@ -123,7 +123,7 @@ static GST_INIT: Once = Once::new();
 
 fn ensure_gst_init() {
     GST_INIT.call_once(|| {
-        gst::init().expect("gstreamer初期化失敗");
+        gst::init().expect(&t!("gstreamer初期化失敗"));
         register_bundled_plugin_dir();
         log_hardware_decoder_availability();
     });
@@ -154,11 +154,19 @@ fn log_hardware_decoder_availability() {
         .collect();
     if found.is_empty() {
         eprintln!(
-            "[gstreamer-decoder] ハードウェアH.264/HEVCデコーダ要素が未登録です。\
-             VAAPI/V4L2/NVCODECいずれかのGStreamerプラグインパッケージを導入して下さい。"
+            "{}",
+            t!(
+                "[gstreamer-decoder] ハードウェアH.264/HEVCデコーダ要素が未登録です。VAAPI/V4L2/NVCODECいずれかのGStreamerプラグインパッケージを導入して下さい。"
+            )
         );
     } else {
-        eprintln!("[gstreamer-decoder] ハードウェアデコーダ検出: {found:?}");
+        eprintln!(
+            "{}",
+            t!(
+                "[gstreamer-decoder] ハードウェアデコーダ検出: %{arg0}",
+                arg0 = format!("{found:?}")
+            )
+        );
     }
 }
 
@@ -234,23 +242,47 @@ fn drain_to_fakesink(pipeline: &gst::Pipeline, pad: &gst::Pad) {
     {
         Ok(e) => e,
         Err(e) => {
-            eprintln!("[gstreamer-decoder] fakesink生成失敗（未消費パッドが残留します）: {e}");
+            eprintln!(
+                "{}",
+                t!(
+                    "[gstreamer-decoder] fakesink生成失敗（未消費パッドが残留します）: %{arg0}",
+                    arg0 = format!("{e}")
+                )
+            );
             return;
         }
     };
     if let Err(e) = pipeline.add(&fakesink) {
-        eprintln!("[gstreamer-decoder] fakesinkのパイプライン追加失敗: {e}");
+        eprintln!(
+            "{}",
+            t!(
+                "[gstreamer-decoder] fakesinkのパイプライン追加失敗: %{arg0}",
+                arg0 = format!("{e}")
+            )
+        );
         return;
     }
     if let Err(e) = fakesink.sync_state_with_parent() {
-        eprintln!("[gstreamer-decoder] fakesinkの状態同期失敗: {e}");
+        eprintln!(
+            "{}",
+            t!(
+                "[gstreamer-decoder] fakesinkの状態同期失敗: %{arg0}",
+                arg0 = format!("{e}")
+            )
+        );
     }
     let Some(sinkpad) = fakesink.static_pad("sink") else {
-        eprintln!("[gstreamer-decoder] fakesink sinkパッド未取得");
+        eprintln!("{}", t!("[gstreamer-decoder] fakesink sinkパッド未取得"));
         return;
     };
     if let Err(e) = pad.link(&sinkpad) {
-        eprintln!("[gstreamer-decoder] fakesinkへのリンク失敗: {e:?}");
+        eprintln!(
+            "{}",
+            t!(
+                "[gstreamer-decoder] fakesinkへのリンク失敗: %{arg0}",
+                arg0 = format!("{e:?}")
+            )
+        );
     }
 }
 
@@ -274,12 +306,14 @@ fn wait_state(pipeline: &gst::Pipeline, timeout: gst::ClockTime) -> Result<(), S
         let src = err
             .src()
             .map(|s| s.path_string().to_string())
-            .unwrap_or_else(|| "不明".to_owned());
-        return Err(format!(
-            "状態遷移失敗: 要素={src} 理由={} 詳細={:?}",
-            err.error(),
-            err.debug()
-        ));
+            .unwrap_or_else(|| t!("不明").to_string());
+        return Err(t!(
+            "状態遷移失敗: 要素=%{arg0} 理由=%{arg1} 詳細=%{arg2}",
+            arg0 = format!("{src}"),
+            arg1 = format!("{}", err.error()),
+            arg2 = format!("{:?}", err.debug())
+        )
+        .to_string());
     }
     Err("状態遷移失敗（バスにERRORメッセージなし）".to_owned())
 }
@@ -295,17 +329,22 @@ fn extract_nv12_bytes(buffer: &gst::BufferRef, width: u32, height: u32) -> Resul
     let y_plane_size = (width * height) as usize;
     let uv_plane_size = (width * height / 2) as usize;
     eprintln!(
-        "[gstreamer-decoder] extract_nv12_bytes: width={width} height={height} \
-         data_len={} 必要バイト数={}",
-        data.len(),
-        y_plane_size + uv_plane_size
+        "{}",
+        t!(
+            "[gstreamer-decoder] extract_nv12_bytes: width=%{arg0} height=%{arg1} data_len=%{arg2} 必要バイト数=%{arg3}",
+            arg0 = format!("{width}"),
+            arg1 = format!("{height}"),
+            arg2 = format!("{}", data.len()),
+            arg3 = format!("{}", y_plane_size + uv_plane_size)
+        )
     );
     if data.len() < y_plane_size + uv_plane_size {
-        let msg = format!(
-            "NV12バッファサイズ不足: data_len={} 必要={}",
-            data.len(),
-            y_plane_size + uv_plane_size
-        );
+        let msg = t!(
+            "NV12バッファサイズ不足: data_len=%{arg0} 必要=%{arg1}",
+            arg0 = format!("{}", data.len()),
+            arg1 = format!("{}", y_plane_size + uv_plane_size)
+        )
+        .to_string();
         eprintln!("[gstreamer-decoder] {msg}");
         return Err(msg);
     }
@@ -349,9 +388,11 @@ impl GstDecoderInner {
         let discovered = discoverer::discover(path)?;
         if !discovered.seekable {
             eprintln!(
-                "[gstreamer-decoder] 警告: このソースはシーク不可と報告されました。\
-                 ACCURATE seekが失敗する可能性があります: {}",
-                path.display()
+                "{}",
+                t!(
+                    "[gstreamer-decoder] 警告: このソースはシーク不可と報告されました。ACCURATE seekが失敗する可能性があります: %{arg0}",
+                    arg0 = format!("{}", path.display())
+                )
             );
         }
 
@@ -361,7 +402,7 @@ impl GstDecoderInner {
         let uridecodebin3 = gst::ElementFactory::make("uridecodebin3")
             .property("uri", uri.as_str())
             .build()
-            .map_err(|e| format!("uridecodebin3生成失敗: {e}"))?;
+            .map_err(|e| t!("uridecodebin3生成失敗: %{arg0}", arg0 = format!("{e}")).to_string())?;
 
         let download_elems: Vec<gst::Element> = DOWNLOAD_CHAIN
             .split('!')
@@ -369,21 +410,26 @@ impl GstDecoderInner {
             .filter(|s| !s.is_empty())
             .map(|desc| {
                 let name = desc.split_whitespace().next().unwrap_or(desc);
-                gst::ElementFactory::make(name)
-                    .build()
-                    .map_err(|e| format!("{name}生成失敗: {e}"))
+                gst::ElementFactory::make(name).build().map_err(|e| {
+                    t!(
+                        "%{arg0}生成失敗: %{arg1}",
+                        arg0 = format!("{name}"),
+                        arg1 = format!("{e}")
+                    )
+                    .to_string()
+                })
             })
             .collect::<Result<_, _>>()?;
         let videoconvert = gst::ElementFactory::make("videoconvert")
             .build()
-            .map_err(|e| format!("videoconvert生成失敗: {e}"))?;
+            .map_err(|e| t!("videoconvert生成失敗: %{arg0}", arg0 = format!("{e}")).to_string())?;
         let queue = gst::ElementFactory::make("queue")
             .property_from_str("leaky", "downstream")
             .property("max-size-buffers", 4u32)
             .property("max-size-bytes", 0u32)
             .property("max-size-time", 0u64)
             .build()
-            .map_err(|e| format!("queue生成失敗: {e}"))?;
+            .map_err(|e| t!("queue生成失敗: %{arg0}", arg0 = format!("{e}")).to_string())?;
         let appsink = AppSink::builder()
             .caps(&gst::Caps::from_str(SYSMEM_CAPS).map_err(|e| e.to_string())?)
             .sync(false)
@@ -402,12 +448,13 @@ impl GstDecoderInner {
         video_chain.push(videoconvert.clone());
         video_chain.push(queue.clone());
         video_chain.push(appsink.clone().upcast::<gst::Element>());
-        gst::Element::link_many(video_chain.iter().collect::<Vec<_>>())
-            .map_err(|e| format!("映像チェーンのリンク失敗: {e}"))?;
+        gst::Element::link_many(video_chain.iter().collect::<Vec<_>>()).map_err(|e| {
+            t!("映像チェーンのリンク失敗: %{arg0}", arg0 = format!("{e}")).to_string()
+        })?;
 
         let video_chain_head_sink = video_chain
             .first()
-            .expect("video_chainは常に非空")
+            .expect(&t!("video_chainは常に非空"))
             .static_pad("sink")
             .ok_or("映像チェーン先頭のsinkパッド未取得")?;
 
@@ -419,15 +466,12 @@ impl GstDecoderInner {
             let pad_name = pad.name();
             if pad_name.starts_with("video_") {
                 if video_chain_head_sink.is_linked() {
-                    eprintln!(
-                        "[gstreamer-decoder] 追加の映像ストリーム{pad_name}を検出しましたが、\
-                         最初の映像ストリームのみ使用します（fakesinkへ排出）"
-                    );
+                    eprintln!("{}", t!("[gstreamer-decoder] 追加の映像ストリーム%{arg0}を検出しましたが、最初の映像ストリームのみ使用します（fakesinkへ排出）", arg0 = format!("{pad_name}")));
                     drain_to_fakesink(&pipeline, pad);
                     return;
                 }
                 if let Err(e) = pad.link(&video_chain_head_sink) {
-                    eprintln!("[gstreamer-decoder] 映像パッド{pad_name}のリンク失敗: {e:?}");
+                    eprintln!("{}", t!("[gstreamer-decoder] 映像パッド%{arg0}のリンク失敗: %{arg1}", arg0 = format!("{pad_name}"), arg1 = format!("{e:?}")));
                 }
             } else {
                 drain_to_fakesink(&pipeline, pad);
@@ -471,8 +515,13 @@ impl GstDecoderInner {
 
         if width % 2 != 0 || height % 2 != 0 {
             eprintln!(
-                "[gstreamer-decoder] 警告: 奇数寸法動画（width={width} height={height}）はNV12 4:2:0平面計算が破綻する可能性: {}",
-                path.display()
+                "{}",
+                t!(
+                    "[gstreamer-decoder] 警告: 奇数寸法動画（width=%{arg0} height=%{arg1}）はNV12 4:2:0平面計算が破綻する可能性: %{arg2}",
+                    arg0 = format!("{width}"),
+                    arg1 = format!("{height}"),
+                    arg2 = format!("{}", path.display())
+                )
             );
         }
 
@@ -487,10 +536,17 @@ impl GstDecoderInner {
         let total_frames = duration_to_frames(duration_ns, frame_duration_ns).max(1);
 
         eprintln!(
-            "[gstreamer-decoder] open完了: caps={caps} width={width} height={height} \
-             fps={fps} total_frames={total_frames} duration_ns={duration_ns} \
-             has_audio={}",
-            discovered.has_audio
+            "{}",
+            t!(
+                "[gstreamer-decoder] open完了: caps=%{arg0} width=%{arg1} height=%{arg2} fps=%{arg3} total_frames=%{arg4} duration_ns=%{arg5} has_audio=%{arg6}",
+                arg0 = format!("{caps}"),
+                arg1 = format!("{width}"),
+                arg2 = format!("{height}"),
+                arg3 = format!("{fps}"),
+                arg4 = format!("{total_frames}"),
+                arg5 = format!("{duration_ns}"),
+                arg6 = format!("{}", discovered.has_audio)
+            )
         );
 
         Ok(Self {
@@ -513,11 +569,20 @@ impl GstDecoderInner {
         if self.pipeline.current_state() != gst::State::Playing
             && let Err(e) = self.pipeline.set_state(gst::State::Playing)
         {
-            eprintln!("[gstreamer-decoder] 連番再生パス: PLAYING遷移失敗 {e}");
+            eprintln!(
+                "{}",
+                t!(
+                    "[gstreamer-decoder] 連番再生パス: PLAYING遷移失敗 %{arg0}",
+                    arg0 = format!("{e}")
+                )
+            );
             return None;
         }
         if wait_state(&self.pipeline, gst::ClockTime::from_seconds(2)).is_err() {
-            eprintln!("[gstreamer-decoder] 連番再生パス: 状態遷移待機失敗");
+            eprintln!(
+                "{}",
+                t!("[gstreamer-decoder] 連番再生パス: 状態遷移待機失敗")
+            );
             return None;
         }
         match self
@@ -525,12 +590,21 @@ impl GstDecoderInner {
             .try_pull_sample(gst::ClockTime::from_seconds(2))
         {
             Some(sample) => {
-                eprintln!("[gstreamer-decoder] 連番再生パス成功: target={target}");
+                eprintln!(
+                    "{}",
+                    t!(
+                        "[gstreamer-decoder] 連番再生パス成功: target=%{arg0}",
+                        arg0 = format!("{target}")
+                    )
+                );
                 self.last_frame = target;
                 Some(sample)
             }
             None => {
-                eprintln!("[gstreamer-decoder] 連番再生パス: サンプル取得タイムアウト");
+                eprintln!(
+                    "{}",
+                    t!("[gstreamer-decoder] 連番再生パス: サンプル取得タイムアウト")
+                );
                 None
             }
         }
@@ -554,8 +628,13 @@ impl GstDecoderInner {
         let target_ns = target as u64 * self.frame_duration_ns;
         let seek_flags = gst::SeekFlags::FLUSH | gst::SeekFlags::ACCURATE;
         eprintln!(
-            "[gstreamer-decoder] sample_atシーク: frame_index={frame_index} target={target} \
-             target_ns={target_ns}"
+            "{}",
+            t!(
+                "[gstreamer-decoder] sample_atシーク: frame_index=%{arg0} target=%{arg1} target_ns=%{arg2}",
+                arg0 = format!("{frame_index}"),
+                arg1 = format!("{target}"),
+                arg2 = format!("{target_ns}")
+            )
         );
         if self.pipeline.current_state() != gst::State::Paused {
             let _ = self.pipeline.set_state(gst::State::Paused);
@@ -564,11 +643,23 @@ impl GstDecoderInner {
             .seek_simple(seek_flags, gst::ClockTime::from_nseconds(target_ns))
             .map_err(|e| {
                 let msg = e.to_string();
-                eprintln!("[gstreamer-decoder] seek失敗: {msg}");
+                eprintln!(
+                    "{}",
+                    t!(
+                        "[gstreamer-decoder] seek失敗: %{arg0}",
+                        arg0 = format!("{msg}")
+                    )
+                );
                 msg
             })?;
         wait_state(&self.pipeline, gst::ClockTime::from_seconds(10)).map_err(|e| {
-            eprintln!("[gstreamer-decoder] seek後の状態遷移失敗: {e}");
+            eprintln!(
+                "{}",
+                t!(
+                    "[gstreamer-decoder] seek後の状態遷移失敗: %{arg0}",
+                    arg0 = format!("{e}")
+                )
+            );
             e
         })?;
         let result = self
@@ -582,17 +673,30 @@ impl GstDecoderInner {
                 let caps_str = sample
                     .caps()
                     .map(|c| c.to_string())
-                    .unwrap_or_else(|| "なし".to_owned());
+                    .unwrap_or_else(|| t!("なし").to_string());
                 let landed_pts_ns = sample.buffer().and_then(|b| b.pts()).map(|p| p.nseconds());
                 eprintln!(
-                    "[gstreamer-decoder] sample取得成功: frame_index={frame_index} \
-                     buffer_size={buffer_size} caps={caps_str} landed_pts_ns={landed_pts_ns:?}"
+                    "{}",
+                    t!(
+                        "[gstreamer-decoder] sample取得成功: frame_index=%{arg0} buffer_size=%{arg1} caps=%{arg2} landed_pts_ns=%{arg3}",
+                        arg0 = format!("{frame_index}"),
+                        arg1 = format!("{buffer_size}"),
+                        arg2 = format!("{caps_str}"),
+                        arg3 = format!("{landed_pts_ns:?}")
+                    )
                 );
                 self.last_frame = target;
                 self.last_gop_start = target;
             }
             Err(e) => {
-                eprintln!("[gstreamer-decoder] sample取得失敗: frame_index={frame_index} 理由={e}");
+                eprintln!(
+                    "{}",
+                    t!(
+                        "[gstreamer-decoder] sample取得失敗: frame_index=%{arg0} 理由=%{arg1}",
+                        arg0 = format!("{frame_index}"),
+                        arg1 = format!("{e}")
+                    )
+                );
             }
         }
         result
@@ -611,11 +715,20 @@ impl GstDecoderInner {
         if self.pipeline.current_state() != gst::State::Playing
             && let Err(e) = self.pipeline.set_state(gst::State::Playing)
         {
-            eprintln!("[gstreamer-decoder] 追いつきパス: PLAYING遷移失敗 {e}");
+            eprintln!(
+                "{}",
+                t!(
+                    "[gstreamer-decoder] 追いつきパス: PLAYING遷移失敗 %{arg0}",
+                    arg0 = format!("{e}")
+                )
+            );
             return None;
         }
         if wait_state(&self.pipeline, gst::ClockTime::from_seconds(2)).is_err() {
-            eprintln!("[gstreamer-decoder] 追いつきパス: 状態遷移待機失敗");
+            eprintln!(
+                "{}",
+                t!("[gstreamer-decoder] 追いつきパス: 状態遷移待機失敗")
+            );
             return None;
         }
         for step in 1..=gap {
@@ -627,14 +740,25 @@ impl GstDecoderInner {
                     self.last_frame += 1;
                     if step == gap {
                         eprintln!(
-                            "[gstreamer-decoder] 追いつきパス成功: target={target} gap={gap}"
+                            "{}",
+                            t!(
+                                "[gstreamer-decoder] 追いつきパス成功: target=%{arg0} gap=%{arg1}",
+                                arg0 = format!("{target}"),
+                                arg1 = format!("{gap}")
+                            )
                         );
                         return Some(sample);
                     }
                 }
                 None => {
                     eprintln!(
-                        "[gstreamer-decoder] 追いつきパス: サンプル取得タイムアウト target={target} step={step}/{gap}"
+                        "{}",
+                        t!(
+                            "[gstreamer-decoder] 追いつきパス: サンプル取得タイムアウト target=%{arg0} step=%{arg1}/%{arg2}",
+                            arg0 = format!("{target}"),
+                            arg1 = format!("{step}"),
+                            arg2 = format!("{gap}")
+                        )
                     );
                     return None;
                 }
@@ -704,8 +828,12 @@ fn bounded_join(handle: Option<JoinHandle<()>>, timeout: Duration, name: &str) {
         }
         if start.elapsed() >= timeout {
             eprintln!(
-                "[gstreamer-decoder] {name} 終了待機タイムアウト（{timeout:?}）。\
-                 スレッドを解放せず放棄します（プロセス終了までのリークを許容し、呼び出し元の停止を回避）"
+                "{}",
+                t!(
+                    "[gstreamer-decoder] %{arg0} 終了待機タイムアウト（%{arg1}）。スレッドを解放せず放棄します（プロセス終了までのリークを許容し、呼び出し元の停止を回避）",
+                    arg0 = format!("{name}"),
+                    arg1 = format!("{timeout:?}")
+                )
             );
             std::mem::forget(handle);
             return;
@@ -734,10 +862,10 @@ impl GstDecoder {
                 .name("gst-decoder-busdrain".to_owned())
                 .spawn(move || {
                     let Some(bus) = pipeline.bus() else {
-                        eprintln!("[gstreamer-decoder] busdrain_thread: バス未取得のため即終了");
+                        eprintln!("{}", t!("[gstreamer-decoder] busdrain_thread: バス未取得のため即終了"));
                         return;
                     };
-                    eprintln!("[gstreamer-decoder] busdrain_thread起動完了");
+                    eprintln!("{}", t!("[gstreamer-decoder] busdrain_thread起動完了"));
                     while !bus_stop.load(Ordering::Acquire) {
                         let Some(msg) = bus.timed_pop(BUS_DRAIN_POLL) else {
                             continue;
@@ -747,26 +875,19 @@ impl GstDecoder {
                                 let src = err
                                     .src()
                                     .map(|s| s.path_string().to_string())
-                                    .unwrap_or_else(|| "不明".to_owned());
-                                eprintln!(
-                                    "[gstreamer-decoder] busdrain: ERROR 要素={src} 理由={} 詳細={:?}",
-                                    err.error(),
-                                    err.debug()
-                                );
+                                    .unwrap_or_else(|| t!("不明").to_string());
+                                eprintln!("{}", t!("[gstreamer-decoder] busdrain: ERROR 要素=%{arg0} 理由=%{arg1} 詳細=%{arg2}", arg0 = format!("{src}"), arg1 = format!("{}", err.error()), arg2 = format!("{:?}", err.debug())));
                             }
                             gst::MessageView::Warning(warn) => {
-                                eprintln!(
-                                    "[gstreamer-decoder] busdrain: WARNING 理由={}",
-                                    warn.error()
-                                );
+                                eprintln!("{}", t!("[gstreamer-decoder] busdrain: WARNING 理由=%{arg0}", arg0 = format!("{}", warn.error())));
                             }
                             gst::MessageView::Eos(_) => {
-                                eprintln!("[gstreamer-decoder] busdrain: EOS受信");
+                                eprintln!("{}", t!("[gstreamer-decoder] busdrain: EOS受信"));
                             }
                             _ => {}
                         }
                     }
-                    eprintln!("[gstreamer-decoder] busdrain_thread終了");
+                    eprintln!("{}", t!("[gstreamer-decoder] busdrain_thread終了"));
                 })
                 .map_err(|e| e.to_string())?
         };
@@ -778,36 +899,32 @@ impl GstDecoder {
                 .name("gst-decoder-command".to_owned())
                 .spawn(move || {
                     let mut inner = inner;
-                    eprintln!("[gstreamer-decoder] command_thread起動完了");
+                    eprintln!("{}", t!("[gstreamer-decoder] command_thread起動完了"));
                     while let Ok(command) = rx.recv() {
                         match command {
                             Command::Frame {
                                 frame_index,
                                 reply,
                             } => {
-                                eprintln!(
-                                    "[gstreamer-decoder] command_thread: Frame受信 frame_index={frame_index}"
-                                );
+                                eprintln!("{}", t!("[gstreamer-decoder] command_thread: Frame受信 frame_index=%{arg0}", arg0 = format!("{frame_index}")));
                                 let result = inner.sample_at(frame_index).and_then(|sample| {
                                     let buffer = sample.buffer().ok_or("buffer未取得".to_owned())?;
                                     extract_nv12_bytes(buffer, inner.width, inner.height)
                                         .map(|bytes| (bytes, inner.last_gop_start))
                                 });
                                 if let Err(e) = &result {
-                                    eprintln!(
-                                        "[gstreamer-decoder] command_thread: フレーム処理失敗 frame_index={frame_index} 理由={e}"
-                                    );
+                                    eprintln!("{}", t!("[gstreamer-decoder] command_thread: フレーム処理失敗 frame_index=%{arg0} 理由=%{arg1}", arg0 = format!("{frame_index}"), arg1 = format!("{e}")));
                                 }
                                 let _ = reply.send(result);
                             }
                             Command::Shutdown => {
-                                eprintln!("[gstreamer-decoder] command_thread: Shutdown受信");
+                                eprintln!("{}", t!("[gstreamer-decoder] command_thread: Shutdown受信"));
                                 break;
                             }
                         }
                     }
                     let _ = inner.pipeline.set_state(gst::State::Null);
-                    eprintln!("[gstreamer-decoder] command_thread終了");
+                    eprintln!("{}", t!("[gstreamer-decoder] command_thread終了"));
                 })
                 .map_err(|e| e.to_string())?
         };
@@ -848,7 +965,13 @@ impl VideoSource for GstDecoder {
         if self.pending.contains_key(&clamped) {
             return Ok(());
         }
-        eprintln!("[gstreamer-decoder] prefetch呼び出し: frame_index={clamped}");
+        eprintln!(
+            "{}",
+            t!(
+                "[gstreamer-decoder] prefetch呼び出し: frame_index=%{arg0}",
+                arg0 = format!("{clamped}")
+            )
+        );
         let (reply_tx, reply_rx) = mpsc::channel();
         self.tx
             .send(Command::Frame {
@@ -857,22 +980,37 @@ impl VideoSource for GstDecoder {
             })
             .map_err(|e| {
                 let msg = "command_thread終了済み".to_owned();
-                eprintln!("[gstreamer-decoder] コマンド送信失敗: {e} ({msg})");
+                eprintln!(
+                    "{}",
+                    t!(
+                        "[gstreamer-decoder] コマンド送信失敗: %{arg0} (%{arg1})",
+                        arg0 = format!("{e}"),
+                        arg1 = format!("{msg}")
+                    )
+                );
                 msg
             })?;
         let (bytes, gop_start) = reply_rx
             .recv_timeout(COMMAND_REPLY_TIMEOUT)
             .map_err(|e| {
-                let msg = format!(
-                    "command_thread応答タイムアウト（{COMMAND_REPLY_TIMEOUT:?}経過、詳細={e}）"
-                );
+                let msg = t!(
+                    "command_thread応答タイムアウト（%{arg0}経過、詳細=%{arg1}）",
+                    arg0 = format!("{COMMAND_REPLY_TIMEOUT:?}"),
+                    arg1 = format!("{e}")
+                )
+                .to_string();
                 eprintln!("[gstreamer-decoder] {msg}");
                 msg
             })
             .and_then(|inner| inner)?;
         eprintln!(
-            "[gstreamer-decoder] prefetch完了: frame_index={clamped} bytes={} gop_start={gop_start}",
-            bytes.len()
+            "{}",
+            t!(
+                "[gstreamer-decoder] prefetch完了: frame_index=%{arg0} bytes=%{arg1} gop_start=%{arg2}",
+                arg0 = format!("{clamped}"),
+                arg1 = format!("{}", bytes.len()),
+                arg2 = format!("{gop_start}")
+            )
         );
         if self.pending.len() >= PENDING_PURGE_THRESHOLD {
             let gop_span = clamped - gop_start;
