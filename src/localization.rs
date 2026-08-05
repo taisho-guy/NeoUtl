@@ -21,10 +21,10 @@ pub fn initialize() {
         .or_else(|_| std::env::var("LC_ALL"))
         .or_else(|_| std::env::var("LANG"))
         .map(|value| {
-            if value.to_ascii_lowercase().starts_with("ja") {
-                "ja".to_owned()
-            } else {
+            if value.to_ascii_lowercase().starts_with("en") {
                 "en".to_owned()
+            } else {
+                "ja".to_owned()
             }
         })
         .unwrap_or_else(|_| "ja".to_owned());
@@ -55,14 +55,13 @@ pub fn load_plugin_catalog(plugin_path: &Path) {
         .expect("locale lock poisoned")
         .clone();
     let direct = parent.join("i18n").join(format!("{locale}.yml"));
+    let stem = plugin_path
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or_default();
     let nested = parent
         .join("i18n")
-        .join(
-            plugin_path
-                .file_stem()
-                .and_then(|s| s.to_str())
-                .unwrap_or_default(),
-        )
+        .join(stem.strip_prefix("lib").unwrap_or(stem))
         .join(format!("{locale}.yml"));
     let Some(path) = [direct, nested].into_iter().find(|path| path.is_file()) else {
         return;
