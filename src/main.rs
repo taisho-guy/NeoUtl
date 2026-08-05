@@ -15,6 +15,7 @@ macro_rules! t {
 mod app_state;
 mod audio;
 mod config;
+mod crash_report;
 mod document;
 mod easings;
 mod ecs;
@@ -96,6 +97,10 @@ fn configure_gst_plugin_path() {
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     localization::initialize();
+    let crash_reporting_enabled = ui::system_settings::load_from_disk()
+        .unwrap_or_default()
+        .crash_reporting_enabled;
+    let _sentry_guard = crash_report::init(crash_reporting_enabled);
     let _ = project::begin_runtime_session();
 
     configure_gst_plugin_path();
