@@ -63,7 +63,12 @@ pub fn load_all(decoders_dir: &Path) {
         for plugin in &plugins {
             eprintln!(
                 "{}",
-                t!("[NeoUtl] デコーダ登録: %{arg0} (%{arg1}, 拡張子={:?})")
+                t!(
+                    "[NeoUtl] デコーダ登録: %{arg0} (%{arg1}, 拡張子=%{arg2})",
+                    arg0 = format!("{}", plugin.id),
+                    arg1 = format!("{}", plugin.name),
+                    arg2 = format!("{:?}", plugin.extensions)
+                )
             );
         }
         plugins

@@ -221,6 +221,7 @@ impl AudioMixer {
                         "{}",
                         t!(
                             "[NeoUtl] audio_mixer: デコード失敗 %{arg0}: %{arg1}",
+                            arg0 = format!("{}", source.path.display()),
                             arg1 = format!("{}", err)
                         )
                     );

@@ -84,7 +84,12 @@ pub fn load_all(objects_dir: &Path) {
             .kind_id = kind_id;
         eprintln!(
             "{}",
-            t!("[NeoUtl] プラグイン登録: %{arg0} (%{arg1}, kind_id=%{arg2})")
+            t!(
+                "[NeoUtl] プラグイン登録: %{arg0} (%{arg1}, kind_id=%{arg2})",
+                arg0 = format!("{}", plugin.stable_id),
+                arg1 = format!("{}", plugin.name),
+                arg2 = format!("{}", kind_id)
+            )
         );
     }
     registry_swap().store(Arc::new(plugins));
@@ -175,6 +180,7 @@ pub fn default_objects_dir() -> PathBuf {
 }
 
 fn load_one(path: &Path) -> Result<ObjectPlugin, Box<dyn std::error::Error>> {
+    crate::localization::load_plugin_catalog(path);
     let lib = unsafe { Library::new(path) }?;
     let entry: Symbol<EntryFn> = unsafe { lib.get(ENTRY_SYMBOL) }?;
     let vtable: &'static ObjectVTable = unsafe { &*entry() };

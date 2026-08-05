@@ -403,6 +403,8 @@ fn main() {
     stage_crates(&root, profile, target, "objects", &objects);
     stage_crates(&root, profile, target, "effects", &effects);
     stage_crates(&root, profile, target, "decoders", &decoders);
+    fs::create_dir_all(target_dir(&root, profile, target).join("easings"))
+        .expect("easings配置先ディレクトリ作成失敗");
     stage_scripts(&root, profile, target);
 
     if task != "run" {
