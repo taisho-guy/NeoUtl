@@ -14,13 +14,16 @@ impl TimelineWindow {
     ) -> TimelineObject {
         let registry_snapshot = registry();
         let plugin = registry_snapshot.get(data.kind as usize);
+        let is_audio = plugin.is_some_and(|p| p.name == "Audio");
         let waveform = data
             .media_path
             .as_deref()
+            .filter(|_| is_audio)
             .and_then(|path| self.waveform_texture(ctx, path));
         let waveform_duration_frames = data
             .media_path
             .as_deref()
+            .filter(|_| is_audio)
             .and_then(|path| {
                 crate::media::cache::global()
                     .load_audio(path)
@@ -37,7 +40,10 @@ impl TimelineWindow {
             kind: data.kind,
             kind_known: plugin.is_some(),
             layer: data.layer,
-            label: plugin.map_or("Unknown", |p| p.name.as_str()).to_string(),
+            label: plugin.map_or_else(
+                || crate::localization::tr("Unknown"),
+                |p| crate::localization::object_name(&p.name),
+            ),
             selected: false,
             keyframe_frames: Vec::new(),
             waveform: waveform.map(|h| h.id()),
