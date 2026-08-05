@@ -52,8 +52,8 @@ pub fn compile_object_shader(label: &str, source_relpath: &str) {
         );
     }
 
-    println!("cargo:rerun-if-changed={}", source_path.display());
-    println!("cargo:rerun-if-env-changed=SLANG_DIR");
+    println!("{}", t!("cargo:rerun-if-changed=%{arg0}"));
+    println!("{}", t!("cargo:rerun-if-env-changed=SLANG_DIR"));
 }
 rust_i18n::i18n!("../../i18n");
 #[macro_use]

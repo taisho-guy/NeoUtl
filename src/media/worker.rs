@@ -383,7 +383,14 @@ impl DecodeWorker {
                     && requested_t.load(Ordering::Acquire) == target
                     && let Err(e) = decode_thread.prefetch_only(far)
                 {
-                    eprintln!("[decode-worker] speculative prefetch(frame={far}) failed: {e}");
+                    eprintln!(
+                        "{}",
+                        t!(
+                            "[decode-worker] speculative prefetch(frame=%{arg0}) failed: %{arg1}",
+                            arg0 = format!("{}", far),
+                            arg1 = format!("{}", e)
+                        )
+                    );
                     if decode_thread.hung {
                         on_fail_t(e);
                         return;

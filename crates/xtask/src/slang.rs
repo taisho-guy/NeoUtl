@@ -67,7 +67,13 @@ fn read_installed_tag(slang_dir: &Path) -> Option<String> {
 
 fn write_installed_tag(slang_dir: &Path, tag_name: &str) {
     if let Err(err) = fs::write(version_marker_path(slang_dir), tag_name) {
-        eprintln!("[xtask][slang] バージョン記録失敗: {err}");
+        eprintln!(
+            "{}",
+            t!(
+                "[xtask][slang] バージョン記録失敗: %{arg0}",
+                arg0 = format!("{}", err)
+            )
+        );
     }
 }
 
@@ -160,7 +166,7 @@ fn extract_zip(bytes: &[u8], slang_dir: &Path) -> Result<(), String> {
             .by_index(index)
             .map_err(|err| format!("zipエントリ読込失敗: {err}"))?;
         let Some(relative_path) = entry.enclosed_name() else {
-            eprintln!("[xtask][slang] 不正なzipエントリを無視: {}", entry.name());
+            eprintln!("{}", t!("[xtask][slang] 不正なzipエントリを無視: %{arg0}"));
             continue;
         };
         let dest_path = slang_dir.join(&relative_path);
@@ -200,15 +206,17 @@ pub fn ensure_installed(workspace_root: &Path, offline: bool) {
     if offline {
         if local_installed {
             eprintln!(
-                "[xtask][slang] --offline指定のため更新確認をスキップ: 導入済み {}",
-                installed_tag.as_deref().unwrap_or("unknown")
+                "{}",
+                t!("[xtask][slang] --offline指定のため更新確認をスキップ: 導入済み %{arg0}")
             );
             return;
         }
         if let Some(system_slangc) = find_system_slangc() {
             eprintln!(
-                "[xtask][slang] --offline指定のため更新確認をスキップ: システム導入済みslangcを利用 ({})",
-                system_slangc.display()
+                "{}",
+                t!(
+                    "[xtask][slang] --offline指定のため更新確認をスキップ: システム導入済みslangcを利用 (%{arg0})"
+                )
             );
             return;
         }
@@ -225,14 +233,21 @@ pub fn ensure_installed(workspace_root: &Path, offline: bool) {
         Err(err) => {
             if local_installed {
                 eprintln!(
-                    "[xtask][slang] 更新確認をスキップ（{err}）。導入済みのSlangを継続利用します"
+                    "{}",
+                    t!(
+                        "[xtask][slang] 更新確認をスキップ（%{arg0}）。導入済みのSlangを継続利用します",
+                        arg0 = format!("{}", err)
+                    )
                 );
                 return;
             }
             if let Some(system_slangc) = find_system_slangc() {
                 eprintln!(
-                    "[xtask][slang] 更新確認失敗（{err}）。システム導入済みslangcを利用します ({})",
-                    system_slangc.display()
+                    "{}",
+                    t!(
+                        "[xtask][slang] 更新確認失敗（%{arg0}）。システム導入済みslangcを利用します (%{arg1})",
+                        arg0 = format!("{}", err)
+                    )
                 );
                 return;
             }
@@ -243,7 +258,7 @@ pub fn ensure_installed(workspace_root: &Path, offline: bool) {
     };
 
     if installed_tag.as_deref() == Some(release.tag_name.as_str()) && slang_dir.is_dir() {
-        eprintln!("[xtask][slang] 最新版導入済み: {}", release.tag_name);
+        eprintln!("{}", t!("[xtask][slang] 最新版導入済み: %{arg0}"));
         return;
     }
 
@@ -254,15 +269,12 @@ pub fn ensure_installed(workspace_root: &Path, offline: bool) {
         );
     };
 
-    eprintln!(
-        "[xtask][slang] 導入開始: {} ({})",
-        release.tag_name, asset.name
-    );
+    eprintln!("{}", t!("[xtask][slang] 導入開始: %{arg0} (%{arg1})"));
     let bytes = download_asset_bytes(&asset.browser_download_url)
         .unwrap_or_else(|err| panic!("[xtask][slang] ダウンロード失敗: {err}"));
     extract_zip(&bytes, &slang_dir).unwrap_or_else(|err| panic!("[xtask][slang] 展開失敗: {err}"));
     write_installed_tag(&slang_dir, &release.tag_name);
-    eprintln!("[xtask][slang] 導入完了: {}", release.tag_name);
+    eprintln!("{}", t!("[xtask][slang] 導入完了: %{arg0}"));
 }
 
 /// build.rs（neoutl-object-shader-build等）がslangcを解決出来るよう、
@@ -283,7 +295,10 @@ pub fn apply_build_env(cmd: &mut Command, workspace_root: &Path) {
     let mut paths: Vec<PathBuf> = vec![bin_dir];
     paths.extend(env::split_paths(&existing_path));
     let Ok(joined_path) = env::join_paths(paths) else {
-        eprintln!("[xtask][slang] PATH合成失敗、SLANG_DIRのみ設定します");
+        eprintln!(
+            "{}",
+            t!("[xtask][slang] PATH合成失敗、SLANG_DIRのみ設定します")
+        );
         return;
     };
     cmd.env("PATH", joined_path);

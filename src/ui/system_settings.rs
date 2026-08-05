@@ -127,7 +127,7 @@ impl SystemSettingsWindow {
 
     fn reload(&mut self, world_holder: &Arc<Mutex<EcsWorld>>) {
         let Some(loaded) = load_from_disk() else {
-            self.save_status = tr("設定ファイルなし");
+            self.save_status = t!("設定ファイルなし");
             return;
         };
         world_holder
@@ -150,7 +150,7 @@ impl SystemSettingsWindow {
         self.magnetic_snap_range = loaded.magnetic_snap_range;
         self.export_container = loaded.export_container;
         self.export_codec = loaded.export_codec;
-        self.save_status = tr("再読込完了");
+        self.save_status = t!("再読込完了");
     }
 
     pub fn show(&mut self, _ctx: &Context, ui: &mut Ui, world_holder: &Arc<Mutex<EcsWorld>>) {
@@ -188,14 +188,14 @@ impl SystemSettingsWindow {
 
             ui.separator();
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                if ui.button(tr("保存")).clicked() {
+                if ui.button(t!("保存")).clicked() {
                     let s = world_holder.lock().unwrap().get_system_settings();
                     self.save_status = match save_to_disk(&s) {
-                        Ok(()) => tr("保存完了"),
-                        Err(_) => tr("保存失敗"),
+                        Ok(()) => t!("保存完了"),
+                        Err(_) => t!("保存失敗"),
                     };
                 }
-                if ui.button(tr("再読込")).clicked() {
+                if ui.button(t!("再読込")).clicked() {
                     self.reload(world_holder);
                 }
                 ui.label(&self.save_status);
@@ -226,7 +226,7 @@ impl SystemSettingsWindow {
     }
 
     fn page_appearance(&mut self, ui: &mut egui::Ui, world_holder: &Arc<Mutex<EcsWorld>>) {
-        ui.label(tr("テーマ"));
+        ui.label(t!("テーマ"));
         let resp = ui.add(ThemeSwitcher::new(&mut self.theme_choice).auto_install(false));
         if resp.changed() {
             crate::theme::set(self.theme_choice);

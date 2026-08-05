@@ -1,6 +1,6 @@
 # i18n-literal-migrator
 
-`syn` で Rust の AST を解析し、標準出力マクロ（`print!`・`println!`・`eprint!`・`eprintln!`）のメッセージだけを `t!()` に変換します。通常の文字列リテラル（環境変数名、パス、設定キーなど）は変更しません。書き戻しは対象マクロの span のみを置換します。
+`syn` で Rust の AST を解析し、標準出力マクロ（`print!`・`println!`・`eprint!`・`eprintln!`）と、固定文字列を受け取る `tr("...")` / `effect_name("...")` などを `t!()` に変換します。通常の文字列リテラル、動的な `tr(label)`、環境変数名、パス、設定キーは変更しません。書き戻しは対象ノードの span のみを置換します。
 
 ```sh
 cargo run --manifest-path tools/i18n-literal-migrator/Cargo.toml -- src crates

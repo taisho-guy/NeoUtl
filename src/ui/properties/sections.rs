@@ -136,7 +136,7 @@ pub fn text_section(ui: &mut egui::Ui, world: &mut EcsWorld, id: usize) {
     let (clip_start, clip_end) = clip_bounds(world, id);
     let current_frame = world.current_frame();
     ui.separator();
-    ui.colored_label(egui::Color32::from_rgb(0x8a, 0xab, 0xff), tr("テキスト"));
+    ui.colored_label(egui::Color32::from_rgb(0x8a, 0xab, 0xff), t!("テキスト"));
     for schema in TEXT_SCHEMA {
         match schema.kind {
             ParamKind::Text => {
@@ -185,7 +185,7 @@ pub fn shape_section(ui: &mut egui::Ui, world: &mut EcsWorld, id: usize) {
     let (clip_start, clip_end) = clip_bounds(world, id);
     let current_frame = world.current_frame();
     ui.separator();
-    ui.colored_label(egui::Color32::from_rgb(0x8a, 0xab, 0xff), tr("図形"));
+    ui.colored_label(egui::Color32::from_rgb(0x8a, 0xab, 0xff), t!("図形"));
     for schema in SHAPE_SCHEMA {
         let value = shape.get_param(schema.key).unwrap_or(0.0);
         let (min, max) = resolve_range(schema.range, 1920.0, 1080.0);
@@ -219,7 +219,7 @@ pub fn audio_section(ui: &mut egui::Ui, world: &mut EcsWorld, id: usize) {
         return;
     };
     ui.separator();
-    ui.colored_label(egui::Color32::from_rgb(0x8a, 0xab, 0xff), tr("オーディオ"));
+    ui.colored_label(egui::Color32::from_rgb(0x8a, 0xab, 0xff), t!("オーディオ"));
     for schema in AUDIO_SCHEMA {
         if !is_visible(schema, |k| audio.get_param(k).unwrap_or(0.0)) {
             continue;

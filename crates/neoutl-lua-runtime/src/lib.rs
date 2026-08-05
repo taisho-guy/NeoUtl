@@ -87,8 +87,11 @@ impl LuaSystem {
         for path in paths {
             if let Err(err) = self.load_file(&path) {
                 eprintln!(
-                    "[NeoUtl] systemスクリプト実行失敗 {}: {err}",
-                    path.display()
+                    "{}",
+                    t!(
+                        "[NeoUtl] systemスクリプト実行失敗 %{arg0}: %{arg1}",
+                        arg1 = format!("{}", err)
+                    )
                 );
             }
         }

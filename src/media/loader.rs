@@ -28,7 +28,13 @@ pub fn load_all(decoders_dir: &Path) {
         let entries = match std::fs::read_dir(decoders_dir) {
             Ok(e) => e,
             Err(err) => {
-                eprintln!("[NeoUtl] decoders/ 読み込み失敗: {err}");
+                eprintln!(
+                    "{}",
+                    t!(
+                        "[NeoUtl] decoders/ 読み込み失敗: %{arg0}",
+                        arg0 = format!("{}", err)
+                    )
+                );
                 plugins.sort_by(|a, b| a.id.cmp(&b.id));
                 return plugins;
             }
@@ -42,7 +48,13 @@ pub fn load_all(decoders_dir: &Path) {
         plugins.extend(candidates.iter().filter_map(|path| match load_one(path) {
             Ok(p) => Some(p),
             Err(err) => {
-                eprintln!("[NeoUtl] デコーダ読み込み失敗 {}: {err}", path.display());
+                eprintln!(
+                    "{}",
+                    t!(
+                        "[NeoUtl] デコーダ読み込み失敗 %{arg0}: %{arg1}",
+                        arg1 = format!("{}", err)
+                    )
+                );
                 None
             }
         }));
@@ -50,8 +62,8 @@ pub fn load_all(decoders_dir: &Path) {
         plugins.sort_by(|a, b| a.id.cmp(&b.id));
         for plugin in &plugins {
             eprintln!(
-                "[NeoUtl] デコーダ登録: {} ({}, 拡張子={:?})",
-                plugin.name, plugin.id, plugin.extensions
+                "{}",
+                t!("[NeoUtl] デコーダ登録: %{arg0} (%{arg1}, 拡張子={:?})")
             );
         }
         plugins
@@ -185,5 +197,8 @@ fn is_dylib(path: &Path) -> bool {
 #[cfg(target_os = "linux")]
 pub fn inject_gpuvideo_shared_device(device: std::sync::Arc<gpu_video::VulkanDevice>) {
     neoutl_media_gpuvideo_decoder::set_shared_device(device);
-    eprintln!("[NeoUtl] gpu_video共有デバイス注入（ネイティブ呼び出し）");
+    eprintln!(
+        "{}",
+        t!("[NeoUtl] gpu_video共有デバイス注入（ネイティブ呼び出し）")
+    );
 }

@@ -67,7 +67,7 @@ impl EffectAddDialog {
                     .show(ui, |ui| {
                         ui.horizontal(|ui| {
                             if ui
-                                .selectable_label(self.category_filter.is_empty(), tr("全て"))
+                                .selectable_label(self.category_filter.is_empty(), t!("全て"))
                                 .clicked()
                             {
                                 self.category_filter.clear();
@@ -90,7 +90,7 @@ impl EffectAddDialog {
                     if rows.is_empty() {
                         ui.colored_label(
                             egui::Color32::from_rgb(0x55, 0x55, 0x5e),
-                            tr("該当するエフェクトがありません"),
+                            t!("該当するエフェクトがありません"),
                         );
                     }
                     for row in &rows {
@@ -115,7 +115,7 @@ impl EffectAddDialog {
 
                 ui.separator();
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    if ui.button(tr("閉じる")).clicked() {
+                    if ui.button(t!("閉じる")).clicked() {
                         close_clicked = true;
                     }
                 });

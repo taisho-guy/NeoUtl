@@ -1,8 +1,16 @@
 #![recursion_limit = "256"]
+#![warn(clippy::pedantic)]
+#![warn(clippy::indexing_slicing)]
+#![warn(clippy::arithmetic_side_effects)]
 
 rust_i18n::i18n!("i18n");
-#[macro_use]
 extern crate rust_i18n;
+
+macro_rules! t {
+    ($($args:tt)*) => {
+        rust_i18n::t!($($args)*).to_string()
+    };
+}
 
 mod app_state;
 mod audio;
@@ -24,13 +32,89 @@ mod shortcuts;
 mod theme;
 mod ui;
 
-use std::rc::Rc;
+fn default_gst_plugin_dir() -> Option<std::path::PathBuf> {
+    #[allow(unused_variables)]
+    let exe_dir = std::env::current_exe().ok()?.parent()?.to_path_buf();
+
+    #[cfg(target_os = "macos")]
+    {
+        let dir = exe_dir.join("../Resources/gstreamer-1.0");
+        return dir.is_dir().then_some(dir);
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        let dir = exe_dir.join("lib/gstreamer-1.0");
+        return dir.is_dir().then_some(dir);
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        None
+    }
+}
+
+fn gst_registry_cache_path() -> Option<std::path::PathBuf> {
+    let exe_dir = std::env::current_exe().ok()?.parent()?.to_path_buf();
+    let dir = exe_dir.join("gst-registry");
+    std::fs::create_dir_all(&dir).ok()?;
+    Some(dir.join("registry.bin"))
+}
+
+fn configure_gst_plugin_path() {
+    let system_settings = ui::system_settings::load_from_disk().unwrap_or_default();
+    media::runtime::set_worker_threads(system_settings.worker_threads);
+    media::runtime::apply_decode_backend_env(system_settings.decode_backend);
+
+    unsafe {
+        #[cfg(not(target_os = "linux"))]
+        std::env::set_var("GST_PLUGIN_SYSTEM_PATH_1_0", "");
+
+        if let Some(registry_path) = gst_registry_cache_path()
+            && let Some(path_str) = registry_path.to_str()
+        {
+            std::env::set_var("GST_REGISTRY_1_0", path_str);
+        }
+    }
+
+    let Some(dir) = default_gst_plugin_dir() else {
+        return;
+    };
+    let Some(dir_str) = dir.to_str() else {
+        eprintln!(
+            "[NeoUtl] GST_PLUGIN_PATHの解決に失敗（非UTF-8パス）: {}",
+            dir.display()
+        );
+        return;
+    };
+    unsafe {
+        std::env::set_var("GST_PLUGIN_PATH", dir_str);
+    }
+    eprintln!("[NeoUtl] GST_PLUGIN_PATH設定: {dir_str}");
+}
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     localization::initialize();
+    let _ = project::begin_runtime_session();
 
-    let gpu = Rc::new(gpu_shared::init_shared_gpu()?);
+    configure_gst_plugin_path();
+
+    std::thread::spawn(neoutl_media_gstreamer_encoder::warm_up);
+
+    objects::load_all(&objects::default_objects_dir());
+    effects::load_all(
+        &effects::default_effects_dir(),
+        &effects::default_effects_lua_dir(),
+    );
+    media::loader::load_all(&media::loader::default_decoders_dir());
+    easings::loader::load_all(&easings::loader::default_easings_dir());
+    audio::plugin_registry::load_all(&audio::plugin_registry::default_plugins_dir());
+
+    let shared_gpu = std::rc::Rc::new(gpu_shared::init_shared_gpu()?);
+
     let preview_slot = egui_loop::make_preview_slot();
-    ui::install(gpu.clone(), preview_slot.clone());
-    egui_loop::run(gpu, preview_slot)
+    egui_loop::run(shared_gpu, preview_slot)?;
+
+    project::finish_runtime_session();
+    Ok(())
 }

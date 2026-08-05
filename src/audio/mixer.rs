@@ -102,7 +102,13 @@ impl AudioMixer {
         match build_output(sample_rate, self.channels, self.ring.clone()) {
             Ok(output) => self.output = Some(output),
             Err(err) => {
-                eprintln!("[NeoUtl] audio_mixer: 出力再構築失敗: {err}");
+                eprintln!(
+                    "{}",
+                    t!(
+                        "[NeoUtl] audio_mixer: 出力再構築失敗: %{arg0}",
+                        arg0 = format!("{}", err)
+                    )
+                );
                 self.output = None;
             }
         }
@@ -212,8 +218,11 @@ impl AudioMixer {
                 }
                 Err(err) => {
                     eprintln!(
-                        "[NeoUtl] audio_mixer: デコード失敗 {}: {err}",
-                        source.path.display()
+                        "{}",
+                        t!(
+                            "[NeoUtl] audio_mixer: デコード失敗 %{arg0}: %{arg1}",
+                            arg1 = format!("{}", err)
+                        )
                     );
                     return;
                 }
@@ -303,9 +312,11 @@ impl AudioMixer {
             for (&param_id, &value) in &instance_ref.params {
                 if let Err(err) = plugin.set_parameter(param_id, value) {
                     eprintln!(
-                        "[NeoUtl] audio_mixer: parameter設定失敗 path={} id={}: {err}",
-                        instance_ref.path.display(),
-                        param_id
+                        "{}",
+                        t!(
+                            "[NeoUtl] audio_mixer: parameter設定失敗 path=%{arg0} id=%{arg1}: %{arg2}",
+                            arg2 = format!("{}", err)
+                        )
                     );
                 }
             }
@@ -332,16 +343,22 @@ fn load_plugin_instance(instance_ref: &PluginInstanceRef) -> CachedPlugin {
             Ok(mut p) => {
                 if let Err(err) = p.start() {
                     eprintln!(
-                        "[NeoUtl] audio_mixer: vst3 start失敗 {}: {err}",
-                        instance_ref.path.display()
+                        "{}",
+                        t!(
+                            "[NeoUtl] audio_mixer: vst3 start失敗 %{arg0}: %{arg1}",
+                            arg1 = format!("{}", err)
+                        )
                     );
                 }
                 Some(Box::new(p))
             }
             Err(err) => {
                 eprintln!(
-                    "[NeoUtl] audio_mixer: vst3ホスト生成失敗 path={}: {err}",
-                    instance_ref.path.display()
+                    "{}",
+                    t!(
+                        "[NeoUtl] audio_mixer: vst3ホスト生成失敗 path=%{arg0}: %{arg1}",
+                        arg1 = format!("{}", err)
+                    )
                 );
                 None
             }
@@ -350,17 +367,22 @@ fn load_plugin_instance(instance_ref: &PluginInstanceRef) -> CachedPlugin {
             Ok(mut p) => {
                 if let Err(err) = p.start() {
                     eprintln!(
-                        "[NeoUtl] audio_mixer: clap start失敗 {}: {err}",
-                        instance_ref.path.display()
+                        "{}",
+                        t!(
+                            "[NeoUtl] audio_mixer: clap start失敗 %{arg0}: %{arg1}",
+                            arg1 = format!("{}", err)
+                        )
                     );
                 }
                 Some(Box::new(p))
             }
             Err(err) => {
                 eprintln!(
-                    "[NeoUtl] audio_mixer: clapホスト生成失敗 path={} id={}: {err}",
-                    instance_ref.path.display(),
-                    instance_ref.plugin_id
+                    "{}",
+                    t!(
+                        "[NeoUtl] audio_mixer: clapホスト生成失敗 path=%{arg0} id=%{arg1}: %{arg2}",
+                        arg2 = format!("{}", err)
+                    )
                 );
                 None
             }

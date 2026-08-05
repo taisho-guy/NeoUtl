@@ -131,14 +131,14 @@ pub fn load_all(effects_dir: &Path, scripts_dir: &Path) {
         if ids.insert(plugin.id.clone()) {
             sources.push(Arc::new(EffectSource::Native(plugin)));
         } else {
-            eprintln!("[NeoUtl] エフェクトID重複、除外: {}", plugin.id);
+            eprintln!("{}", t!("[NeoUtl] エフェクトID重複、除外: %{arg0}"));
         }
     }
     for lua_source in neoutl_effect_lua::load_dir(scripts_dir) {
         if ids.insert(lua_source.id.clone()) {
             sources.push(Arc::new(EffectSource::Lua(lua_source)));
         } else {
-            eprintln!("[NeoUtl] エフェクトID重複、除外: {}", lua_source.id);
+            eprintln!("{}", t!("[NeoUtl] エフェクトID重複、除外: %{arg0}"));
         }
     }
 
@@ -149,10 +149,8 @@ pub fn load_all(effects_dir: &Path, scripts_dir: &Path) {
             EffectSource::Lua(_) => "lua",
         };
         eprintln!(
-            "[NeoUtl] エフェクト登録: {} ({}) [{}]",
-            s.name(),
-            s.id(),
-            kind
+            "{}",
+            t!("[NeoUtl] エフェクト登録: %{arg0} (%{arg1}) [%{arg2}]")
         );
     }
     registry_swap().store(Arc::new(sources));
@@ -197,7 +195,13 @@ pub fn reload_one(path: &Path) -> Result<(), String> {
         })
         .collect();
     registry_swap().store(Arc::new(next));
-    eprintln!("[NeoUtl] エフェクト再ロード完了: {id}");
+    eprintln!(
+        "{}",
+        t!(
+            "[NeoUtl] エフェクト再ロード完了: %{arg0}",
+            arg0 = format!("{}", id)
+        )
+    );
     Ok(())
 }
 
@@ -219,21 +223,33 @@ pub fn reload_lua(sources: Vec<LuaEffectSource>) {
         if ids.insert(lua_source.id.clone()) {
             next.push(Arc::new(EffectSource::Lua(lua_source)));
         } else {
-            eprintln!("[NeoUtl] エフェクトID重複、除外: {}", lua_source.id);
+            eprintln!("{}", t!("[NeoUtl] エフェクトID重複、除外: %{arg0}"));
         }
     }
 
     next.sort_by(|a, b| a.id().cmp(b.id()));
     let count = next.len();
     registry_swap().store(Arc::new(next));
-    eprintln!("[NeoUtl] Luaエフェクト再ロード完了: {count}件");
+    eprintln!(
+        "{}",
+        t!(
+            "[NeoUtl] Luaエフェクト再ロード完了: %{arg0}件",
+            arg0 = format!("{}", count)
+        )
+    );
 }
 
 fn load_native(effects_dir: &Path) -> Vec<EffectPlugin> {
     let entries = match std::fs::read_dir(effects_dir) {
         Ok(e) => e,
         Err(err) => {
-            eprintln!("[NeoUtl] effects/ 読み込み失敗: {err}");
+            eprintln!(
+                "{}",
+                t!(
+                    "[NeoUtl] effects/ 読み込み失敗: %{arg0}",
+                    arg0 = format!("{}", err)
+                )
+            );
             return Vec::new();
         }
     };
@@ -248,7 +264,13 @@ fn load_native(effects_dir: &Path) -> Vec<EffectPlugin> {
         .filter_map(|path| match load_one(path) {
             Ok(p) => Some(p),
             Err(err) => {
-                eprintln!("[NeoUtl] エフェクト読み込み失敗 {}: {err}", path.display());
+                eprintln!(
+                    "{}",
+                    t!(
+                        "[NeoUtl] エフェクト読み込み失敗 %{arg0}: %{arg1}",
+                        arg1 = format!("{}", err)
+                    )
+                );
                 None
             }
         })
