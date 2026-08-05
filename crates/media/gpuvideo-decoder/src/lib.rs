@@ -239,7 +239,6 @@ mod imp {
         free: VecDeque<usize>,
         map: HashMap<i64, usize>,
         order: VecDeque<i64>,
-        capacity: usize,
     }
 
     impl TextureCache {
@@ -281,7 +280,6 @@ mod imp {
                 free: (0..capacity).collect(),
                 map: HashMap::new(),
                 order: VecDeque::new(),
-                capacity,
             }
         }
 
@@ -597,7 +595,8 @@ mod imp {
             eprintln!(
                 "{}",
                 t!(
-                    "[gpuvideo][open] create_wgpu_textures_decoder_h264 end path=%{arg0} elapsed_ms=%{arg1} thread={:?}"
+                    "[gpuvideo][open] create_wgpu_textures_decoder_h264 end path=%{arg0} elapsed_ms=%{arg1} thread={:?}",
+                    arg1 = decoder_init_started.elapsed().as_millis()
                 )
             );
 
@@ -620,7 +619,8 @@ mod imp {
             eprintln!(
                 "{}",
                 t!(
-                    "[gpuvideo][open] converter init end path=%{arg0} elapsed_ms=%{arg1} thread={:?}"
+                    "[gpuvideo][open] converter init end path=%{arg0} elapsed_ms=%{arg1} thread={:?}",
+                    arg1 = converter_init_started.elapsed().as_millis()
                 )
             );
 
@@ -790,7 +790,10 @@ mod imp {
                         })?;
                     eprintln!(
                         "{}",
-                        t!("[gpuvideo][reset] end #%{arg0} elapsed_ms=%{arg1} thread={:?}")
+                        t!(
+                            "[gpuvideo][reset] end #%{arg0} elapsed_ms=%{arg1} thread={:?}",
+                            arg1 = reset_started.elapsed().as_millis()
+                        )
                     );
                     self.next_output_index = packet.display_index;
                 }
@@ -837,7 +840,8 @@ mod imp {
                 eprintln!(
                     "{}",
                     t!(
-                        "[gpuvideo][decode] call_end display_index=%{arg0} frame_index=%{arg1} elapsed_ms=%{arg2} output_count=%{arg3} thread={:?}"
+                        "[gpuvideo][decode] call_end display_index=%{arg0} frame_index=%{arg1} elapsed_ms=%{arg2} output_count=%{arg3} thread={:?}",
+                        arg2 = decode_started.elapsed().as_millis()
                     )
                 );
 
@@ -931,7 +935,8 @@ mod imp {
                     eprintln!(
                         "{}",
                         t!(
-                            "[gpuvideo][convert] display_index=%{arg0} frame_index=%{arg1} elapsed_ms=%{arg2} thread={:?}"
+                            "[gpuvideo][convert] display_index=%{arg0} frame_index=%{arg1} elapsed_ms=%{arg2} thread={:?}",
+                            arg2 = convert_started.elapsed().as_millis()
                         )
                     );
 

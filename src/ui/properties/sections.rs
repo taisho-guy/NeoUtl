@@ -6,7 +6,7 @@ use crate::ecs::components::ParamAccess;
 use crate::ecs::object_schema::{
     AUDIO_SCHEMA, SHAPE_SCHEMA, TEXT_SCHEMA, TRANSFORM_SCHEMA, is_visible, resolve_range,
 };
-use crate::localization::{effect_param_label, tr};
+use crate::localization::effect_param_label;
 use neoutl_shared_abi::ParamKind;
 
 /// Float/Color系パラメータ1行の共通描画。呼び出し側は`get`/`set`/`track`/`set_kf`/

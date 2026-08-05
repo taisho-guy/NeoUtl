@@ -1,4 +1,3 @@
-use crate::localization::tr;
 use crate::project::{self, ProjectMeta};
 
 pub struct LauncherPanel {

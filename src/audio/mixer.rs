@@ -31,7 +31,7 @@ const CONTINUITY_GAP_SECONDS: f64 = 0.25;
 /// 適用の上で加算合成し、rodio経由で出力デバイスへ書き込む。
 /// デバイス側の要求サンプルフォーマット（f32/i16/u16等）への変換はrodioが担う。
 pub struct AudioMixer {
-    output: Option<AudioOutput>,
+    output: Option<MixerDeviceSink>,
     ring: Arc<Mutex<VecDeque<f32>>>,
     sample_rate: u32,
     channels: u16,
@@ -51,11 +51,6 @@ struct CachedPlugin {
     path: PathBuf,
     plugin_id: String,
     plugin: Option<Box<dyn NeoPlugin>>,
-}
-
-/// deviceはdrop時に出力を停止するため、AudioMixerと同じ生存期間で保持する。
-struct AudioOutput {
-    device: MixerDeviceSink,
 }
 
 impl AudioMixer {
@@ -137,6 +132,9 @@ impl AudioMixer {
     /// にのみ用いる。
     pub fn process_frame(&mut self, world: &EcsWorld, current_frame: i32, speed: f64) {
         if speed <= 0.0 {
+            return;
+        }
+        if self.output.is_none() {
             return;
         }
         let now = Instant::now();
@@ -412,7 +410,7 @@ fn build_output(
     sample_rate: u32,
     channels: u16,
     ring: Arc<Mutex<VecDeque<f32>>>,
-) -> Result<AudioOutput, String> {
+) -> Result<MixerDeviceSink, String> {
     let sample_rate = NonZero::new(sample_rate).ok_or("sample_rate must be nonzero")?;
     let channels = NonZero::new(channels).ok_or("channels must be nonzero")?;
     let device = DeviceSinkBuilder::from_default_device()
@@ -426,7 +424,7 @@ fn build_output(
         sample_rate,
         channels,
     });
-    Ok(AudioOutput { device })
+    Ok(device)
 }
 
 /// AudioMixer::process_frameが積んだサンプルをpopして返す無限長Source。

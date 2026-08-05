@@ -1,6 +1,5 @@
 use neoutl_audio_plugin_host::{
-    PluginCatalogEntry, PluginFormat, discover_clap_file, discover_clap_paths, discover_vst3_file,
-    discover_vst3_paths,
+    PluginCatalogEntry, PluginFormat, discover_clap_paths, discover_vst3_paths,
 };
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
@@ -138,35 +137,6 @@ fn system_clap_dirs() -> Vec<PathBuf> {
         }
     }
     roots
-}
-
-pub fn registry() -> &'static [PluginCatalogEntry] {
-    REGISTRY.get().map_or(&[][..], Vec::as_slice)
-}
-
-pub fn by_plugin_id(plugin_id: &str) -> Option<&'static PluginCatalogEntry> {
-    registry().iter().find(|e| e.plugin_id == plugin_id)
-}
-
-pub fn by_path(path: &str) -> Option<&'static PluginCatalogEntry> {
-    registry().iter().find(|e| e.path.to_string_lossy() == path)
-}
-
-pub fn resolve(path: &Path, format: PluginFormat) -> Option<PluginCatalogEntry> {
-    if format == PluginFormat::Vst3 {
-        return discover_vst3_file(path).into_iter().next();
-    }
-    let entries = match format {
-        PluginFormat::Vst3 => discover_vst3_file(path),
-        PluginFormat::Clap => discover_clap_file(path),
-    };
-    if entries.is_empty() {
-        eprintln!(
-            "{}",
-            t!("[NeoUtl] audioプラグインのメタデータ取得失敗: {:?} %{arg1}")
-        );
-    }
-    entries.into_iter().next()
 }
 
 /// effects::loader::default_effects_dirと同型。VST3/CLAP双方を1ディレクトリへ集約する

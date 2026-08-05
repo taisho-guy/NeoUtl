@@ -12,7 +12,7 @@
 
 use crate::ecs::EcsWorld;
 use crate::ecs::types::Keyframe;
-use crate::localization::{effect_param_label, tr};
+use crate::localization::effect_param_label;
 use egui_plot::{Line, Plot, PlotPoint, PlotPoints, Points};
 use neoutl_easing_standard::{StandardEasing, ease, encode_payload, parse_payload};
 use std::sync::Mutex;

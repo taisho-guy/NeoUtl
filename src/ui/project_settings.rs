@@ -1,5 +1,4 @@
 use crate::app_state::{self, SharedAppState};
-use crate::localization::tr;
 use crate::project;
 use crate::ui::system_settings::fields::{choice_field, name_field};
 use egui::{Context, Ui};
@@ -50,6 +49,10 @@ impl ProjectSettingsWindow {
         world.set_audio_format(sample_rate, channels);
         let _ = project::save_from_world(&world);
         drop(world);
+        app_state::active_audio_mixer(state)
+            .lock()
+            .unwrap()
+            .set_sample_rate(sample_rate);
 
         {
             let mut s = state.lock().unwrap();

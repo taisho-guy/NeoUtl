@@ -95,7 +95,11 @@ pub fn load_all(easings_dir: &Path) {
         for plugin in &plugins {
             eprintln!(
                 "{}",
-                t!("[NeoUtl] イージングエンジン登録: %{arg0} (%{arg1})")
+                t!(
+                    "[NeoUtl] イージングエンジン登録: %{arg0} (%{arg1})",
+                    arg0 = plugin.id,
+                    arg1 = plugin.name
+                )
             );
         }
         plugins

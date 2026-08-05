@@ -1,7 +1,6 @@
 use crate::app_state::{self, SharedAppState};
 use crate::ecs::resources::ProjectResource;
 use crate::ecs::systems::get_active_objects_system;
-use crate::localization::tr;
 use crate::renderer::RenderEngine;
 use egui_wgpu::Renderer as EguiRenderer;
 use egui_wgpu::wgpu;
@@ -229,7 +228,7 @@ impl PreviewPanel {
                     ui.close();
                 }
                 if ui.button(t!("上書き保存")).clicked() {
-                    app_state::save_all(state);
+                    let _ = app_state::save_active(state);
                     ui.close();
                 }
                 if ui.button(t!("名前を付けて保存")).clicked() {
