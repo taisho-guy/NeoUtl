@@ -171,6 +171,7 @@
 "[xtask] バイナリ起動失敗 ({}): {e}": "[xtask] バイナリ起動失敗 ({}): {e}"
 "[xtask] ビルド対象パッケージ0件のためcargo呼び出しを省略": "[xtask] ビルド対象パッケージ0件のためcargo呼び出しを省略"
 "[xtask] 統合ビルド失敗: exit=%{arg0}": "[xtask] 統合ビルド失敗: exit=%{arg0}"
+"[xtask] 翻訳配置失敗 {filename}: {err}": "[xtask] 翻訳配置失敗 {filename}: {err}"
 "[xtask] 解析失敗: %{arg0}": "[xtask] 解析失敗: %{arg0}"
 "[xtask] 配置: %{arg0}/%{arg1}": "[xtask] 配置: %{arg0}/%{arg1}"
 "[xtask] 配置: scripts/（Lua）": "[xtask] 配置: scripts/（Lua）"
