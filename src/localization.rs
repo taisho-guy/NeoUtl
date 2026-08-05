@@ -54,7 +54,19 @@ pub fn load_plugin_catalog(plugin_path: &Path) {
         .read()
         .expect("locale lock poisoned")
         .clone();
-    let path = parent.join("i18n").join(format!("{locale}.yml"));
+    let direct = parent.join("i18n").join(format!("{locale}.yml"));
+    let nested = parent
+        .join("i18n")
+        .join(
+            plugin_path
+                .file_stem()
+                .and_then(|s| s.to_str())
+                .unwrap_or_default(),
+        )
+        .join(format!("{locale}.yml"));
+    let Some(path) = [direct, nested].into_iter().find(|path| path.is_file()) else {
+        return;
+    };
     let Ok(content) = std::fs::read_to_string(path) else {
         return;
     };

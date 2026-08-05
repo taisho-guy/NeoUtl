@@ -13,6 +13,7 @@ mod slang;
 struct DiscoveredCrate {
     package_name: String,
     lib_name: String,
+    source_dir: PathBuf,
 }
 
 /// workspace_root/subdir 直下の各ディレクトリのCargo.tomlを走査し、
@@ -104,6 +105,7 @@ fn discover_crates(workspace_root: &Path, subdir: &str) -> Vec<DiscoveredCrate> 
         result.push(DiscoveredCrate {
             package_name,
             lib_name,
+            source_dir: manifest_dir,
         });
     }
 
@@ -310,7 +312,26 @@ fn stage_crates(
                 )
             ),
         }
+        let catalog_src = c.source_dir.join("i18n");
+        if catalog_src.is_dir() {
+            let catalog_dst = dest_dir.join("i18n").join(&c.lib_name);
+            if let Err(err) = copy_i18n(&catalog_src, &catalog_dst) {
+                eprintln!("[xtask] 翻訳配置失敗 {filename}: {err}");
+            }
+        }
     }
+}
+
+fn copy_i18n(src: &Path, dst: &Path) -> std::io::Result<()> {
+    fs::create_dir_all(dst)?;
+    for entry in fs::read_dir(src)? {
+        let entry = entry?;
+        let path = entry.path();
+        if path.extension().and_then(|e| e.to_str()) == Some("yml") {
+            fs::copy(&path, dst.join(entry.file_name()))?;
+        }
+    }
+    Ok(())
 }
 
 fn stage_scripts(workspace_root: &Path, profile: &str, target: Option<&str>) {
