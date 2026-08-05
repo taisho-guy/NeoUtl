@@ -5,7 +5,6 @@ edition = "2024"
 description = "Safely wrap Rust string literals in rust-i18n t! macros"
 license = "MIT"
 
-# Keep this utility as a genuinely independent cargo project.
 [workspace]
 
 [dependencies]

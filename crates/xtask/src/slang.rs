@@ -116,14 +116,15 @@ fn github_token() -> Option<String> {
 
 fn fetch_latest_release() -> Result<ReleaseInfo, String> {
     let mut req = ureq::get(RELEASES_API_URL)
-        .set("User-Agent", "NeoUtl-xtask")
-        .set("Accept", "application/vnd.github+json");
+        .header("User-Agent", "NeoUtl-xtask")
+        .header("Accept", "application/vnd.github+json");
     if let Some(token) = github_token() {
-        req = req.set("Authorization", &format!("Bearer {token}"));
+        req = req.header("Authorization", &format!("Bearer {token}"));
     }
     req.call()
         .map_err(|err| format!("GitHub Releases API取得失敗: {err}"))?
-        .into_json::<ReleaseInfo>()
+        .body_mut()
+        .read_json::<ReleaseInfo>()
         .map_err(|err| format!("GitHub Releases APIレスポンス解析失敗: {err}"))
 }
 
@@ -135,16 +136,17 @@ fn select_asset<'a>(assets: &'a [ReleaseAsset], platform_tag: &str) -> Option<&'
 }
 
 fn download_asset_bytes(url: &str) -> Result<Vec<u8>, String> {
-    let mut req = ureq::get(url).set("User-Agent", "NeoUtl-xtask");
+    let mut req = ureq::get(url).header("User-Agent", "NeoUtl-xtask");
     if let Some(token) = github_token() {
-        req = req.set("Authorization", &format!("Bearer {token}"));
+        req = req.header("Authorization", &format!("Bearer {token}"));
     }
-    let response = req
+    let mut response = req
         .call()
         .map_err(|err| format!("Slangアセットダウンロード失敗: {err}"))?;
     let mut bytes = Vec::new();
     response
-        .into_reader()
+        .body_mut()
+        .as_reader()
         .read_to_end(&mut bytes)
         .map_err(|err| format!("Slangアセット読込失敗: {err}"))?;
     Ok(bytes)

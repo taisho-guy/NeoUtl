@@ -31,6 +31,7 @@ mod renderer;
 mod shortcuts;
 mod theme;
 mod ui;
+mod update;
 
 fn default_gst_plugin_dir() -> Option<std::path::PathBuf> {
     #[allow(unused_variables)]

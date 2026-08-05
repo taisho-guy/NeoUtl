@@ -71,8 +71,26 @@ local function scan_directory(root_dir, ignore_patterns)
         end
 
         if not should_exclude then
+            local rel_path = path:sub(#root_dir + 2)
             for _, pattern in ipairs(ignore_patterns) do
-                if path:find(pattern, 1, true) then
+                local anchored = pattern:match("^/(.+)$")
+                local target = anchored or pattern
+                local match = false
+                if anchored then
+                    match = rel_path == target or rel_path:sub(1, #target + 1) == target .. "/"
+                else
+                    for _, segment in ipairs((function()
+                        local segs = {}
+                        for s in rel_path:gmatch("[^/]+") do table.insert(segs, s) end
+                        return segs
+                    end)()) do
+                        if segment == target then match = true break end
+                    end
+                    if rel_path == target or rel_path:sub(1, #target + 1) == target .. "/" then
+                        match = true
+                    end
+                end
+                if match then
                     should_exclude = true
                     break
                 end

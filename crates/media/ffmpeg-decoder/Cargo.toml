@@ -5,5 +5,5 @@ edition = "2024"
 
 [dependencies]
 neoutl-media-api = { path = "../../neoutl-media-api" }
-ffmpeg-next = "8"
+ffmpeg-next = "9"
 wgpu = "29"
