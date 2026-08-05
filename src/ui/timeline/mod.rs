@@ -19,7 +19,7 @@ mod grid;
 mod layer_header;
 mod ruler;
 mod scene_tabs;
-mod util;
+pub(crate) mod util;
 mod view;
 
 use util::egui_key_name;

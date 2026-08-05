@@ -123,7 +123,8 @@ pub(super) fn build_context_menu(
     items
 }
 
-pub(super) fn egui_key_name(key: egui::Key) -> String {
+/// ui::preview（プロジェクトタブショートカット解決）と共有するためcrate公開。
+pub(crate) fn egui_key_name(key: egui::Key) -> String {
     use egui::Key;
     match key {
         Key::Space => "Space".into(),

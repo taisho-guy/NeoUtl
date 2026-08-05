@@ -341,6 +341,58 @@ pub fn redo_active(state: &SharedAppState) -> bool {
     true
 }
 
+/// アクティブセッションのプロジェクト名を反映したウィンドウタイトルを返す。
+pub fn active_project_window_title(state: &SharedAppState) -> String {
+    let s = state.lock().unwrap();
+    format!("NeoUtl - {}", s.sessions[s.active].meta.name)
+}
+
+/// 指定セッションのみをディスクへ保存する。成功時dirtyフラグを解除する。
+pub fn save_session(state: &SharedAppState, index: usize) -> bool {
+    let world_holder = {
+        let s = state.lock().unwrap();
+        s.sessions[index].world.clone()
+    };
+    let result = {
+        let world = world_holder.lock().unwrap();
+        crate::project::save_from_world(&world)
+    };
+    if let Err(err) = &result {
+        eprintln!(
+            "{}",
+            t!(
+                "[NeoUtl] プロジェクト保存失敗: %{arg0}",
+                arg0 = format!("{}", err)
+            )
+        );
+    }
+    if result.is_ok() {
+        let mut s = state.lock().unwrap();
+        s.sessions[index].dirty = false;
+        s.sessions[index].last_autosave = Instant::now();
+    }
+    result.is_ok()
+}
+
+/// 指定セッションを閉じる。最後の1件は閉じない。activeが閉じた位置以降を
+/// 指していた場合は隣接セッションへ繰り上げる。
+pub fn close_session(state: &SharedAppState, index: usize) -> Result<(), String> {
+    let mut s = state.lock().unwrap();
+    if s.sessions.len() <= 1 {
+        return Err("最後のプロジェクトタブは閉じられません".to_string());
+    }
+    if index >= s.sessions.len() {
+        return Err(format!("存在しないセッションです: {index}"));
+    }
+    s.sessions.remove(index);
+    if s.active >= s.sessions.len() {
+        s.active = s.sessions.len() - 1;
+    } else if s.active > index {
+        s.active -= 1;
+    }
+    Ok(())
+}
+
 /// クリップボードへコピー/切り取り結果を格納する。
 pub fn set_clipboard(state: &SharedAppState, docs: Vec<crate::document::ObjectDoc>) {
     let mut s = state.lock().unwrap();

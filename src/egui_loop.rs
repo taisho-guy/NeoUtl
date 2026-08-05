@@ -387,8 +387,13 @@ impl EguiMainWindow {
             }
             WindowKind::Preview => {
                 if let Some(p) = self.slot.borrow().as_ref() {
+                    native
+                        .window
+                        .set_title(&crate::app_state::active_project_window_title(&p.state));
                     native.redraw(&self.gpu, |ui, renderer| {
-                        p.panel.borrow_mut().show(ui, renderer, &p.state);
+                        p.panel
+                            .borrow_mut()
+                            .show(ui, renderer, &p.state, &p.dialogs);
                     });
                 }
             }

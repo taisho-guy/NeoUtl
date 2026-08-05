@@ -19,6 +19,8 @@ pub struct DialogSet {
     pub scene_settings: SceneSettingsWindow,
     pub keybindings: KeybindingsWindow,
     pub export_dialog: ExportDialog,
+    /// 未保存プロジェクトタブを閉じる際の確認待ちセッションindex。
+    pub confirm_close_session: Option<usize>,
 }
 
 impl DialogSet {
@@ -29,6 +31,24 @@ impl DialogSet {
             scene_settings: SceneSettingsWindow::new(),
             keybindings: KeybindingsWindow::new(),
             export_dialog: ExportDialog::new(),
+            confirm_close_session: None,
+        }
+    }
+
+    /// プロジェクトタブを閉じる唯一の受け口。dirtyでなければ即時close_session、
+    /// dirtyならconfirm_close_sessionへ退避しUI側の確認ダイアログ表示を待つ。
+    pub fn request_close_session(&mut self, state: &SharedAppState, index: usize) {
+        let dirty = state
+            .lock()
+            .unwrap()
+            .sessions
+            .get(index)
+            .map(|s| s.dirty)
+            .unwrap_or(false);
+        if dirty {
+            self.confirm_close_session = Some(index);
+        } else {
+            let _ = crate::app_state::close_session(state, index);
         }
     }
 
