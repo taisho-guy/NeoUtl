@@ -72,7 +72,6 @@ fn disabled_submenu_parent(label: String) -> ContextMenuItem {
 ///   オプション(未実装)→ウィンドウ配置(未実装)
 pub(super) fn build_context_menu(
     hit_id: i32,
-    ripple_mode: bool,
     clipboard_empty: bool,
     kinds: &[ObjectKindItem],
     objects: &[(i32, String)],

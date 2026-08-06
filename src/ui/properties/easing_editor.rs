@@ -8,12 +8,10 @@
 
 use crate::easings::loader::curve_presets;
 use crate::ecs::EcsWorld;
-use crate::ecs::types::Keyframe;
+use crate::ecs::types::{ApplyMode, Keyframe};
 use crate::localization::effect_param_label;
 use egui_plot::{Line, Plot, PlotPoint, PlotPoints, Points};
-use neoutl_easing_standard::{
-    CurveKind, EasingPayload, Modifier, ease, encode_payload, parse_payload,
-};
+use neoutl_easing_standard::{CurveKind, Modifier, ease, encode_payload, parse_payload};
 use std::sync::Mutex;
 
 /// 汎用ハンドル種別。1つの`Plot`パッド内で複数ハンドルを最近傍判定するために使う。
@@ -120,6 +118,20 @@ fn set_kf(
     }
 }
 
+/// AviUtl Curve Editorの「適用モード(標準/補間)」に対応する区間トグル。
+fn set_apply_mode(world: &mut EcsWorld, target: &TrackTarget, frame: i32, mode: ApplyMode) {
+    match target {
+        TrackTarget::Object { object_id, key } => {
+            world.set_keyframe_apply_mode(*object_id, key, frame, mode)
+        }
+        TrackTarget::Effect {
+            object_id,
+            effect_index,
+            key,
+        } => world.set_effect_keyframe_apply_mode(*object_id, *effect_index, key, frame, mode),
+    }
+}
+
 fn remove_kf(world: &mut EcsWorld, target: &TrackTarget, frame: i32) {
     match target {
         TrackTarget::Object { object_id, key } => world.remove_keyframe(*object_id, key, frame),
@@ -213,6 +225,7 @@ pub fn show(ctx: &egui::Context, ui: &mut egui::Ui, world: &mut EcsWorld) -> boo
 
     let mut removed: Option<i32> = None;
     let mut updated: Option<(i32, i32, f32, String, Vec<u8>)> = None;
+    let mut apply_mode_set: Option<(i32, ApplyMode)> = None;
     let mut new_selected = selected_frame;
 
     ui.columns(2, |cols| {
@@ -253,6 +266,18 @@ pub fn show(ctx: &egui::Context, ui: &mut egui::Ui, world: &mut EcsWorld) -> boo
         if let Some(sel) = selected_frame.filter(|f| has_outgoing(&track, *f)) {
             let k = track.iter().find(|k| k.frame == sel).unwrap();
             let mut payload = parse_payload(&k.engine_payload);
+
+            left.horizontal(|ui| {
+                ui.label(t!("適用モード"));
+                let color = match k.apply_mode {
+                    ApplyMode::Linear => egui::Color32::from_rgb(0x3b, 0x82, 0xf6),
+                    ApplyMode::Interpolate => egui::Color32::from_rgb(0x22, 0xc5, 0x5e),
+                };
+                let button = egui::Button::new(k.apply_mode.label()).fill(color);
+                if ui.add(button).clicked() {
+                    apply_mode_set = Some((k.frame, k.apply_mode.toggled()));
+                }
+            });
 
             left.label(t!("区間カーブ種別"));
             let mut kind_changed = false;
@@ -341,32 +366,46 @@ pub fn show(ctx: &egui::Context, ui: &mut egui::Ui, world: &mut EcsWorld) -> boo
         }
 
         let right = &mut cols[1];
-        let mut curve: Vec<[f64; 2]> = Vec::new();
+        let fit_view = right.button(t!("ビューをフィット")).clicked();
         const SAMPLES: i32 = 64;
+        let mut segment_curves: Vec<(Vec<[f64; 2]>, ApplyMode)> = Vec::new();
         for w in track.windows(2) {
             let (a, b) = (&w[0], &w[1]);
             let payload = parse_payload(&a.engine_payload);
+            let mut curve: Vec<[f64; 2]> = Vec::with_capacity(SAMPLES as usize + 1);
             for s in 0..=SAMPLES {
                 let t = s as f32 / SAMPLES as f32;
                 let frame = a.frame as f64 + (b.frame - a.frame) as f64 * t as f64;
                 let value = a.value + (b.value - a.value) * ease(&payload, t);
                 curve.push([frame, value as f64]);
             }
+            segment_curves.push((curve, a.apply_mode));
         }
-        if curve.is_empty() {
-            curve.push([track[0].frame as f64, track[0].value as f64]);
+        if segment_curves.is_empty() && !track.is_empty() {
+            segment_curves.push((
+                vec![[track[0].frame as f64, track[0].value as f64]],
+                ApplyMode::Linear,
+            ));
         }
-        let points: PlotPoints = curve.into();
         let markers: PlotPoints = track
             .iter()
             .map(|k| [k.frame as f64, k.value as f64])
             .collect();
-        Plot::new(("easing_editor_plot", &target))
-            .height(320.0)
-            .show(right, |u| {
-                u.line(Line::new("curve", points));
-                u.points(Points::new("keyframes", markers).radius(4.0));
-            });
+        let mut plot = Plot::new(("easing_editor_plot", &target)).height(320.0);
+        if fit_view {
+            plot = plot.reset();
+        }
+        plot.show(right, |u| {
+            for (i, (curve, mode)) in segment_curves.into_iter().enumerate() {
+                let color = match mode {
+                    ApplyMode::Linear => egui::Color32::from_rgb(0x3b, 0x82, 0xf6),
+                    ApplyMode::Interpolate => egui::Color32::from_rgb(0x22, 0xc5, 0x5e),
+                };
+                let points: PlotPoints = curve.into();
+                u.line(Line::new(format!("curve_{i}"), points).color(color));
+            }
+            u.points(Points::new("keyframes", markers).radius(4.0));
+        });
     });
 
     if let Some(f) = removed {
@@ -374,6 +413,9 @@ pub fn show(ctx: &egui::Context, ui: &mut egui::Ui, world: &mut EcsWorld) -> boo
         if new_selected == Some(f) {
             new_selected = None;
         }
+    }
+    if let Some((frame, mode)) = apply_mode_set {
+        set_apply_mode(world, &target, frame, mode);
     }
     if let Some((old_frame, new_frame, value, engine_id, payload)) = updated {
         if new_frame != old_frame {
@@ -439,6 +481,7 @@ fn edit_kind_params(ui: &mut egui::Ui, kind: &mut CurveKind, target: &TrackTarge
             Plot::new(("bezier_pad", target, sel))
                 .height(90.0)
                 .data_aspect(1.0)
+                .allow_drag(false)
                 .show(ui, |u| {
                     let curve: PlotPoints = (0..=32)
                         .map(|s| {
@@ -460,15 +503,25 @@ fn edit_kind_params(ui: &mut egui::Ui, kind: &mut CurveKind, target: &TrackTarge
                     ]
                     .into();
                     u.points(Points::new("cp", pts).radius(5.0));
-                    if let Some(pos) = u.pointer_coordinate() {
+                    let modifiers = u.ctx().input(|i| i.modifiers);
+                    if modifiers.alt && u.response().dragged() {
+                        let delta = u.pointer_coordinate_drag_delta();
+                        u.translate_bounds(-delta);
+                    } else if modifiers.shift && modifiers.ctrl && u.response().dragged() {
+                        let delta = u.pointer_coordinate_drag_delta();
+                        handle_left[0] = (handle_left[0] + delta.x).clamp(0.0, 1.0);
+                        handle_left[1] += delta.y;
+                        handle_right[0] = (handle_right[0] + delta.x).clamp(0.0, 1.0);
+                        handle_right[1] += delta.y;
+                    } else if let Some(pos) = u.pointer_coordinate() {
                         if u.response().dragged() {
+                            let mut y = pos.y as f32;
+                            if modifiers.shift {
+                                y = if y >= 0.5 { 1.0 } else { 0.0 };
+                            }
                             match hit_test(pos, *handle_left, *handle_right) {
-                                HandleId::A => {
-                                    *handle_left = [pos.x.clamp(0.0, 1.0) as f32, pos.y as f32]
-                                }
-                                HandleId::B => {
-                                    *handle_right = [pos.x.clamp(0.0, 1.0) as f32, pos.y as f32]
-                                }
+                                HandleId::A => *handle_left = [pos.x.clamp(0.0, 1.0) as f32, y],
+                                HandleId::B => *handle_right = [pos.x.clamp(0.0, 1.0) as f32, y],
                             }
                         }
                     }
@@ -488,6 +541,7 @@ fn edit_kind_params(ui: &mut egui::Ui, kind: &mut CurveKind, target: &TrackTarge
             });
             Plot::new(("bounce_pad", target, sel))
                 .height(90.0)
+                .allow_drag(false)
                 .show(ui, |u| {
                     let curve: PlotPoints = (0..=32)
                         .map(|s| {
@@ -506,7 +560,11 @@ fn edit_kind_params(ui: &mut egui::Ui, kind: &mut CurveKind, target: &TrackTarge
                     u.line(Line::new("bounce", curve));
                     let handle: PlotPoints = vec![[*cor as f64, *period as f64]].into();
                     u.points(Points::new("param", handle).radius(5.0));
-                    if let Some(pos) = u.pointer_coordinate() {
+                    let modifiers = u.ctx().input(|i| i.modifiers);
+                    if modifiers.alt && u.response().dragged() {
+                        let delta = u.pointer_coordinate_drag_delta();
+                        u.translate_bounds(-delta);
+                    } else if let Some(pos) = u.pointer_coordinate() {
                         if u.response().dragged() {
                             *cor = pos.x.clamp(0.0, 0.99) as f32;
                             *period = pos.y.clamp(0.01, 2.0) as f32;
@@ -535,6 +593,7 @@ fn edit_kind_params(ui: &mut egui::Ui, kind: &mut CurveKind, target: &TrackTarge
             });
             Plot::new(("elastic_pad", target, sel))
                 .height(90.0)
+                .allow_drag(false)
                 .show(ui, |u| {
                     let curve: PlotPoints = (0..=32)
                         .map(|s| {
@@ -554,7 +613,11 @@ fn edit_kind_params(ui: &mut egui::Ui, kind: &mut CurveKind, target: &TrackTarge
                     u.line(Line::new("elastic", curve));
                     let handle: PlotPoints = vec![[*frequency as f64, *amplitude as f64]].into();
                     u.points(Points::new("param", handle).radius(5.0));
-                    if let Some(pos) = u.pointer_coordinate() {
+                    let modifiers = u.ctx().input(|i| i.modifiers);
+                    if modifiers.alt && u.response().dragged() {
+                        let delta = u.pointer_coordinate_drag_delta();
+                        u.translate_bounds(-delta);
+                    } else if let Some(pos) = u.pointer_coordinate() {
                         if u.response().dragged() {
                             *frequency = pos.x.clamp(0.1, 16.0) as f32;
                             *amplitude = pos.y.clamp(0.0, 4.0) as f32;
@@ -592,9 +655,10 @@ fn edit_kind_params(ui: &mut egui::Ui, kind: &mut CurveKind, target: &TrackTarge
                 });
             }
             let boundary_count = segments.len().saturating_sub(1);
-            if boundary_count > 0 {
+            {
                 Plot::new(("normal_pad", target, sel))
                     .height(90.0)
+                    .allow_drag(false)
                     .show(ui, |u| {
                         let curve: PlotPoints = (0..=48)
                             .map(|s| {
@@ -617,23 +681,59 @@ fn edit_kind_params(ui: &mut egui::Ui, kind: &mut CurveKind, target: &TrackTarge
                             boundary_xs.iter().map(|x| [*x as f64, 0.5f64]).collect();
                         u.points(Points::new("boundaries", handles).radius(5.0));
                         if let Some(pos) = u.pointer_coordinate() {
-                            if u.response().dragged() {
-                                let nearest = boundary_xs
-                                    .iter()
-                                    .enumerate()
-                                    .min_by(|(_, a), (_, b)| {
-                                        (**a as f64 - pos.x)
-                                            .abs()
-                                            .total_cmp(&(**b as f64 - pos.x).abs())
-                                    })
-                                    .map(|(i, _)| i);
-                                if let Some(i) = nearest {
-                                    neoutl_easing_standard::curve::drag_anchor_x(
-                                        segments,
-                                        i + 1,
-                                        pos.x as f32,
-                                    );
+                            let seg_idx = segments.iter().position(|s| {
+                                pos.x as f32 >= s.anchor_start[0] && pos.x as f32 <= s.anchor_end[0]
+                            });
+                            if let Some(idx) = seg_idx {
+                                u.response().context_menu(|menu_ui| {
+                                    for name in ["Linear", "Bounce", "Elastic"] {
+                                        if menu_ui.button(name).clicked() {
+                                            let new_kind = match name {
+                                                "Bounce" => CurveKind::default_bounce(),
+                                                "Elastic" => CurveKind::default_elastic(),
+                                                _ => CurveKind::Linear,
+                                            };
+                                            neoutl_easing_standard::curve::replace_segment_kind(
+                                                segments, idx, new_kind,
+                                            );
+                                            menu_ui.close();
+                                        }
+                                    }
+                                });
+                            }
+                        }
+                        let modifiers = u.ctx().input(|i| i.modifiers);
+                        const HIT_X: f64 = 0.03;
+                        let nearest_boundary = u.pointer_coordinate().and_then(|pos| {
+                            boundary_xs
+                                .iter()
+                                .enumerate()
+                                .map(|(i, x)| (i, (*x as f64 - pos.x).abs()))
+                                .min_by(|(_, a), (_, b)| a.total_cmp(b))
+                                .filter(|(_, d)| *d <= HIT_X)
+                                .map(|(i, _)| i)
+                        });
+                        if u.response().double_clicked() {
+                            if let Some(i) = nearest_boundary {
+                                if segments.len() > 1 {
+                                    neoutl_easing_standard::curve::remove_segment(segments, i);
                                 }
+                            } else if let Some(pos) = u.pointer_coordinate() {
+                                let x = pos.x.clamp(0.0, 1.0) as f32;
+                                neoutl_easing_standard::curve::add_segment(segments, x);
+                            }
+                        } else if modifiers.alt && u.response().dragged() {
+                            let delta = u.pointer_coordinate_drag_delta();
+                            u.translate_bounds(-delta);
+                        } else if let Some(pos) = u.pointer_coordinate() {
+                            if u.response().dragged()
+                                && let Some(i) = nearest_boundary
+                            {
+                                neoutl_easing_standard::curve::drag_anchor_x(
+                                    segments,
+                                    i + 1,
+                                    pos.x as f32,
+                                );
                             }
                         }
                     });

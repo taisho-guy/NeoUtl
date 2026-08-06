@@ -24,7 +24,8 @@ pub fn evaluate(source: &str, t: f32) -> Option<f32> {
                 Ok(mlua::VmState::Continue)
             }
         },
-    );
+    )
+    .ok()?;
 
     let globals = lua.globals();
     globals.set("t", t).ok()?;
