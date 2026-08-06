@@ -8,9 +8,10 @@
 
 use crate::easings::loader::curve_presets;
 use crate::ecs::EcsWorld;
-use crate::ecs::types::{ApplyMode, Keyframe};
+use crate::ecs::components::ParamAccess;
+use crate::ecs::types::{ApplyMode, Keyframe, Value};
 use crate::localization::effect_param_label;
-use egui_plot::{Line, Plot, PlotPoint, PlotPoints, Points};
+use egui_plot::{HLine, Line, Plot, PlotPoint, PlotPoints, Points, VLine};
 use neoutl_easing_standard::{CurveKind, Modifier, ease, encode_payload, parse_payload};
 use std::sync::Mutex;
 
@@ -143,6 +144,70 @@ fn remove_kf(world: &mut EcsWorld, target: &TrackTarget, frame: i32) {
     }
 }
 
+fn clip_bounds(world: &EcsWorld, object_id: usize) -> (i32, i32) {
+    world
+        .get_timeline_objects()
+        .into_iter()
+        .find(|o| o.id as usize == object_id)
+        .map(|o| (o.start_frame, o.end_frame))
+        .unwrap_or((0, 1))
+}
+
+fn base_value(world: &EcsWorld, target: &TrackTarget) -> f32 {
+    match target {
+        TrackTarget::Object { object_id, key } => world
+            .get_transform(*object_id)
+            .and_then(|v| v.get_param(key))
+            .or_else(|| {
+                world
+                    .get_audio_params(*object_id)
+                    .and_then(|v| v.get_param(key))
+            })
+            .or_else(|| world.get_text(*object_id).and_then(|v| v.get_param(key)))
+            .or_else(|| world.get_shape(*object_id).and_then(|v| v.get_param(key)))
+            .unwrap_or_default(),
+        TrackTarget::Effect {
+            object_id,
+            effect_index,
+            key,
+        } => world
+            .get_effects(*object_id)
+            .get(*effect_index)
+            .and_then(|effect| effect.params.get(key))
+            .and_then(|param| match param.static_value {
+                Value::Number(value) => Some(value),
+                _ => None,
+            })
+            .unwrap_or_default(),
+    }
+}
+
+/// AviQtlの`normalizeTrackForDuration`相当。開始・終了は区間の境界であり、
+/// 実キーフレームが無い場合でもEasingEditorから見える状態にする。
+fn ensure_endpoint_keyframes(world: &mut EcsWorld, target: &TrackTarget, track: &[Keyframe]) {
+    let object_id = match target {
+        TrackTarget::Object { object_id, .. } | TrackTarget::Effect { object_id, .. } => *object_id,
+    };
+    let (start, end) = clip_bounds(world, object_id);
+    let fallback = base_value(world, target);
+    let engine = "neoutl-easing-standard".to_owned();
+    let payload = encode_payload(&neoutl_easing_standard::EasingPayload::linear());
+    if !track.iter().any(|k| k.frame == start) {
+        set_kf(
+            world,
+            target,
+            start,
+            fallback,
+            engine.clone(),
+            payload.clone(),
+        );
+    }
+    if !track.iter().any(|k| k.frame == end) {
+        let end_value = track.last().map(|k| k.value).unwrap_or(fallback);
+        set_kf(world, target, end, end_value, engine, payload);
+    }
+}
+
 const KIND_CHOICES: &[&str] = &["Linear", "Bezier", "Bounce", "Elastic", "Normal", "Script"];
 const MODIFIER_CHOICES: &[&str] = &["Discretization", "Noise", "SineWave", "SquareWave"];
 
@@ -188,252 +253,540 @@ fn default_modifier(name: &str) -> Modifier {
 /// `egui_loop.rs`の`WindowKind::EasingEditor`ネイティブウィンドウから毎フレーム呼ばれる。
 /// 対象が無ければ即falseを返し、呼び出し側がウィンドウを破棄する。
 pub fn show(ctx: &egui::Context, ui: &mut egui::Ui, world: &mut EcsWorld) -> bool {
-    let Some((target, label, mut selected_frame, mut preset_name_buf)) = ({
-        ACTIVE.lock().unwrap().as_ref().map(|s| {
-            (
-                s.target.clone(),
-                s.label.clone(),
-                s.selected_frame,
-                s.preset_name.clone(),
-            )
-        })
-    }) else {
-        return false;
-    };
-    let track = track_of(world, &target);
+    return show_curve_editor_layout(ctx, ui, world);
+    #[allow(unreachable_code)]
+    {
+        let Some((target, label, mut selected_frame, mut preset_name_buf)) = ({
+            ACTIVE.lock().unwrap().as_ref().map(|s| {
+                (
+                    s.target.clone(),
+                    s.label.clone(),
+                    s.selected_frame,
+                    s.preset_name.clone(),
+                )
+            })
+        }) else {
+            return false;
+        };
+        let initial_track = track_of(world, &target);
+        ensure_endpoint_keyframes(world, &target, &initial_track);
+        let track = track_of(world, &target);
+        let (clip_start, clip_end) = clip_bounds(
+            world,
+            match &target {
+                TrackTarget::Object { object_id, .. } | TrackTarget::Effect { object_id, .. } => {
+                    *object_id
+                }
+            },
+        );
 
-    ui.heading(format!("イージング編集: {}", effect_param_label(&label)));
-    ui.separator();
+        ui.heading(format!("補間設定: {}", effect_param_label(&label)));
+        ui.separator();
 
-    if track.is_empty() {
-        ui.weak(t!(
-            "キーフレームがありません。プロパティ行の＋KFで追加してください。"
-        ));
-        return true;
-    }
+        if selected_frame.is_none_or(|f| {
+            !track
+                .iter()
+                .any(|k| k.frame == f && has_outgoing(&track, f))
+        }) {
+            selected_frame = track
+                .iter()
+                .find(|k| has_outgoing(&track, k.frame))
+                .map(|k| k.frame);
+        }
 
-    if selected_frame.is_none_or(|f| {
-        !track
-            .iter()
-            .any(|k| k.frame == f && has_outgoing(&track, f))
-    }) {
-        selected_frame = track
-            .iter()
-            .find(|k| has_outgoing(&track, k.frame))
-            .map(|k| k.frame);
-    }
+        let mut removed: Option<i32> = None;
+        let mut updated: Option<(i32, i32, f32, String, Vec<u8>)> = None;
+        let mut apply_mode_set: Option<(i32, ApplyMode)> = None;
+        let mut new_selected = selected_frame;
+        let mut catalog_kind: Option<&'static str> = None;
+        let mut reset_requested = false;
 
-    let mut removed: Option<i32> = None;
-    let mut updated: Option<(i32, i32, f32, String, Vec<u8>)> = None;
-    let mut apply_mode_set: Option<(i32, ApplyMode)> = None;
-    let mut new_selected = selected_frame;
-
-    ui.columns(2, |cols| {
-        let left = &mut cols[0];
-        left.label(t!("キーフレーム"));
-        egui::Grid::new(("easing_editor_kf_grid", &target))
-            .num_columns(3)
-            .striped(true)
-            .show(left, |ui| {
-                for k in &track {
-                    let mut frame = k.frame;
-                    let mut value = k.value;
-                    let selected = selected_frame == Some(k.frame);
-                    if ui.selectable_label(selected, "●").clicked() {
-                        new_selected = Some(k.frame);
-                    }
-                    ui.add(egui::DragValue::new(&mut frame).prefix("f:"));
-                    ui.add(egui::DragValue::new(&mut value).speed(0.01).prefix("v:"));
-                    if ui.small_button("✕").clicked() {
-                        removed = Some(k.frame);
-                    }
-                    ui.end_row();
-
-                    if frame != k.frame || value != k.value {
-                        updated = Some((
-                            k.frame,
-                            frame,
-                            value,
-                            k.engine_id.clone(),
-                            k.engine_payload.clone(),
-                        ));
+        ui.horizontal(|ui| {
+            if ui.button("⧉").on_hover_text(t!("カーブをコピー")).clicked() {
+                if let Some(frame) = selected_frame {
+                    if let Some(k) = track.iter().find(|k| k.frame == frame) {
+                        ui.ctx()
+                            .copy_text(String::from_utf8_lossy(&k.engine_payload).into_owned());
                     }
                 }
-            });
+            }
+            if ui
+                .button("★")
+                .on_hover_text(t!("プリセットとして保存"))
+                .clicked()
+            {}
+            if ui.button("↺").on_hover_text(t!("カーブを初期化")).clicked() {
+                reset_requested = true;
+            }
+            ui.separator();
+            ui.label(format!(
+                "{}  {}",
+                label,
+                selected_frame.map_or("-".into(), |f| f.to_string())
+            ));
+        });
 
-        left.separator();
-
-        if let Some(sel) = selected_frame.filter(|f| has_outgoing(&track, *f)) {
-            let k = track.iter().find(|k| k.frame == sel).unwrap();
-            let mut payload = parse_payload(&k.engine_payload);
-
-            left.horizontal(|ui| {
-                ui.label(t!("適用モード"));
-                let color = match k.apply_mode {
-                    ApplyMode::Linear => egui::Color32::from_rgb(0x3b, 0x82, 0xf6),
-                    ApplyMode::Interpolate => egui::Color32::from_rgb(0x22, 0xc5, 0x5e),
-                };
-                let button = egui::Button::new(k.apply_mode.label()).fill(color);
-                if ui.add(button).clicked() {
-                    apply_mode_set = Some((k.frame, k.apply_mode.toggled()));
-                }
-            });
-
-            left.label(t!("区間カーブ種別"));
-            let mut kind_changed = false;
-            egui::ComboBox::new(("easing_kind_combo", &target, sel), "")
-                .selected_text(payload.kind.label())
-                .show_ui(left, |ui| {
-                    for name in KIND_CHOICES {
+        ui.columns(2, |cols| {
+            let left = &mut cols[1];
+            left.label(egui::RichText::new(t!("種類")).strong());
+            for (category, names) in [
+                (t!("基本"), vec!["Linear"]),
+                (t!("標準カーブ"), vec!["Bezier", "Normal"]),
+                (t!("反動と弾性"), vec!["Bounce", "Elastic"]),
+                (t!("特殊"), vec!["Script"]),
+            ] {
+                left.collapsing(category, |ui| {
+                    ui.horizontal_wrapped(|ui| {
+                        for name in names {
+                            let selected = selected_frame
+                                .and_then(|f| track.iter().find(|k| k.frame == f))
+                                .map(|k| parse_payload(&k.engine_payload).kind.label() == name)
+                                .unwrap_or(false);
+                            if ui.selectable_label(selected, name).clicked() {
+                                catalog_kind = Some(name);
+                            }
+                        }
+                    });
+                });
+            }
+            left.separator();
+            left.label(t!("キーフレーム"));
+            egui::Grid::new(("easing_editor_kf_grid", &target))
+                .num_columns(3)
+                .striped(true)
+                .show(left, |ui| {
+                    for k in &track {
+                        let mut frame = k.frame;
+                        let mut value = k.value;
+                        let selected = selected_frame == Some(k.frame);
+                        if ui.selectable_label(selected, "●").clicked() {
+                            new_selected = Some(k.frame);
+                        }
+                        ui.add(egui::DragValue::new(&mut frame).prefix("f:"));
+                        ui.add(egui::DragValue::new(&mut value).speed(0.01).prefix("v:"));
+                        let endpoint = k.frame == clip_start || k.frame == clip_end;
                         if ui
-                            .selectable_label(payload.kind.label() == *name, *name)
+                            .add_enabled(!endpoint, egui::Button::new("✕"))
+                            .on_hover_text(if endpoint {
+                                t!("開始点と終了点は区間の境界のため削除できません").to_string()
+                            } else {
+                                String::new()
+                            })
                             .clicked()
-                            && payload.kind.label() != *name
                         {
-                            payload.kind = default_for(name);
+                            removed = Some(k.frame);
+                        }
+                        ui.end_row();
+
+                        if frame != k.frame || value != k.value {
+                            updated = Some((
+                                k.frame,
+                                frame,
+                                value,
+                                k.engine_id.clone(),
+                                k.engine_payload.clone(),
+                            ));
+                        }
+                    }
+                });
+
+            left.separator();
+
+            if let Some(sel) = selected_frame.filter(|f| has_outgoing(&track, *f)) {
+                let k = track.iter().find(|k| k.frame == sel).unwrap();
+                let mut payload = parse_payload(&k.engine_payload);
+
+                left.horizontal(|ui| {
+                    ui.label(t!("適用モード"));
+                    let color = match k.apply_mode {
+                        ApplyMode::Linear => egui::Color32::from_rgb(0x3b, 0x82, 0xf6),
+                        ApplyMode::Interpolate => egui::Color32::from_rgb(0x22, 0xc5, 0x5e),
+                    };
+                    let button = egui::Button::new(k.apply_mode.label()).fill(color);
+                    if ui.add(button).clicked() {
+                        apply_mode_set = Some((k.frame, k.apply_mode.toggled()));
+                    }
+                });
+
+                left.label(t!("区間カーブ種別"));
+                let mut kind_changed = false;
+                if reset_requested {
+                    payload.kind = CurveKind::Linear;
+                    payload.modifiers.clear();
+                    kind_changed = true;
+                }
+                if let Some(name) = catalog_kind {
+                    if payload.kind.label() != name {
+                        payload.kind = default_for(name);
+                        kind_changed = true;
+                    }
+                }
+                egui::ComboBox::new(("easing_kind_combo", &target, sel), "")
+                    .selected_text(payload.kind.label())
+                    .show_ui(left, |ui| {
+                        for name in KIND_CHOICES {
+                            if ui
+                                .selectable_label(payload.kind.label() == *name, *name)
+                                .clicked()
+                                && payload.kind.label() != *name
+                            {
+                                payload.kind = default_for(name);
+                                kind_changed = true;
+                            }
+                        }
+                    });
+
+                left.separator();
+                edit_kind_params(left, &mut payload.kind, &target, sel);
+
+                left.separator();
+                left.label(t!("モディファイア"));
+                let mut mod_to_remove: Option<usize> = None;
+                for (i, m) in payload.modifiers.iter_mut().enumerate() {
+                    left.horizontal(|ui| {
+                        ui.label(m.label());
+                        if ui.small_button("✕").clicked() {
+                            mod_to_remove = Some(i);
+                        }
+                    });
+                    edit_modifier_params(left, m, &target, sel, i);
+                }
+                if let Some(i) = mod_to_remove {
+                    payload.modifiers.remove(i);
+                    kind_changed = true;
+                }
+                egui::ComboBox::new(
+                    ("easing_add_modifier", &target, sel),
+                    t!("＋モディファイア追加"),
+                )
+                .selected_text("")
+                .show_ui(left, |ui| {
+                    for name in MODIFIER_CHOICES {
+                        if ui.selectable_label(false, *name).clicked() {
+                            payload.modifiers.push(default_modifier(name));
                             kind_changed = true;
                         }
                     }
                 });
 
-            left.separator();
-            edit_kind_params(left, &mut payload.kind, &target, sel);
+                left.separator();
+                left.label(t!("プリセット"));
+                if let Some(reg_mutex) = curve_presets() {
+                    let mut reg = reg_mutex.lock().unwrap();
+                    let names: Vec<String> = reg.names().map(str::to_owned).collect();
+                    egui::ComboBox::new(("easing_preset_apply", &target, sel), t!("適用"))
+                        .selected_text("")
+                        .show_ui(left, |ui| {
+                            for name in &names {
+                                if ui.selectable_label(false, name).clicked() {
+                                    if let Some(k) = reg.get(name) {
+                                        payload.kind = k.clone();
+                                        kind_changed = true;
+                                    }
+                                }
+                            }
+                        });
+                    left.horizontal(|ui| {
+                        ui.text_edit_singleline(&mut preset_name_buf);
+                        if ui.small_button(t!("現在値を保存")).clicked()
+                            && !preset_name_buf.is_empty()
+                        {
+                            reg.save_as(&preset_name_buf, payload.kind.clone());
+                        }
+                    });
+                } else {
+                    left.weak(t!("プリセットレジストリ未初期化(load_all未実行)"));
+                }
 
-            left.separator();
-            left.label(t!("モディファイア"));
-            let mut mod_to_remove: Option<usize> = None;
-            for (i, m) in payload.modifiers.iter_mut().enumerate() {
-                left.horizontal(|ui| {
-                    ui.label(m.label());
-                    if ui.small_button("✕").clicked() {
-                        mod_to_remove = Some(i);
-                    }
-                });
-                edit_modifier_params(left, m, &target, sel, i);
+                let new_bytes = encode_payload(&payload);
+                if kind_changed || new_bytes != k.engine_payload {
+                    updated = Some((k.frame, k.frame, k.value, k.engine_id.clone(), new_bytes));
+                }
+            } else {
+                left.weak(t!("末尾キーフレームには区間カーブがありません。"));
             }
-            if let Some(i) = mod_to_remove {
-                payload.modifiers.remove(i);
-                kind_changed = true;
-            }
-            egui::ComboBox::new(
-                ("easing_add_modifier", &target, sel),
-                t!("＋モディファイア追加"),
-            )
-            .selected_text("")
-            .show_ui(left, |ui| {
-                for name in MODIFIER_CHOICES {
-                    if ui.selectable_label(false, *name).clicked() {
-                        payload.modifiers.push(default_modifier(name));
-                        kind_changed = true;
-                    }
+
+            let right = &mut cols[0];
+            right.horizontal(|ui| {
+                ui.label(egui::RichText::new(t!("プレビュー")).strong());
+                ui.add_space(8.0);
+                ui.label(t!("ズーム:"));
+                if ui.small_button("−").clicked() {
+                    ui.memory_mut(|m| {
+                        m.data
+                            .insert_temp(egui::Id::new(("easing_fit", &target)), true)
+                    });
+                }
+                ui.label("100%");
+                if ui.small_button("+").clicked() {
+                    ui.memory_mut(|m| {
+                        m.data
+                            .insert_temp(egui::Id::new(("easing_fit", &target)), true)
+                    });
+                }
+                if ui.small_button("1:1").clicked() {
+                    ui.memory_mut(|m| {
+                        m.data
+                            .insert_temp(egui::Id::new(("easing_fit", &target)), true)
+                    });
                 }
             });
+            let fit_view = right.ctx().memory(|m| {
+                m.data
+                    .get_temp::<bool>(egui::Id::new(("easing_fit", &target)))
+                    .unwrap_or(false)
+            });
+            right.separator();
+            const SAMPLES: i32 = 64;
+            let mut segment_curves: Vec<(Vec<[f64; 2]>, ApplyMode)> = Vec::new();
+            for w in track.windows(2) {
+                let (a, b) = (&w[0], &w[1]);
+                let payload = parse_payload(&a.engine_payload);
+                let mut curve: Vec<[f64; 2]> = Vec::with_capacity(SAMPLES as usize + 1);
+                for s in 0..=SAMPLES {
+                    let t = s as f32 / SAMPLES as f32;
+                    let frame = a.frame as f64 + (b.frame - a.frame) as f64 * t as f64;
+                    let value = a.value + (b.value - a.value) * ease(&payload, t);
+                    curve.push([frame, value as f64]);
+                }
+                segment_curves.push((curve, a.apply_mode));
+            }
+            if segment_curves.is_empty() && !track.is_empty() {
+                segment_curves.push((
+                    vec![[track[0].frame as f64, track[0].value as f64]],
+                    ApplyMode::Linear,
+                ));
+            }
+            let markers: PlotPoints = track
+                .iter()
+                .map(|k| [k.frame as f64, k.value as f64])
+                .collect();
+            let mut plot = Plot::new(("easing_editor_plot", &target))
+                .height(430.0)
+                .data_aspect(1.0)
+                .allow_boxed_zoom(false);
+            if fit_view {
+                plot = plot.reset();
+            }
+            plot.show(right, |u| {
+                u.vline(VLine::new("x=0", 0.0).color(egui::Color32::DARK_GRAY));
+                u.vline(VLine::new("x=1", 1.0).color(egui::Color32::DARK_GRAY));
+                u.hline(HLine::new("y=0", 0.0).color(egui::Color32::DARK_GRAY));
+                u.hline(HLine::new("y=1", 1.0).color(egui::Color32::DARK_GRAY));
+                let diagonal: PlotPoints = vec![[0.0, 0.0], [1.0, 1.0]].into();
+                u.line(Line::new("linear reference", diagonal).color(egui::Color32::DARK_GRAY));
+                for (i, (curve, mode)) in segment_curves.into_iter().enumerate() {
+                    let color = match mode {
+                        ApplyMode::Linear => egui::Color32::from_rgb(0x3b, 0x82, 0xf6),
+                        ApplyMode::Interpolate => egui::Color32::from_rgb(0x22, 0xc5, 0x5e),
+                    };
+                    let points: PlotPoints = curve.into();
+                    u.line(Line::new(format!("curve_{i}"), points).color(color));
+                }
+                u.points(Points::new("keyframes", markers).radius(4.0));
+            });
+        });
 
-            left.separator();
-            left.label(t!("プリセット"));
-            if let Some(reg_mutex) = curve_presets() {
-                let mut reg = reg_mutex.lock().unwrap();
-                let names: Vec<String> = reg.names().map(str::to_owned).collect();
-                egui::ComboBox::new(("easing_preset_apply", &target, sel), t!("適用"))
-                    .selected_text("")
-                    .show_ui(left, |ui| {
-                        for name in &names {
-                            if ui.selectable_label(false, name).clicked() {
-                                if let Some(k) = reg.get(name) {
-                                    payload.kind = k.clone();
-                                    kind_changed = true;
-                                }
+        if let Some(f) = removed {
+            remove_kf(world, &target, f);
+            if new_selected == Some(f) {
+                new_selected = None;
+            }
+        }
+        if let Some((frame, mode)) = apply_mode_set {
+            set_apply_mode(world, &target, frame, mode);
+        }
+        if let Some((old_frame, new_frame, value, engine_id, payload)) = updated {
+            if new_frame != old_frame {
+                remove_kf(world, &target, old_frame);
+            }
+            set_kf(world, &target, new_frame, value, engine_id, payload);
+            if new_selected == Some(old_frame) {
+                new_selected = Some(new_frame);
+            }
+        }
+
+        if let Some(state) = ACTIVE.lock().unwrap().as_mut() {
+            state.selected_frame = new_selected;
+            state.preset_name = preset_name_buf.clone();
+        }
+
+        ui.separator();
+        if ui.button(t!("閉じる")).clicked() {
+            close();
+        }
+        let _ = ctx;
+        true
+    }
+}
+
+/// Curve Editorの本体レイアウト。AviUtl版の「左グラフ／右プリセット／下部適用」を
+/// そのままNeoUtlの即時UIへ写像する。キーフレーム一覧はここへ持ち込まない。
+fn show_curve_editor_layout(ctx: &egui::Context, ui: &mut egui::Ui, world: &mut EcsWorld) -> bool {
+    let Some((target, label, selected_frame)) = ACTIVE
+        .lock()
+        .unwrap()
+        .as_ref()
+        .map(|s| (s.target.clone(), s.label.clone(), s.selected_frame))
+    else {
+        return false;
+    };
+    let initial = track_of(world, &target);
+    ensure_endpoint_keyframes(world, &target, &initial);
+    let track = track_of(world, &target);
+    let selected = selected_frame.or_else(|| track.windows(2).next().map(|w| w[0].frame));
+
+    let mut selected_kind: Option<CurveKind> = None;
+    let mut close_requested = false;
+    let mut fit = false;
+
+    ui.horizontal(|ui| {
+        for (icon, tip) in [("□", "コピー"), ("★", "保存"), ("↻", "リセット")] {
+            ui.small_button(icon).on_hover_text(tip);
+        }
+        ui.separator();
+        egui::ComboBox::from_id_salt(("curve_mode", &target))
+            .selected_text("標準")
+            .show_ui(ui, |ui| {
+                for mode in ["標準", "振動", "バウンス", "スクリプト"] {
+                    let _ = ui.selectable_label(mode == "標準", mode);
+                }
+            });
+        if ui.small_button("‹").clicked() {}
+        ui.label("1");
+        if ui.small_button("＋").clicked() {}
+        ui.add_space(4.0);
+        ui.label(egui::RichText::new(effect_param_label(&label)).weak());
+    });
+
+    ui.separator();
+    ui.columns(2, |cols| {
+        let graph_ui = &mut cols[0];
+        graph_ui.horizontal(|ui| {
+            ui.label(egui::RichText::new("標準").strong());
+            ui.add_space(8.0);
+            ui.label("ビュー");
+            if ui
+                .small_button("⛶")
+                .on_hover_text("ビューをフィット")
+                .clicked()
+            {
+                fit = true;
+            }
+        });
+        let payload = selected
+            .and_then(|frame| track.iter().find(|k| k.frame == frame))
+            .map(|k| parse_payload(&k.engine_payload))
+            .unwrap_or_else(|| neoutl_easing_standard::EasingPayload::linear());
+        let mut plot = Plot::new(("curve_editor_graph", &target))
+            .height(330.0)
+            .data_aspect(1.0)
+            .allow_boxed_zoom(false)
+            .allow_drag(true)
+            .allow_scroll(true);
+        if fit {
+            plot = plot.reset();
+        }
+        plot.show(graph_ui, |plot_ui| {
+            let grid: PlotPoints = (0..=8)
+                .map(|i| {
+                    let x = i as f64 / 8.0;
+                    [x, x]
+                })
+                .collect();
+            plot_ui.line(Line::new("linear", grid).color(egui::Color32::DARK_GRAY));
+            let curve: PlotPoints = (0..=128)
+                .map(|i| {
+                    let t = i as f32 / 128.0;
+                    [t as f64, ease(&payload, t) as f64]
+                })
+                .collect();
+            plot_ui.line(
+                Line::new("curve", curve)
+                    .color(egui::Color32::from_rgb(0x9a, 0xc7, 0xff))
+                    .width(2.0),
+            );
+            let anchors: PlotPoints = track
+                .iter()
+                .map(|k| [k.frame as f64, k.value as f64])
+                .collect();
+            plot_ui.points(Points::new("anchors", anchors).radius(4.0));
+        });
+
+        let preset_ui = &mut cols[1];
+        preset_ui.horizontal(|ui| {
+            ui.label(egui::RichText::new("プリセットを検索…").weak());
+            ui.label("☷");
+        });
+        preset_ui.separator();
+        preset_ui.horizontal(|ui| {
+            ui.label(egui::RichText::new("すべて").strong());
+            ui.label("(6)⌄");
+        });
+        egui::ScrollArea::vertical()
+            .id_salt(("preset_scroll", &target))
+            .show(preset_ui, |ui| {
+                let presets = [
+                    ("linear", CurveKind::Linear),
+                    ("easeIn", CurveKind::default_bezier()),
+                    ("easeOut", CurveKind::default_bezier()),
+                    ("bounce", CurveKind::default_bounce()),
+                    ("elastic", CurveKind::default_elastic()),
+                    ("normal", CurveKind::default_normal()),
+                ];
+                for row in presets.chunks(3) {
+                    ui.horizontal(|ui| {
+                        for (name, kind) in row {
+                            let response = ui.add_sized([62.0, 62.0], egui::Button::new(*name));
+                            if response.double_clicked() || response.clicked() {
+                                selected_kind = Some(kind.clone());
                             }
                         }
                     });
-                left.horizontal(|ui| {
-                    ui.text_edit_singleline(&mut preset_name_buf);
-                    if ui.small_button(t!("現在値を保存")).clicked() && !preset_name_buf.is_empty()
-                    {
-                        reg.save_as(&preset_name_buf, payload.kind.clone());
-                    }
-                });
-            } else {
-                left.weak(t!("プリセットレジストリ未初期化(load_all未実行)"));
-            }
-
-            let new_bytes = encode_payload(&payload);
-            if kind_changed || new_bytes != k.engine_payload {
-                updated = Some((k.frame, k.frame, k.value, k.engine_id.clone(), new_bytes));
-            }
-        } else {
-            left.weak(t!("末尾キーフレームには区間カーブがありません。"));
-        }
-
-        let right = &mut cols[1];
-        let fit_view = right.button(t!("ビューをフィット")).clicked();
-        const SAMPLES: i32 = 64;
-        let mut segment_curves: Vec<(Vec<[f64; 2]>, ApplyMode)> = Vec::new();
-        for w in track.windows(2) {
-            let (a, b) = (&w[0], &w[1]);
-            let payload = parse_payload(&a.engine_payload);
-            let mut curve: Vec<[f64; 2]> = Vec::with_capacity(SAMPLES as usize + 1);
-            for s in 0..=SAMPLES {
-                let t = s as f32 / SAMPLES as f32;
-                let frame = a.frame as f64 + (b.frame - a.frame) as f64 * t as f64;
-                let value = a.value + (b.value - a.value) * ease(&payload, t);
-                curve.push([frame, value as f64]);
-            }
-            segment_curves.push((curve, a.apply_mode));
-        }
-        if segment_curves.is_empty() && !track.is_empty() {
-            segment_curves.push((
-                vec![[track[0].frame as f64, track[0].value as f64]],
-                ApplyMode::Linear,
-            ));
-        }
-        let markers: PlotPoints = track
-            .iter()
-            .map(|k| [k.frame as f64, k.value as f64])
-            .collect();
-        let mut plot = Plot::new(("easing_editor_plot", &target)).height(320.0);
-        if fit_view {
-            plot = plot.reset();
-        }
-        plot.show(right, |u| {
-            for (i, (curve, mode)) in segment_curves.into_iter().enumerate() {
-                let color = match mode {
-                    ApplyMode::Linear => egui::Color32::from_rgb(0x3b, 0x82, 0xf6),
-                    ApplyMode::Interpolate => egui::Color32::from_rgb(0x22, 0xc5, 0x5e),
-                };
-                let points: PlotPoints = curve.into();
-                u.line(Line::new(format!("curve_{i}"), points).color(color));
-            }
-            u.points(Points::new("keyframes", markers).radius(4.0));
-        });
+                }
+            });
     });
 
-    if let Some(f) = removed {
-        remove_kf(world, &target, f);
-        if new_selected == Some(f) {
-            new_selected = None;
+    let mut applied = false;
+    ui.add_space(4.0);
+    ui.horizontal(|ui| {
+        if ui
+            .add_sized(
+                egui::vec2(ui.available_size_before_wrap().x, 30.0),
+                egui::Button::new(
+                    egui::RichText::new("適用")
+                        .color(egui::Color32::WHITE)
+                        .strong(),
+                )
+                .fill(egui::Color32::from_rgb(0x2d, 0x76, 0xb8)),
+            )
+            .clicked()
+        {
+            applied = true;
         }
-    }
-    if let Some((frame, mode)) = apply_mode_set {
-        set_apply_mode(world, &target, frame, mode);
-    }
-    if let Some((old_frame, new_frame, value, engine_id, payload)) = updated {
-        if new_frame != old_frame {
-            remove_kf(world, &target, old_frame);
+        if ui.small_button("⌄").clicked() {}
+        if ui.small_button("閉じる").clicked() {
+            close_requested = true;
         }
-        set_kf(world, &target, new_frame, value, engine_id, payload);
-        if new_selected == Some(old_frame) {
-            new_selected = Some(new_frame);
-        }
-    }
+    });
 
-    if let Some(state) = ACTIVE.lock().unwrap().as_mut() {
-        state.selected_frame = new_selected;
-        state.preset_name = preset_name_buf.clone();
+    if let (Some(frame), Some(kind)) = (selected, selected_kind) {
+        if let Some(k) = track.iter().find(|k| k.frame == frame) {
+            set_kf(
+                world,
+                &target,
+                frame,
+                k.value,
+                k.engine_id.clone(),
+                encode_payload(&neoutl_easing_standard::EasingPayload {
+                    kind,
+                    modifiers: Vec::new(),
+                }),
+            );
+        }
     }
-
-    ui.separator();
-    if ui.button(t!("閉じる")).clicked() {
+    if applied {}
+    if close_requested {
         close();
     }
     let _ = ctx;

@@ -1,5 +1,4 @@
 pub mod curve;
-pub mod legacy;
 pub mod script;
 
 pub use curve::{
@@ -44,8 +43,7 @@ pub fn ease(payload: &EasingPayload, t: f32) -> f32 {
 
 /// FFI境界を越えないインプロセス呼び出し（`neoutl-easing-standard`をrlibとして
 /// 直接依存するegui側エディタ）でも同一の符号化規則を使うための公開版。
-/// 新形式デコードに失敗した場合のみ旧`StandardEasing`形式を試み、
-/// それも失敗すればLinearへフォールバックする（決定事項3）。
+/// 不正または空のペイロードはLinearへフォールバックする。
 pub fn parse_payload(slice: &[u8]) -> EasingPayload {
     if slice.is_empty() {
         return EasingPayload::linear();
@@ -53,13 +51,7 @@ pub fn parse_payload(slice: &[u8]) -> EasingPayload {
     if let Ok(payload) = serde_json::from_slice::<EasingPayload>(slice) {
         return payload;
     }
-    if let Ok(legacy_kind) = serde_json::from_slice::<legacy::StandardEasing>(slice) {
-        return EasingPayload {
-            kind: curve::from_legacy(&legacy_kind),
-            modifiers: Vec::new(),
-        };
-    }
-    eprintln!("[neoutl-easing-standard] 旧形式ペイロード解読失敗、Linearへフォールバック");
+    eprintln!("[neoutl-easing-standard] ペイロード解読失敗、Linearへフォールバック");
     EasingPayload::linear()
 }
 
