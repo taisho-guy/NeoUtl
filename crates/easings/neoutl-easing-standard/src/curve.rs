@@ -21,6 +21,9 @@ pub enum CurveKind {
         decay: f32,
         reversed: bool,
     },
+    Standard {
+        name: String,
+    },
     Normal {
         segments: Vec<CurveSegment>,
     },
@@ -42,6 +45,7 @@ impl CurveKind {
             CurveKind::Bezier { .. } => "Bezier",
             CurveKind::Bounce { .. } => "Bounce",
             CurveKind::Elastic { .. } => "Elastic",
+            CurveKind::Standard { .. } => "Standard",
             CurveKind::Normal { .. } => "Normal",
             CurveKind::Script { .. } => "Script",
         }
@@ -86,6 +90,10 @@ impl CurveKind {
         CurveKind::Script {
             source: "return t".to_owned(),
         }
+    }
+
+    pub fn standard(name: impl Into<String>) -> Self {
+        CurveKind::Standard { name: name.into() }
     }
 }
 
@@ -323,8 +331,65 @@ pub fn evaluate_kind(kind: &CurveKind, t: f32) -> f32 {
             decay,
             reversed,
         } => elastic_ease(t, *amplitude, *frequency, *decay, *reversed),
+        CurveKind::Standard { name } => evaluate_standard(name, t),
         CurveKind::Normal { segments } => evaluate_normal(segments, t),
         CurveKind::Script { source } => crate::script::evaluate(source, t).unwrap_or(t),
+    }
+}
+
+fn evaluate_standard(name: &str, t: f32) -> f32 {
+    if name == "linear" {
+        return t;
+    }
+    let family = if name.contains("Sine") {
+        1
+    } else if name.contains("Quad") {
+        2
+    } else if name.contains("Cubic") {
+        3
+    } else if name.contains("Quart") {
+        4
+    } else if name.contains("Quint") {
+        5
+    } else if name.contains("Expo") {
+        6
+    } else if name.contains("Circ") {
+        7
+    } else {
+        8
+    };
+    let base = |x: f32| match family {
+        1 => 1.0 - (x * std::f32::consts::FRAC_PI_2).cos(),
+        2 => x * x,
+        3 => x * x * x,
+        4 => x.powi(4),
+        5 => x.powi(5),
+        6 => {
+            if x == 0.0 {
+                0.0
+            } else {
+                (2.0_f32).powf(10.0 * x - 10.0)
+            }
+        }
+        7 => 1.0 - (1.0 - x * x).sqrt(),
+        _ => 2.70158 * x * x * x - 1.70158 * x * x,
+    };
+    if name.starts_with("easeInOut") {
+        if t < 0.5 {
+            base(t * 2.0) / 2.0
+        } else {
+            1.0 - base(2.0 - 2.0 * t) / 2.0
+        }
+    } else if name.starts_with("easeOutIn") {
+        if t < 0.5 {
+            (1.0 - base(1.0 - 2.0 * t)) / 2.0
+        } else {
+            base(2.0 * t - 1.0) / 2.0 + 0.5
+        }
+    } else if name.starts_with("easeOut") {
+        1.0 - base(1.0 - t)
+    } else {
+        base(t)
     }
 }
 
