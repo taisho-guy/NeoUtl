@@ -1,0 +1,509 @@
+//! AviUtl `curve_editor`移植: カーブ種別・セグメント・モディファイア定義。
+//! `Curve_Editor移植計画.md` 3.1節に対応。
+
+use serde::{Deserialize, Serialize};
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub enum CurveKind {
+    Linear,
+    Bezier {
+        handle_left: [f32; 2],
+        handle_right: [f32; 2],
+    },
+    Bounce {
+        cor: f32,
+        period: f32,
+        reversed: bool,
+    },
+    Elastic {
+        amplitude: f32,
+        frequency: f32,
+        decay: f32,
+        reversed: bool,
+    },
+    Normal {
+        segments: Vec<CurveSegment>,
+    },
+    Script {
+        source: String,
+    },
+}
+
+impl Default for CurveKind {
+    fn default() -> Self {
+        CurveKind::Linear
+    }
+}
+
+impl CurveKind {
+    pub fn label(&self) -> &'static str {
+        match self {
+            CurveKind::Linear => "Linear",
+            CurveKind::Bezier { .. } => "Bezier",
+            CurveKind::Bounce { .. } => "Bounce",
+            CurveKind::Elastic { .. } => "Elastic",
+            CurveKind::Normal { .. } => "Normal",
+            CurveKind::Script { .. } => "Script",
+        }
+    }
+
+    pub fn default_bezier() -> Self {
+        CurveKind::Bezier {
+            handle_left: [0.42, 0.0],
+            handle_right: [0.58, 1.0],
+        }
+    }
+
+    pub fn default_bounce() -> Self {
+        CurveKind::Bounce {
+            cor: 0.5,
+            period: 0.3,
+            reversed: false,
+        }
+    }
+
+    pub fn default_elastic() -> Self {
+        CurveKind::Elastic {
+            amplitude: 1.0,
+            frequency: 3.0,
+            decay: 6.0,
+            reversed: false,
+        }
+    }
+
+    pub fn default_normal() -> Self {
+        CurveKind::Normal {
+            segments: vec![CurveSegment {
+                anchor_start: [0.0, 0.0],
+                anchor_end: [1.0, 1.0],
+                kind: CurveKind::Linear,
+                modifiers: Vec::new(),
+            }],
+        }
+    }
+
+    pub fn default_script() -> Self {
+        CurveKind::Script {
+            source: "return t".to_owned(),
+        }
+    }
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct CurveSegment {
+    pub anchor_start: [f32; 2],
+    pub anchor_end: [f32; 2],
+    pub kind: CurveKind,
+    pub modifiers: Vec<Modifier>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub enum Modifier {
+    Discretization {
+        sampling_resolution: u32,
+        quantization_resolution: u32,
+    },
+    Noise {
+        seed: i32,
+        amplitude: f32,
+        frequency: f32,
+        phase: f32,
+        octaves: i32,
+        decay_sharpness: f32,
+    },
+    SineWave {
+        amplitude: f32,
+        frequency: f32,
+        phase: f32,
+    },
+    SquareWave {
+        amplitude: f32,
+        frequency: f32,
+        phase: f32,
+        duty: f32,
+    },
+}
+
+impl Modifier {
+    pub fn label(&self) -> &'static str {
+        match self {
+            Modifier::Discretization { .. } => "Discretization",
+            Modifier::Noise { .. } => "Noise",
+            Modifier::SineWave { .. } => "SineWave",
+            Modifier::SquareWave { .. } => "SquareWave",
+        }
+    }
+
+    /// `t`(0..1進行度)を受け取り値(0..1想定域、範囲外可)へ写像する`base`を
+    /// 後段でラップする。AviUtl `Modifier::apply`の関数デコレータに対応。
+    fn wrap(&self, base: &dyn Fn(f32) -> f32, t: f32) -> f32 {
+        match self {
+            Modifier::Discretization {
+                sampling_resolution,
+                quantization_resolution,
+            } => {
+                let s = (*sampling_resolution).max(1) as f32;
+                let q = (*quantization_resolution).max(1) as f32;
+                let sampled_t = (t * s).round() / s;
+                let raw = base(sampled_t);
+                (raw * q).round() / q
+            }
+            Modifier::Noise {
+                seed,
+                amplitude,
+                frequency,
+                phase,
+                octaves,
+                decay_sharpness,
+            } => {
+                let raw = base(t);
+                let n = fbm_noise1(
+                    *seed,
+                    t * *frequency + *phase,
+                    (*octaves).max(1) as u32,
+                    *decay_sharpness,
+                );
+                raw + n * *amplitude
+            }
+            Modifier::SineWave {
+                amplitude,
+                frequency,
+                phase,
+            } => {
+                let raw = base(t);
+                raw + (std::f32::consts::TAU * (*frequency * t + *phase)).sin() * *amplitude
+            }
+            Modifier::SquareWave {
+                amplitude,
+                frequency,
+                phase,
+                duty,
+            } => {
+                let raw = base(t);
+                let cycle = (*frequency * t + *phase).fract();
+                let cycle = if cycle < 0.0 { cycle + 1.0 } else { cycle };
+                let sq = if cycle < duty.clamp(0.0, 1.0) {
+                    1.0
+                } else {
+                    -1.0
+                };
+                raw + sq * *amplitude
+            }
+        }
+    }
+}
+
+/// AviUtl `Modifier::apply`の関数デコレータ合成。`mods`を先頭から順に
+/// `base`へ巻き付け、最内層が`base`・最外層が`mods`末尾になる。
+pub fn apply_modifiers(
+    base: impl Fn(f32) -> f32 + 'static,
+    mods: &[Modifier],
+) -> Box<dyn Fn(f32) -> f32> {
+    mods.iter()
+        .cloned()
+        .fold(Box::new(base) as Box<dyn Fn(f32) -> f32>, |acc, m| {
+            Box::new(move |t: f32| m.wrap(&acc, t))
+        })
+}
+
+fn splitmix32(seed: u32) -> u32 {
+    let mut z = seed.wrapping_add(0x9E3779B9);
+    z = (z ^ (z >> 16)).wrapping_mul(0x85EBCA6B);
+    z = (z ^ (z >> 13)).wrapping_mul(0xC2B2AE35);
+    z ^ (z >> 16)
+}
+
+fn value_noise1(seed: i32, x: f32) -> f32 {
+    let x0 = x.floor();
+    let frac = x - x0;
+    let hash = |i: i32| -> f32 {
+        let combined = (seed as u32) ^ (i as u32).wrapping_mul(0x27D4_EB2F);
+        (splitmix32(combined) as f64 / (u32::MAX as f64 + 1.0)) as f32 * 2.0 - 1.0
+    };
+    let a = hash(x0 as i32);
+    let b = hash(x0 as i32 + 1);
+    let u = frac * frac * (3.0 - 2.0 * frac);
+    a + (b - a) * u
+}
+
+/// `octaves`段のフラクタルブラウン運動合成。`decay_sharpness`は段ごとの振幅減衰指数。
+fn fbm_noise1(seed: i32, x: f32, octaves: u32, decay_sharpness: f32) -> f32 {
+    let mut total = 0.0f32;
+    let mut freq = 1.0f32;
+    let mut amp = 1.0f32;
+    let mut norm = 0.0f32;
+    for i in 0..octaves {
+        total += value_noise1(seed.wrapping_add(i as i32), x * freq) * amp;
+        norm += amp;
+        freq *= 2.0;
+        amp *= (0.5f32).powf(decay_sharpness.max(0.01));
+    }
+    if norm > 0.0 { total / norm } else { 0.0 }
+}
+
+fn bezier_ease(t: f32, h1: [f32; 2], h2: [f32; 2]) -> f32 {
+    let sample_x = |u: f32| {
+        let mu = 1.0 - u;
+        3.0 * mu * mu * u * h1[0] + 3.0 * mu * u * u * h2[0] + u * u * u
+    };
+    let sample_y = |u: f32| {
+        let mu = 1.0 - u;
+        3.0 * mu * mu * u * h1[1] + 3.0 * mu * u * u * h2[1] + u * u * u
+    };
+    let mut u = t;
+    for _ in 0..8 {
+        let mu = 1.0 - u;
+        let err = sample_x(u) - t;
+        if err.abs() < 1e-5 {
+            break;
+        }
+        let dx =
+            3.0 * mu * mu * h1[0] + 6.0 * mu * u * (h2[0] - h1[0]) + 3.0 * u * u * (1.0 - h2[0]);
+        if dx.abs() < 1e-6 {
+            break;
+        }
+        u -= err / dx;
+    }
+    sample_y(u.clamp(0.0, 1.0))
+}
+
+/// AviUtl `curve_bounce.cpp`相当。反発係数`cor`、周期`period`の減衰バウンド。
+fn bounce_ease(t: f32, cor: f32, period: f32, reversed: bool) -> f32 {
+    let t = if reversed { 1.0 - t } else { t };
+    let cor = cor.clamp(0.01, 0.99);
+    let period = period.max(0.01);
+    let mut drop_start = 0.0f32;
+    let mut amp = 1.0f32;
+    let mut half_period = period;
+    let mut y;
+    loop {
+        let seg_end = drop_start + half_period;
+        if t <= seg_end || amp < 1e-4 {
+            let local = (t - drop_start) / half_period.max(1e-6);
+            let bounce_y = 1.0 - (2.0 * local - 1.0).powi(2);
+            y = 1.0 - amp * (1.0 - bounce_y);
+            break;
+        }
+        drop_start = seg_end;
+        amp *= cor * cor;
+        half_period *= cor;
+    }
+    y = y.clamp(0.0, 1.0);
+    if reversed { 1.0 - y } else { y }
+}
+
+/// AviUtl `curve_elastic.cpp`相当。振幅・周波数・減衰の可変ばね振動。
+fn elastic_ease(t: f32, amplitude: f32, frequency: f32, decay: f32, reversed: bool) -> f32 {
+    let t = if reversed { 1.0 - t } else { t };
+    let envelope = (-decay * t).exp();
+    let osc = (std::f32::consts::TAU * frequency * t).sin();
+    let y = 1.0 - envelope * osc * amplitude;
+    let y = y.clamp(-2.0, 2.0);
+    if reversed { 1.0 - y } else { y }
+}
+
+/// セグメント無しの単一カーブ種別を`t`(0..1)で評価する。`Normal`は自身が
+/// 子セグメント配列を保持するため区間再帰を内部で完結させる。
+pub fn evaluate_kind(kind: &CurveKind, t: f32) -> f32 {
+    let t = t.clamp(0.0, 1.0);
+    match kind {
+        CurveKind::Linear => t,
+        CurveKind::Bezier {
+            handle_left,
+            handle_right,
+        } => bezier_ease(t, *handle_left, *handle_right),
+        CurveKind::Bounce {
+            cor,
+            period,
+            reversed,
+        } => bounce_ease(t, *cor, *period, *reversed),
+        CurveKind::Elastic {
+            amplitude,
+            frequency,
+            decay,
+            reversed,
+        } => elastic_ease(t, *amplitude, *frequency, *decay, *reversed),
+        CurveKind::Normal { segments } => evaluate_normal(segments, t),
+        CurveKind::Script { source } => crate::script::evaluate(source, t).unwrap_or(t),
+    }
+}
+
+/// モディファイア込みの最終評価。1区間の`ease()`本体はこれを呼ぶ。
+pub fn evaluate_kind_with_modifiers(kind: &CurveKind, mods: &[Modifier], t: f32) -> f32 {
+    let base_t = t.clamp(0.0, 1.0);
+    if mods.is_empty() {
+        return evaluate_kind(kind, base_t);
+    }
+    let kind = kind.clone();
+    apply_modifiers(move |u| evaluate_kind(&kind, u), mods)(base_t)
+}
+
+/// AviUtl `NormalCurve::curve_function`相当。`anchor_start.x`昇順を前提に
+/// `t`が属する子セグメントを二分探索し、ローカル進行度へ再写像して委譲する。
+fn evaluate_normal(segments: &[CurveSegment], t: f32) -> f32 {
+    if segments.is_empty() {
+        return t;
+    }
+    if segments.len() == 1 {
+        return evaluate_segment(&segments[0], t);
+    }
+    let idx = segments.partition_point(|s| s.anchor_end[0] < t);
+    let idx = idx.min(segments.len() - 1);
+    evaluate_segment(&segments[idx], t)
+}
+
+fn evaluate_segment(seg: &CurveSegment, t: f32) -> f32 {
+    let x0 = seg.anchor_start[0];
+    let x1 = seg.anchor_end[0];
+    let span = (x1 - x0).max(1e-6);
+    let local_t = ((t - x0) / span).clamp(0.0, 1.0);
+    let y0 = seg.anchor_start[1];
+    let y1 = seg.anchor_end[1];
+    let local_y = evaluate_kind_with_modifiers(&seg.kind, &seg.modifiers, local_t);
+    y0 + (y1 - y0) * local_y
+}
+
+pub fn add_segment(segments: &mut Vec<CurveSegment>, at_x: f32) {
+    let insert_at = segments.partition_point(|s| s.anchor_start[0] < at_x);
+    let (start, end) = if insert_at == 0 {
+        (0.0, segments.first().map_or(1.0, |s| s.anchor_start[0]))
+    } else if insert_at >= segments.len() {
+        (segments.last().map_or(0.0, |s| s.anchor_end[0]), 1.0)
+    } else {
+        (
+            segments[insert_at - 1].anchor_end[0],
+            segments[insert_at].anchor_start[0],
+        )
+    };
+    segments.insert(
+        insert_at,
+        CurveSegment {
+            anchor_start: [start, 0.0],
+            anchor_end: [end, 1.0],
+            kind: CurveKind::Linear,
+            modifiers: Vec::new(),
+        },
+    );
+}
+
+/// セグメント境界(anchor)を`[0,1]`域内でドラッグ移動する。両隣接境界を
+/// 越えないようclampし、境界の連続性(前segの終端=次segの始端)を維持する。
+pub fn drag_anchor_x(segments: &mut [CurveSegment], boundary_index: usize, new_x: f32) {
+    if boundary_index == 0 || boundary_index >= segments.len() {
+        return;
+    }
+    let lower = segments[boundary_index - 1].anchor_start[0] + 1e-3;
+    let upper = segments
+        .get(boundary_index + 1)
+        .map_or(1.0, |s| s.anchor_end[0] - 1e-3);
+    let clamped = new_x.clamp(lower, upper);
+    segments[boundary_index - 1].anchor_end[0] = clamped;
+    segments[boundary_index].anchor_start[0] = clamped;
+}
+
+pub fn remove_segment(segments: &mut Vec<CurveSegment>, index: usize) {
+    if segments.len() > 1 && index < segments.len() {
+        segments.remove(index);
+    }
+}
+
+pub fn replace_segment_kind(segments: &mut [CurveSegment], index: usize, kind: CurveKind) {
+    if let Some(seg) = segments.get_mut(index) {
+        seg.kind = kind;
+    }
+}
+
+/// 旧`StandardEasing`形式からの読込専用ワンショット変換。
+/// `0.5.x`系列の間のみ保持し、次回メジャーバージョンで削除する。
+pub fn from_legacy(legacy: &crate::legacy::StandardEasing) -> CurveKind {
+    use crate::legacy::StandardEasing as L;
+    match legacy {
+        L::Linear => CurveKind::Linear,
+        L::Step => CurveKind::Bounce {
+            cor: 0.0,
+            period: 1.0,
+            reversed: false,
+        },
+        L::Bezier { cp1, cp2 } => CurveKind::Bezier {
+            handle_left: [cp1.0, cp1.1],
+            handle_right: [cp2.0, cp2.1],
+        },
+        L::EaseInBack | L::EaseOutBack | L::EaseInOutBack => CurveKind::default_elastic(),
+        L::EaseInBounce | L::EaseOutBounce | L::EaseInOutBounce => CurveKind::default_bounce(),
+        L::Random { .. } => CurveKind::Normal {
+            segments: vec![CurveSegment {
+                anchor_start: [0.0, 0.0],
+                anchor_end: [1.0, 1.0],
+                kind: CurveKind::Linear,
+                modifiers: vec![Modifier::Noise {
+                    seed: 0,
+                    amplitude: 0.2,
+                    frequency: 8.0,
+                    phase: 0.0,
+                    octaves: 1,
+                    decay_sharpness: 1.0,
+                }],
+            }],
+        },
+        L::EaseInSine => CurveKind::Bezier {
+            handle_left: [0.12, 0.0],
+            handle_right: [0.39, 0.0],
+        },
+        L::EaseOutSine => CurveKind::Bezier {
+            handle_left: [0.61, 1.0],
+            handle_right: [0.88, 1.0],
+        },
+        L::EaseInOutSine => CurveKind::Bezier {
+            handle_left: [0.37, 0.0],
+            handle_right: [0.63, 1.0],
+        },
+        L::EaseInQuad => CurveKind::Bezier {
+            handle_left: [0.11, 0.0],
+            handle_right: [0.5, 0.0],
+        },
+        L::EaseOutQuad => CurveKind::Bezier {
+            handle_left: [0.5, 1.0],
+            handle_right: [0.89, 1.0],
+        },
+        L::EaseInOutQuad => CurveKind::Bezier {
+            handle_left: [0.45, 0.0],
+            handle_right: [0.55, 1.0],
+        },
+        L::EaseInCubic => CurveKind::Bezier {
+            handle_left: [0.32, 0.0],
+            handle_right: [0.67, 0.0],
+        },
+        L::EaseOutCubic => CurveKind::Bezier {
+            handle_left: [0.33, 1.0],
+            handle_right: [0.68, 1.0],
+        },
+        L::EaseInOutCubic => CurveKind::Bezier {
+            handle_left: [0.65, 0.0],
+            handle_right: [0.35, 1.0],
+        },
+        L::EaseInQuart => CurveKind::Bezier {
+            handle_left: [0.5, 0.0],
+            handle_right: [0.75, 0.0],
+        },
+        L::EaseOutQuart => CurveKind::Bezier {
+            handle_left: [0.25, 1.0],
+            handle_right: [0.5, 1.0],
+        },
+        L::EaseInOutQuart => CurveKind::Bezier {
+            handle_left: [0.76, 0.0],
+            handle_right: [0.24, 1.0],
+        },
+        L::EaseInExpo => CurveKind::Bezier {
+            handle_left: [0.7, 0.0],
+            handle_right: [0.84, 0.0],
+        },
+        L::EaseOutExpo => CurveKind::Bezier {
+            handle_left: [0.16, 1.0],
+            handle_right: [0.3, 1.0],
+        },
+        L::EaseInOutExpo => CurveKind::Bezier {
+            handle_left: [0.87, 0.0],
+            handle_right: [0.13, 1.0],
+        },
+    }
+}
