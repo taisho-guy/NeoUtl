@@ -4,7 +4,7 @@ use crate::ui::launcher::LauncherPanel;
 use crate::ui::preview::PreviewPanel;
 use crate::ui::properties::PropertiesPanel;
 use crate::ui::timeline::TimelineWindow;
-use egui_system_fonts::{FontRegion, FontStyle, set_with_region};
+use egui_system_fonts;
 use egui_wgpu::Renderer as EguiRenderer;
 use egui_wgpu::wgpu;
 use std::cell::RefCell;
@@ -157,7 +157,7 @@ impl NativeWindow {
 
         let ctx = egui::Context::default();
         crate::theme::install(&ctx);
-        set_with_region(&ctx, FontRegion::Japanese, FontStyle::Sans);
+        install_locale_fonts(&ctx);
         let state = egui_winit::State::new(
             ctx.clone(),
             egui::ViewportId::ROOT,
@@ -548,4 +548,10 @@ pub fn run(gpu: Rc<SharedGpu>, slot: PreviewSlot) -> Result<(), Box<dyn std::err
     let mut app = EguiMainWindow::new(gpu, slot);
     event_loop.run_app(&mut app)?;
     Ok(())
+}
+
+/// システムロケールを検出し、対応するフォントをegui既定フォント定義へ適用する。
+/// フォント検出・読込は`egui-system-fonts`クレートに委譲する。
+fn install_locale_fonts(ctx: &egui::Context) {
+    egui_system_fonts::set_auto(ctx, egui_system_fonts::FontStyle::Sans);
 }

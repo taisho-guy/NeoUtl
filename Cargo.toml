@@ -84,15 +84,15 @@ egui-wgpu = "0.35"
 egui-winit = "0.35"
 winit = "0.30"
 egui_extras = "0.35"
-egui_tiles = "0.16"
 egui_material_icons = "0.7"
 egui_code_editor = "0.3"
 egui_plot = "0.36"
-egui-system-fonts = "0.35"
 egui-elegance = "0.14"
 rust-i18n = "4"
 ureq = { version = "3", features = ["json", "_tls"] }
 zip = "8"
+egui_dock = "0.20"
+egui-system-fonts = "0.35"
 
 [dev-dependencies]
 

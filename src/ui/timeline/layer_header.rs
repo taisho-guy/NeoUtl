@@ -111,7 +111,9 @@ impl TimelineWindow {
             }
             if select_resp.secondary_clicked() {
                 self.selected_layer = i;
-                self.toggle_layer_locked(state, preview_panel, i);
+                if let Some(pos) = select_resp.interact_pointer_pos() {
+                    self.open_layer_menu(pos, i, layer_states);
+                }
             }
 
             let vis_id = ui.id().with(("layer-vis", i));
