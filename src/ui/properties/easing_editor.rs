@@ -212,6 +212,9 @@ const KIND_CHOICES: &[&str] = &["Linear", "Bezier", "Bounce", "Elastic", "Normal
 const MODIFIER_CHOICES: &[&str] = &["Discretization", "Noise", "SineWave", "SquareWave"];
 
 fn default_for(name: &str) -> CurveKind {
+    if name == "linear" || name.starts_with("ease") {
+        return CurveKind::standard(name);
+    }
     match name {
         "Bezier" => CurveKind::default_bezier(),
         "Bounce" => CurveKind::default_bounce(),
@@ -639,6 +642,12 @@ fn show_curve_editor_layout(ctx: &egui::Context, ui: &mut egui::Ui, world: &mut 
     let mut selected_kind: Option<CurveKind> = None;
     let mut close_requested = false;
     let mut fit = false;
+    let mut curve_changed = false;
+    let mut edited_payload = None;
+    let visuals = ctx.style_of(ctx.theme()).visuals.clone();
+    let accent = visuals.selection.bg_fill;
+    let text_color = visuals.text_color();
+    let weak_text = visuals.weak_text_color();
 
     ui.horizontal(|ui| {
         for (icon, tip) in [("□", "コピー"), ("★", "保存"), ("↻", "リセット")] {
@@ -674,7 +683,10 @@ fn show_curve_editor_layout(ctx: &egui::Context, ui: &mut egui::Ui, world: &mut 
                 fit = true;
             }
         });
-        let payload = selected
+        let selected_index = selected
+            .and_then(|frame| track.windows(2).position(|w| w[0].frame == frame))
+            .unwrap_or(0);
+        let mut active_payload = selected
             .and_then(|frame| track.iter().find(|k| k.frame == frame))
             .map(|k| parse_payload(&k.engine_payload))
             .unwrap_or_else(|| neoutl_easing_standard::EasingPayload::linear());
@@ -695,23 +707,158 @@ fn show_curve_editor_layout(ctx: &egui::Context, ui: &mut egui::Ui, world: &mut 
                 })
                 .collect();
             plot_ui.line(Line::new("linear", grid).color(egui::Color32::DARK_GRAY));
-            let curve: PlotPoints = (0..=128)
-                .map(|i| {
-                    let t = i as f32 / 128.0;
-                    [t as f64, ease(&payload, t) as f64]
-                })
-                .collect();
-            plot_ui.line(
-                Line::new("curve", curve)
-                    .color(egui::Color32::from_rgb(0x9a, 0xc7, 0xff))
-                    .width(2.0),
-            );
-            let anchors: PlotPoints = track
-                .iter()
-                .map(|k| [k.frame as f64, k.value as f64])
-                .collect();
-            plot_ui.points(Points::new("anchors", anchors).radius(4.0));
+            for (segment_index, window) in track.windows(2).enumerate() {
+                let segment_payload = parse_payload(&window[0].engine_payload);
+                let curve: PlotPoints = (0..=128)
+                    .map(|i| {
+                        let t = i as f32 / 128.0;
+                        [t as f64, ease(&segment_payload, t) as f64]
+                    })
+                    .collect();
+                let active = segment_index == selected_index;
+                let color = if active {
+                    accent
+                } else {
+                    accent.linear_multiply(0.35)
+                };
+                plot_ui.line(
+                    Line::new(format!("curve_{segment_index}"), curve)
+                        .color(color)
+                        .width(if active { 3.0 } else { 1.5 }),
+                );
+                if active {
+                    if let CurveKind::Bezier {
+                        handle_left,
+                        handle_right,
+                    } = &active_payload.kind
+                    {
+                        let controls: PlotPoints = vec![
+                            [handle_left[0] as f64, handle_left[1] as f64],
+                            [handle_right[0] as f64, handle_right[1] as f64],
+                        ]
+                        .into();
+                        let tangents: PlotPoints = vec![
+                            [0.0, 0.0],
+                            [handle_left[0] as f64, handle_left[1] as f64],
+                            [1.0, 1.0],
+                            [handle_right[0] as f64, handle_right[1] as f64],
+                        ]
+                        .into();
+                        plot_ui.line(Line::new("tangents", tangents).color(weak_text));
+                        plot_ui.points(
+                            Points::new("control_points", controls)
+                                .color(egui::Color32::WHITE)
+                                .radius(6.0),
+                        );
+                    }
+                    if let CurveKind::Bounce { cor, period, .. } = &active_payload.kind {
+                        let point: PlotPoints =
+                            vec![[*cor as f64, (*period / 2.0).clamp(0.0, 1.0) as f64]].into();
+                        plot_ui.points(
+                            Points::new("bounce_handle", point)
+                                .color(egui::Color32::WHITE)
+                                .radius(6.0),
+                        );
+                    }
+                    if let CurveKind::Elastic {
+                        amplitude,
+                        frequency,
+                        decay,
+                        ..
+                    } = &active_payload.kind
+                    {
+                        let points: PlotPoints = vec![
+                            [
+                                (*frequency / 16.0).clamp(0.0, 1.0) as f64,
+                                (*amplitude / 4.0).clamp(0.0, 1.0) as f64,
+                            ],
+                            [(*decay / 16.0).clamp(0.0, 1.0) as f64, 0.5],
+                        ]
+                        .into();
+                        plot_ui.points(
+                            Points::new("elastic_handles", points)
+                                .color(egui::Color32::WHITE)
+                                .radius(6.0),
+                        );
+                    }
+                    let endpoints: PlotPoints = vec![[0.0, 0.0], [1.0, 1.0]].into();
+                    plot_ui.points(
+                        Points::new("active_endpoints", endpoints)
+                            .color(egui::Color32::WHITE)
+                            .radius(5.0),
+                    );
+                }
+            }
+            let response = plot_ui.response();
+            if response.double_clicked() {
+                if let CurveKind::Normal { segments } = &mut active_payload.kind {
+                    if let Some(pos) = plot_ui.pointer_coordinate() {
+                        let x = pos.x.clamp(0.05, 0.95) as f32;
+                        neoutl_easing_standard::add_segment(segments, x);
+                        curve_changed = true;
+                    }
+                }
+            } else if response.dragged() {
+                let modifiers = plot_ui.ctx().input(|i| i.modifiers);
+                if let Some(pos) = plot_ui.pointer_coordinate() {
+                    if let CurveKind::Bezier {
+                        handle_left,
+                        handle_right,
+                    } = &mut active_payload.kind
+                    {
+                        let dl = (pos.x - handle_left[0] as f64).powi(2)
+                            + (pos.y - handle_left[1] as f64).powi(2);
+                        let dr = (pos.x - handle_right[0] as f64).powi(2)
+                            + (pos.y - handle_right[1] as f64).powi(2);
+                        let snap = |y: f64| {
+                            if modifiers.shift {
+                                if y >= 0.5 { 1.0 } else { 0.0 }
+                            } else {
+                                y
+                            }
+                        };
+                        if dl <= dr {
+                            handle_left[0] = pos.x.clamp(0.0, 1.0) as f32;
+                            handle_left[1] = snap(pos.y) as f32;
+                            if modifiers.shift && modifiers.ctrl {
+                                handle_right[0] = (1.0 - handle_left[0]).clamp(0.0, 1.0);
+                                handle_right[1] = handle_left[1];
+                            }
+                        } else {
+                            handle_right[0] = pos.x.clamp(0.0, 1.0) as f32;
+                            handle_right[1] = snap(pos.y) as f32;
+                            if modifiers.shift && modifiers.ctrl {
+                                handle_left[0] = (1.0 - handle_right[0]).clamp(0.0, 1.0);
+                                handle_left[1] = handle_right[1];
+                            }
+                        }
+                        curve_changed = true;
+                    }
+                    if let CurveKind::Bounce { cor, period, .. } = &mut active_payload.kind {
+                        *cor = pos.x.clamp(0.0, 0.99) as f32;
+                        *period = (pos.y.clamp(0.0, 1.0) as f32 * 2.0).clamp(0.01, 2.0);
+                        curve_changed = true;
+                    }
+                    if let CurveKind::Elastic {
+                        amplitude,
+                        frequency,
+                        decay,
+                        ..
+                    } = &mut active_payload.kind
+                    {
+                        let modifiers = plot_ui.ctx().input(|i| i.modifiers);
+                        if modifiers.ctrl {
+                            *decay = (pos.x.clamp(0.0, 1.0) as f32 * 16.0).clamp(0.0, 16.0);
+                        } else {
+                            *frequency = (pos.x.clamp(0.0, 1.0) as f32 * 16.0).clamp(0.1, 16.0);
+                            *amplitude = (pos.y.clamp(0.0, 1.0) as f32 * 4.0).clamp(0.0, 4.0);
+                        }
+                        curve_changed = true;
+                    }
+                }
+            }
         });
+        edited_payload = Some(active_payload);
 
         let preset_ui = &mut cols[1];
         preset_ui.horizontal(|ui| {
@@ -721,25 +868,57 @@ fn show_curve_editor_layout(ctx: &egui::Context, ui: &mut egui::Ui, world: &mut 
         preset_ui.separator();
         preset_ui.horizontal(|ui| {
             ui.label(egui::RichText::new("すべて").strong());
-            ui.label("(6)⌄");
+            ui.label("(37)⌄");
         });
         egui::ScrollArea::vertical()
             .id_salt(("preset_scroll", &target))
             .show(preset_ui, |ui| {
-                let presets = [
-                    ("linear", CurveKind::Linear),
-                    ("easeIn", CurveKind::default_bezier()),
-                    ("easeOut", CurveKind::default_bezier()),
-                    ("bounce", CurveKind::default_bounce()),
-                    ("elastic", CurveKind::default_elastic()),
-                    ("normal", CurveKind::default_normal()),
+                let names = [
+                    "linear",
+                    "easeInSine",
+                    "easeOutSine",
+                    "easeInOutSine",
+                    "easeOutInSine",
+                    "easeInQuad",
+                    "easeOutQuad",
+                    "easeInOutQuad",
+                    "easeOutInQuad",
+                    "easeInCubic",
+                    "easeOutCubic",
+                    "easeInOutCubic",
+                    "easeOutInCubic",
+                    "easeInQuart",
+                    "easeOutQuart",
+                    "easeInOutQuart",
+                    "easeOutInQuart",
+                    "easeInQuint",
+                    "easeOutQuint",
+                    "easeInOutQuint",
+                    "easeOutInQuint",
+                    "easeInExpo",
+                    "easeOutExpo",
+                    "easeInOutExpo",
+                    "easeOutInExpo",
+                    "easeInCirc",
+                    "easeOutCirc",
+                    "easeInOutCirc",
+                    "easeOutInCirc",
+                    "easeInBack",
+                    "easeOutBack",
+                    "easeInOutBack",
+                    "easeOutInBack",
+                    "easeInElastic",
+                    "easeOutElastic",
+                    "easeInBounce",
+                    "easeOutBounce",
                 ];
-                for row in presets.chunks(3) {
+                for row in names.chunks(3) {
                     ui.horizontal(|ui| {
-                        for (name, kind) in row {
-                            let response = ui.add_sized([62.0, 62.0], egui::Button::new(*name));
-                            if response.double_clicked() || response.clicked() {
-                                selected_kind = Some(kind.clone());
+                        for name in row {
+                            let kind = default_for(name);
+                            let response = preset_card(ui, name, &kind);
+                            if response.clicked() {
+                                selected_kind = Some(kind);
                             }
                         }
                     });
@@ -785,12 +964,75 @@ fn show_curve_editor_layout(ctx: &egui::Context, ui: &mut egui::Ui, world: &mut 
             );
         }
     }
+    if curve_changed {
+        if let Some(frame) = selected {
+            if let Some(k) = track.iter().find(|k| k.frame == frame) {
+                if let Some(payload) = edited_payload {
+                    set_kf(
+                        world,
+                        &target,
+                        frame,
+                        k.value,
+                        k.engine_id.clone(),
+                        encode_payload(&payload),
+                    );
+                }
+            }
+        }
+    }
     if applied {}
     if close_requested {
         close();
     }
     let _ = ctx;
     true
+}
+
+fn preset_card(ui: &mut egui::Ui, name: &str, kind: &CurveKind) -> egui::Response {
+    let (rect, response) = ui.allocate_exact_size(egui::vec2(78.0, 72.0), egui::Sense::click());
+    let chart = egui::Rect::from_min_max(
+        rect.min + egui::vec2(4.0, 4.0),
+        egui::pos2(rect.max.x - 4.0, rect.min.y + 48.0),
+    );
+    let painter = ui.painter();
+    let fill = if response.hovered() {
+        egui::Color32::from_rgb(0x35, 0x35, 0x3b)
+    } else {
+        egui::Color32::from_rgb(0x25, 0x25, 0x2a)
+    };
+    painter.rect_filled(rect, 4.0, fill);
+    painter.rect_stroke(
+        chart,
+        2.0,
+        egui::Stroke::new(1.0, egui::Color32::from_gray(75)),
+        egui::StrokeKind::Inside,
+    );
+    let points: Vec<egui::Pos2> = (0..=32)
+        .map(|i| {
+            let t = i as f32 / 32.0;
+            let y = evaluate_kind(kind, t);
+            egui::pos2(
+                chart.left() + chart.width() * t,
+                chart.bottom() - chart.height() * y.clamp(-0.2, 1.2),
+            )
+        })
+        .collect();
+    painter.add(egui::Shape::line(
+        points,
+        egui::Stroke::new(1.5, egui::Color32::from_rgb(0xc8, 0xc8, 0xd0)),
+    ));
+    painter.text(
+        egui::pos2(rect.center().x, rect.bottom() - 13.0),
+        egui::Align2::CENTER_CENTER,
+        name,
+        egui::FontId::proportional(10.0),
+        egui::Color32::from_gray(205),
+    );
+    response
+}
+
+fn evaluate_kind(kind: &CurveKind, t: f32) -> f32 {
+    neoutl_easing_standard::curve::evaluate_kind(kind, t)
 }
 
 fn has_outgoing(track: &[Keyframe], frame: i32) -> bool {
@@ -1095,6 +1337,7 @@ fn edit_kind_params(ui: &mut egui::Ui, kind: &mut CurveKind, target: &TrackTarge
         CurveKind::Script { source } => {
             ui.add(egui::TextEdit::multiline(source).desired_rows(4));
         }
+        CurveKind::Standard { .. } => {}
     }
 }
 
