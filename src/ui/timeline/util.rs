@@ -246,6 +246,97 @@ pub(super) fn build_context_menu(
     ]
 }
 
+/// レイヤーヘッダー右クリックメニューの項目集合を構築する。
+/// レイヤーのロック→レイヤーの表示→レイヤーを設定(未実装)→レイヤー名を変更(未実装)→
+/// 他のレイヤーを表示/非表示(未実装)→区切り→レイヤーを挿入(未実装)→レイヤーを削除(未実装)→
+/// 区切り→レイヤーの表示(全レイヤー一覧submenu)→区切り→
+/// グリッド(BPM)の表示[チェック]→音声波形の表示[チェック]→区切り→
+/// オプション(未実装)→ウィンドウ配置(未実装)
+pub(super) fn build_layer_menu(
+    layer: i32,
+    layer_states: &[(bool, bool)],
+    show_grid: bool,
+    show_waveform: bool,
+) -> Vec<ContextMenuItem> {
+    let (visible, locked) = layer_states
+        .get(layer as usize)
+        .copied()
+        .unwrap_or((true, false));
+
+    let visibility_submenu: Vec<ContextMenuItem> = layer_states
+        .iter()
+        .enumerate()
+        .map(|(idx, &(vis, _))| ContextMenuItem {
+            label: t!("レイヤー{}").replace("{}", &(idx + 1).to_string()),
+            action: 41,
+            kind: idx as i32,
+            enabled: true,
+            icon: "eye".into(),
+            checked: Some(vis),
+            submenu: Vec::new(),
+        })
+        .collect();
+
+    vec![
+        ContextMenuItem {
+            label: t!("レイヤーのロック"),
+            action: 40,
+            kind: layer,
+            enabled: true,
+            icon: "lock".into(),
+            checked: Some(locked),
+            submenu: Vec::new(),
+        },
+        ContextMenuItem {
+            label: t!("レイヤーの表示"),
+            action: 41,
+            kind: layer,
+            enabled: true,
+            icon: "eye".into(),
+            checked: Some(visible),
+            submenu: Vec::new(),
+        },
+        disabled_leaf(t!("レイヤーを設定"), 42),
+        disabled_leaf(t!("レイヤー名を変更"), 43),
+        disabled_leaf(t!("他のレイヤーを表示/非表示"), 44),
+        sep(),
+        disabled_leaf(t!("レイヤーを挿入"), 45),
+        disabled_leaf(t!("レイヤーを削除"), 46),
+        sep(),
+        ContextMenuItem {
+            label: t!("レイヤーの表示"),
+            action: 17,
+            kind: -1,
+            enabled: !visibility_submenu.is_empty(),
+            icon: "list".into(),
+            checked: None,
+            submenu: visibility_submenu,
+        },
+        sep(),
+        ContextMenuItem {
+            label: t!("グリッド(BPM)の表示"),
+            action: 15,
+            kind: -1,
+            enabled: true,
+            icon: "grid".into(),
+            checked: Some(show_grid),
+            submenu: Vec::new(),
+        },
+        ContextMenuItem {
+            label: t!("音声波形の表示"),
+            action: 16,
+            kind: -1,
+            enabled: true,
+            icon: "audio-lines".into(),
+            checked: Some(show_waveform),
+            submenu: Vec::new(),
+        },
+        sep(),
+        disabled_submenu_parent(t!("オプション")),
+        disabled_submenu_parent(t!("ウィンドウ配置")),
+    ]
+}
+
 /// ui::preview（プロジェクトタブショートカット解決）と共有するためcrate公開。
 pub(crate) fn egui_key_name(key: egui::Key) -> String {
     use egui::Key;

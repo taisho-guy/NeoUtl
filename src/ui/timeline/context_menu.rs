@@ -13,7 +13,11 @@ const ROW_HEIGHT: f32 = 24.0;
 
 /// メニュー行を枠線なしで描画する。ホバー時のみ背景をハイライトし、
 /// egui::Buttonの常時可視フレームによる「ボタンの積み重ね」に見える見た目を避ける。
-fn menu_row(ui: &mut egui::Ui, item: &ContextMenuItem, has_submenu: bool) -> egui::Response {
+pub(super) fn menu_row(
+    ui: &mut egui::Ui,
+    item: &ContextMenuItem,
+    has_submenu: bool,
+) -> egui::Response {
     let desired = egui::vec2(ui.available_width(), ROW_HEIGHT);
     let (rect, resp) = ui.allocate_exact_size(desired, egui::Sense::click());
     let resp = if item.enabled {
@@ -307,6 +311,8 @@ impl TimelineWindow {
             14 => self.select_object(state, &(), item.kind, false),
             15 => self.show_grid = !self.show_grid,
             16 => self.show_waveform = !self.show_waveform,
+            40 => self.toggle_layer_locked(state, preview_panel, item.kind),
+            41 => self.toggle_layer_visible(state, preview_panel, item.kind),
             _ => {}
         }
     }

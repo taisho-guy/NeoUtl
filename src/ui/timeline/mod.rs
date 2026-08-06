@@ -17,6 +17,7 @@ mod context_menu;
 mod data;
 mod grid;
 mod layer_header;
+mod layer_menu;
 mod ruler;
 mod scene_tabs;
 pub(crate) mod util;
@@ -89,6 +90,9 @@ pub struct TimelineWindow {
     kdrag: Option<KeyframeDrag>,
     range: Option<RangeSelect>,
     menu: Option<MenuState>,
+    /// レイヤーヘッダー右クリックメニュー。タイムライン本体のメニュー(menu)とは
+    /// 独立して開閉する（起動元の座標系・項目集合が異なるため）。
+    layer_menu: Option<MenuState>,
     waveform_cache: HashMap<PathBuf, egui::TextureHandle>,
     /// 右クリックメニュー「グリッド(BPM)の表示」と連動する表示トグル。
     show_grid: bool,
@@ -111,6 +115,7 @@ impl TimelineWindow {
             kdrag: None,
             range: None,
             menu: None,
+            layer_menu: None,
             waveform_cache: HashMap::new(),
             show_grid: true,
             show_waveform: true,
@@ -127,6 +132,7 @@ impl TimelineWindow {
         self.kdrag = None;
         self.range = None;
         self.menu = None;
+        self.layer_menu = None;
     }
 
     pub(super) fn frame_interval(&self) -> i32 {
@@ -275,6 +281,7 @@ impl TimelineWindow {
         });
 
         self.context_menu_layer(ui, state, preview_panel, current_frame, &kinds);
+        self.layer_menu_layer(ui, state, preview_panel);
     }
 
     pub(super) fn handle_shortcuts(

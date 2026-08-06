@@ -5,6 +5,9 @@ use crate::renderer::RenderEngine;
 use crate::shortcuts::{self, CommandId, Scope};
 use crate::ui::dialogs::DialogSet;
 use crate::ui::timeline::util::egui_key_name;
+use egui_dock::{
+    AllowedSplits, DockArea, DockState, NodeIndex, Style, SurfaceIndex, TabIndex, TabViewer,
+};
 use egui_wgpu::Renderer as EguiRenderer;
 use egui_wgpu::wgpu;
 use std::cell::RefCell;
@@ -17,6 +20,49 @@ use std::time::Instant;
 /// keybindings/scene_settings/export_dialogはフェーズ2、拡張編集はフェーズ4でegui-native
 /// 化済みのためここには含まれない（DialogSet・TimelineWindowがPreviewPanelの開閉要求
 /// フラグを読む）。
+/// セッションタブ1件分（本体ウィンドウのタブバー用）。indexはSharedAppState::sessions
+/// 内の位置そのもので、毎フレーム再構築するため保持する状態は持たない。
+#[derive(Clone)]
+struct SessionTab {
+    index: usize,
+    name: String,
+}
+
+struct SessionTabViewer<'a> {
+    switch_target: &'a mut Option<usize>,
+    close_target: &'a mut Option<usize>,
+    closable: bool,
+}
+
+impl<'a> TabViewer for SessionTabViewer<'a> {
+    type Tab = SessionTab;
+
+    fn id(&mut self, tab: &mut Self::Tab) -> egui::Id {
+        egui::Id::new("session-tab").with(tab.index)
+    }
+
+    fn title(&mut self, tab: &mut Self::Tab) -> egui::WidgetText {
+        (&tab.name).into()
+    }
+
+    fn ui(&mut self, _ui: &mut egui::Ui, _tab: &mut Self::Tab) {}
+
+    fn on_tab_button(&mut self, tab: &mut Self::Tab, response: &egui::Response) {
+        if response.clicked() {
+            *self.switch_target = Some(tab.index);
+        }
+    }
+
+    fn closeable(&mut self, _tab: &mut Self::Tab) -> bool {
+        self.closable
+    }
+
+    fn on_close(&mut self, tab: &mut Self::Tab) -> egui_dock::widgets::tab_viewer::OnCloseResponse {
+        *self.close_target = Some(tab.index);
+        egui_dock::widgets::tab_viewer::OnCloseResponse::Ignore
+    }
+}
+
 pub struct LegacyWindows {}
 
 /// 再生開始時刻と開始フレームの記録。current_frameはこの2値と経過実時間から
@@ -286,51 +332,73 @@ impl PreviewPanel {
         });
     }
 
-    /// QML `RowLayout{ readonly property int _tabH: 28 }` 対応。
-    /// 各タブに閉じるボタン(×)を併設する。closable判定はセッション数>1のみ。
+    /// セッションタブ(本体ウィンドウ)。egui_dockのタブ行のみを意匠として用いる。
+    /// タブ本体(node内容)は本関数の外でプレビュー描画が行われるため`ui`は空実装。
+    /// セッション一覧はSharedAppStateから毎フレーム再構築するため、DockStateも
+    /// 毎フレーム再構築する（ドラッグによる並べ替え永続化はスコープ外）。
     fn tab_bar(
         &mut self,
         ui: &mut egui::Ui,
         state: &SharedAppState,
         dialogs: &Rc<RefCell<DialogSet>>,
     ) {
-        ui.set_min_height(28.0);
-        ui.horizontal(|ui| {
-            let (names, active_index) = {
-                let s = state.lock().unwrap();
-                let names: Vec<String> = s
-                    .sessions
-                    .iter()
-                    .map(|sess| sess.meta.name.clone())
-                    .collect();
-                (names, s.active)
-            };
-            let closable = names.len() > 1;
-            let mut switch_target: Option<usize> = None;
-            let mut close_target: Option<usize> = None;
-            for (i, name) in names.iter().enumerate() {
-                ui.horizontal(|ui| {
-                    if ui.selectable_label(i == active_index, name).clicked() && i != active_index {
-                        switch_target = Some(i);
-                    }
-                    if closable && ui.small_button("×").clicked() {
-                        close_target = Some(i);
-                    }
-                });
+        let (tabs, active_index) = {
+            let s = state.lock().unwrap();
+            let tabs: Vec<SessionTab> = s
+                .sessions
+                .iter()
+                .enumerate()
+                .map(|(i, sess)| SessionTab {
+                    index: i,
+                    name: sess.meta.name.clone(),
+                })
+                .collect();
+            (tabs, s.active)
+        };
+        let closable = tabs.len() > 1;
+
+        let mut dock_state = DockState::new(tabs);
+        let _ = dock_state.set_active_tab(egui_dock::TabPath::new(
+            SurfaceIndex::main(),
+            NodeIndex::root(),
+            TabIndex(active_index),
+        ));
+
+        let mut switch_target: Option<usize> = None;
+        let mut close_target: Option<usize> = None;
+        let mut viewer = SessionTabViewer {
+            switch_target: &mut switch_target,
+            close_target: &mut close_target,
+            closable,
+        };
+
+        ui.allocate_ui_with_layout(
+            egui::Vec2::new(ui.available_width(), 28.0),
+            egui::Layout::top_down(egui::Align::Min),
+            |ui| {
+                DockArea::new(&mut dock_state)
+                    .id(egui::Id::new("session-tabs"))
+                    .style(Style::from_egui(ui.style().as_ref()))
+                    .show_add_buttons(false)
+                    .show_close_buttons(closable)
+                    .draggable_tabs(false)
+                    .allowed_splits(AllowedSplits::None)
+                    .show_inside(ui, &mut viewer);
+            },
+        );
+
+        if let Some(i) = switch_target {
+            {
+                let mut s = state.lock().unwrap();
+                s.active = i;
             }
-            if let Some(i) = switch_target {
-                {
-                    let mut s = state.lock().unwrap();
-                    s.active = i;
-                }
-                self.playback_anchor = None;
-                self.texture_id = None;
-                self.sync_active_session(state);
-            }
-            if let Some(i) = close_target {
-                dialogs.borrow_mut().request_close_session(state, i);
-            }
-        });
+            self.playback_anchor = None;
+            self.texture_id = None;
+            self.sync_active_session(state);
+        }
+        if let Some(i) = close_target {
+            dialogs.borrow_mut().request_close_session(state, i);
+        }
     }
 
     /// active_indexをdelta分循環移動する（Ctrl+Tab/Ctrl+Shift+Tab用）。
