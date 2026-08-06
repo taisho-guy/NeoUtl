@@ -22,9 +22,40 @@ pub struct Keyframe {
     pub engine_payload: Vec<u8>,
     #[serde(default)]
     pub edit_seq: u64,
+    /// 区間の適用モード。このキーフレームを起点とする区間(次のキーフレームまで)に適用される。
+    /// AviUtl Curve Editorの「適用モード: 標準/補間」に対応。カーブ編集操作(engine_payload変更)とは
+    /// 独立して切り替わるため、専用フィールドとしてKeyframeへ持たせる（区間データの一部）。
+    #[serde(default)]
+    pub apply_mode: ApplyMode,
 }
 
 impl Keyframe {}
+
+/// 区間の適用挙動。
+/// - Linear: 各トラック(X/Y/Z等)を個別に補間する(既定)。
+/// - Interpolate: 複数トラックの同一区間を1つの軌道として合成し、経路自体を曲げる。
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ApplyMode {
+    #[default]
+    Linear,
+    Interpolate,
+}
+
+impl ApplyMode {
+    pub fn label(self) -> &'static str {
+        match self {
+            ApplyMode::Linear => "標準",
+            ApplyMode::Interpolate => "補間",
+        }
+    }
+
+    pub fn toggled(self) -> Self {
+        match self {
+            ApplyMode::Linear => ApplyMode::Interpolate,
+            ApplyMode::Interpolate => ApplyMode::Linear,
+        }
+    }
+}
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub enum Value {
@@ -98,9 +129,17 @@ impl EffectParam {
                     engine_id,
                     engine_payload,
                     edit_seq,
+                    apply_mode: ApplyMode::default(),
                 });
                 self.keyframes.sort_by_key(|k| k.frame);
             }
+        }
+    }
+
+    /// frameを起点とする区間の適用モードを設定する。対象キーフレームが無ければ無視する。
+    pub fn set_apply_mode(&mut self, frame: i32, mode: ApplyMode) {
+        if let Some(k) = self.keyframes.iter_mut().find(|k| k.frame == frame) {
+            k.apply_mode = mode;
         }
     }
 
@@ -214,6 +253,7 @@ fn clamp_and_reseed_internal(
             engine_id: start_engine_id,
             engine_payload: start_payload,
             edit_seq: next_edit_seq(),
+            apply_mode: ApplyMode::default(),
         },
     );
     deduped.push(Keyframe {
@@ -222,6 +262,7 @@ fn clamp_and_reseed_internal(
         engine_id: end_engine_id,
         engine_payload: end_payload,
         edit_seq: next_edit_seq(),
+        apply_mode: ApplyMode::default(),
     });
 
     *keyframes = deduped;

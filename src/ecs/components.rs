@@ -226,9 +226,19 @@ impl KeyframeTracks {
                     engine_id,
                     engine_payload,
                     edit_seq,
+                    apply_mode: crate::ecs::types::ApplyMode::default(),
                 });
                 track.sort_by_key(|k| k.frame);
             }
+        }
+    }
+
+    /// frameを起点とする区間の適用モードを設定する。
+    pub fn set_apply_mode(&mut self, key: &str, frame: i32, mode: crate::ecs::types::ApplyMode) {
+        if let Some(track) = self.0.get_mut(key)
+            && let Some(k) = track.iter_mut().find(|k| k.frame == frame)
+        {
+            k.apply_mode = mode;
         }
     }
 

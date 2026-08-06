@@ -157,7 +157,6 @@ impl TimelineWindow {
             .collect();
         let items = build_context_menu(
             hit_id,
-            self.ripple_mode,
             clipboard_empty,
             &kinds,
             &objects,
