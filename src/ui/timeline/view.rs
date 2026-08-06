@@ -37,7 +37,9 @@ impl TimelineWindow {
         let painter = ui.painter_at(rect);
         painter.rect_filled(rect, 0.0, bg);
 
-        self.draw_grid(&painter, rect, layer_count);
+        if self.show_grid {
+            self.draw_grid(&painter, rect, layer_count);
+        }
 
         self.handle_background_input(ui, &response, state, preview_panel);
 

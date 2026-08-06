@@ -90,7 +90,7 @@ impl TimelineWindow {
             egui::StrokeKind::Outside,
         );
 
-        if obj.has_waveform {
+        if obj.has_waveform && self.show_waveform {
             if let Some(tex) = obj.waveform {
                 let wx = clip_rect.min.x
                     + 3.0
