@@ -44,10 +44,7 @@ fn from_vtable(vtable: MediaVTable, lib: Option<Library>) -> MediaPlugin {
 /// NeoUtl本体へgpu_video共有デバイス注入のため直接静的リンクされるデコーダ。
 /// dlsymプラグインではないためdecoders/走査対象から外れ、ここで自己登録する。
 fn native_plugins() -> Vec<MediaPlugin> {
-    vec![
-        from_vtable(gpuvideo_native_vtable(), None),
-        from_vtable(neoutl_media_gstreamer_decoder::native_vtable(), None),
-    ]
+    vec![from_vtable(gpuvideo_native_vtable(), None)]
 }
 
 #[cfg(target_os = "linux")]
