@@ -217,6 +217,7 @@ fn build_all<'a>(
     }
 }
 
+/*
 fn build_vst3_helpers(workspace_root: &Path, profile: &str, target: Option<&str>, offline: bool) {
     let mut cmd = Command::new("cargo");
     cmd.current_dir(workspace_root)
@@ -277,6 +278,7 @@ fn build_vst3_helpers(workspace_root: &Path, profile: &str, target: Option<&str>
         );
     }
 }
+*/
 
 fn stage_crates(
     workspace_root: &Path,
@@ -402,8 +404,6 @@ fn main() {
     generate_japanese_i18n(&root);
 
     slang::ensure_installed(&root, offline);
-    build_vst3_helpers(&root, profile, target, offline);
-
     let objects = discover_crates(&root, "crates/objects");
     let effects = discover_crates(&root, "crates/effects");
     let decoders = discover_crates(&root, "crates/media");
@@ -417,7 +417,7 @@ fn main() {
             ("effects", effects.as_slice()),
             ("decoders", decoders.as_slice()),
         ],
-        &["NeoUtl"],
+        &["NeoUtl", "vst3-host"],
         &lua_feature,
     );
 
@@ -472,8 +472,16 @@ fn generate_japanese_i18n(root: &Path) {
     }
     let dir = root.join("i18n");
     fs::create_dir_all(&dir).expect(&t!("i18nディレクトリ作成失敗"));
-    fs::write(dir.join("ja.yml"), output).expect(&t!("日本語翻訳ファイル作成失敗"));
-    eprintln!("{}", t!("[xtask] i18n/ja.ymlを生成しました"));
+    let catalog = dir.join("ja.yml");
+    let unchanged = fs::read_to_string(&catalog)
+        .map(|current| current == output)
+        .unwrap_or(false);
+    if !unchanged {
+        fs::write(&catalog, output).expect(&t!("日本語翻訳ファイル作成失敗"));
+        eprintln!("{}", t!("[xtask] i18n/ja.ymlを生成しました"));
+    } else {
+        eprintln!("{}", t!("[xtask] i18n/ja.ymlに変更なし"));
+    }
 }
 
 fn collect_source_files(dir: &Path, files: &mut Vec<PathBuf>) {

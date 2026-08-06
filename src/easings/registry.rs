@@ -53,11 +53,6 @@ impl CurveRegistry {
         self.flush();
     }
 
-    pub fn remove(&mut self, name: &str) {
-        self.entries.retain(|e| e.name != name);
-        self.flush();
-    }
-
     fn flush(&self) {
         if let Some(parent) = self.path.parent() {
             let _ = std::fs::create_dir_all(parent);

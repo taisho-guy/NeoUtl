@@ -93,7 +93,7 @@ impl WindowKind {
             Self::Keybindings => (720, 540),
             Self::Export => (620, 560),
             Self::EffectAdd => (420, 560),
-            Self::EasingEditor => (560, 520),
+            Self::EasingEditor => (580, 460),
         }
     }
 
