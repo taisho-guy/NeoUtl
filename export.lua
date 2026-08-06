@@ -1,16 +1,20 @@
 #!/usr/bin/env luajit
 
 local DEFAULT_EXTENSIONS = {
-    ".cpp", ".hpp", ".c", ".h", ".rs", ".toml", ".slint", ".qml", ".qrc", 
-    ".ui", ".pro", ".pri", ".js", ".json", ".cmake", ".sh", ".bash", ".py", 
-    ".lua", ".fish", ".xml", ".yaml", ".yml", ".ini", ".conf", ".clang-format", 
-    ".clang-tidy", ".gitignore", ".md", ".txt", ".rst", ".glsl", ".frag", 
-    ".vert", ".slang", ".wgsl"
+    ".cpp", ".hpp", ".c", ".h", ".hh", ".hxx", ".cc", ".cxx", ".rs", ".toml",
+    ".slint", ".qml", ".qrc", ".ui", ".pro", ".pri", ".js", ".jsx", ".ts",
+    ".tsx", ".json", ".cmake", ".sh", ".bash", ".py", ".lua", ".fish", ".xml",
+    ".yaml", ".yml", ".ini", ".conf", ".clang-format", ".clang-tidy",
+    ".gitignore", ".md", ".txt", ".rst", ".glsl", ".frag", ".vert", ".slang",
+    ".wgsl", ".def", ".vcxproj", ".filters", ".props", ".targets", ".sln",
+    ".vcproj", ".vdproj", ".sass", ".scss", ".css", ".html", ".htm",
+    ".nuspec", ".config", ".editorconfig", ".resx", ".manifest"
 }
 
 local DEFAULT_FILENAMES = {
     ["CMakeLists.txt"]=true, ["Makefile"]=true, ["Dockerfile"]=true,
-    ["Vagrantfile"]=true, [".gitignore"]=true, ["LICENSE"]=true, ["README"]=true
+    ["Vagrantfile"]=true, [".gitignore"]=true, ["LICENSE"]=true, ["README"]=true,
+    ["nuget.config"]=true, ["packages.config"]=true, ["NuGet.Config"]=true
 }
 
 local EXCLUDE_FILES = {
