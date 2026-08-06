@@ -1,3 +1,12 @@
+pub mod curve;
+pub mod legacy;
+pub mod script;
+
+pub use curve::{
+    CurveKind, CurveSegment, Modifier, add_segment, evaluate_kind_with_modifiers, remove_segment,
+    replace_segment_kind,
+};
+
 use neoutl_easing_api::{
     EasingEngineMeta, EasingEngineVTable, EditResultC, EditResultCode, KeyframeC,
 };
@@ -5,213 +14,63 @@ use serde::{Deserialize, Serialize};
 use std::ffi::{CString, c_void};
 use std::sync::OnceLock;
 
-#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
-pub enum StandardEasing {
-    Linear,
-    Step,
-    EaseInSine,
-    EaseOutSine,
-    EaseInOutSine,
-    EaseInQuad,
-    EaseOutQuad,
-    EaseInOutQuad,
-    EaseInCubic,
-    EaseOutCubic,
-    EaseInOutCubic,
-    EaseInQuart,
-    EaseOutQuart,
-    EaseInOutQuart,
-    EaseInExpo,
-    EaseOutExpo,
-    EaseInOutExpo,
-    EaseInBack,
-    EaseOutBack,
-    EaseInOutBack,
-    EaseInBounce,
-    EaseOutBounce,
-    EaseInOutBounce,
-    Bezier { cp1: (f32, f32), cp2: (f32, f32) },
-    Random { seed: u32, step: i32 },
+/// 1区間分のカーブ本体とその直上に掛かるモディファイアスタック。
+/// AviUtl `GraphCurve`が自身の`modifiers`を保持する構造に対応する。
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct EasingPayload {
+    pub kind: CurveKind,
+    pub modifiers: Vec<Modifier>,
 }
 
-impl Default for StandardEasing {
-    fn default() -> Self {
-        StandardEasing::Linear
+impl EasingPayload {
+    pub fn linear() -> Self {
+        Self {
+            kind: CurveKind::Linear,
+            modifiers: Vec::new(),
+        }
+    }
+
+    pub fn is_step(&self) -> bool {
+        matches!(
+            self.kind,
+            CurveKind::Bounce { cor, .. } if cor == 0.0
+        )
     }
 }
 
-fn bounce_out(x: f32) -> f32 {
-    const N1: f32 = 7.5625;
-    const D1: f32 = 2.75;
-    if x < 1.0 / D1 {
-        N1 * x * x
-    } else if x < 2.0 / D1 {
-        let x = x - 1.5 / D1;
-        N1 * x * x + 0.75
-    } else if x < 2.5 / D1 {
-        let x = x - 2.25 / D1;
-        N1 * x * x + 0.9375
-    } else {
-        let x = x - 2.625 / D1;
-        N1 * x * x + 0.984375
+pub fn ease(payload: &EasingPayload, t: f32) -> f32 {
+    evaluate_kind_with_modifiers(&payload.kind, &payload.modifiers, t)
+}
+
+/// FFI境界を越えないインプロセス呼び出し（`neoutl-easing-standard`をrlibとして
+/// 直接依存するegui側エディタ）でも同一の符号化規則を使うための公開版。
+/// 新形式デコードに失敗した場合のみ旧`StandardEasing`形式を試み、
+/// それも失敗すればLinearへフォールバックする（決定事項3）。
+pub fn parse_payload(slice: &[u8]) -> EasingPayload {
+    if slice.is_empty() {
+        return EasingPayload::linear();
     }
-}
-
-fn bezier_ease(t: f32, cp1: (f32, f32), cp2: (f32, f32)) -> f32 {
-    let sample_x = |u: f32| {
-        let mu = 1.0 - u;
-        3.0 * mu * mu * u * cp1.0 + 3.0 * mu * u * u * cp2.0 + u * u * u
-    };
-    let sample_y = |u: f32| {
-        let mu = 1.0 - u;
-        3.0 * mu * mu * u * cp1.1 + 3.0 * mu * u * u * cp2.1 + u * u * u
-    };
-    let mut u = t;
-    for _ in 0..8 {
-        let mu = 1.0 - u;
-        let x = sample_x(u);
-        let err = x - t;
-        if err.abs() < 1e-5 {
-            break;
-        }
-        let dx =
-            3.0 * mu * mu * cp1.0 + 6.0 * mu * u * (cp2.0 - cp1.0) + 3.0 * u * u * (1.0 - cp2.0);
-        if dx.abs() < 1e-6 {
-            break;
-        }
-        u -= err / dx;
+    if let Ok(payload) = serde_json::from_slice::<EasingPayload>(slice) {
+        return payload;
     }
-    sample_y(u.clamp(0.0, 1.0))
-}
-
-fn splitmix32(seed: u32) -> u32 {
-    let mut z = seed.wrapping_add(0x9E3779B9);
-    z = (z ^ (z >> 16)).wrapping_mul(0x85EBCA6B);
-    z = (z ^ (z >> 13)).wrapping_mul(0xC2B2AE35);
-    z ^ (z >> 16)
-}
-
-fn random_unit(seed: u32, idx: i64) -> f32 {
-    let idx_bits = (idx as i64 as u64 as u32).wrapping_mul(0x27D4_EB2F);
-    let combined = seed ^ idx_bits;
-    (splitmix32(combined) as f64 / (u32::MAX as f64 + 1.0)) as f32
-}
-
-pub fn ease(kind: StandardEasing, t: f32) -> f32 {
-    let t = t.clamp(0.0, 1.0);
-    match kind {
-        StandardEasing::Linear => t,
-        StandardEasing::Step => 0.0,
-        StandardEasing::EaseInSine => 1.0 - (t * std::f32::consts::FRAC_PI_2).cos(),
-        StandardEasing::EaseOutSine => (t * std::f32::consts::FRAC_PI_2).sin(),
-        StandardEasing::EaseInOutSine => -((std::f32::consts::PI * t).cos() - 1.0) / 2.0,
-        StandardEasing::EaseInQuad => t * t,
-        StandardEasing::EaseOutQuad => 1.0 - (1.0 - t) * (1.0 - t),
-        StandardEasing::EaseInOutQuad => {
-            if t < 0.5 {
-                2.0 * t * t
-            } else {
-                1.0 - (-2.0 * t + 2.0).powi(2) / 2.0
-            }
-        }
-        StandardEasing::EaseInCubic => t * t * t,
-        StandardEasing::EaseOutCubic => 1.0 - (1.0 - t).powi(3),
-        StandardEasing::EaseInOutCubic => {
-            if t < 0.5 {
-                4.0 * t * t * t
-            } else {
-                1.0 - (-2.0 * t + 2.0).powi(3) / 2.0
-            }
-        }
-        StandardEasing::EaseInQuart => t.powi(4),
-        StandardEasing::EaseOutQuart => 1.0 - (1.0 - t).powi(4),
-        StandardEasing::EaseInOutQuart => {
-            if t < 0.5 {
-                8.0 * t.powi(4)
-            } else {
-                1.0 - (-2.0 * t + 2.0).powi(4) / 2.0
-            }
-        }
-        StandardEasing::EaseInExpo => {
-            if t == 0.0 {
-                0.0
-            } else {
-                2f32.powf(10.0 * t - 10.0)
-            }
-        }
-        StandardEasing::EaseOutExpo => {
-            if t == 1.0 {
-                1.0
-            } else {
-                1.0 - 2f32.powf(-10.0 * t)
-            }
-        }
-        StandardEasing::EaseInOutExpo => {
-            if t == 0.0 {
-                0.0
-            } else if t == 1.0 {
-                1.0
-            } else if t < 0.5 {
-                2f32.powf(20.0 * t - 10.0) / 2.0
-            } else {
-                (2.0 - 2f32.powf(-20.0 * t + 10.0)) / 2.0
-            }
-        }
-        StandardEasing::EaseInBack => {
-            const C1: f32 = 1.70158;
-            const C3: f32 = C1 + 1.0;
-            C3 * t * t * t - C1 * t * t
-        }
-        StandardEasing::EaseOutBack => {
-            const C1: f32 = 1.70158;
-            const C3: f32 = C1 + 1.0;
-            let u = t - 1.0;
-            1.0 + C3 * u * u * u + C1 * u * u
-        }
-        StandardEasing::EaseInOutBack => {
-            const C2: f32 = 1.70158 * 1.525;
-            if t < 0.5 {
-                (2.0 * t).powi(2) * ((C2 + 1.0) * 2.0 * t - C2) / 2.0
-            } else {
-                let u = 2.0 * t - 2.0;
-                (u * u * ((C2 + 1.0) * u + C2) + 2.0) / 2.0
-            }
-        }
-        StandardEasing::EaseInBounce => 1.0 - bounce_out(1.0 - t),
-        StandardEasing::EaseOutBounce => bounce_out(t),
-        StandardEasing::EaseInOutBounce => {
-            if t < 0.5 {
-                (1.0 - bounce_out(1.0 - 2.0 * t)) / 2.0
-            } else {
-                (1.0 + bounce_out(2.0 * t - 1.0)) / 2.0
-            }
-        }
-        StandardEasing::Bezier { cp1, cp2 } => bezier_ease(t, cp1, cp2),
-        StandardEasing::Random { seed, step } => {
-            let step = step.max(1) as f32;
-            let idx = (t * 16.0 / step).floor() as i64;
-            random_unit(seed, idx)
-        }
+    if let Ok(legacy_kind) = serde_json::from_slice::<legacy::StandardEasing>(slice) {
+        return EasingPayload {
+            kind: curve::from_legacy(&legacy_kind),
+            modifiers: Vec::new(),
+        };
     }
+    eprintln!("[neoutl-easing-standard] 旧形式ペイロード解読失敗、Linearへフォールバック");
+    EasingPayload::linear()
+}
+
+pub fn encode_payload(payload: &EasingPayload) -> Vec<u8> {
+    serde_json::to_vec(payload).unwrap_or_default()
 }
 
 pub struct DecodedKeyframe {
     pub frame: i32,
     pub value: f32,
-    pub easing: StandardEasing,
-}
-
-/// FFI境界を越えないインプロセス呼び出し（`neoutl-easing-standard`をrlibとして
-/// 直接依存するegui側エディタ）でも同一の符号化規則を使うための公開版。
-pub fn parse_payload(slice: &[u8]) -> StandardEasing {
-    if slice.is_empty() {
-        return StandardEasing::Linear;
-    }
-    serde_json::from_slice(slice).unwrap_or(StandardEasing::Linear)
-}
-
-pub fn encode_payload(easing: StandardEasing) -> Vec<u8> {
-    serde_json::to_vec(&easing).unwrap_or_default()
+    pub easing: EasingPayload,
 }
 
 unsafe fn decode_keyframes(keyframes_ptr: *const KeyframeC, count: usize) -> Vec<DecodedKeyframe> {
@@ -272,19 +131,19 @@ unsafe extern "C" fn evaluate_c(
             }
             let idx = points.partition_point(|k| k.frame <= frame);
             let (a, b) = (&points[idx - 1], &points[idx]);
-            if a.easing == StandardEasing::Step {
+            if a.easing.is_step() {
                 return a.value;
             }
             let span = (b.frame - a.frame).max(1) as f32;
             let t = (frame - a.frame) as f32 / span;
-            a.value + (b.value - a.value) * ease(a.easing, t)
+            a.value + (b.value - a.value) * ease(&a.easing, t)
         }
     }
 }
 
 /// サードパーティ.dll/.so向けFFI経路。ホスト(NeoUtl本体)は本クレートをrlibとして
 /// 直接リンクしており、標準エンジンのカーブ編集UIは`src/ui/properties/easing_editor.rs`
-/// が`StandardEasing`/`parse_payload`/`encode_payload`をインプロセス直接呼び出しする
+/// が`EasingPayload`/`parse_payload`/`encode_payload`をインプロセス直接呼び出しする
 /// ため、FFI別ウィンドウは開かず即Cancelを返す（サードパーティエンジンのみこの経路を使う）。
 unsafe extern "C" fn open_editor_window_c(
     _host_handle: *const c_void,
@@ -315,7 +174,7 @@ unsafe extern "C" fn serialize_c(
     let json_bytes = serde_json::to_vec(
         &points
             .iter()
-            .map(|p| (p.frame, p.value, p.easing))
+            .map(|p| (p.frame, p.value, p.easing.clone()))
             .collect::<Vec<_>>(),
     )
     .unwrap_or_default();
@@ -345,11 +204,11 @@ unsafe extern "C" fn deserialize_c(
         return;
     }
     let slice = unsafe { std::slice::from_raw_parts(bytes_ptr, len) };
-    let raw: Vec<(i32, f32, StandardEasing)> = serde_json::from_slice(slice).unwrap_or_default();
+    let raw: Vec<(i32, f32, EasingPayload)> = serde_json::from_slice(slice).unwrap_or_default();
 
     let mut out_vec = Vec::with_capacity(raw.len());
     for (frame, value, easing) in raw {
-        let payload = encode_payload(easing);
+        let payload = encode_payload(&easing);
         let mut boxed_p = payload.into_boxed_slice();
         let p_len = boxed_p.len();
         let p_ptr = boxed_p.as_mut_ptr();

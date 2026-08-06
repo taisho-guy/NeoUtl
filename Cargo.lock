@@ -3110,6 +3110,7 @@ dependencies = [
 name = "neoutl-easing-standard"
 version = "0.1.0"
 dependencies = [
+ "mlua",
  "neoutl-easing-api",
  "serde",
  "serde_json",
