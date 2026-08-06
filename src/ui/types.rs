@@ -48,7 +48,13 @@ pub struct CatalogRow {
 ///         13=Cut and Close Selection(未実装), 14=Select Object(kind=object id),
 ///         15=Toggle Grid Display, 16=Toggle Waveform Display,
 ///         17=無効submenu親（フィルタオブジェクト/フィルタ効果/プラグイン/
-///         オプション/ウィンドウ配置。未実装のため常にenabled=false）。
+///         オプション/ウィンドウ配置/整列。未実装のため常にenabled=false）、
+///         18=左側に詰める(未実装), 19=切り取りして詰める(未実装),
+///         20=切り出し(未実装), 21=長さを変更(未実装),
+///         22=オブジェクト名を変更(未実装), 23=中間点を追加(未実装),
+///         24=中間点を削除(未実装), 25=グループ化(未実装),
+///         26=グループ解除(未実装), 27=エイリアスをファイルに保存(未実装),
+///         28=エイリアスを作成(未実装)。
 /// submenu非空の項目はクリックで開閉するのみでactionを発火しない。
 #[derive(Clone, Debug, Default)]
 pub struct ContextMenuItem {

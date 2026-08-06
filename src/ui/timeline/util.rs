@@ -57,7 +57,12 @@ fn disabled_submenu_parent(label: String) -> ContextMenuItem {
 }
 
 /// タイムライン右クリックメニューの項目集合を構築する唯一の経路。
-/// hit-id>=0（クリップ上）: 削除→分割→複製→区切り→切り取り→コピー→区切り→リップルモード切替。
+/// hit-id>=0（クリップ上）: 切り取り→コピー→貼り付け→削除→複製→分割→区切り→
+///   左側に詰める(未実装)→切り取りして詰める(未実装)→切り出し(未実装)→
+///   長さを変更(未実装)→区切り→整列(未実装)→区切り→
+///   オブジェクト名を変更(未実装)→区切り→中間点を追加(未実装)→中間点を削除(未実装)→
+///   区切り→グループ化(未実装)→グループ解除(未実装)→区切り→
+///   エイリアスをファイルに保存(未実装)→エイリアスを作成(未実装)
 /// hit-id<0（背景上）: AviUtl互換の背景メニュー構成。
 ///   メディアオブジェクトを追加→フィルタオブジェクトを追加(未実装)→区切り→
 ///   フィルタ効果を追加(未実装)→区切り→貼り付け→空のフレームを挿入(未実装)→区切り→
@@ -77,34 +82,6 @@ pub(super) fn build_context_menu(
     if hit_id >= 0 {
         return vec![
             ContextMenuItem {
-                label: tr("削除"),
-                action: 1,
-                kind: -1,
-                enabled: true,
-                icon: "trash".into(),
-                checked: None,
-                submenu: Vec::new(),
-            },
-            ContextMenuItem {
-                label: tr("再生位置で分割"),
-                action: 0,
-                kind: -1,
-                enabled: true,
-                icon: "scissors".into(),
-                checked: None,
-                submenu: Vec::new(),
-            },
-            ContextMenuItem {
-                label: tr("複製"),
-                action: 7,
-                kind: -1,
-                enabled: true,
-                icon: "copy-plus".into(),
-                checked: None,
-                submenu: Vec::new(),
-            },
-            sep(),
-            ContextMenuItem {
                 label: tr("切り取り"),
                 action: 8,
                 kind: -1,
@@ -122,20 +99,60 @@ pub(super) fn build_context_menu(
                 checked: None,
                 submenu: Vec::new(),
             },
-            sep(),
             ContextMenuItem {
-                label: if ripple_mode {
-                    tr("リップルモード: オン")
-                } else {
-                    tr("リップルモード: オフ")
-                },
-                action: 3,
+                label: tr("貼り付け"),
+                action: 10,
                 kind: -1,
-                enabled: true,
-                icon: "link".into(),
+                enabled: !clipboard_empty,
+                icon: "paste".into(),
                 checked: None,
                 submenu: Vec::new(),
             },
+            ContextMenuItem {
+                label: tr("削除"),
+                action: 1,
+                kind: -1,
+                enabled: true,
+                icon: "trash".into(),
+                checked: None,
+                submenu: Vec::new(),
+            },
+            ContextMenuItem {
+                label: tr("複製"),
+                action: 7,
+                kind: -1,
+                enabled: true,
+                icon: "copy-plus".into(),
+                checked: None,
+                submenu: Vec::new(),
+            },
+            ContextMenuItem {
+                label: tr("分割"),
+                action: 0,
+                kind: -1,
+                enabled: true,
+                icon: "scissors".into(),
+                checked: None,
+                submenu: Vec::new(),
+            },
+            sep(),
+            disabled_leaf(t!("左側に詰める"), 18),
+            disabled_leaf(t!("切り取りして詰める"), 19),
+            disabled_leaf(t!("切り出し"), 20),
+            disabled_leaf(t!("長さを変更"), 21),
+            sep(),
+            disabled_submenu_parent(t!("整列")),
+            sep(),
+            disabled_leaf(t!("オブジェクト名を変更"), 22),
+            sep(),
+            disabled_leaf(t!("中間点を追加"), 23),
+            disabled_leaf(t!("中間点を削除"), 24),
+            sep(),
+            disabled_leaf(t!("グループ化"), 25),
+            disabled_leaf(t!("グループ解除"), 26),
+            sep(),
+            disabled_leaf(t!("エイリアスをファイルに保存"), 27),
+            disabled_leaf(t!("エイリアスを作成"), 28),
         ];
     }
 
