@@ -69,11 +69,13 @@ struct MenuState {
     frame: i32,
     layer: i32,
     items: Vec<ContextMenuItem>,
+    /// 現在開いているサブメニューの親項目index（items内）。Noneは非表示。
+    open_submenu: Option<usize>,
 }
 
 /// 拡張編集ウィンドウ。egui::Painter直接描画によるゼロコピー非対象領域。
 /// obj/layer-states/scene-tabsは毎フレームworldから再構築する（イミディエイトモード方式）。
-/// zoom-scale/scroll-x/scroll-y/選択状態のみ本構造体へ永続化する。
+/// zoom-scale/scroll-x/scroll-y/選択状態/表示トグルのみ本構造体へ永続化する。
 pub struct TimelineWindow {
     pub open: bool,
     zoom_scale: f32,
@@ -88,6 +90,10 @@ pub struct TimelineWindow {
     range: Option<RangeSelect>,
     menu: Option<MenuState>,
     waveform_cache: HashMap<PathBuf, egui::TextureHandle>,
+    /// 右クリックメニュー「グリッド(BPM)の表示」と連動する表示トグル。
+    show_grid: bool,
+    /// 右クリックメニュー「音声波形の表示」と連動する表示トグル。
+    show_waveform: bool,
 }
 
 impl TimelineWindow {
@@ -106,6 +112,8 @@ impl TimelineWindow {
             range: None,
             menu: None,
             waveform_cache: HashMap::new(),
+            show_grid: true,
+            show_waveform: true,
         }
     }
 
