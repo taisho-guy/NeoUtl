@@ -2,6 +2,7 @@ use ffmpeg_next as ffmpeg;
 use ffmpeg_next::util::frame::Video as VideoFrame;
 use ffmpeg_sys_next as sys;
 use std::collections::{HashMap, VecDeque};
+use std::ffi::CString;
 use std::path::Path;
 use std::ptr;
 
@@ -189,6 +190,172 @@ fn p010le_to_rgba8(sw_frame: *const sys::AVFrame, width: u32, height: u32) -> Ve
     out
 }
 
+#[cfg(target_os = "linux")]
+struct HwScaleFilter {
+    graph: *mut sys::AVFilterGraph,
+    src_ctx: *mut sys::AVFilterContext,
+    sink_ctx: *mut sys::AVFilterContext,
+}
+#[cfg(target_os = "linux")]
+unsafe impl Send for HwScaleFilter {}
+#[cfg(target_os = "linux")]
+impl Drop for HwScaleFilter {
+    fn drop(&mut self) {
+        unsafe { sys::avfilter_graph_free(&mut self.graph) };
+    }
+}
+
+#[cfg(target_os = "linux")]
+unsafe fn build_vaapi_scale_filter(
+    hw_frames_ctx: *mut sys::AVBufferRef,
+    in_width: i32,
+    in_height: i32,
+    hw_pix_fmt: sys::AVPixelFormat,
+    out_width: i32,
+    out_height: i32,
+) -> Result<HwScaleFilter, String> {
+    unsafe {
+        let graph = sys::avfilter_graph_alloc();
+        if graph.is_null() {
+            return Err("avfilter_graph_alloc failed".into());
+        }
+
+        let buffer_name = CString::new("buffer").unwrap();
+        let buffersink_name = CString::new("buffersink").unwrap();
+        let in_name = CString::new("in").unwrap();
+        let out_name = CString::new("out").unwrap();
+        let args = CString::new(format!(
+            "video_size={in_width}x{in_height}:pix_fmt={}:time_base=1/1000000",
+            hw_pix_fmt as i32,
+        ))
+        .unwrap();
+
+        let buffersrc = sys::avfilter_get_by_name(buffer_name.as_ptr());
+        let mut src_ctx: *mut sys::AVFilterContext = ptr::null_mut();
+        let ret = sys::avfilter_graph_create_filter(
+            &mut src_ctx,
+            buffersrc,
+            in_name.as_ptr(),
+            args.as_ptr(),
+            ptr::null_mut(),
+            graph,
+        );
+        if ret < 0 || src_ctx.is_null() {
+            let mut g = graph;
+            sys::avfilter_graph_free(&mut g);
+            return Err(format!("buffer filter作成失敗 ret={ret}"));
+        }
+
+        let par = sys::av_buffersrc_parameters_alloc();
+        if par.is_null() {
+            let mut g = graph;
+            sys::avfilter_graph_free(&mut g);
+            return Err("av_buffersrc_parameters_alloc failed".into());
+        }
+        (*par).hw_frames_ctx = hw_frames_ctx;
+        let ret = sys::av_buffersrc_parameters_set(src_ctx, par);
+        sys::av_free(par as *mut std::ffi::c_void);
+        if ret < 0 {
+            let mut g = graph;
+            sys::avfilter_graph_free(&mut g);
+            return Err(format!("av_buffersrc_parameters_set failed ret={ret}"));
+        }
+
+        let buffersink = sys::avfilter_get_by_name(buffersink_name.as_ptr());
+        let mut sink_ctx: *mut sys::AVFilterContext = ptr::null_mut();
+        let ret = sys::avfilter_graph_create_filter(
+            &mut sink_ctx,
+            buffersink,
+            out_name.as_ptr(),
+            ptr::null(),
+            ptr::null_mut(),
+            graph,
+        );
+        if ret < 0 || sink_ctx.is_null() {
+            let mut g = graph;
+            sys::avfilter_graph_free(&mut g);
+            return Err(format!("buffersink filter作成失敗 ret={ret}"));
+        }
+
+        let mut outputs = sys::avfilter_inout_alloc();
+        let mut inputs = sys::avfilter_inout_alloc();
+        if outputs.is_null() || inputs.is_null() {
+            sys::avfilter_inout_free(&mut outputs);
+            sys::avfilter_inout_free(&mut inputs);
+            let mut g = graph;
+            sys::avfilter_graph_free(&mut g);
+            return Err("avfilter_inout_alloc failed".into());
+        }
+        (*outputs).name = sys::av_strdup(in_name.as_ptr());
+        (*outputs).filter_ctx = src_ctx;
+        (*outputs).pad_idx = 0;
+        (*outputs).next = ptr::null_mut();
+
+        (*inputs).name = sys::av_strdup(out_name.as_ptr());
+        (*inputs).filter_ctx = sink_ctx;
+        (*inputs).pad_idx = 0;
+        (*inputs).next = ptr::null_mut();
+
+        let filter_spec =
+            CString::new(format!("scale_vaapi=w={out_width}:h={out_height}")).unwrap();
+        let ret = sys::avfilter_graph_parse_ptr(
+            graph,
+            filter_spec.as_ptr(),
+            &mut inputs,
+            &mut outputs,
+            ptr::null_mut(),
+        );
+        sys::avfilter_inout_free(&mut inputs);
+        sys::avfilter_inout_free(&mut outputs);
+        if ret < 0 {
+            let mut g = graph;
+            sys::avfilter_graph_free(&mut g);
+            return Err(format!("avfilter_graph_parse_ptr failed ret={ret}"));
+        }
+
+        let ret = sys::avfilter_graph_config(graph, ptr::null_mut());
+        if ret < 0 {
+            let mut g = graph;
+            sys::avfilter_graph_free(&mut g);
+            return Err(format!("avfilter_graph_config failed ret={ret}"));
+        }
+
+        Ok(HwScaleFilter {
+            graph,
+            src_ctx,
+            sink_ctx,
+        })
+    }
+}
+
+#[cfg(target_os = "linux")]
+unsafe fn run_hw_scale_filter(
+    filter: &HwScaleFilter,
+    hw_frame: *mut sys::AVFrame,
+) -> Result<*mut sys::AVFrame, String> {
+    unsafe {
+        let ret = sys::av_buffersrc_add_frame_flags(
+            filter.src_ctx,
+            hw_frame,
+            sys::AV_BUFFERSRC_FLAG_KEEP_REF as i32,
+        );
+        if ret < 0 {
+            return Err(format!("av_buffersrc_add_frame_flags failed ret={ret}"));
+        }
+        let filtered = sys::av_frame_alloc();
+        if filtered.is_null() {
+            return Err("av_frame_alloc failed".into());
+        }
+        let ret = sys::av_buffersink_get_frame(filter.sink_ctx, filtered);
+        if ret < 0 {
+            let mut f = filtered;
+            sys::av_frame_free(&mut f);
+            return Err(format!("av_buffersink_get_frame failed ret={ret}"));
+        }
+        Ok(filtered)
+    }
+}
+
 unsafe fn upload_hw_frame_as_texture(
     device: &wgpu::Device,
     queue: &wgpu::Queue,
@@ -247,7 +414,7 @@ unsafe fn seek_stream_backward(
     stream_index: usize,
     pts: i64,
 ) -> Result<(), String> {
-    let ctx = input.as_mut_ptr();
+    let ctx = unsafe { input.as_mut_ptr() };
     let ret = unsafe {
         sys::av_seek_frame(
             ctx,
@@ -282,40 +449,143 @@ unsafe extern "C" fn get_hw_format(
 pub fn build_index(
     input: &mut ffmpeg::format::context::Input,
     stream_index: usize,
-    decoder: &mut ffmpeg::decoder::Video,
-) -> Result<Vec<IndexEntry>, ffmpeg::Error> {
+) -> Result<(Vec<IndexEntry>, Vec<i64>, Vec<i64>), ffmpeg::Error> {
     let mut index = Vec::new();
-    let mut decoded = VideoFrame::empty();
     for (stream, packet) in input.packets() {
         if stream.index() != stream_index {
             continue;
         }
-        decoder.send_packet(&packet)?;
-        while decoder.receive_frame(&mut decoded).is_ok() {
-            index.push(IndexEntry {
-                pts: decoded.pts().unwrap_or(0),
-                key: decoded.is_key(),
-            });
-        }
-    }
-    decoder.send_eof()?;
-    while decoder.receive_frame(&mut decoded).is_ok() {
+        let pts = packet.pts().or_else(|| packet.dts()).unwrap_or(0);
         index.push(IndexEntry {
-            pts: decoded.pts().unwrap_or(0),
-            key: decoded.is_key(),
+            pts,
+            key: packet.is_key(),
         });
     }
     index.sort_by_key(|e| e.pts);
-    Ok(index)
+
+    let n = index.len();
+    let mut prev_keyframe = vec![0i64; n];
+    let mut last_key = 0i64;
+    for i in 0..n {
+        if index[i].key {
+            last_key = i as i64;
+        }
+        prev_keyframe[i] = last_key;
+    }
+
+    let mut gop_end = vec![0i64; n.max(1)];
+    let mut end = n as i64 - 1;
+    for i in (0..n).rev() {
+        gop_end[i] = end;
+        if i > 0 && index[i].key {
+            end = i as i64 - 1;
+        }
+    }
+
+    Ok((index, prev_keyframe, gop_end))
 }
 
 const TEXTURE_CACHE_CAPACITY: usize =
     (neoutl_media_api::DEFAULT_DECODE_CACHE_BYTES / (1920 * 1080 * 4)) as usize;
+struct SendPacket(ffmpeg::codec::packet::Packet);
+unsafe impl Send for SendPacket {}
+
+struct PacketQueueState {
+    packets: VecDeque<SendPacket>,
+    eof: bool,
+    generation: u64,
+}
+
+enum ReaderCmd {
+    Seek(i64),
+    Stop,
+}
+
+const READER_QUEUE_CAPACITY: usize = 64;
+
+fn spawn_packet_reader(
+    mut input: ffmpeg::format::context::Input,
+    stream_index: usize,
+) -> (
+    std::sync::mpsc::Sender<ReaderCmd>,
+    std::sync::Arc<(std::sync::Mutex<PacketQueueState>, std::sync::Condvar)>,
+    std::thread::JoinHandle<()>,
+) {
+    let shared = std::sync::Arc::new((
+        std::sync::Mutex::new(PacketQueueState {
+            packets: VecDeque::new(),
+            eof: false,
+            generation: 0,
+        }),
+        std::sync::Condvar::new(),
+    ));
+    let shared_thread = std::sync::Arc::clone(&shared);
+    let (cmd_tx, cmd_rx) = std::sync::mpsc::channel::<ReaderCmd>();
+
+    let join = std::thread::Builder::new()
+        .name("neoutl-ffmpeg-packet-reader".into())
+        .spawn(move || {
+            let (lock, cvar) = &*shared_thread;
+            let do_seek = |input: &mut ffmpeg::format::context::Input, pts: i64| {
+                let _ = unsafe { seek_stream_backward(input, stream_index, pts) };
+                let mut q = lock.lock().expect("packet queue mutex poisoned");
+                q.packets.clear();
+                q.eof = false;
+                q.generation += 1;
+                cvar.notify_all();
+            };
+            'outer: loop {
+                match cmd_rx.try_recv() {
+                    Ok(ReaderCmd::Seek(pts)) => {
+                        do_seek(&mut input, pts);
+                        continue 'outer;
+                    }
+                    Ok(ReaderCmd::Stop) => break 'outer,
+                    Err(std::sync::mpsc::TryRecvError::Disconnected) => break 'outer,
+                    Err(std::sync::mpsc::TryRecvError::Empty) => {}
+                }
+                {
+                    let q = lock.lock().expect("packet queue mutex poisoned");
+                    if q.packets.len() >= READER_QUEUE_CAPACITY {
+                        drop(q);
+                        std::thread::sleep(std::time::Duration::from_millis(2));
+                        continue 'outer;
+                    }
+                }
+                match input.packets().next() {
+                    Some((stream, packet)) => {
+                        if stream.index() == stream_index {
+                            let mut q = lock.lock().expect("packet queue mutex poisoned");
+                            q.packets.push_back(SendPacket(packet));
+                            cvar.notify_all();
+                        }
+                    }
+                    None => {
+                        {
+                            let mut q = lock.lock().expect("packet queue mutex poisoned");
+                            q.eof = true;
+                            cvar.notify_all();
+                        }
+                        match cmd_rx.recv() {
+                            Ok(ReaderCmd::Seek(pts)) => do_seek(&mut input, pts),
+                            Ok(ReaderCmd::Stop) => break 'outer,
+                            Err(_) => break 'outer,
+                        }
+                    }
+                }
+            }
+        })
+        .expect("packet reader thread spawn failed");
+
+    (cmd_tx, shared, join)
+}
+
 const SEEK_THRESHOLD: i64 = 64;
 
 pub struct DecoderCore {
-    input: ffmpeg::format::context::Input,
-    stream_index: usize,
+    reader_cmd_tx: std::sync::mpsc::Sender<ReaderCmd>,
+    reader_shared: std::sync::Arc<(std::sync::Mutex<PacketQueueState>, std::sync::Condvar)>,
+    reader_join: Option<std::thread::JoinHandle<()>>,
     decoder: ffmpeg::decoder::Video,
     _hw_device_ctx: Option<HwDeviceCtx>,
     hw_pix_fmt: Option<sys::AVPixelFormat>,
@@ -323,16 +593,25 @@ pub struct DecoderCore {
     pub width: u32,
     pub height: u32,
     index: Vec<IndexEntry>,
+    prev_keyframe: Vec<i64>,
+    gop_end: Vec<i64>,
     cache: TextureCache,
     last_display_index: i64,
     exhausted: bool,
     hw_pix_fmt_box: Option<*mut sys::AVPixelFormat>,
+    hw_scale_target: Option<(u32, u32)>,
+    #[cfg(target_os = "linux")]
+    hw_scale_filter: Option<HwScaleFilter>,
 }
 
 unsafe impl Send for DecoderCore {}
 
 impl Drop for DecoderCore {
     fn drop(&mut self) {
+        let _ = self.reader_cmd_tx.send(ReaderCmd::Stop);
+        if let Some(join) = self.reader_join.take() {
+            let _ = join.join();
+        }
         if let Some(p) = self.hw_pix_fmt_box.take() {
             unsafe {
                 drop(Box::from_raw(p));
@@ -362,6 +641,15 @@ impl DecoderCore {
 
         let context = ffmpeg::codec::context::Context::from_parameters(stream.parameters())?;
         let mut decoder = context.decoder().video()?;
+
+        if let Ok(v) = std::env::var("NEOUTL_AVFORMAT_THREADS") {
+            if let Ok(n) = v.parse::<i32>() {
+                unsafe {
+                    (*decoder.as_mut_ptr()).thread_count = n;
+                }
+            }
+        }
+
         let width = decoder.width();
         let height = decoder.height();
 
@@ -400,14 +688,17 @@ impl DecoderCore {
                 }
             }
         }
-        let index = build_index(&mut input, stream_index, &mut decoder)?;
+        let (index, prev_keyframe, gop_end) = build_index(&mut input, stream_index)?;
         unsafe { seek_stream_backward(&mut input, stream_index, 0) }
             .map_err(|_| ffmpeg::Error::Bug)?;
         decoder.flush();
 
+        let (reader_cmd_tx, reader_shared, reader_join) = spawn_packet_reader(input, stream_index);
+
         Ok(Self {
-            input,
-            stream_index,
+            reader_cmd_tx,
+            reader_shared,
+            reader_join: Some(reader_join),
             decoder,
             _hw_device_ctx: hw_device_ctx,
             hw_pix_fmt,
@@ -415,10 +706,15 @@ impl DecoderCore {
             width,
             height,
             index,
+            prev_keyframe,
+            gop_end,
             cache: TextureCache::new(TEXTURE_CACHE_CAPACITY.max(4)),
             last_display_index: -1,
             exhausted: false,
             hw_pix_fmt_box,
+            hw_scale_target: None,
+            #[cfg(target_os = "linux")]
+            hw_scale_filter: None,
         })
     }
 
@@ -426,13 +722,79 @@ impl DecoderCore {
         self.index.len() as i64
     }
 
-    fn preceding_keyframe(&self, target_index: i64) -> i64 {
-        for i in (0..=target_index).rev() {
-            if self.index[i as usize].key {
-                return i;
+    pub fn set_output_size(&mut self, width: u32, height: u32) {
+        let target = if width == 0 || height == 0 || (width, height) == (self.width, self.height) {
+            None
+        } else {
+            Some((width, height))
+        };
+        if target != self.hw_scale_target {
+            self.hw_scale_target = target;
+            #[cfg(target_os = "linux")]
+            {
+                self.hw_scale_filter = None;
             }
         }
-        0
+    }
+
+    fn preceding_keyframe(&self, target_index: i64) -> i64 {
+        self.prev_keyframe[target_index as usize]
+    }
+
+    fn gop_end_index(&self, target_index: i64) -> i64 {
+        self.gop_end[self.preceding_keyframe(target_index) as usize]
+    }
+
+    fn decode_budget(&self, target: i64) -> i64 {
+        let key = self.preceding_keyframe(target);
+        let gop_end = self.gop_end_index(target);
+        (gop_end - key + 10).max(500)
+    }
+
+    fn ensure_seek(&mut self, target: i64) -> Result<(), String> {
+        let need_seek = self.exhausted
+            || self.last_display_index < 0
+            || target < self.last_display_index
+            || target - self.last_display_index >= SEEK_THRESHOLD;
+        if !need_seek {
+            return Ok(());
+        }
+        let key = self.preceding_keyframe(target);
+        let seek_pts = self.index[key as usize].pts;
+
+        let (lock, cvar) = &*self.reader_shared;
+        let generation_before = lock.lock().expect("packet queue mutex poisoned").generation;
+        self.reader_cmd_tx
+            .send(ReaderCmd::Seek(seek_pts))
+            .map_err(|_| "packet reader threadが消失".to_string())?;
+        {
+            let mut q = lock.lock().expect("packet queue mutex poisoned");
+            while q.generation == generation_before {
+                q = cvar.wait(q).expect("packet queue condvar poisoned");
+            }
+        }
+
+        self.decoder.flush();
+        self.last_display_index = -1;
+        self.exhausted = false;
+        unsafe {
+            (*self.decoder.as_mut_ptr()).skip_loop_filter = sys::AVDiscard::AVDISCARD_NONREF;
+        }
+        Ok(())
+    }
+
+    fn next_packet(&mut self) -> Option<ffmpeg::codec::packet::Packet> {
+        let (lock, cvar) = &*self.reader_shared;
+        let mut q = lock.lock().expect("packet queue mutex poisoned");
+        loop {
+            if let Some(p) = q.packets.pop_front() {
+                return Some(p.0);
+            }
+            if q.eof {
+                return None;
+            }
+            q = cvar.wait(q).expect("packet queue condvar poisoned");
+        }
     }
 
     pub fn prefetch_at(&mut self, target_index: i64) -> Result<(), String> {
@@ -443,33 +805,19 @@ impl DecoderCore {
         if self.last_display_index >= target && self.last_display_index >= 0 {
             return Ok(());
         }
+        self.ensure_seek(target)?;
 
-        let need_seek = self.exhausted
-            || self.last_display_index < 0
-            || target < self.last_display_index
-            || target - self.last_display_index >= SEEK_THRESHOLD;
-        if need_seek {
-            let key = self.preceding_keyframe(target);
-            let seek_pts = self.index[key as usize].pts;
-            unsafe { seek_stream_backward(&mut self.input, self.stream_index, seek_pts) }?;
-            self.decoder.flush();
-            self.last_display_index = -1;
-            self.exhausted = false;
-            unsafe {
-                (*self.decoder.as_mut_ptr()).skip_loop_filter = sys::AVDiscard::AVDISCARD_NONREF;
-            }
-        }
-
+        let mut budget = self.decode_budget(target);
         let mut decoded = VideoFrame::empty();
-        let stream_index = self.stream_index;
-        for (stream, packet) in self.input.packets() {
-            if stream.index() != stream_index {
-                continue;
-            }
+        while budget > 0 {
+            let Some(packet) = self.next_packet() else {
+                break;
+            };
             self.decoder
                 .send_packet(&packet)
                 .map_err(|e| e.to_string())?;
-            while self.decoder.receive_frame(&mut decoded).is_ok() {
+            while budget > 0 && self.decoder.receive_frame(&mut decoded).is_ok() {
+                budget -= 1;
                 let pts = decoded.pts().unwrap_or(0);
                 let Some(display_index) = self
                     .index
@@ -490,7 +838,8 @@ impl DecoderCore {
             }
         }
         self.decoder.send_eof().map_err(|e| e.to_string())?;
-        while self.decoder.receive_frame(&mut decoded).is_ok() {
+        while budget > 0 && self.decoder.receive_frame(&mut decoded).is_ok() {
+            budget -= 1;
             let pts = decoded.pts().unwrap_or(0);
             let Some(display_index) = self
                 .index
@@ -522,22 +871,7 @@ impl DecoderCore {
         if let Some(tex) = self.cache.get(target) {
             return Ok(tex);
         }
-
-        let need_seek = self.exhausted
-            || self.last_display_index < 0
-            || target < self.last_display_index
-            || target - self.last_display_index >= SEEK_THRESHOLD;
-        if need_seek {
-            let key = self.preceding_keyframe(target);
-            let seek_pts = self.index[key as usize].pts;
-            unsafe { seek_stream_backward(&mut self.input, self.stream_index, seek_pts) }?;
-            self.decoder.flush();
-            self.last_display_index = -1;
-            self.exhausted = false;
-            unsafe {
-                (*self.decoder.as_mut_ptr()).skip_loop_filter = sys::AVDiscard::AVDISCARD_NONREF;
-            }
-        }
+        self.ensure_seek(target)?;
 
         let Some(hw_pix_fmt) = self.hw_pix_fmt else {
             return Err(
@@ -546,15 +880,12 @@ impl DecoderCore {
         };
 
         let mut decoded = VideoFrame::empty();
-        let stream_index = self.stream_index;
         let mut hw_frames_seen: u32 = 0;
-        loop {
-            let Some((stream, packet)) = self.input.packets().next() else {
+        let mut budget = self.decode_budget(target);
+        while budget > 0 {
+            let Some(packet) = self.next_packet() else {
                 break;
             };
-            if stream.index() != stream_index {
-                continue;
-            }
             self.decoder
                 .send_packet(&packet)
                 .map_err(|e| e.to_string())?;
@@ -565,6 +896,7 @@ impl DecoderCore {
                 device,
                 queue,
                 &mut hw_frames_seen,
+                &mut budget,
             )? {
                 return Ok(texture);
             }
@@ -577,6 +909,7 @@ impl DecoderCore {
             device,
             queue,
             &mut hw_frames_seen,
+            &mut budget,
         )? {
             return Ok(texture);
         }
@@ -596,24 +929,14 @@ impl DecoderCore {
         device: &wgpu::Device,
         queue: &wgpu::Queue,
         hw_frames_seen: &mut u32,
+        budget: &mut i64,
     ) -> Result<Option<wgpu::Texture>, String> {
         let (width, height) = (self.width, self.height);
-        while self.decoder.receive_frame(decoded).is_ok() {
+        while *budget > 0 && self.decoder.receive_frame(decoded).is_ok() {
+            *budget -= 1;
             let pts = decoded.pts().unwrap_or(0);
             let raw_format = unsafe { (*decoded.as_ptr()).format };
             let found = self.index.binary_search_by_key(&pts, |e| e.pts).ok();
-            if let Some(idx) = found {
-                if (idx as i64 - target).abs() <= 3 {
-                    eprintln!(
-                        "[decoder_core][diag] pts={pts} display_index={idx} target={target} \
-                         raw_format={raw_format} hw_pix_fmt={:?} format_match={}",
-                        hw_pix_fmt as i32,
-                        raw_format == hw_pix_fmt as i32,
-                    );
-                }
-            } else {
-                eprintln!("[decoder_core][diag] pts={pts} はindexに一致なし(binary_search失敗)");
-            }
             let Some(display_index) = found.map(|i| i as i64) else {
                 continue;
             };
@@ -624,10 +947,60 @@ impl DecoderCore {
             }
             *hw_frames_seen += 1;
 
+            #[cfg(target_os = "linux")]
+            let (upload_ptr, out_width, out_height, scaled_owned) = if let Some((ow, oh)) =
+                self.hw_scale_target
+            {
+                if self.hw_scale_filter.is_none() {
+                    let hw_frames_ctx = unsafe { (*decoded.as_ptr()).hw_frames_ctx };
+                    if !hw_frames_ctx.is_null() {
+                        match unsafe {
+                            build_vaapi_scale_filter(
+                                hw_frames_ctx,
+                                width as i32,
+                                height as i32,
+                                hw_pix_fmt,
+                                ow as i32,
+                                oh as i32,
+                            )
+                        } {
+                            Ok(f) => self.hw_scale_filter = Some(f),
+                            Err(e) => eprintln!(
+                                "[decoder_core] hwaccelスケールフィルタ構築失敗、原寸のままアップロード: {e}"
+                            ),
+                        }
+                    }
+                }
+                match &self.hw_scale_filter {
+                    Some(filter) => {
+                        match unsafe { run_hw_scale_filter(filter, decoded.as_mut_ptr()) } {
+                            Ok(scaled) => (scaled, ow, oh, Some(scaled)),
+                            Err(e) => {
+                                eprintln!(
+                                    "[decoder_core] hwaccelスケール適用失敗、原寸のままアップロード: {e}"
+                                );
+                                (unsafe { decoded.as_mut_ptr() }, width, height, None)
+                            }
+                        }
+                    }
+                    None => (unsafe { decoded.as_mut_ptr() }, width, height, None),
+                }
+            } else {
+                (unsafe { decoded.as_mut_ptr() }, width, height, None)
+            };
+            #[cfg(not(target_os = "linux"))]
+            let (upload_ptr, out_width, out_height) =
+                (unsafe { decoded.as_mut_ptr() }, width, height);
+
             let texture = unsafe {
-                upload_hw_frame_as_texture(device, queue, decoded.as_mut_ptr(), width, height)
+                upload_hw_frame_as_texture(device, queue, upload_ptr, out_width, out_height)
             }
             .map_err(|e| format!("frame upload failed at index={display_index}: {e}"))?;
+
+            #[cfg(target_os = "linux")]
+            if let Some(mut scaled) = scaled_owned {
+                unsafe { sys::av_frame_free(&mut scaled) };
+            }
 
             self.cache.put(display_index, texture.clone());
             if display_index >= target {

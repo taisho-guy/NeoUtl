@@ -16,6 +16,7 @@ pub trait VideoSource: Send {
         device: &wgpu::Device,
         queue: &wgpu::Queue,
     ) -> Result<wgpu::Texture, String>;
+    fn set_output_size(&mut self, _width: u32, _height: u32) {}
 }
 
 pub trait ImageSource: Send {

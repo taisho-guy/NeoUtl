@@ -212,6 +212,7 @@ pub struct DecodeWorker {
     signal: Arc<(Mutex<bool>, Condvar)>,
     store: Arc<Mutex<TextureStore>>,
     last_error: Arc<Mutex<Option<String>>>,
+    exact_queue: Arc<Mutex<VecDeque<i64>>>,
 
     task: Option<tokio::task::JoinHandle<()>>,
     worker_thread_id: Arc<Mutex<Option<ThreadId>>>,
@@ -231,6 +232,7 @@ impl DecodeWorker {
         let store = Arc::new(Mutex::new(TextureStore::new()));
         let last_error = Arc::new(Mutex::new(None));
         let worker_thread_id = Arc::new(Mutex::new(None));
+        let exact_queue = Arc::new(Mutex::new(VecDeque::new()));
 
         let requested_t = requested.clone();
         let signal_t = signal.clone();
@@ -238,6 +240,7 @@ impl DecodeWorker {
         let last_error_t = last_error.clone();
         let worker_thread_id_t = worker_thread_id.clone();
         let on_fail_t = on_fail.clone();
+        let exact_queue_t = exact_queue.clone();
 
         let task = super::runtime::handle().spawn_blocking(move || {
             *worker_thread_id_t.lock().unwrap() = Some(std::thread::current().id());
@@ -295,6 +298,20 @@ impl DecodeWorker {
                     *pending = false;
                     requested_t.load(Ordering::Acquire)
                 };
+
+                loop {
+                    let next_exact = exact_queue_t.lock().unwrap().pop_front();
+                    let Some(index) = next_exact else {
+                        break;
+                    };
+                    if store_t.lock().unwrap().contains(index) {
+                        on_ready();
+                        continue;
+                    }
+                    if produce!(index, false) {
+                        on_ready();
+                    }
+                }
 
                 if target == STOP_SENTINEL {
                     return;
@@ -368,6 +385,7 @@ impl DecodeWorker {
             signal,
             store,
             last_error,
+            exact_queue,
             task: Some(task),
             worker_thread_id,
         }
@@ -375,6 +393,13 @@ impl DecodeWorker {
 
     pub fn request(&self, frame_index: i64) {
         self.requested.store(frame_index, Ordering::Release);
+        let (lock, cvar) = &*self.signal;
+        *lock.lock().unwrap() = true;
+        cvar.notify_one();
+    }
+
+    pub fn request_exact(&self, frame_index: i64) {
+        self.exact_queue.lock().unwrap().push_back(frame_index);
         let (lock, cvar) = &*self.signal;
         *lock.lock().unwrap() = true;
         cvar.notify_one();
