@@ -97,6 +97,11 @@ impl From<&SceneMeta> for SceneSettings {
 
 pub struct EcsWorld {
     pub world: World,
+    /// タイムラインUIの選択オブジェクトID集合。TimelineWindow::showが毎フレーム
+    /// 書き込み、PropertiesPanel::showが読み取る、ウィンドウをまたいだ選択状態の
+    /// 単一の真実源。shipyard ECSではなく単純フィールドとする（永続化対象外の
+    /// 一時UI状態のため）。
+    selected_ids: std::collections::HashSet<usize>,
 }
 
 impl EcsWorld {
@@ -108,7 +113,20 @@ impl EcsWorld {
         world.add_unique(SceneResource::new());
         world.add_unique(SystemSettingsResource::new());
         world.add_unique(Camera::default());
-        Self { world }
+        Self {
+            world,
+            selected_ids: std::collections::HashSet::new(),
+        }
+    }
+
+    /// タイムラインUIの選択状態を書き込む。TimelineWindow::showが毎フレーム呼ぶ。
+    pub fn set_selected_ids(&mut self, ids: std::collections::HashSet<usize>) {
+        self.selected_ids = ids;
+    }
+
+    /// 指定オブジェクトが選択中か判定する。PropertiesPanel::showが毎フレーム参照する。
+    pub fn is_selected(&self, id: usize) -> bool {
+        self.selected_ids.contains(&id)
     }
 
     pub fn add_object(

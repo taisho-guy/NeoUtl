@@ -1,4 +1,4 @@
-use super::util::{brighten, darken};
+use super::util::{brighten, darken, readable_text_color};
 use super::{
     ClipDrag, DragMode, HANDLE_WIDTH, KEYFRAME_SIZE, KeyframeDrag, LAYER_HEIGHT, TimelineWindow,
 };
@@ -56,16 +56,17 @@ impl TimelineWindow {
             palette[(obj.kind.max(0) as usize) % palette.len()]
         };
         let color = if obj.selected {
-            brighten(base, 0.4)
+            brighten(base, 0.5)
         } else {
             base
         };
         let visuals = ui.visuals().clone();
-        let selected_outline = visuals.selection.bg_fill.gamma_multiply(1.6);
-        let label_color = visuals.strong_text_color();
+        let label_color = readable_text_color(color);
         let keyframe_color = visuals.warn_fg_color;
 
-        {
+        if obj.selected {
+            painter.rect_filled(clip_rect, 0.0, color);
+        } else {
             let mut mesh = egui::Mesh::default();
             let left_color = darken(color, 0.5);
             mesh.colored_vertex(clip_rect.left_top(), left_color);
@@ -76,19 +77,6 @@ impl TimelineWindow {
             mesh.add_triangle(1, 3, 2);
             painter.add(mesh);
         }
-        painter.rect_stroke(
-            clip_rect,
-            0.0,
-            Stroke::new(
-                if obj.selected { 2.0 } else { 1.0 },
-                if obj.selected {
-                    selected_outline
-                } else {
-                    darken(base, 0.3)
-                },
-            ),
-            egui::StrokeKind::Outside,
-        );
 
         if obj.has_waveform && self.show_waveform {
             if let Some(tex) = obj.waveform {
@@ -115,13 +103,20 @@ impl TimelineWindow {
             }
         }
 
-        painter.text(
-            Pos2::new(clip_rect.min.x + 6.0, clip_rect.center().y),
-            egui::Align2::LEFT_CENTER,
-            &obj.label,
-            egui::FontId::proportional(10.0),
-            label_color,
-        );
+        {
+            let text_clip = clip_rect.intersect(view_rect);
+            if text_clip.width() > 0.0 && text_clip.height() > 0.0 {
+                let label_x = clip_rect.min.x.max(view_rect.min.x) + 6.0;
+                let label_x = label_x.min(clip_rect.max.x - 2.0);
+                painter.with_clip_rect(text_clip).text(
+                    Pos2::new(label_x, clip_rect.center().y),
+                    egui::Align2::LEFT_CENTER,
+                    &obj.label,
+                    egui::FontId::proportional(10.0),
+                    label_color,
+                );
+            }
+        }
 
         for &f in &obj.keyframe_frames {
             let dragged_delta = match &self.kdrag {

@@ -124,6 +124,12 @@ struct NativeWindow {
     ctx: egui::Context,
     state: egui_winit::State,
     renderer: EguiRenderer,
+    /// OS側の表示状態。非表示中はGPU描画(surface取得/present)を一切行わない。
+    /// PresentMode::Fifoは非合成対象ウィンドウへのpresentがvsync待ちで復帰しない
+    /// 場合があり、そのままredrawを継続すると単一スレッドのイベントループ全体が
+    /// フリーズする。表示/非表示の唯一の実装箇所はwindow_eventのCloseRequested/
+    /// set_native_visibleとする。
+    visible: bool,
 }
 
 impl NativeWindow {
@@ -175,10 +181,14 @@ impl NativeWindow {
             ctx,
             state,
             renderer,
+            visible: true,
         }
     }
 
     fn redraw(&mut self, gpu: &SharedGpu, draw: impl FnOnce(&mut egui::Ui, &mut EguiRenderer)) {
+        if !self.visible {
+            return;
+        }
         crate::theme::install(&self.ctx);
         let raw_input = self.state.take_egui_input(&self.window);
         let mut draw = Some(draw);
@@ -506,14 +516,17 @@ impl ApplicationHandler for EguiMainWindow {
         let Some(native) = self.windows.get_mut(&id) else {
             return;
         };
-        if native.state.on_window_event(&native.window, &event).repaint {
+        if native.visible && native.state.on_window_event(&native.window, &event).repaint {
             native.window.request_redraw();
         }
         let kind = native.kind;
         match event {
             WindowEvent::CloseRequested => match kind {
                 WindowKind::Launcher | WindowKind::Preview => event_loop.exit(),
-                WindowKind::Timeline | WindowKind::Properties => native.window.set_visible(false),
+                WindowKind::Timeline | WindowKind::Properties => {
+                    native.visible = false;
+                    native.window.set_visible(false);
+                }
                 _ if kind.is_lazy_dialog() => Self::set_dialog_open(&self.slot, kind, false),
                 _ => {}
             },
