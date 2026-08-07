@@ -1,268 +1,197 @@
-#!/usr/bin/env luajit
+local io_open = io.open
+local string_find = string.find
+local string_sub = string.sub
+local table_concat = table.concat
 
-local LINE_COMMENT = {
-    [".rs"] = "//",
-    [".slint"] = "//",
-    [".wgsl"] = "//",
-    [".py"] = "#"
+-- ==========================================
+-- 1. 各言語ごとのパース高速ジャンプ用パターン
+-- ==========================================
+local EXT_CONFIGS = {
+    rs = { jump = '[%/r%"]' },    -- Rust: //, /* */, ", r", r#", URL除外
+    lua = { jump = '[%-%"%\'%[]' }, -- Lua: --, --[[ ]], ", ', [[ ]], URL除外
+    slang = { jump = '[%/r%"]' },  -- Slang: Rust/C系と同様の構文
+    json = { jump = '[%"]' },       -- JSON: コメントなし、文字列のみ保護（念のため）
+    toml = { jump = '[%#%"%\']' },   -- TOML: #, ", ', """
+    yaml = { jump = '[%#%"%\']' }    -- YAML: #, ", '
 }
 
-local NOISE_PATTERNS = {
-    "^%-+$",
-    "^=+$",
-    "^(here|this)%s",
-    "^(this function|this method|this struct|this class)%s",
-    "^(create|creates|initialize|initializes|construct|constructs|declare|declares)%s+(a|the|an)%s",
-    "^(作成|生成|初期化|定義|宣言)する",
-    "^(変数|引数|クラス|構造体)を",
-    "^(インポート|参照|取得|設定)する",
-    "^(increment|decrement|set|get|return|call|loop over|iterate over)%s",
-    "^(ここで|まず|次に|そして|最後に)",
-    "^step%s*%d+",
-    "^(todo|fixme|xxx).*(later|後で|いつか)",
-    "^(note|補足)%s*:%s*(this is|これは)",
-    "^(引数|戻り値|返り値|パラメータ)%s*[:：]",
-    "^(注意|警告|※)%s*[:：]?",
-    "^(src|crates).*%.(rs|slint|wgsl|py)$"
-}
-
-local TRIVIAL_ECHO_RATIO = 0.85
-local TRIVIAL_ECHO_MAXLEN = 40
-
-local function get_ext(path)
-    return path:match("%.[^.]+$") or ""
-end
-
-local function strip_marker(text, lc)
-    local t = text:match("^%s*(.-)%s*$") or ""
-    if t:sub(1, #lc) == lc then
-        t = t:sub(#lc + 1):match("^%s*(.-)%s*$") or ""
-    end
-    return t
-end
-
-local function split_words(str)
-    local words = {}
-    for word in str:gmatch("[A-Za-z0-9_]+") do
-        words[word] = true
-    end
-    return words
-end
-
-local function token_overlap(comment, code_line)
-    local c = split_words(comment:lower())
-    local k = split_words(code_line:lower())
-    
-    local c_count, intersect = 0, 0
-    for w in pairs(c) do
-        c_count = c_count + 1
-        if k[w] then intersect = intersect + 1 end
-    end
-    
-    if c_count == 0 then return 0.0 end
-    return intersect / c_count
-end
-
-local function regex_match_insensitive(text, pattern)
-    local low_text = text:lower()
-    local low_pattern = pattern:lower()
-    return low_text:find(low_pattern) ~= nil
-end
-
-local function classify(comment_text, next_code_line, lc)
-    local body = strip_marker(comment_text, lc)
-    if body == "" then return "empty" end
-    
-    for _, pat in ipairs(NOISE_PATTERNS) do
-        if regex_match_insensitive(body, pat) then
-            return "noise"
-        end
-    end
-    
-    if next_code_line and #body < TRIVIAL_ECHO_MAXLEN then
-        if token_overlap(body, next_code_line) >= TRIVIAL_ECHO_RATIO then
-            return "echo"
-        end
-    end
-    return "keep"
-end
-
-local function comment_blocks(lines, lc)
-    local blocks = {}
+-- ==========================================
+-- 2. 究極高速化パースエンジン
+-- ==========================================
+local function clean_comments(content, ext)
+    local len = #content
+    local result = {}
+    local r_idx = 1
+    local last_pos = 1
     local i = 1
-    local n = #lines
-    while i <= n do
-        if lines[i]:match("^%s*" .. lc) then
-            local start = i
-            while i <= n and lines[i]:match("^%s*" .. lc) do
+    local config = EXT_CONFIGS[ext]
+
+    while i <= len do
+        local next_idx = string_find(content, config.jump, i)
+        if not next_idx then break end
+        
+        i = next_idx
+        local b1 = string_sub(content, i, i)
+
+        -- ------------------------------------------
+        -- 【共通】通常の文字列リテラル保護 ("..." や '...')
+        -- ------------------------------------------
+        if b1 == '"' or b1 == "'" then
+            local q = b1
+            i = i + 1
+            while i <= len do
+                local _, end_idx = string_find(content, q, i, true)
+                if not end_idx then i = len + 1 break end
+                
+                -- エスケープ文字（\" や \'）の逆算
+                local esc_count = 0
+                local check_idx = end_idx - 1
+                while check_idx >= i and string_sub(content, check_idx, check_idx) == '\\' do
+                    esc_count = esc_count + 1
+                    check_idx = check_idx - 1
+                end
+                
+                if esc_count % 2 == 0 then
+                    i = end_idx + 1
+                    break
+                else
+                    i = end_idx + 1
+                end
+            end
+
+        -- ------------------------------------------
+        -- 【Rust / Slang】生文字列リテラル & C系コメント
+        -- ------------------------------------------
+        elseif (ext == "rs" or ext == "slang") and b1 == 'r' then
+            local n2 = string_sub(content, i+1, i+2)
+            if string_sub(n2, 1, 1) == '"' then
+                i = i + 2
+                local _, end_idx = string_find(content, '"', i, true)
+                i = end_idx and (end_idx + 1) or (len + 1)
+            elseif string_sub(n2, 1, 1) == '#' then
+                local _, start_sharp_end = string_find(content, '"', i + 2, true)
+                if start_sharp_end then
+                    local sharps = string_sub(content, i + 1, start_sharp_end - 1)
+                    local close_pattern = '"' .. sharps
+                    local _, end_idx = string_find(content, close_pattern, start_sharp_end, true)
+                    i = end_idx and (end_idx + #close_pattern) or (len + 1)
+                else
+                    i = i + 1
+                end
+            else
                 i = i + 1
             end
-            table.insert(blocks, {start, i - 1})
+
+        elseif (ext == "rs" or ext == "slang") and b1 == '/' then
+            local b2 = string_sub(content, i+1, i+1)
+            if b2 == '/' then
+                result[r_idx] = string_sub(content, last_pos, i - 1)
+                r_idx = r_idx + 1
+                local _, e = string_find(content, "\n", i + 2, true)
+                i = e and (e + 1) or (len + 1)
+                last_pos = i
+            elseif b2 == '*' then
+                result[r_idx] = string_sub(content, last_pos, i - 1)
+                r_idx = r_idx + 1
+                local _, e = string_find(content, "*/", i + 2, true)
+                i = e and (e + 2) or (len + 1)
+                last_pos = i
+            else
+                i = i + 1
+            end
+
+        -- ------------------------------------------
+        -- 【Lua】ロングストリング & Luaコメント
+        -- ------------------------------------------
+        elseif ext == "lua" and b1 == '[' then
+            -- [[ ... ]] の検知（シャープ等がない純粋なリテラル開始のみ対応）
+            if string_sub(content, i+1, i+1) == '[' then
+                local _, end_idx = string_find(content, ']]', i + 2, true)
+                i = end_idx and (end_idx + 2) or (len + 1)
+            else
+                i = i + 1
+            end
+
+        elseif ext == "lua" and b1 == '-' then
+            if string_sub(content, i+1, i+1) == '-' then
+                result[r_idx] = string_sub(content, last_pos, i - 1)
+                r_idx = r_idx + 1
+                
+                -- --[[ 複数行コメント ]] の判定
+                if string_sub(content, i+2, i+3) == '[[' then
+                    local _, e = string_find(content, "]]", i + 4, true)
+                    i = e and (e + 2) or (len + 1)
+                else
+                    -- 通常の1行コメント
+                    local _, e = string_find(content, "\n", i + 2, true)
+                    i = e and (e + 1) or (len + 1)
+                end
+                last_pos = i
+            else
+                i = i + 1
+            end
+
+        -- ------------------------------------------
+        -- 【TOML / YAML】# コメント
+        -- ------------------------------------------
+        elseif (ext == "toml" or ext == "yaml") and b1 == '#' then
+            result[r_idx] = string_sub(content, last_pos, i - 1)
+            r_idx = r_idx + 1
+            local _, e = string_find(content, "\n", i + 1, true)
+            i = e and (e + 1) or (len + 1)
+            last_pos = i
+
         else
             i = i + 1
         end
     end
-    return blocks
+
+    if r_idx > 1 then
+        result[r_idx] = string_sub(content, last_pos, len)
+        return table_concat(result)
+    end
+    return nil
 end
 
-local function scan_lines(lines, lc)
-    local out = {}
-    for i, line in ipairs(lines) do
-        if line:match("^%s*" .. lc) then
-            local next_code = nil
-            for j = i + 1, #lines do
-                if lines[j]:match("%S") and not lines[j]:match("^%s*" .. lc) then
-                    next_code = lines[j]
-                    break
-                end
-            end
-            table.insert(out, {i, classify(line, next_code, lc)})
+-- ==========================================
+-- 3. ファイル処理・OSコマンド実行
+-- ==========================================
+local function remove_comments_from_file(filepath, ext)
+    local file = io_open(filepath, "r")
+    if not file then return end
+    local content = file:read("*all")
+    file:close()
+
+    local cleaned = clean_comments(content, ext)
+    if cleaned then
+        local wfile = io_open(filepath, "w")
+        if wfile then
+            wfile:write(cleaned)
+            wfile:close()
+            print("Cleaned (" .. ext .. "): " .. filepath)
         end
     end
-    return out
 end
 
-local function vocab_hit_blocks(lines, lc)
-    local idx = {}
-    local blocks = comment_blocks(lines, lc)
-    for _, block in ipairs(blocks) do
-        local start, fin = block[1], block[2]
-        local block_text_table = {}
-        for l = start, fin do
-            table.insert(block_text_table, strip_marker(lines[l], lc))
-        end
-        local block_text = table.concat(block_text_table, "\n")
-        
-        for _, pat in ipairs(NOISE_PATTERNS) do
-            if regex_match_insensitive(block_text, pat) then
-                for l = start, fin do
-                    idx[l] = true
-                end
-                break
-            end
-        end
-    end
-    return idx
-end
+local function scan_project()
+    -- 拡張子指定で対象を絞る（target, .git を弾きつつ高速find）
+    local cmd = (os.getenv("WINDIR") or os.getenv("windir"))
+        and 'dir /b /s *.rs *.lua *.slang *.json *.toml *.yaml 2>nul' 
+        or 'find . -type d -name "target" -prune -o -type d -name ".git" -prune -o -type f \\( -name "*.rs" -o -name "*.lua" -o -name "*.slang" -o -name "*.json" -o -name "*.toml" -o -name "*.yaml" \\) -print'
 
-local function read_file_lines(path)
-    local lines = {}
-    local f = io.open(path, "r")
-    if not f then return nil end
-    for line in f:lines() do
-        table.insert(lines, line)
-    end
-    f:close()
-    return lines
-end
-
-local function write_file_lines(path, lines)
-    local f = io.open(path, "w")
-    if not f then return false end
-    for _, line in ipairs(lines) do
-        f:write(line .. "\n")
-    end
-    f:close()
-    return true
-end
-
-local function process(path, fix, levels)
-    local ext = get_ext(path)
-    local lc = LINE_COMMENT[ext]
-    if not lc then return false end
-
-    local lines = read_file_lines(path)
-    if not lines then return false end
-
-    local verdicts = scan_lines(lines, lc)
-    local hit = false
-    local remove_idx = {}
-
-    for _, v in ipairs(verdicts) do
-        local idx, verdict = v[1], v[2]
-        if levels[verdict] then
-            hit = true
-            print(string.format("%s:%d: [%s] %s", path, idx, verdict, lines[idx]:match("^%s*(.-)%s*$")))
-            remove_idx[idx] = true
-        end
-    end
-
-    local vocab_idx = vocab_hit_blocks(lines, lc)
-    for idx in pairs(vocab_idx) do
-        if not remove_idx[idx] then
-            hit = true
-            print(string.format("%s:%d: [vocab-block] %s", path, idx, lines[idx]:match("^%s*(.-)%s*$")))
-            remove_idx[idx] = true
-        end
-    end
-
-    if fix and hit then
-        local new_lines = {}
-        for i, line in ipairs(lines) do
-            if not remove_idx[i] then
-                table.insert(new_lines, line)
-            end
-        end
-        write_file_lines(path, new_lines)
-    end
-
-    return hit
-end
-
-local function main()
-    local root = "."
-    local fix = false
-    local levels_str = "noise,echo,empty"
-    local exclude_list = {"aviutl2_sdk", "target", "%.git", "slang"}
-
-    local i = 1
-    while i <= #arg do
-        if arg[i] == "--fix" then
-            fix = true
-            i = i + 1
-        elseif arg[i] == "--levels" then
-            levels_str = arg[i+1]
-            i = i + 2
-        elseif arg[i] == "--exclude" then
-            table.insert(exclude_list, arg[i+1])
-            i = i + 2
-        else
-            root = arg[i]
-            i = i + 1
-        end
-    end
-
-    local levels = {}
-    for lvl in levels_str:gmatch("[^,]+") do
-        levels[lvl] = true
-    end
-
-    local find_cmd = "find " .. root .. " -type f"
-    local p = io.popen(find_cmd)
+    local p = io.popen(cmd)
     if not p then return end
 
-    local n = 0
-    for path in p:lines() do
-        local should_exclude = false
-        for _, excl in ipairs(exclude_list) do
-            if path:find(excl) then
-                should_exclude = true
-                break
-            end
-        end
-
-        if not should_exclude then
-            local ext = get_ext(path)
-            if LINE_COMMENT[ext] then
-                if process(path, fix, levels) then
-                    n = n + 1
-                end
+    for file in p:lines() do
+        if file ~= "" then
+            local ext = string_sub(file, #file - 3) -- .xxx
+            ext = ext:match("%.([^%.]+)$") or file:match("%.([^%.]+)$")
+            if ext and EXT_CONFIGS[ext] then
+                remove_comments_from_file(file, ext)
             end
         end
     end
     p:close()
-
-    print(string.format("検出/処理ファイル数: %d", n))
 end
 
-main()
+scan_project()

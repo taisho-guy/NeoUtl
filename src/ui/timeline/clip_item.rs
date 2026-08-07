@@ -195,6 +195,20 @@ impl TimelineWindow {
             return;
         }
 
+        if left_resp.hovered() || left_resp.dragged() {
+            ui.ctx().set_cursor_icon(egui::CursorIcon::ResizeWest);
+        }
+        if right_resp.hovered() || right_resp.dragged() {
+            ui.ctx().set_cursor_icon(egui::CursorIcon::ResizeEast);
+        }
+        if body_resp.hovered() || body_resp.dragged() {
+            ui.ctx().set_cursor_icon(if body_resp.dragged() {
+                egui::CursorIcon::Grabbing
+            } else {
+                egui::CursorIcon::Grab
+            });
+        }
+
         if left_resp.drag_started() {
             if let Some(pos) = left_resp.interact_pointer_pos() {
                 self.drag = Some(ClipDrag {

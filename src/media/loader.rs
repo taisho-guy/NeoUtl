@@ -43,8 +43,14 @@ fn from_vtable(vtable: MediaVTable, lib: Option<Library>) -> MediaPlugin {
 
 /// NeoUtl本体へgpu_video共有デバイス注入のため直接静的リンクされるデコーダ。
 /// dlsymプラグインではないためdecoders/走査対象から外れ、ここで自己登録する。
+/// ffmpeg-decoderはgpuvideo-decoder（H.264ゼロコピー専用）のCPUフォールバックとして
+/// 同様に直接静的リンクする（idはfind_all_by_extensionのソート順でgpuvideo後に来るよう
+/// "neoutl.media.software-ffmpeg"としている。両者のextensions重複は意図的）。
 fn native_plugins() -> Vec<MediaPlugin> {
-    vec![from_vtable(gpuvideo_native_vtable(), None)]
+    vec![
+        from_vtable(gpuvideo_native_vtable(), None),
+        from_vtable(neoutl_media_ffmpeg_decoder::native_vtable(), None),
+    ]
 }
 
 #[cfg(target_os = "linux")]

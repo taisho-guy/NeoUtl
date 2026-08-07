@@ -3375,12 +3375,10 @@ dependencies = [
 name = "neoutl-media-ffmpeg-decoder"
 version = "0.0.0"
 dependencies = [
- "ash",
  "ffmpeg-next",
  "ffmpeg-sys-next",
  "neoutl-media-api",
  "wgpu",
- "wgpu-hal",
 ]
 
 [[package]]

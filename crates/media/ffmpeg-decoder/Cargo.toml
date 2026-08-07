@@ -8,5 +8,3 @@ neoutl-media-api = { path = "../../neoutl-media-api" }
 ffmpeg-next = { version = "9", features = ["codec", "format", "software-resampling"] }
 ffmpeg-sys-next = "9"
 wgpu = { version = "29", features = ["vulkan-portability"] }
-wgpu-hal = "29"
-ash = "0.38"
