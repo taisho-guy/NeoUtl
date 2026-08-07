@@ -2,26 +2,18 @@ use crate::config;
 use serde::{Deserialize, Serialize};
 use shipyard::Unique;
 
-/// 動画プロジェクト全体の設定（FPS・解像度等）
 #[derive(Clone, Debug, Unique)]
 pub struct ProjectResource {
     pub name: String,
-    /// プロジェクトディレクトリ（未保存時はNone）
     pub dir: Option<std::path::PathBuf>,
     pub fps: u32,
-    /// 出力幅（ピクセル）
     pub width: u32,
-    /// 出力高さ（ピクセル）
     pub height: u32,
-    /// 音声サンプリングレート（Hz）
     pub audio_sample_rate: u32,
-    /// 音声チャンネル数（1=モノラル, 2=ステレオ）
     pub audio_channels: u32,
 }
 
 impl ProjectResource {
-    /// 新規プロジェクト・シーンの既定解像度。Camera::for_resolution()の
-    /// ブートストラップ値と共有し、値の重複を避ける。
     pub const DEFAULT_WIDTH: u32 = config::PROJECT_DEFAULT_WIDTH;
     pub const DEFAULT_HEIGHT: u32 = config::PROJECT_DEFAULT_HEIGHT;
 
@@ -48,7 +40,6 @@ fn default_layer_states() -> Vec<(bool, bool)> {
     vec![(true, false); DEFAULT_LAYER_COUNT]
 }
 
-/// タイムライン状態（再生ヘッド・フレーム総数・ズーム率など）
 #[derive(Unique)]
 pub struct TimelineResource {
     pub current_frame: i32,
@@ -70,7 +61,6 @@ impl TimelineResource {
     }
 }
 
-/// 各レイヤーの表示・ロック状態
 #[derive(Unique)]
 pub struct LayerStates(pub Vec<(bool, bool)>);
 
@@ -92,14 +82,8 @@ impl LayerStates {
     }
 }
 
-/// グリッドモード（AviQtl::UI::SceneData::gridMode相当）。BPM/Frameモードは未実装のため
-/// 現状はAutoのみを保持する。
 pub const GRID_MODE_AUTO: i32 = 0;
 
-/// シーン単体の設定（AviQtl::UI::SceneData 相当。グリッド・スナップはシーン単位で保持する）。
-/// `Serialize`/`Deserialize`をプロジェクトファイルへの直接永続化に用いる。
-/// `total_frames`・`layer_states`はランタイム状態のため保存対象外とし、
-/// 復元時は既定値（`default_total_frames`・`default_layer_states`）で補完する。
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct SceneMeta {
     pub id: i32,
@@ -141,9 +125,6 @@ impl SceneMeta {
         }
     }
 
-    /// システム設定の既定値（新規シーン用）を反映したメタ情報を生成する。
-    /// UI側（scene_settings.rs::open_for_create）はこの結果のみを初期値として使い、
-    /// グリッド既定値を独自に書き直さない。
     pub fn new_with_defaults(
         id: i32,
         name: impl Into<String>,
@@ -156,8 +137,6 @@ impl SceneMeta {
         meta
     }
 
-    /// グリッド間隔・スナップ許容範囲に基づき、フレーム番号を最寄りのグリッド線へ吸着させる。
-    /// `enable_snap`がfalse、または許容範囲外の場合は入力値をそのまま返す。
     pub fn snap_frame(&self, frame: i32) -> i32 {
         if !self.enable_snap || self.grid_interval <= 0 {
             return frame;
@@ -172,7 +151,6 @@ impl SceneMeta {
     }
 }
 
-/// プロジェクト内の全シーンとアクティブシーン（AviQtl::Core::DocumentModel 相当）
 #[derive(Unique)]
 pub struct SceneResource {
     pub scenes: Vec<SceneMeta>,
@@ -198,33 +176,25 @@ impl SceneResource {
     }
 }
 
-/// システム全体の設定（AviQtl::Core::SettingsManager 相当）
 #[derive(Clone, Debug, Unique, Serialize, Deserialize)]
 pub struct SystemSettingsResource {
     pub autosave_enabled: bool,
     pub autosave_interval_sec: i32,
     pub theme_dark: bool,
-    /// 選択中テーマのstable_id。空文字は未選択（theme_darkの明暗2値へフォールバック）
     #[serde(default)]
     pub theme_id: String,
     #[serde(default)]
     pub easing_engine_id: String,
     pub ui_scale_percent: i32,
-    /// 0: 自動（論理コア数に追従） / 1以上: デコードワーカーの上限並列数
     pub worker_threads: i32,
     pub audio_max_block_size: i32,
-    /// 0: 自動 (GPU優先, 失敗時CPU) / 1: GPU固定 / 2: CPU固定
     pub decode_backend: i32,
-    /// 新規シーン作成時に引き継ぐスナップ既定値
     pub default_snap: bool,
     pub magnetic_snap_range: i32,
-    /// 0: MP4 / 1: MOV / 2: MKV
     pub export_container: i32,
-    /// 0: H.264 / 1: HEVC / 2: AV1
     pub export_codec: i32,
     #[serde(default)]
     pub check_update_on_startup: bool,
-    /// GlitchTip(Sentry)へのクラッシュ/エラー匿名送信。既定無効（オプトイン）。
     #[serde(default)]
     pub crash_reporting_enabled: bool,
 }

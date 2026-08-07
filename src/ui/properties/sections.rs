@@ -9,9 +9,6 @@ use crate::ecs::object_schema::{
 use crate::localization::effect_param_label;
 use neoutl_shared_abi::ParamKind;
 
-/// Float/Color系パラメータ1行の共通描画。呼び出し側は`get`/`set`/`track`/`set_kf`/
-/// `remove_kf`をobject種別ごとのアクセサとして渡し、本関数は書き込み先フレーム確定
-/// （resolve_segment）とUI描画のみを担う。
 #[allow(clippy::too_many_arguments)]
 pub(super) fn float_row(
     ui: &mut egui::Ui,
@@ -212,8 +209,6 @@ pub fn shape_section(ui: &mut egui::Ui, world: &mut EcsWorld, id: usize) {
     }
 }
 
-/// オーディオ("volume"/"pan")はキーフレーム非対応のためPropertyRowではなく
-/// 単一DragValueのまま据え置く（旧properties_panel.rsの方針を継承）。
 pub fn audio_section(ui: &mut egui::Ui, world: &mut EcsWorld, id: usize) {
     let Some(mut audio) = world.get_audio_params(id) else {
         return;

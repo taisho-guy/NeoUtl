@@ -16,21 +16,6 @@ struct DiscoveredCrate {
     source_dir: PathBuf,
 }
 
-/// workspace_root/subdir 直下の各ディレクトリのCargo.tomlを走査し、
-/// package.name と lib.name（未指定時はpackage.nameの'-'を'_'置換）を収集する。
-/// 新規追加クレートはディレクトリを置くだけで自動検出対象になる。
-/// subdirには"crates/objects"・"crates/effects"・"crates/media"のいずれも渡せる
-/// （3者は同一走査規則）。
-/// workspace([workspace].members)から意図的に除外されたクレートディレクトリ。
-/// cargo build -p はworkspace非対象パッケージを解決できないため、ディレクトリが
-/// 存在していてもここに含まれるものはxtaskの検出対象から外す。
-/// ffmpeg-decoder: gstreamer/symphonia経路で代替、要件確定まで凍結（Cargo.toml側の
-/// [workspace].membersコメントアウトと対で管理する）。
-/// gstreamer-encoder: NeoUtl本体へ直接静的リンク（export.rsから使用）。dlsymプラグイン
-/// ではないため除外。
-/// gpuvideo-decoder/gpuvideo-encoder: NeoUtl本体からgpu_video共有デバイス注入のため
-/// path依存として直接静的リンクされ、native_plugins()/native_vtables()経由で自己登録する。
-/// dlsymプラグインではないため、decoders/への配置対象から外す。
 const WORKSPACE_EXCLUDED_DIRS: &[&str] = &[
     "audio-plugin-host",
     "ffmpeg-decoder",
@@ -123,8 +108,6 @@ fn dylib_filename(lib_name: &str) -> String {
     }
 }
 
-/// --targetの有無でcargoの出力先が target/{profile} と target/{triple}/{profile} に分かれるため、
-/// ビルド・配置の両方で参照する実出力ディレクトリをここで一元的に解決する。
 fn target_dir(workspace_root: &Path, profile: &str, target: Option<&str>) -> PathBuf {
     match target {
         Some(triple) => workspace_root.join("target").join(triple).join(profile),
@@ -140,13 +123,6 @@ fn exe_filename(bin_name: &str) -> String {
     }
 }
 
-/// objects/effects/decoders/NeoUtl本体を単一のcargo呼び出しへ集約してビルドする。
-/// 呼び出しを分割すると、cargoのfeature unification（resolver 2）が呼び出し単位で
-/// 独立に行われるため、要求パッケージ集合の違い（例: decoders単体呼び出しと
-/// NeoUtl本体呼び出しでwgpu等の要求feature集合が食い違う）により同一依存クレートが
-/// 呼び出しごとに異なるfingerprintで再ビルドされ、互いのキャッシュを破棄し合う。
-/// 全パッケージを1回のcargo build -pの列挙に含めることでfeature解決を1本化し、
-/// この相互キャッシュ破棄を排除する。
 fn build_all<'a>(
     workspace_root: &Path,
     profile: &str,
@@ -167,7 +143,6 @@ fn build_all<'a>(
     if let Some(triple) = target {
         cmd.arg("--target").arg(triple);
     }
-    // [target.'cfg(...)']による自動切替ではなく、常にこの明示featureで選択する。
     const MLUA_CONSUMER_CRATES: &[&str] = &["neoutl-lua-runtime", "neoutl-effect-lua"];
     for pkg in MLUA_CONSUMER_CRATES {
         cmd.arg("-p")
@@ -216,69 +191,6 @@ fn build_all<'a>(
         );
     }
 }
-
-/*
-fn build_vst3_helpers(workspace_root: &Path, profile: &str, target: Option<&str>, offline: bool) {
-    let mut cmd = Command::new("cargo");
-    cmd.current_dir(workspace_root)
-        .arg("build")
-        .arg("--locked")
-        .arg("-p")
-        .arg("vst3-host")
-        .arg("--bin")
-        .arg("vst3-host-probe");
-    if profile == "release" {
-        cmd.arg("--release");
-    }
-    if let Some(target) = target {
-        cmd.arg("--target").arg(target);
-    }
-    if offline {
-        cmd.arg("--offline");
-    }
-    let status = cmd.status().expect(&t!("vst3-host-probeビルド起動失敗"));
-    if !status.success() {
-        panic!(
-            "{}",
-            t!(
-                "[xtask] vst3-host-probeビルド失敗: exit=%{arg0}",
-                arg0 = format!("{status}")
-            )
-        );
-    }
-
-    let mut helper = Command::new("cargo");
-    helper
-        .current_dir(workspace_root)
-        .arg("build")
-        .arg("--locked")
-        .arg("-p")
-        .arg("vst3-host")
-        .arg("--bin")
-        .arg("vst3-host-helper");
-    if profile == "release" {
-        helper.arg("--release");
-    }
-    if let Some(target) = target {
-        helper.arg("--target").arg(target);
-    }
-    if offline {
-        helper.arg("--offline");
-    }
-    let status = helper
-        .status()
-        .expect(&t!("vst3-host-helperビルド起動失敗"));
-    if !status.success() {
-        panic!(
-            "{}",
-            t!(
-                "[xtask] vst3-host-helperビルド失敗: exit=%{arg0}",
-                arg0 = format!("{status}")
-            )
-        );
-    }
-}
-*/
 
 fn stage_crates(
     workspace_root: &Path,
@@ -442,10 +354,6 @@ fn main() {
     }
 }
 
-/// Collect Japanese string literals from application and plugin sources and
-/// write the canonical Japanese catalog. Translation keys are deliberately
-/// the source text itself; internal IDs and numeric effect constraints are
-/// never inspected or modified here.
 fn generate_japanese_i18n(root: &Path) {
     let mut messages = std::collections::BTreeSet::new();
     let mut files = Vec::new();

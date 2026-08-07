@@ -13,23 +13,12 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-/// リングバッファの上限秒数。出力側の消費停止・遅延時の無制限蓄積を防ぐ。
 const RING_CAPACITY_SECONDS: usize = 2;
 
-/// ring目標充足量（秒）。process_frame呼び出し間隔（設計値16msだがタイマー・ロック競合・
-/// 描画処理によるジッタを含む実測値）に対し十分な余裕を持たせ、呼び出し1回あたりの遅延・
-/// 欠落がそのままring枯渇（無音混入=プツプツ）に直結しない量を確保する。
 const TARGET_BUFFER_SECONDS: f64 = 0.12;
 
-/// process_frame呼び出し間隔がこれを超えたクリップは非連続（新規再生開始）とみなし、
-/// sourceフレーム位置から位相を再計算する。ビデオフレーム番号ではなく実時間で判定するため、
-/// 1ビデオフレーム未満の間隔で複数回process_frameが呼ばれる場合（tick > フレームレート）でも
-/// 誤って非連続判定されない。
 const CONTINUITY_GAP_SECONDS: f64 = 0.25;
 
-/// AviQtl::Engine::AudioMixer対応物。デコード済みAudioBufferをボリューム/パン/ミュート
-/// 適用の上で加算合成し、rodio経由で出力デバイスへ書き込む。
-/// デバイス側の要求サンプルフォーマット（f32/i16/u16等）への変換はrodioが担う。
 pub struct AudioMixer {
     output: Option<MixerDeviceSink>,
     ring: Arc<Mutex<VecDeque<f32>>>,
@@ -38,15 +27,11 @@ pub struct AudioMixer {
     decode_cache: HashMap<PathBuf, Arc<AudioBuffer>>,
     clip_phase: HashMap<usize, f64>,
     clip_last_tick: HashMap<usize, Instant>,
-    /// (entity_id, chain_index)キー。CLAP側はNeoPlugin::process未実装（無音）のため、
-    /// ロード自体は保持しつつ実処理はVST3のみとなる（milestone順序6のスコープ）。
     plugin_instances: HashMap<u64, CachedPlugin>,
 }
 
 unsafe impl Send for AudioMixer {}
 
-/// PluginChain側のメタデータ（path/plugin_id）変更検知用。エンティティのチェーンが
-/// UI操作で差し替えられた場合、この照合に失敗した時点で実体を再ロードする。
 struct CachedPlugin {
     path: PathBuf,
     plugin_id: String,
@@ -72,8 +57,6 @@ impl AudioMixer {
         })
     }
 
-    /// 出力デバイス非搭載環境（CI・ヘッドレス実行）向け。出力なしで動作し、
-    /// process_frameは合成のみ実行しringは無音のまま滞留・破棄される。
     pub fn silent() -> Self {
         Self {
             output: None,
@@ -87,7 +70,6 @@ impl AudioMixer {
         }
     }
 
-    /// プロジェクトのサンプルレート変更時。出力を再構築する。
     pub fn set_sample_rate(&mut self, sample_rate: u32) {
         if sample_rate == self.sample_rate {
             return;
@@ -109,27 +91,18 @@ impl AudioMixer {
         }
     }
 
-    /// シーク発生時。連続再生前提の位相・直前tick記録・リングバッファを破棄する。
     pub fn reset(&mut self) {
         self.clip_phase.clear();
         self.clip_last_tick.clear();
         self.ring.lock().unwrap().clear();
     }
 
-    /// 即座に無音化する。ring内既生成分を破棄するのみで、次回process_frame呼び出し時に
-    /// 目標充足量から再充填される。
     pub fn pause(&self) {
         self.ring.lock().unwrap().clear();
     }
 
     pub fn play(&self) {}
 
-    /// ring内サンプル数がTARGET_BUFFER_SECONDS分に満たない差分だけ合成し積む。
-    /// dt（呼び出し間隔の実測値）に基づく量産ではなく目標充足量への差分補充とすることで、
-    /// タイマー周期・ロック競合・描画処理による呼び出し間隔のジッタがそのままring枯渇
-    /// （無音混入=プツプツ）に直結しない（呼び出しが一時的に遅延・欠落してもTARGET_BUFFER分の
-    /// 先読みが吸収する）。current_frameは合成対象クリップの検索窓（get_active_audio_system）
-    /// にのみ用いる。
     pub fn process_frame(&mut self, world: &EcsWorld, current_frame: i32, speed: f64) {
         if speed <= 0.0 {
             return;
@@ -174,10 +147,6 @@ impl AudioMixer {
         }
     }
 
-    /// エクスポート専用。指定ビデオフレームに対応する音声区間をring/deviceを経ずに
-    /// 直接ミックスし、インターリーブ済みステレオf32列(sample_count*2)で返す。
-    /// 呼び出し順はビデオフレーム昇順を前提とする（mix_entityのclip_phase継続判定が
-    /// 前回呼び出しからの経過時間ではなくフレーム連番前提で機能するため）。
     pub fn render_frame_offline(
         &mut self,
         world: &EcsWorld,
@@ -276,7 +245,6 @@ impl AudioMixer {
         self.clip_last_tick.insert(entity.id, now);
     }
 
-    /// entity_idに紐づくPluginChainをchan_l/chan_rへ順次適用する。
     fn apply_plugin_chain(
         &mut self,
         entity_id: usize,
@@ -333,9 +301,6 @@ impl AudioMixer {
     }
 }
 
-/// PluginInstanceRefから実体を生成する。VST3/CLAPともstart_processingまで完了させ即座に
-/// process可能な状態とする。読込失敗時はpluginをNoneとし、以後は当該参照が変わるまで再試行しない
-/// （毎tick再ロードを試みてスパムログにならないようにする）。
 fn load_plugin_instance(instance_ref: &PluginInstanceRef) -> CachedPlugin {
     let plugin: Option<Box<dyn NeoPlugin>> = match instance_ref.format {
         PluginFormat::Vst3 => match load_vst3(&instance_ref.path) {
@@ -427,10 +392,6 @@ fn build_output(
     Ok(device)
 }
 
-/// AudioMixer::process_frameが積んだサンプルをpopして返す無限長Source。
-/// 枯渇時（未再生時・pause直後）は無音（0.0）を返しストリームを継続させる
-/// （AviQtl側QAudioSinkのpush駆動と対称）。play/pause状態を持たず、ring内容のみに従うため、
-/// スクラブ時のprocess_frame単発呼び出しもそのまま音として出力される。
 struct RingSource {
     ring: Arc<Mutex<VecDeque<f32>>>,
     sample_rate: NonZero<u32>,
@@ -463,7 +424,6 @@ impl Source for RingSource {
     }
 }
 
-/// get_active_audio_systemが返すエンティティ表現。
 pub struct ActiveAudioEntity {
     pub id: usize,
     pub audio: AudioParams,

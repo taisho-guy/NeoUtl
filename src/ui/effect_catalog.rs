@@ -3,8 +3,6 @@ use crate::ui::effect_add_dialog::EffectCatalogSource;
 use crate::ui::types::CatalogRow;
 use std::sync::Mutex;
 
-/// 直近に追加したエフェクトIDの履歴（新しい順、最大8件）。プロセス生存中のみ保持し
-/// ディスク永続化はしない（最近使用ソートは同一セッション内の利便性のためのもの）。
 static RECENT_EFFECT_IDS: Mutex<Vec<String>> = Mutex::new(Vec::new());
 
 pub fn mark_effect_used(id: &str) {
@@ -14,8 +12,6 @@ pub fn mark_effect_used(id: &str) {
     recent.truncate(8);
 }
 
-/// エフェクトカタログの全件と、カテゴリ一覧（重複除去・昇順）を起動時に一度構築する。
-/// フィルタ・ソートは`filtered()`が都度算出し、EffectAddDialog表示のたびに反映する。
 pub struct EffectCatalogState {
     all: Vec<CatalogRow>,
     categories: Vec<String>,
@@ -44,7 +40,6 @@ impl EffectCatalogState {
         &self.categories
     }
 
-    /// sort_mode: 0=カテゴリ順, 1=名前順, 2=最近使用順
     pub fn filtered(&self, query: &str, sort_mode: i32, category: &str) -> Vec<CatalogRow> {
         let q = query.to_lowercase();
         let mut rows: Vec<CatalogRow> = self

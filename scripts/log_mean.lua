@@ -1,4 +1,3 @@
--- scripts/log_mean.lua
 local frame_count = 0
 
 system.on_pre_render(function()

@@ -123,7 +123,6 @@ pub fn by_id(id: &str) -> Option<&'static EasingPlugin> {
         .or_else(|| registry().iter().find(|p| p.id == "neoutl-easing-standard"))
 }
 
-/// カーブプリセットレジストリへのグローバルアクセス。`load_all`未実行時はNone。
 pub fn curve_presets() -> Option<&'static Mutex<CurveRegistry>> {
     CURVE_PRESETS.get()
 }

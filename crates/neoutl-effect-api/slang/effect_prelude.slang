@@ -1,6 +1,3 @@
-// エフェクトフルスクリーンパス頂点契約。全EffectVTable実装のfs_mainはこのファイルを
-// build.rs内でfs_main本体へ前置連結した状態でコンパイルする。
-// @group(0)@binding(0)=input_tex, @binding(1)=input_sampler を固定契約とする。
 struct VertexOutput
 {
     float4 position : SV_Position;

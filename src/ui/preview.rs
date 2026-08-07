@@ -15,13 +15,6 @@ use std::rc::Rc;
 use std::sync::Arc;
 use std::time::Instant;
 
-/// フェーズ5未移植の既存Slintウィンドウ。本体ウィンドウ・拡張編集はeguiへ移行済みのため、
-/// メニューからの表示要求はこのWeakハンドル経由で行う。system_settings/project_settings/
-/// keybindings/scene_settings/export_dialogはフェーズ2、拡張編集はフェーズ4でegui-native
-/// 化済みのためここには含まれない（DialogSet・TimelineWindowがPreviewPanelの開閉要求
-/// フラグを読む）。
-/// セッションタブ1件分（本体ウィンドウのタブバー用）。indexはSharedAppState::sessions
-/// 内の位置そのもので、毎フレーム再構築するため保持する状態は持たない。
 #[derive(Clone)]
 struct SessionTab {
     index: usize,
@@ -65,15 +58,11 @@ impl<'a> TabViewer for SessionTabViewer<'a> {
 
 pub struct LegacyWindows {}
 
-/// 再生開始時刻と開始フレームの記録。current_frameはこの2値と経過実時間から
-/// 決定論的に算出する（redraw頻度に非依存）。
 type PlaybackAnchor = Option<(Instant, i32)>;
 
 const PLAYBACK_TICK_MS: u64 = 16;
 const SPEED_NORMAL_PERCENT: i32 = 100;
 
-/// 本体ウィンドウの状態。deviceとqueueはinit_shared_gpuから起動時に確定した値を
-/// 保持し続け、RenderEngineとegui_wgpu::Rendererの双方へ同一ハンドルを供給する。
 pub struct PreviewPanel {
     device: Arc<wgpu::Device>,
     queue: Arc<wgpu::Queue>,
@@ -117,22 +106,15 @@ impl PreviewPanel {
         }
     }
 
-    /// TimelineWindowがプル型再同期の要否を判定するための単調増加世代値。
-    /// アクティブセッション切替（新規プロジェクト確定・タブ切替）の唯一の発生源である
-    /// sync_active_session内でのみ加算する。
     pub fn session_generation(&self) -> u64 {
         self.session_generation
     }
 
-    /// タイムライン側での構造編集（追加・削除・分割・複製・移動・貼り付け等）確定後、
-    /// 総フレーム数のみをworldから再取得する。オブジェクト一覧自体はTimelineWindowが
-    /// 毎フレームworldから直接読み出すため、ここでは同期しない。
     pub fn refresh_total_frames(&mut self, state: &SharedAppState) {
         let world_holder = app_state::active_world(state);
         self.total_frames = world_holder.lock().unwrap().total_frames();
     }
 
-    /// タイムライン・ルーラーからのシーク要求の唯一の受け口。
     pub fn seek(&mut self, frame: i32, state: &SharedAppState) {
         self.apply_frame(frame, state);
         if self.is_playing {
@@ -212,8 +194,6 @@ impl PreviewPanel {
         }
     }
 
-    /// GPU側描画とテクスチャ登録。ゼロコピー経路の中核。
-    /// register_native_textureはリサイズ発生時のみ呼び、毎フレーム再登録しない。
     fn render_frame(&mut self, egui_renderer: &mut EguiRenderer, state: &SharedAppState) {
         let world_holder = app_state::active_world(state);
         let engine_holder = app_state::active_engine(state);
@@ -332,10 +312,6 @@ impl PreviewPanel {
         });
     }
 
-    /// セッションタブ(本体ウィンドウ)。egui_dockのタブ行のみを意匠として用いる。
-    /// タブ本体(node内容)は本関数の外でプレビュー描画が行われるため`ui`は空実装。
-    /// セッション一覧はSharedAppStateから毎フレーム再構築するため、DockStateも
-    /// 毎フレーム再構築する（ドラッグによる並べ替え永続化はスコープ外）。
     fn tab_bar(
         &mut self,
         ui: &mut egui::Ui,
@@ -401,7 +377,6 @@ impl PreviewPanel {
         }
     }
 
-    /// active_indexをdelta分循環移動する（Ctrl+Tab/Ctrl+Shift+Tab用）。
     fn switch_relative(&mut self, state: &SharedAppState, delta: i32) {
         {
             let mut s = state.lock().unwrap();
@@ -416,8 +391,6 @@ impl PreviewPanel {
         self.sync_active_session(state);
     }
 
-    /// プロジェクトタブ切替・クローズのグローバルショートカット処理。
-    /// メニュー/タブバーとは独立し、フォーカス位置に関わらず常時解決する。
     fn handle_project_shortcuts(
         &mut self,
         ui: &egui::Ui,
@@ -456,8 +429,6 @@ impl PreviewPanel {
         }
     }
 
-    /// dialogs.confirm_close_sessionが立っている間、保存確認モーダルを表示する。
-    /// 「保存して閉じる」「保存せず閉じる」「キャンセル」の3択。
     fn confirm_close_dialog(
         &mut self,
         ctx: &egui::Context,
@@ -505,8 +476,6 @@ impl PreviewPanel {
         }
     }
 
-    /// QML `MainWindow.qml` 再生コントロールバー(Rectangle height:38, RowLayout)の直接対応。
-    /// 並び順: シークバー(fillWidth) → フレームカウンタ → 前後/再生ボタン群 → 速度SpinBox。
     fn playback_controls(&mut self, ui: &mut egui::Ui, state: &SharedAppState) {
         ui.set_min_height(38.0);
         ui.horizontal(|ui| {
@@ -588,8 +557,6 @@ impl PreviewPanel {
         self.session_generation += 1;
     }
 
-    /// 毎フレーム呼び出しの単一窓口。呼び出し順序:
-    /// メニュー/タブ/操作バー構築 → GPU描画・テクスチャ登録 → 中央パネルへ表示。
     pub fn show(
         &mut self,
         ui: &mut egui::Ui,

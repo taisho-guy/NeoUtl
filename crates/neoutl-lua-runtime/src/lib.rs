@@ -3,8 +3,6 @@ use neoutl_effect_lua::LuaEffectSource;
 use std::path::Path;
 use std::sync::{Arc, Mutex};
 
-/// system.register_computeで登録されるコンピュートパス定義。
-/// wgpu::ComputePipeline構築はrenderer側がidをキーにして都度行う。
 #[derive(Clone, Debug)]
 pub struct ComputeDef {
     pub id: String,
@@ -17,9 +15,6 @@ struct Registrations {
     computes: Vec<ComputeDef>,
     pre_render_hooks: Vec<RegistryKey>,
     post_export_hooks: Vec<RegistryKey>,
-    /// reduce結果の最新値。key=呼び出し元が定めた名前、value=スカラー配列。
-    /// renderer側がGPUリダクション完了後にpublish_reduce_resultで書き込み、
-    /// Lua側はsystem.reduce_result(name)で読み出す（往路・復路ともスカラーのみ）。
     reduce_results: std::collections::HashMap<String, Vec<f32>>,
 }
 
@@ -72,7 +67,6 @@ impl LuaSystem {
         self.load_script(&src, &path.to_string_lossy())
     }
 
-    /// dir配下の*.luaを昇順で全実行する。個別失敗は当該ファイルのみ除外し継続する。
     pub fn load_dir(&self, dir: &Path) {
         let entries = match std::fs::read_dir(dir) {
             Ok(e) => e,
@@ -97,19 +91,14 @@ impl LuaSystem {
         }
     }
 
-    /// これまでにregister_effectで蓄積されたエフェクト定義を取り出す（消費・空化する）。
     pub fn drain_effects(&self) -> Vec<LuaEffectSource> {
         std::mem::take(&mut self.regs.lock().unwrap().effects)
     }
 
-    /// これまでにregister_computeで蓄積されたコンピュートパス定義を取り出す（消費・空化する）。
     pub fn drain_computes(&self) -> Vec<ComputeDef> {
         std::mem::take(&mut self.regs.lock().unwrap().computes)
     }
 
-    /// on_pre_render登録済みの全コールバックを引数無しで1回ずつ実行する。
-    /// RefCell borrowはキー1件取得の瞬間のみ保持し、コールバック呼び出し中は
-    /// 解放する（コールバック内からのregister_*再入呼び出しでも二重borrowにならない）。
     pub fn run_pre_render_hooks(&self) -> Result<(), SystemError> {
         let len = self.regs.lock().unwrap().pre_render_hooks.len();
         for i in 0..len {
@@ -125,7 +114,6 @@ impl LuaSystem {
         Ok(())
     }
 
-    /// on_post_export登録済みの全コールバックを引数無しで1回ずつ実行する（再入安全性はpre_renderと同様）。
     pub fn run_post_export_hooks(&self) -> Result<(), SystemError> {
         let len = self.regs.lock().unwrap().post_export_hooks.len();
         for i in 0..len {
@@ -141,8 +129,6 @@ impl LuaSystem {
         Ok(())
     }
 
-    /// 蓄積済みhook登録(pre_render/post_export)を全解除する。Lua側レジストリ参照を
-    /// remove_registry_valueで明示的に解放し、reload_dir再入毎の参照リークを防ぐ。
     fn clear_hooks(&self) -> Result<(), SystemError> {
         let mut regs = self.regs.lock().unwrap();
         for key in regs.pre_render_hooks.drain(..) {
@@ -154,9 +140,6 @@ impl LuaSystem {
         Ok(())
     }
 
-    /// dir配下のスクリプトを全解除・全再実行する（load_dirの再入安全版）。
-    /// hooks/effects/computesを事前に空化してからload_dirを呼ぶため、呼び出し元は
-    /// reload_dir直後にdrain_effects/drain_computesを呼べば当該dir由来分のみを得る。
     pub fn reload_dir(&self, dir: &Path) -> Result<(), SystemError> {
         self.clear_hooks()?;
         {
@@ -168,8 +151,6 @@ impl LuaSystem {
         Ok(())
     }
 
-    /// GPUリダクション完了後、renderer側から結果スカラー配列を書き込む。
-    /// Lua側は次回以降system.reduce_result(name)で読み出せる。
     pub fn publish_reduce_result(&self, name: &str, values: &[f32]) {
         self.regs
             .lock()

@@ -2,13 +2,8 @@ use serde::{Deserialize, Serialize};
 use shipyard::Component;
 use std::collections::HashMap;
 
-/// キー文字列によるf32フィールドの汎用read/write窓口。
-/// UI層(properties.rs)はgroup名で対象コンポーネントを選ぶだけとなり、
-/// key単位の分岐は各コンポーネント定義の直下(このtraitのimpl)に一本化される。
-/// object_schema.rsのkeyと1:1で対応する。
 pub trait ParamAccess {
     fn get_param(&self, key: &str) -> Option<f32>;
-    /// keyが未知の場合false（呼び出し側はplugin_param等へのフォールバックに使う）。
     fn set_param(&mut self, key: &str, value: f32) -> bool;
 }
 
@@ -30,9 +25,6 @@ pub struct Layer(pub i32);
 #[derive(Clone, Copy, Debug, Component)]
 pub struct SceneId(pub i32);
 
-/// シーン参照オブジェクト。SCENE_STABLE_IDのクリップにのみ付与する。
-/// target_sceneはSceneResource.scenes[].id。ネスト評価・循環検出は
-/// SceneResource::would_cycle/systems::get_active_objects_systemが担う。
 #[derive(Clone, Copy, Debug, Component, Serialize, Deserialize)]
 pub struct SceneObject {
     pub target_scene: i32,
@@ -119,8 +111,6 @@ impl Default for TextContent {
     }
 }
 
-/// 位置(X/Y/Z)はTransform（object_schema::TRANSFORM_SCHEMA）へ一本化する。
-/// TextContentはテキスト固有パラメータ(font_size等)のみを保持する。
 impl ParamAccess for TextContent {
     fn get_param(&self, key: &str) -> Option<f32> {
         Some(match key {
@@ -137,7 +127,6 @@ impl ParamAccess for TextContent {
     }
 }
 
-/// 図形種別。sides==4はRect、sides>=8はEllipse近似として扱う（現行UI上のプリセット分岐）。
 #[derive(Clone, Copy, Debug, Component, Serialize, Deserialize)]
 pub struct ShapeParams {
     pub sides: u32,
@@ -190,14 +179,6 @@ impl ParamAccess for ShapeParams {
 #[derive(Clone, Debug, Default, Component, Serialize, Deserialize)]
 pub struct PluginParams(pub HashMap<String, f32>);
 
-/// Transform/TextContent/ShapeParams/AudioParams等、ParamAccessを実装する
-/// ネイティブコンポーネント向けの中間点集合。keyはParamAccessのkeyと1:1対応する。
-/// エフェクトパラメータの中間点はEffectInstance::params側のEffectParam::keyframesが
-/// 個別に保持するため、ここには含めない（所有者・ライフタイムが異なる別データを
-/// 単一箇所へ無理に統合しない）。
-///
-/// エンティティに未付与＝中間点なし（静的値のみ）を意味する。1件でも中間点を打った
-/// 時点でShipyard側へadd_componentされる（EcsWorld::set_keyframe参照）。
 #[derive(Clone, Debug, Default, Component, Serialize, Deserialize)]
 pub struct KeyframeTracks(pub HashMap<String, Vec<crate::ecs::types::Keyframe>>);
 
@@ -233,7 +214,6 @@ impl KeyframeTracks {
         }
     }
 
-    /// frameを起点とする区間の適用モードを設定する。
     pub fn set_apply_mode(&mut self, key: &str, frame: i32, mode: crate::ecs::types::ApplyMode) {
         if let Some(track) = self.0.get_mut(key)
             && let Some(k) = track.iter_mut().find(|k| k.frame == frame)
@@ -242,7 +222,6 @@ impl KeyframeTracks {
         }
     }
 
-    /// 空になったトラックはキーごと削除し、以後の走査対象から外す。
     pub fn remove_keyframe(&mut self, key: &str, frame: i32) {
         if let Some(track) = self.0.get_mut(key) {
             track.retain(|k| k.frame != frame);
@@ -252,7 +231,6 @@ impl KeyframeTracks {
         }
     }
 
-    /// 指定keyの中間点をold_frameからnew_frameへ移動する。new_frameに既存点があれば失敗する。
     pub fn move_keyframe(&mut self, key: &str, old_frame: i32, new_frame: i32) -> bool {
         let Some(track) = self.0.get_mut(key) else {
             return false;
@@ -330,7 +308,6 @@ impl KeyframeTracks {
         (KeyframeTracks(second), evaluated)
     }
 
-    /// 対象コンポーネントへ、指定フレームでの評価値を書き込む。
     pub fn apply(&self, target: &mut impl ParamAccess, frame: i32) {
         for (key, track) in &self.0 {
             let Some(fallback) = target.get_param(key) else {
@@ -356,9 +333,6 @@ impl KeyframeTracks {
     }
 }
 
-/// 動画・画像・音声オブジェクトが参照する外部メディアファイル。
-/// デコード自体はMediaCache（src/media/cache.rs）が担い、このコンポーネントは
-/// パス・種別・素材内トリム開始位置のみを保持する。
 #[derive(Clone, Debug, Component, Serialize, Deserialize)]
 pub struct MediaSource {
     pub path: std::path::PathBuf,

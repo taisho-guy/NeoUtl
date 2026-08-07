@@ -5,9 +5,6 @@ use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 
-/// effects/loader.rsと同型のRegistry。discover結果を起動時に一度だけ確定し、
-/// UIのカタログ表示はここから読み取る。実プラグイン読込（load_vst3/load_clap）は
-/// PluginChainへ追加された時点までAudioEngine側で遅延実行する。
 static REGISTRY: OnceLock<Vec<PluginCatalogEntry>> = OnceLock::new();
 
 pub fn load_all(plugins_dir: &Path) {
@@ -139,8 +136,6 @@ fn system_clap_dirs() -> Vec<PathBuf> {
     roots
 }
 
-/// effects::loader::default_effects_dirと同型。VST3/CLAP双方を1ディレクトリへ集約する
-/// 前提とし、macOSのResourcesバンドル配下も同様に優先探索する。
 pub fn default_plugins_dir() -> PathBuf {
     let Some(exe_dir) = std::env::current_exe()
         .ok()

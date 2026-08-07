@@ -1,6 +1,3 @@
-//! `Curve_Editor移植計画.md` 3.3節・フェーズ5対応。
-//! AviUtl `curves_normal_`(連番ID)はNeoUtlでは名前付きプリセットへ置換する。
-
 use neoutl_easing_standard::CurveKind;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
@@ -40,7 +37,6 @@ impl CurveRegistry {
             .map(|e| &e.kind)
     }
 
-    /// 既存同名は上書きする。保存失敗はログのみ(呼び出し側の編集操作は継続)。
     pub fn save_as(&mut self, name: &str, kind: CurveKind) {
         if let Some(existing) = self.entries.iter_mut().find(|e| e.name == name) {
             existing.kind = kind;

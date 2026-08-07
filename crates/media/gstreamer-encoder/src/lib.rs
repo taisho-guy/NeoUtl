@@ -17,10 +17,6 @@ fn ensure_gst_init() {
     });
 }
 
-/// アプリ起動時にバックグラウンドスレッドから呼び、gst::init()（プラグインレジストリ
-/// 全走査。初回のみ数秒〜十数秒規模）を書き出し操作より前に完了させる。
-/// export()/mux_encoded()呼び出し時点で未完了ならそちらのensure_gst_init()が
-/// 通常どおりブロックして待つため、呼び忘れても機能的には安全（体感速度のみの差）。
 pub fn warm_up() {
     ensure_gst_init();
 }
@@ -66,23 +62,13 @@ fn log_hardware_encoder_availability() {
     }
 }
 
-/// エクスポート出力プリセット。コンテナ/映像コーデック/音声コーデックの組み合わせを
-/// GstEncodingProfileへ変換する。encodebin2はプロファイルから内部のエンコーダ・
-/// マルチプレクサ要素選定、pad-template解決、mux前段のqueue挿入を自動で行うため、
-/// 呼び出し側は「何を作りたいか」の宣言（プリセット）のみを持てばよい。
 #[derive(Clone, Copy, Debug)]
 pub enum ExportPreset {
-    /// MP4コンテナ + H.264映像 + AAC音声。汎用配布・共有向け。
     Mp4H264Aac,
-    /// MP4コンテナ + H.265映像 + AAC音声。高圧縮・高解像度向け。
     Mp4H265Aac,
-    /// MKVコンテナ + H.264映像 + Opus音声。
     MkvH264Opus,
-    /// MKVコンテナ + H.265映像 + Opus音声。
     MkvH265Opus,
-    /// WebMコンテナ + VP9映像 + Vorbis音声。Web埋め込み向け。
     WebmVp9Vorbis,
-    /// QuickTimeコンテナ + ProRes映像（音声なし）。中間コーデック・再編集向け。
     MovProResNoAudio,
 }
 
@@ -103,7 +89,6 @@ impl ExportPreset {
             ExportPreset::MovProResNoAudio => "video/x-prores,variant=standard",
         }
     }
-    /// Noneの場合、音声トラックを持たないプロファイルを構築する。
     fn audio_caps(self) -> Option<&'static str> {
         match self {
             ExportPreset::Mp4H264Aac | ExportPreset::Mp4H265Aac => Some("audio/mpeg,mpegversion=4"),
@@ -113,9 +98,6 @@ impl ExportPreset {
         }
     }
 
-    /// video_caps()の要素がHW/SWいずれの実装を持つかをレジストリから確認する。
-    /// encodebin2自体はランク上位（通常HW優先登録時はHWエレメント）を自動選択するため、
-    /// 本関数は選択結果のログ出力・診断用途に限る。
     pub fn preferred_encoder_element(self, video_caps: &gst::Caps) -> Option<String> {
         gst::ElementFactory::factories_with_type(
             gst::ElementFactoryType::ENCODER,
@@ -132,10 +114,6 @@ impl ExportPreset {
     }
 }
 
-/// GstEncodingContainerProfileを構築する。手動でのエンコーダ/マルチプレクサ要素選定、
-/// x264enc/vp9enc/proresenc等の個別プロパティ設定、pad-template解決、
-/// エンコーダ→マルチプレクサ間のqueue挿入は一切行わず、コンテナ/コーデックcapsの
-/// 宣言のみをencodebin2へ渡す。
 fn build_profile(preset: ExportPreset) -> Result<gst_pbutils::EncodingContainerProfile, String> {
     let container_caps = gst::Caps::from_str(preset.container_caps()).map_err(|e| e.to_string())?;
     let video_caps = gst::Caps::from_str(preset.video_caps()).map_err(|e| e.to_string())?;
@@ -159,7 +137,6 @@ fn build_profile(preset: ExportPreset) -> Result<gst_pbutils::EncodingContainerP
     Ok(builder.build())
 }
 
-/// エクスポート対象映像の基本情報。
 pub struct VideoFrameSource {
     pub width: u32,
     pub height: u32,
@@ -168,31 +145,15 @@ pub struct VideoFrameSource {
     pub total_frames: i64,
 }
 
-/// エクスポート対象音声の基本情報。Noneの場合、音声トラックなしのプロファイルを要求する
-/// （ExportPreset::MovProResNoAudio等）前提でexport()呼び出し側がpresetと整合させること。
 pub struct AudioFrameSource {
     pub sample_rate: u32,
     pub channels: u16,
 }
 
-/// フレームプロデューサ。frame_index順にRGBA8バイト列（width*height*4バイト）を
-/// 返すコールバック。exportからの呼び出しスレッド上で同期的に実行される
-/// （レンダラー側の合成・エフェクト適用結果を1フレームずつ取り出す想定）。
 pub type FrameProducer<'a> = dyn FnMut(i64) -> Result<Vec<u8>, String> + 'a;
 
-/// 音声プロデューサ。frame_indexに対応する1ビデオフレーム分のインターリーブf32
-/// サンプル列（sample_count*channels要素）を返すコールバック。
 pub type AudioProducer<'a> = dyn FnMut(i64, usize) -> Vec<f32> + 'a;
 
-/// encodebin2 + GstEncodingProfileによる映像エクスポート。
-/// appsrcへRGBA8フレームを順次push_bufferし、videoconvert経由でencodebin2へ渡す。
-/// エンコーダ・マルチプレクサの選定、コーデックパラメータの既定値決定、
-/// pad-template解決はencodebin2がprofileから解決するため、本関数は
-/// 「フレーム供給」と「エラー・EOS監視」のみに責務を絞る。
-///
-/// 注記: encodebin2のリクエストパッド名("video_%u"/"audio_%u")はgst-plugins-baseの
-/// バージョンにより変わりうる。導入先の`gst-inspect-1.0 encodebin2`出力と
-/// 突き合わせて確認すること。
 pub fn export(
     output_path: &Path,
     preset: ExportPreset,
@@ -474,8 +435,6 @@ pub fn export(
     Ok(())
 }
 
-/// mux先コンテナ。gpuvideo-encoder(Vulkan HW)が生成済みのAnnexBビットストリームを
-/// 再エンコード無しで格納する。
 #[derive(Clone, Copy, Debug)]
 pub enum MuxContainer {
     Mp4,
@@ -491,15 +450,9 @@ impl MuxContainer {
     }
 }
 
-/// neoutl_media_api::VideoCodecの1エンコード済みチャンクをmuxへ供給するプロデューサ。
-/// 呼び出し側(export.rs)がgpuvideo-encoder::VideoEncoder::encode_rgbaの戻り値を
-/// そのままこの型へ渡す。
 pub type EncodedChunkProducer<'a> =
     dyn FnMut() -> Result<Option<(Vec<u8>, i64, bool)>, String> + 'a;
 
-/// 事前エンコード済みH.264/H.265ビットストリーム(AnnexB, stream-format=byte-stream)を
-/// 再エンコード無しでmuxし、任意でPCM音声(F32LE interleaved)を合流させる。
-/// gpuvideo-encoder(Vulkan HW)経路の出力先として使う。
 pub fn mux_encoded(
     output_path: &Path,
     container: MuxContainer,

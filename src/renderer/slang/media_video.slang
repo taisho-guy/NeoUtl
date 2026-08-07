@@ -32,8 +32,6 @@ VertexOutput vs_main(uint vertex_index : SV_VertexID)
     return out;
 }
 
-// NV12(BT.709, limited-range) -> RGB変換。
-// plane_y: R8 (輝度), plane_uv: RG8 (色差、1/2解像度)。
 [shader("fragment")]
 float4 fs_main(VertexOutput in) : SV_Target
 {

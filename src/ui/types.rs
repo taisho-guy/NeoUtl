@@ -29,8 +29,6 @@ pub struct LayerState {
     pub locked: bool,
 }
 
-/// category: エフェクトプラグインのEffectMeta.categoryをそのまま転記する。
-/// ホスト側でカテゴリ名を固定管理しないため、新規プラグイン追加時もコード変更不要。
 #[derive(Clone, Debug, Default)]
 pub struct CatalogRow {
     pub id: String,
@@ -38,37 +36,15 @@ pub struct CatalogRow {
     pub category: String,
 }
 
-/// タイムライン右クリックメニューの1項目。項目集合はRust側
-/// (timeline/util.rs::build_context_menu)が唯一の生成元であり、egui側は
-/// action値による分岐でクリック処理を振り分けるのみとする（描画専任）。
-/// action: 0=Split at Playhead, 1=Delete Object, 2=Add Object(kind使用),
-///         3=Toggle Ripple Mode, 4=区切り線（クリック不可・表示のみ）,
-///         5=Undo, 6=Redo, 7=Duplicate, 8=Cut, 9=Copy, 10=Paste,
-///         11=Insert Blank Frame(未実装), 12=Cut Selection(未実装),
-///         13=Cut and Close Selection(未実装), 14=Select Object(kind=object id),
-///         15=Toggle Grid Display, 16=Toggle Waveform Display,
-///         17=無効submenu親（フィルタオブジェクト/フィルタ効果/プラグイン/
-///         オプション/ウィンドウ配置/整列。未実装のため常にenabled=false）、
-///         18=左側に詰める(未実装), 19=切り取りして詰める(未実装),
-///         20=切り出し(未実装), 21=長さを変更(未実装),
-///         22=オブジェクト名を変更(未実装), 23=中間点を追加(未実装),
-///         24=中間点を削除(未実装), 25=グループ化(未実装),
-///         26=グループ解除(未実装), 27=エイリアスをファイルに保存(未実装),
-///         28=エイリアスを作成(未実装)。
-/// submenu非空の項目はクリックで開閉するのみでactionを発火しない。
 #[derive(Clone, Debug, Default)]
 pub struct ContextMenuItem {
     pub label: String,
     pub action: i32,
     pub kind: i32,
     pub enabled: bool,
-    /// アイコン名（Lucide命名規則）。egui側にアイコンフォント/テクスチャ描画が
-    /// 未実装のため現状は読み出されない（実装時にtimeline.rsのButton描画へ渡す）。
     #[allow(dead_code)]
     pub icon: String,
-    /// Some(true/false)でチェックボックス項目として描画する。Noneは通常項目。
     pub checked: Option<bool>,
-    /// 非空ならサブメニュー親として描画する（右矢印付与、クリックで開閉）。
     pub submenu: Vec<ContextMenuItem>,
 }
 

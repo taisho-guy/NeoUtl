@@ -1,9 +1,6 @@
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-/// slangc実行ファイルのパスを解決する。
-/// SLANG_DIR環境変数（<SLANG_DIR>/bin/slangc[.exe]）を優先し、
-/// 未設定時はPATH上のslangcをそのまま起動する。
 fn resolve_slangc() -> PathBuf {
     let exe_name = if cfg!(windows) {
         "slangc.exe"
@@ -16,12 +13,6 @@ fn resolve_slangc() -> PathBuf {
     }
 }
 
-/// エフェクトクレートのbuild.rsから呼ぶ唯一の関数。
-/// neoutl-effect-api/slang/effect_prelude.slang（vs_main・input_tex・input_sampler契約）と
-/// fragment_path（fs_main本体）を同一slangc呼び出しへ両方渡し、単一翻訳単位としてWGSLへ
-/// コンパイルし、OUT_DIR/{label}.wgslへ出力する。
-/// ビルド時にslangc終了コードを検査するため、コンパイル失敗はcargo build自体を失敗させる
-/// （実行時にシェーダ不正へ到達することがない）。
 pub fn compile_effect_fragment(label: &str, fragment_relpath: &str) {
     let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIRが未設定");
     let prelude_path =

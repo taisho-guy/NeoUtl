@@ -14,17 +14,12 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use wgpu_text::glyph_brush::ab_glyph::FontArc;
 use wgpu_text::{BrushBuilder, TextBrush};
 
-/// GPUデバイスロスト検知フラグ。wgpuのdevice.lost()コールバック（Send + 'staticのみ許容、
-/// UI操作不可）から立てられ、RenderEngine::render()冒頭で参照される。
-/// UIスレッド側の定期ポーリング（app_state等）からも参照しモーダル表示に使う。
 pub static DEVICE_LOST: AtomicBool = AtomicBool::new(false);
 
-/// DEVICE_LOSTが真か確認する。UIスレッドのタイマー等から呼び出す想定。
 pub fn is_device_lost() -> bool {
     DEVICE_LOST.load(Ordering::Relaxed)
 }
 
-/// device.lost()完了時に呼ぶ。以後render()は早期returnし、UI側モーダル表示対象になる。
 fn mark_device_lost(reason: &str) {
     eprintln!(
         "{}",
@@ -36,27 +31,17 @@ fn mark_device_lost(reason: &str) {
     DEVICE_LOST.store(true, Ordering::Relaxed);
 }
 
-/// deviceへdevice-lostコールバックを登録する。コールバックはSend + 'staticのみ許容され、
-/// UI操作は行えないため、フラグを立てるのみに留める。main.rsのデバイス取得直後に一度だけ呼ぶ。
 pub fn install_device_lost_watcher(device: &wgpu::Device) {
     device.set_device_lost_callback(|reason, message| {
         mark_device_lost(&format!("{reason:?}: {message}"));
     });
 }
 
-/// 全ObjectVTable実装が共有する標準Uniform契約（shape.slangのUniforms構造体と一致させること）。
-/// mat4x4<f32>(64) + opacity(4) + sides(4) + extrude_depth(4) + _pad0(4) + fill_color(16) = 96 bytes
-/// GPU側WGSL構造体レイアウトに直結するABI契約値のため config.rs へは移さない。
 const STANDARD_UNIFORM_SIZE: u64 = 96;
-/// wgpuのmin_uniform_buffer_offset_alignment既定値。動的オフセットの単位ストライドとして採用する。
 const UNIFORM_STRIDE: u64 = config::UNIFORM_STRIDE_BYTES;
 const MAX_OBJECTS: u64 = config::MAX_SCENE_OBJECTS;
 const DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
-/// エフェクトUniformsバッファの確保上限（array<vec4<f32>, 8> = 128byte相当まで対応）。
-/// 現行16エフェクトの最大パラメータ数(clipping=5件→uniform_size_std=32byte)を十分に上回る。
 const MAX_EFFECT_UNIFORM_SIZE: u64 = config::MAX_EFFECT_UNIFORM_BYTES;
-/// mat4x4<f32>(64) + opacity(4)、mat4x4アライメント16の倍数へ切り上げ。
-/// GPU側WGSL構造体レイアウトに直結するABI契約値のため config.rs へは移さない。
 const MEDIA_UNIFORM_SIZE: u64 = 80;
 static MEDIA_WGSL: &str = include_str!(concat!(env!("OUT_DIR"), "/media.wgsl"));
 static VIDEO_WGSL: &str = include_str!(concat!(env!("OUT_DIR"), "/media_video.wgsl"));
@@ -68,13 +53,7 @@ pub struct RenderEngine {
     pub depth_texture: wgpu::Texture,
     pub uniform_buffer: wgpu::Buffer,
     pub bind_group: wgpu::BindGroup,
-    /// テキスト描画に使う共有フォント。オブジェクト単位のオフスクリーン
-    /// テクスチャ寸法算出（media::text::measure）にも同一フォントを用いる。
     font: Option<FontArc>,
-    /// テキストオブジェクト1件につき1枚のオフスクリーンテクスチャ＋専用TextBrushを保持する。
-    /// キーはActiveObject.clip_instance（ObjectId由来、フレームを跨いで安定）。
-    /// 生成後は標準クアッドパイプライン（media_pipeline）でTransform・不透明度込みの
-    /// MVPにより描画するため、X/Y/Z回転・拡大率・不透明度が他オブジェクトと同様に効く。
     text_targets: HashMap<u64, TextRenderTarget>,
     pub render_width: u32,
     pub render_height: u32,
@@ -85,12 +64,7 @@ pub struct RenderEngine {
     effect_uniform_buffer: wgpu::Buffer,
     effect_ping: wgpu::Texture,
     effect_pong: wgpu::Texture,
-    /// エフェクト付きオブジェクト1件につき1枚のオフスクリーンターゲット。
-    /// `config::MAX_EFFECT_OBJECTS`まで遅延生成しフレームを跨いで再利用する
-    /// （generate/destroyの毎フレーム反復を避け、確保コストを償却する）。
     effect_object_pool: Vec<wgpu::Texture>,
-    /// オブジェクト単体描画パス共有の深度バッファ。RENDER_ATTACHMENT必須の
-    /// 既存パイプライン（depth_stencil: Some）をそのまま個別描画へ再利用するため保持する。
     effect_object_depth: wgpu::Texture,
     composite_pipeline: wgpu::RenderPipeline,
     composite_bind_group_layout: wgpu::BindGroupLayout,
@@ -100,41 +74,19 @@ pub struct RenderEngine {
     media_sampler: wgpu::Sampler,
     video_pipeline: wgpu::RenderPipeline,
     video_bind_group_layout: wgpu::BindGroupLayout,
-    /// システムレベルLua拡張。エフェクトLuaと共通のscripts/から
-    /// 読み込む常駐スクリプト群を保持する。GPUリソースの実体はLua側へ渡さない
-    /// （neoutl-lua-runtime crateドキュメント参照）。存在しない場合はNone
-    /// （LuaSystem::new失敗時、または該当ディレクトリ未使用時）。
     lua_system: Option<neoutl_lua_runtime::LuaSystem>,
-    /// system.register_computeで登録されたWGSLソースから構築したコンピュートパイプライン。
-    /// key=ComputeDef.id。
     lua_compute_pipelines: HashMap<String, wgpu::ComputePipeline>,
-    /// テクスチャRGBA平均値（"reduce系"の唯一の読み出し経路）を求める固定コンピュートパス。
-    /// ワークグループ毎の部分和をatomic加算で1バッファへ集約し、最終値をCPUへ1回だけ
-    /// map_asyncで読み出す。Lua側へはpublish_reduce_result経由でスカラー4要素のみ渡す。
     reduce_mean_pipeline: wgpu::ComputePipeline,
     reduce_mean_bind_group_layout: wgpu::BindGroupLayout,
     reduce_mean_buffer: wgpu::Buffer,
     reduce_mean_readback_buffer: wgpu::Buffer,
-    /// SceneObjectのレンダリング結果キャッシュ。key=target_scene。
-    /// render()呼び出し1回（トップレベル呼び出し1回、depth=0起点）につき
-    /// クリアし、同一フレーム内で同一シーンを複数クリップが参照する際の
-    /// 再レンダリングを避ける唯一の窓口とする。
     scene_texture_cache: HashMap<i32, wgpu::Texture>,
-    /// 標準オブジェクトパイプラインのレイアウト。build_pipelines_from_registry初回構築時のみ
-    /// 使用する一時値ではなく、ホットリロード時の単体パイプライン再構築（build_pipeline）に
-    /// も同一レイアウトが必要なため保持する。
     object_pipeline_layout: wgpu::PipelineLayout,
-    /// エフェクトパイプラインのレイアウト。用途はobject_pipeline_layoutと対称。
     effect_pipeline_layout: wgpu::PipelineLayout,
-    /// プラグインdylibファイル監視からの通知チャネル。ホットリロード無効時（リリースビルド既定）
-    /// はNoneのままとし、render()冒頭のdrain処理を素通りさせる。
     hot_reload_rx: Option<std::sync::mpsc::Receiver<ReloadEvent>>,
-    /// system.load_dir/reload_dir対象ディレクトリ。apply_script_reloadが再参照する。
     scripts_dir: std::path::PathBuf,
 }
 
-/// テキスト1オブジェクト分の描画先。widthxheightはmedia::text::measure()の結果と一致し、
-/// 寸法変化時のみ再生成する（内容変化のみの場合はbrush.queueの再実行だけで済む）。
 struct TextRenderTarget {
     texture: wgpu::Texture,
     brush: TextBrush,
@@ -142,10 +94,6 @@ struct TextRenderTarget {
     height: u32,
 }
 
-/// フォントとテクスチャ寸法からTextRenderTargetを新規構築する。
-/// テクスチャはcreate_effect_texture同形式（Rgba8Unorm、RENDER_ATTACHMENT+TEXTURE_BINDING+
-/// COPY_SRC/DST）を流用し、media_pipelineのサンプリング対象としてそのまま使える。
-/// 深度は不要（オフスクリーンのグリフラスタライズのみで、奥行き合成は行わない）。
 fn build_text_target(
     device: &wgpu::Device,
     font: &FontArc,
@@ -232,9 +180,6 @@ fn create_depth_texture(device: &wgpu::Device, width: u32, height: u32) -> wgpu:
     })
 }
 
-/// wgslはプラグインFFI（vtable.wgsl()）から得たWGSLソースの生バイト列。
-/// プラグインは別クレートとして独立ビルドされるため、この検証だけは実行時に残る
-/// （NeoUtl本体組み込みシェーダはbuild_media_pipeline側でビルド時include_str!済み）。
 fn try_create_shader_module(
     device: &wgpu::Device,
     wgsl: &[u8],
@@ -386,11 +331,6 @@ fn build_effect_pipeline(
     )
 }
 
-/// effects::loader::registry()の全プラグインからポストプロセスパイプラインを構築する。
-/// エフェクトIDをキーとし、ActiveObject.effectsの並び順に都度引いて適用する。
-/// シェーダコンパイル失敗プラグインは警告出力の上除外し、他プラグインの処理は継続する。
-/// 除外されたエフェクトIDはeffect_pipelinesに登録されず、apply_effect_chain側の
-/// `self.effect_pipelines.get(effect_id)`の既存チェックにより実行時は自動的にスキップされる。
 fn build_effect_pipelines_from_registry(
     device: &wgpu::Device,
     layout: &wgpu::PipelineLayout,
@@ -413,9 +353,6 @@ fn build_effect_pipelines_from_registry(
         .collect()
 }
 
-/// テクスチャRGBA平均を求める固定コンピュートシェーダ。
-/// acc[0..4)=r/g/b/a固定小数点和(SCALE倍・u32)、acc[4]=ピクセル数。
-/// CPU側でSCALE・ピクセル数で除して平均へ戻す（reduce_source_mean参照）。
 const REDUCE_MEAN_WGSL: &str = r#"
 @group(0) @binding(0) var src_tex: texture_2d<f32>;
 @group(0) @binding(1) var<storage, read_write> acc: array<atomic<u32>, 5>;
@@ -485,9 +422,6 @@ fn build_reduce_mean_pipeline(
     (pipeline, bgl)
 }
 
-/// system.register_computeで登録されたコンピュートパス定義群からパイプラインを構築する。
-/// コンパイル失敗した定義は警告出力の上除外し、他定義の処理は継続する
-/// （build_effect_pipelines_from_registryと対称の除外方針）。
 fn build_lua_compute_pipelines(
     device: &wgpu::Device,
     defs: &[neoutl_lua_runtime::ComputeDef],
@@ -550,7 +484,6 @@ fn create_effect_bind_group_layout(device: &wgpu::Device) -> wgpu::BindGroupLayo
     })
 }
 
-/// kind_idに対応するプラグインのstable_idを引く。プラグイン未登録時はNone。
 fn stable_id_of(kind_id: u32) -> Option<&'static str> {
     by_kind_id(kind_id).map(|p| unsafe { &*((p.vtable.meta)()) }.stable_id)
 }
@@ -589,8 +522,6 @@ fn create_media_bind_group_layout(device: &wgpu::Device) -> wgpu::BindGroupLayou
     })
 }
 
-/// NV12動画フレーム用BGL。輝度(binding1)・色差(binding2)を別プレーンとしてバインドする。
-/// media_bind_group_layoutと違いテクスチャバインディングが2枚（RGBA単一プレーン非対応）。
 fn create_video_bind_group_layout(device: &wgpu::Device) -> wgpu::BindGroupLayout {
     let plane_entry = |binding: u32| wgpu::BindGroupLayoutEntry {
         binding,
@@ -627,9 +558,6 @@ fn create_video_bind_group_layout(device: &wgpu::Device) -> wgpu::BindGroupLayou
     })
 }
 
-/// エフェクト適用済みオブジェクト個別テクスチャをself.textureへアルファ合成するための
-/// フルスクリーン三角形WGSL。位置・変形はオブジェクト単体描画パス側のmvpで確定済みのため
-/// 追加変換は行わず等倍転写のみ行う。
 const COMPOSITE_WGSL: &str = r#"
 struct VOut {
     @builtin(position) position: vec4<f32>,
@@ -717,8 +645,6 @@ fn build_composite_pipeline(
     })
 }
 
-/// render_effect_object_offscreenが描画する単体オブジェクトの種別。
-/// ActiveObjectの実描画経路（標準パイプライン/媒体・映像/テキスト）と1:1対応する。
 enum EffectObjectDrawKind<'a> {
     Standard {
         obj: &'a ActiveObject,
@@ -989,8 +915,6 @@ impl RenderEngine {
         }
     }
 
-    /// self.texture(現フレーム最終合成結果)のRGBA平均をGPU上で1回のコンピュートパスで
-    /// 求め、CPUへスカラー4要素のみ読み出す。ピクセル単位データはCPUへ一切渡さない。
     pub fn reduce_source_mean(&self) -> [f32; 4] {
         let zeros = [0u32; 5];
         self.queue
@@ -1068,9 +992,6 @@ impl RenderEngine {
         result
     }
 
-    /// reduce_source_mean()を実行し、結果を"source_mean"という名前でLuaSystemへpublishする。
-    /// scripts/スクリプトはsystem.reduce_result("source_mean")で次回以降読み出せる
-    /// （スカラー4要素のみ、ピクセルバッファそのものは読み出せない）。
     pub fn run_lua_reduce_hooks(&self) {
         if let Some(sys) = &self.lua_system {
             let values = self.reduce_source_mean();
@@ -1078,16 +999,6 @@ impl RenderEngine {
         }
     }
 
-    /// target_scene・local_frameのシーンをオフスクリーンへレンダリングし、
-    /// 結果テクスチャを返す（RGBA、self.texture同一フォーマット）。
-    /// 呼び出し中はself.texture/depth_textureをtarget_scene解像度へ一時的に
-    /// 差し替え、完了後に呼び出し元の解像度へ復元する。
-    ///
-    /// 既知の制約: get_active_objects_system_atはCamera/MVP計算にECS側の
-    /// グローバルProjectResourceを参照するため、target_sceneの解像度が
-    /// トップレベルプロジェクトと異なる場合、内包オブジェクトの画角は
-    /// target_scene基準ではなくプロジェクト基準のまま計算される
-    /// （SceneMeta.width/height自体はオフスクリーンテクスチャ寸法として正しく反映される）。
     fn render_scene_texture(
         &mut self,
         world: &crate::ecs::EcsWorld,
@@ -1145,8 +1056,6 @@ impl RenderEngine {
         );
     }
 
-    /// ActiveObjectのMVP・不透明度・図形パラメータを標準Uniformバッファへ書き込み、
-    /// バインド時に使う動的オフセットを返す（インデックス * UNIFORM_STRIDE）。
     fn write_standard_uniform(&self, index: u64, obj: &ActiveObject) -> u32 {
         let mut data = [0u8; STANDARD_UNIFORM_SIZE as usize];
         data[0..64].copy_from_slice(bytemuck::cast_slice(&obj.mvp));
@@ -1166,8 +1075,6 @@ impl RenderEngine {
         offset as u32
     }
 
-    /// mvp・不透明度をメディア用Uniformバッファへ書き込む共通経路。
-    /// write_media_uniform（映像/画像）とテキスト（render()内、rescale後のmvp）の両方から呼ぶ。
     fn write_media_uniform_raw(&self, index: u64, mvp: &[f32; 16], opacity: f32) -> u32 {
         let mut data = [0u8; MEDIA_UNIFORM_SIZE as usize];
         data[0..64].copy_from_slice(bytemuck::cast_slice(mvp));
@@ -1178,14 +1085,10 @@ impl RenderEngine {
         offset as u32
     }
 
-    /// ActiveObjectのMVP・不透明度をメディア用Uniformバッファへ書き込み、
-    /// バインド時に使う動的オフセットを返す（write_standard_uniformと同一のストライド運用）。
     fn write_media_uniform(&self, index: u64, obj: &ActiveObject) -> u32 {
         self.write_media_uniform_raw(index, &obj.mvp, obj.opacity)
     }
 
-    /// index番目のオブジェクト単体オフスクリーンターゲットを返す。未生成なら
-    /// render_width×render_height寸法で生成しプールへ追加する（フレームを跨いで再利用）。
     fn ensure_effect_object_target(&mut self, index: usize) -> &wgpu::Texture {
         while self.effect_object_pool.len() <= index {
             self.effect_object_pool.push(create_effect_texture(
@@ -1197,9 +1100,6 @@ impl RenderEngine {
         &self.effect_object_pool[index]
     }
 
-    /// srcの内容へchainを順次適用しdstへ書き戻す。chainが空ならsrcをdstへ等倍コピーする。
-    /// 各パスはeffect_ping/effect_pongへ交互出力する共有ワークバッファを用いる
-    /// （呼び出しは同一フレーム内で逐次実行のため競合しない）。
     fn apply_effect_chain(
         &self,
         src: &wgpu::Texture,
@@ -1343,8 +1243,6 @@ impl RenderEngine {
         self.queue.submit([encoder.finish()]);
     }
 
-    /// 標準オブジェクトパイプライン（図形等、self.pipelines登録済みkind_id）1件を
-    /// rpassの現在のカラー/深度アタッチメントへ描画する。
     fn draw_standard_pass(&self, rpass: &mut wgpu::RenderPass, obj: &ActiveObject, offset: u32) {
         if let Some((pipeline, vertex_count)) = self.pipelines.get(&obj.kind_id) {
             rpass.set_pipeline(pipeline);
@@ -1353,7 +1251,6 @@ impl RenderEngine {
         }
     }
 
-    /// 映像/画像フレーム1件（NV12平面・RGBA単一プレーン両対応）をrpassへ描画する。
     fn draw_media_pass(&self, rpass: &mut wgpu::RenderPass, texture: &wgpu::Texture, offset: u32) {
         let is_planar_nv12 = texture.format() == wgpu::TextureFormat::NV12;
         if is_planar_nv12 {
@@ -1424,7 +1321,6 @@ impl RenderEngine {
         }
     }
 
-    /// text_targetsに事前描画済みのグリフテクスチャ1件をrpassへ描画する。
     fn draw_text_pass(&self, rpass: &mut wgpu::RenderPass, clip_instance: u64, offset: u32) {
         let Some(target) = self.text_targets.get(&clip_instance) else {
             return;
@@ -1459,9 +1355,6 @@ impl RenderEngine {
         rpass.draw(0..6, 0..1);
     }
 
-    /// pool_texへ単体オブジェクトを透明クリアの上描画する（Phase3）。深度は
-    /// effect_object_depthを共用しオブジェクトごとにClear(1.0)で初期化する。
-    /// draw_kindが標準/媒体/テキストいずれか1系統のみ実行する（相互排他）。
     fn render_effect_object_offscreen(
         &self,
         pool_tex: &wgpu::Texture,
@@ -1518,9 +1411,6 @@ impl RenderEngine {
         self.queue.submit([encoder.finish()]);
     }
 
-    /// Phase5: pool_texをself.textureへ元の描画順序（レイヤー順）を保ったまま
-    /// アルファブレンド合成する。等倍フルスクリーン矩形描画（位置・変形は
-    /// render_effect_object_offscreen側のmvpで確定済みのため追加変換不要）。
     fn composite_effect_object(&self, pool_tex: &wgpu::Texture) {
         let src_view = pool_tex.create_view(&wgpu::TextureViewDescriptor::default());
         let dst_view = self
@@ -1569,8 +1459,6 @@ impl RenderEngine {
         self.queue.submit([encoder.finish()]);
     }
 
-    /// 従来通りの外部呼び出し窓口（depth=0起点）。呼び出し前にscene_texture_cacheを
-    /// クリアし、フレーム単位で1回だけ各ネストシーンをレンダリングする。
     pub fn render(
         &mut self,
         world: &crate::ecs::EcsWorld,
@@ -1594,9 +1482,6 @@ impl RenderEngine {
         self.run_lua_reduce_hooks();
     }
 
-    /// hot_reload::spawn_watcherからの通知を非ブロッキングでdrainし、対応するプラグイン
-    /// registryとGPUパイプラインを差分更新する。フレーム先頭（lua pre-render hook実行前）
-    /// でのみ呼ぶことで、当該フレーム内の描画は常に一貫したパイプライン集合を参照する。
     fn drain_hot_reload_events(&mut self) {
         let Some(rx) = &self.hot_reload_rx else {
             return;
@@ -1611,8 +1496,6 @@ impl RenderEngine {
         }
     }
 
-    /// objects::loader::reload_one成功時、pipelines全体を現行registryから再構築する。
-    /// 失敗時（Phase6方針）は現行pipelinesを変更せずログのみ出力する。
     fn apply_object_reload(&mut self, path: &std::path::Path) {
         if let Err(err) = crate::objects::loader::reload_one(path) {
             eprintln!(
@@ -1628,7 +1511,6 @@ impl RenderEngine {
         self.rebuild_all_object_pipelines();
     }
 
-    /// effects::loader::reload_one成功時、effect_pipelines全体を現行registryから再構築する。
     fn apply_effect_reload(&mut self, path: &std::path::Path) {
         if let Err(err) = crate::effects::loader::reload_one(path) {
             eprintln!(
@@ -1644,11 +1526,6 @@ impl RenderEngine {
         self.rebuild_all_effect_pipelines();
     }
 
-    /// scripts_dir配下の*.lua変更検知時、LuaSystem::reload_dirでhooks/effects/computesを
-    /// 全解除・全再実行し、drain結果でlua_compute_pipelinesとeffects registryのLua側分を
-    /// 差し替える。失敗時は現行状態を変更せずログのみ出力する
-    /// （clear_hooksが先行実行されるため、load_dir内個別ファイル失敗があっても
-    /// hookの多重登録は発生しない）。
     fn apply_script_reload(&mut self, _path: &std::path::Path) {
         let Some(sys) = &self.lua_system else {
             return;
@@ -1677,20 +1554,15 @@ impl RenderEngine {
         );
     }
 
-    /// 現行objects registry全件からpipelinesを再構築する。差し替え対象は再ロードされた
-    /// 1プラグインのみだが、kind_id -> パイプライン対応の再構築コスト自体はO(登録数)で
-    /// 小さく（プラグイン数は数十件規模）、対象特定の複雑化より全体再構築の単純さを優先する。
     fn rebuild_all_object_pipelines(&mut self) {
         self.pipelines = build_pipelines_from_registry(&self.device, &self.object_pipeline_layout);
     }
 
-    /// 現行effects registry全件からeffect_pipelinesを再構築する。理由はrebuild_all_object_pipelinesと同様。
     fn rebuild_all_effect_pipelines(&mut self) {
         self.effect_pipelines =
             build_effect_pipelines_from_registry(&self.device, &self.effect_pipeline_layout);
     }
 
-    /// SceneObjectの再帰評価を伴う本体。depthはMAX_SCENE_NESTING_DEPTH判定にのみ使う。
     fn render_at(
         &mut self,
         world: &crate::ecs::EcsWorld,
@@ -1997,9 +1869,6 @@ mod tests {
     use super::*;
     use crate::ecs::resources::ProjectResource;
 
-    /// テスト専用GPUハンドル取得。GPUアダプタ非搭載環境（CI含む）では
-    /// request_adapterがErrを返しうるため、呼び出し側は戻り値Noneで
-    /// テストを早期スキップする（GPU非依存の判定へフォールバックしない）。
     fn headless_device() -> Option<(wgpu::Device, wgpu::Queue)> {
         let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
             backends: wgpu::Backends::PRIMARY,
@@ -2017,8 +1886,6 @@ mod tests {
         pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor::default())).ok()
     }
 
-    /// RGBA8テクスチャをCPU側Vec<u8>へ読み出す。bytes_per_row 256byteアライン要件を
-    /// 満たすためパディング込みで読み出し、行ごとにトリムして密パックへ変換する。
     fn read_texture_rgba8(
         device: &wgpu::Device,
         queue: &wgpu::Queue,
@@ -2120,7 +1987,6 @@ mod tests {
         assert!(alpha_values.iter().all(|&a| a == alpha_values[0]));
     }
 
-    /// テスト用ActiveObjectを最小構成で生成する。kind_id・effectsのみ差し替える。
     fn make_active_object(
         kind_id: u32,
         effects: Vec<(String, HashMap<String, Value>)>,
@@ -2139,8 +2005,6 @@ mod tests {
         }
     }
 
-    /// エフェクト付きオブジェクトへ適用したエフェクトが、隣接する無エフェクト
-    /// オブジェクトのピクセルへ波及しないことを検証する（Phase7-1）。
     #[test]
     fn effect_chain_does_not_leak_to_adjacent_object() {
         let Some((device, queue)) = headless_device() else {
@@ -2167,9 +2031,6 @@ mod tests {
         assert_eq!(pixels.len(), (32 * 32 * 4) as usize);
     }
 
-    /// 2オブジェクトへ異なるエフェクトチェーンを設定した場合でも、
-    /// 未登録IDチェーンはapply_effect_chain側でスキップされ、双方の出力が
-    /// 独立して完走することを検証する（Phase7-2）。
     #[test]
     fn distinct_effect_chains_render_independently() {
         let Some((device, queue)) = headless_device() else {

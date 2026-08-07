@@ -45,9 +45,6 @@ impl SceneSettingsWindow {
         }
     }
 
-    /// 新規作成モードでダイアログを開く。幅・高さ・FPSはプロジェクトの現在値を初期値にする。
-    /// グリッド・スナップ既定値はSceneMeta::new_with_defaults（=システム設定のdefault_snap/
-    /// magnetic_snap_rangeを反映したSceneMeta既定値）のみを参照し、本関数側で数値を重複定義しない。
     pub fn open_for_create(&mut self, state: &SharedAppState) {
         let world_holder = app_state::active_world(state);
         let world = world_holder.lock().unwrap();
@@ -80,7 +77,6 @@ impl SceneSettingsWindow {
         self.open = true;
     }
 
-    /// 既存シーンの編集モードでダイアログを開き、現在値を反映する。
     pub fn open_for_edit(&mut self, state: &SharedAppState, scene_id: i32) {
         let world_holder = app_state::active_world(state);
         let world = world_holder.lock().unwrap();
@@ -138,8 +134,6 @@ impl SceneSettingsWindow {
         self.open = false;
     }
 
-    /// 戻り値trueはconfirm確定を示す。呼び出し側はこの時点で
-    /// crate::ui::timeline::sync_active_session(&state, ...)を実行する。
     pub fn show(&mut self, ctx: &Context, ui: &mut Ui, state: &SharedAppState) -> bool {
         if !self.open {
             return false;

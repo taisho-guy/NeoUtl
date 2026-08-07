@@ -1,8 +1,3 @@
-//! `CurveKind::Script`評価。`Curve_Editor移植計画.md` フェーズ3.5、決定事項2対応。
-//! 評価毎に使い捨て`Lua`インスタンスを生成し、`t`/`start`/`end`の3グローバルと
-//! `math`テーブルのみを公開する。`io`/`os`/`require`は未登録のため到達不能。
-//! 命令数上限フックにより無限ループを強制中断する。
-
 use mlua::{Lua, StdLib};
 use std::sync::atomic::{AtomicU32, Ordering};
 

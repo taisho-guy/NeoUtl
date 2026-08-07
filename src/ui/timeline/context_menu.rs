@@ -11,8 +11,6 @@ use std::rc::Rc;
 const MENU_WIDTH: f32 = 220.0;
 const ROW_HEIGHT: f32 = 24.0;
 
-/// メニュー行を枠線なしで描画する。ホバー時のみ背景をハイライトし、
-/// egui::Buttonの常時可視フレームによる「ボタンの積み重ね」に見える見た目を避ける。
 pub(super) fn menu_row(
     ui: &mut egui::Ui,
     item: &ContextMenuItem,
@@ -73,9 +71,6 @@ pub(super) fn menu_row(
     resp
 }
 
-/// Slintトップレベル`timeline.slint`の右クリックメニュー部分に対応する。
-/// 項目集合の生成は `util::build_context_menu` に一本化する
-/// （区切り線=action4の扱い、サブメニュー構造を含め、生成経路をここと重複させない）。
 impl TimelineWindow {
     pub(super) fn finish_drag_if_released(
         &mut self,

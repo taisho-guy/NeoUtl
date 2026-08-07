@@ -1,6 +1,3 @@
-//! AviUtl `curve_editor`移植: カーブ種別・セグメント・モディファイア定義。
-//! `Curve_Editor移植計画.md` 3.1節に対応。
-
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -142,8 +139,6 @@ impl Modifier {
         }
     }
 
-    /// `t`(0..1進行度)を受け取り値(0..1想定域、範囲外可)へ写像する`base`を
-    /// 後段でラップする。AviUtl `Modifier::apply`の関数デコレータに対応。
     fn wrap(&self, base: &dyn Fn(f32) -> f32, t: f32) -> f32 {
         match self {
             Modifier::Discretization {
@@ -201,8 +196,6 @@ impl Modifier {
     }
 }
 
-/// AviUtl `Modifier::apply`の関数デコレータ合成。`mods`を先頭から順に
-/// `base`へ巻き付け、最内層が`base`・最外層が`mods`末尾になる。
 pub fn apply_modifiers(
     base: impl Fn(f32) -> f32 + 'static,
     mods: &[Modifier],
@@ -234,7 +227,6 @@ fn value_noise1(seed: i32, x: f32) -> f32 {
     a + (b - a) * u
 }
 
-/// `octaves`段のフラクタルブラウン運動合成。`decay_sharpness`は段ごとの振幅減衰指数。
 fn fbm_noise1(seed: i32, x: f32, octaves: u32, decay_sharpness: f32) -> f32 {
     let mut total = 0.0f32;
     let mut freq = 1.0f32;
@@ -275,7 +267,6 @@ fn bezier_ease(t: f32, h1: [f32; 2], h2: [f32; 2]) -> f32 {
     sample_y(u.clamp(0.0, 1.0))
 }
 
-/// AviUtl `curve_bounce.cpp`相当。反発係数`cor`、周期`period`の減衰バウンド。
 fn bounce_ease(t: f32, cor: f32, period: f32, reversed: bool) -> f32 {
     let t = if reversed { 1.0 - t } else { t };
     let cor = cor.clamp(0.01, 0.99);
@@ -300,7 +291,6 @@ fn bounce_ease(t: f32, cor: f32, period: f32, reversed: bool) -> f32 {
     if reversed { 1.0 - y } else { y }
 }
 
-/// AviUtl `curve_elastic.cpp`相当。振幅・周波数・減衰の可変ばね振動。
 fn elastic_ease(t: f32, amplitude: f32, frequency: f32, decay: f32, reversed: bool) -> f32 {
     let t = if reversed { 1.0 - t } else { t };
     let envelope = (-decay * t).exp();
@@ -310,8 +300,6 @@ fn elastic_ease(t: f32, amplitude: f32, frequency: f32, decay: f32, reversed: bo
     if reversed { 1.0 - y } else { y }
 }
 
-/// セグメント無しの単一カーブ種別を`t`(0..1)で評価する。`Normal`は自身が
-/// 子セグメント配列を保持するため区間再帰を内部で完結させる。
 pub fn evaluate_kind(kind: &CurveKind, t: f32) -> f32 {
     let t = t.clamp(0.0, 1.0);
     match kind {
@@ -393,7 +381,6 @@ fn evaluate_standard(name: &str, t: f32) -> f32 {
     }
 }
 
-/// モディファイア込みの最終評価。1区間の`ease()`本体はこれを呼ぶ。
 pub fn evaluate_kind_with_modifiers(kind: &CurveKind, mods: &[Modifier], t: f32) -> f32 {
     let base_t = t.clamp(0.0, 1.0);
     if mods.is_empty() {
@@ -403,8 +390,6 @@ pub fn evaluate_kind_with_modifiers(kind: &CurveKind, mods: &[Modifier], t: f32)
     apply_modifiers(move |u| evaluate_kind(&kind, u), mods)(base_t)
 }
 
-/// AviUtl `NormalCurve::curve_function`相当。`anchor_start.x`昇順を前提に
-/// `t`が属する子セグメントを二分探索し、ローカル進行度へ再写像して委譲する。
 fn evaluate_normal(segments: &[CurveSegment], t: f32) -> f32 {
     if segments.is_empty() {
         return t;
@@ -451,8 +436,6 @@ pub fn add_segment(segments: &mut Vec<CurveSegment>, at_x: f32) {
     );
 }
 
-/// セグメント境界(anchor)を`[0,1]`域内でドラッグ移動する。両隣接境界を
-/// 越えないようclampし、境界の連続性(前segの終端=次segの始端)を維持する。
 pub fn drag_anchor_x(segments: &mut [CurveSegment], boundary_index: usize, new_x: f32) {
     if boundary_index == 0 || boundary_index >= segments.len() {
         return;

@@ -14,11 +14,6 @@ pub enum ReloadEvent {
 
 const DEBOUNCE: Duration = Duration::from_millis(250);
 
-/// objects_dir・effects_dir・scripts_dir（非再帰）を監視するバックグラウンドスレッドを
-/// 起動する。dylib対象(so/dylib/dll)は objects_dir/effects_dir 配下、lua対象(*.lua)は
-/// scripts_dir配下のCreate/Modifyイベントをデバウンスの上、呼び出し元へ通知する。
-/// デバウンスはパス単位で直近発火時刻を保持し、ビルドツールの連続書き込み・
-/// リネーム移動パターンによる重複通知を抑制する。
 pub fn spawn_watcher(
     objects_dir: PathBuf,
     effects_dir: PathBuf,

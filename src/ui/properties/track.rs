@@ -1,13 +1,7 @@
-//! `properties.slint` KeyframeTrackの移植。純粋な描画+入力採取専用（値の解決は
-//! segment.rsが担う）。ドラッグ中点は`dragging`引数でセッション状態を呼び出し側に
-//! 持たせ、フレーム単位のスナップ位置を返す。
-
 pub struct TrackOutcome {
     pub point_clicked: Option<i32>,
     pub add_point: Option<i32>,
     pub remove_point: Option<i32>,
-    /// ドラッグ完了時の(移動元フレーム, 移動先フレーム)。呼び出し側はこの1組のみで
-    /// remove_keyframe(from)+set_keyframe(to)相当の付け替えを行う。
     pub drag_committed: Option<(i32, i32)>,
 }
 
@@ -28,13 +22,6 @@ const HEIGHT: f32 = 12.0;
 static DRAG_ORIGIN: std::sync::Mutex<Option<std::collections::HashMap<egui::Id, i32>>> =
     std::sync::Mutex::new(None);
 
-/// 右クリックメニュー表示中に参照する「メニューを開いた瞬間のヒット判定」の保持先。
-/// `response.context_menu`のクロージャは開いている間ずっと毎フレーム呼ばれ続け、
-/// そのたびに現在のポインタ位置で削除/追加を再判定すると、メニュー項目へカーソルを
-/// 動かした時点でポインタがトラック矩形の外に出て`nearest`がNoneになり、
-/// 「削除」ボタンが同じ位置で「追加」ボタンに変貌する（結果、削除しようとした操作が
-/// 誤って際限なくキーフレームを追加してしまう）。開いた瞬間の判定をここに固定し、
-/// メニュー表示中は再判定しない。
 static CONTEXT_HIT: std::sync::Mutex<
     Option<std::collections::HashMap<egui::Id, (Option<(usize, i32, f32)>, f32)>>,
 > = std::sync::Mutex::new(None);

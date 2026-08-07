@@ -21,9 +21,6 @@ fn registry_swap() -> &'static ArcSwap<Vec<Arc<MediaPlugin>>> {
     SWAP.get_or_init(|| ArcSwap::new(Arc::new(Vec::new())))
 }
 
-/// MediaVTable + 保持元Libraryの所有権からMediaPluginを構築する。
-/// meta().id/name/extensionsはdylib静的領域参照のため、この時点で全てownedへ複製する
-/// （Library解放後もMediaPlugin単体で有効であることを保証するため）。
 fn from_vtable(vtable: MediaVTable, lib: Option<Library>) -> MediaPlugin {
     let meta = (vtable.meta)();
     let extensions =
@@ -41,11 +38,6 @@ fn from_vtable(vtable: MediaVTable, lib: Option<Library>) -> MediaPlugin {
     }
 }
 
-/// NeoUtl本体へgpu_video共有デバイス注入のため直接静的リンクされるデコーダ。
-/// dlsymプラグインではないためdecoders/走査対象から外れ、ここで自己登録する。
-/// ffmpeg-decoderはgpuvideo-decoder（H.264ゼロコピー専用）のCPUフォールバックとして
-/// 同様に直接静的リンクする（idはfind_all_by_extensionのソート順でgpuvideo後に来るよう
-/// "neoutl.media.software-ffmpeg"としている。両者のextensions重複は意図的）。
 fn native_plugins() -> Vec<MediaPlugin> {
     vec![
         from_vtable(gpuvideo_native_vtable(), None),
@@ -114,8 +106,6 @@ pub fn registry() -> Arc<Vec<Arc<MediaPlugin>>> {
     registry_swap().load_full()
 }
 
-/// 拡張子に一致する最初のプラグイン（id昇順）。動画はVulkanゼロコピー経路優先、
-/// 非対応環境ではGStreamer等のCPU経路へ自動フォールバックする序列がid昇順に一致する。
 pub fn find_by_extension(ext: &str) -> Option<Arc<MediaPlugin>> {
     registry()
         .iter()
@@ -123,7 +113,6 @@ pub fn find_by_extension(ext: &str) -> Option<Arc<MediaPlugin>> {
         .cloned()
 }
 
-/// 拡張子に一致する全プラグイン（id昇順）。フォールバック候補列挙用。
 pub fn find_all_by_extension(ext: &str) -> Vec<Arc<MediaPlugin>> {
     registry()
         .iter()
@@ -176,8 +165,6 @@ pub fn default_decoders_dir() -> PathBuf {
     exe_dir.join("decoders")
 }
 
-/// main.rs::gpu_shared::init_shared_gpuが起動時に一度だけ呼ぶ。gpuvideo-decoder crate内
-/// SHARED_DEVICEへ委譲し、同一VulkanDeviceをデコード経路へ共有する（Linux限定機能）。
 #[cfg(target_os = "linux")]
 pub fn inject_gpuvideo_shared_device(device: Arc<gpu_video::VulkanDevice>) {
     neoutl_media_gpuvideo_decoder::set_shared_device(device);

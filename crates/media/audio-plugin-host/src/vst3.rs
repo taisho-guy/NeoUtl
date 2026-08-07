@@ -3,10 +3,6 @@ use serde::{Deserialize, Serialize};
 use std::path::Path;
 use vst3_host::{audio::AudioBuffers, plugin::Plugin, simple};
 
-/// VST3のParameter（導入後はCLAP側も同型へ正規化）をこの形へ変換する。UI層(properties.rs)は
-/// neoutl_shared_abi::ParamKind::Floatのmin/max/defaultとしてそのまま消費する。
-/// VST3パラメータは常に正規化空間0.0..=1.0（vst3-host::Parameter::min/maxの仕様）であり、
-/// plain値はプラグイン非公開のためUI表示・保存双方とも正規化値をそのまま扱う。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PluginParamInfo {
     pub id: u32,

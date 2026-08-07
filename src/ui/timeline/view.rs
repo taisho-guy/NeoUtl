@@ -6,10 +6,6 @@ use egui::{Pos2, Rect, Sense, Stroke, Vec2};
 use std::cell::RefCell;
 use std::rc::Rc;
 
-/// Slint `timeline/timeline-view.slint` 相当。
-/// グリッド(grid.rs)・クリップ(clip_item.rs)を合成し、背景ドラッグ選択と
-/// 右クリックメニュー起動(open_context_menu, context_menu.rs)を仲介する。
-/// 配色は `ui.visuals()` (アプリ全体テーマ) から取得し、独自の固定色は持たない。
 impl TimelineWindow {
     pub(super) fn timeline_view(
         &mut self,

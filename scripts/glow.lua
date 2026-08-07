@@ -1,4 +1,3 @@
--- scripts/glow.lua
 return {
   id = "lua_glow",
   name = "Glow (Lua)",

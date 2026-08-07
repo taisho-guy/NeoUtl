@@ -19,8 +19,6 @@ pub trait NeoPlugin: Send {
     fn stop(&mut self) -> Result<(), PluginError>;
     fn process(&mut self, inputs: &[&[f32]], outputs: &mut [&mut [f32]], frames: usize);
     fn set_parameter(&mut self, id: u32, value: f64) -> Result<(), PluginError>;
-    /// パラメータメタデータ列挙。CLAP側（clack-extensions params未統合）は
-    /// 空配列を返す（第一段階のバイパスのみ対応方針に対応）。
     fn param_info(&self) -> Vec<PluginParamInfo>;
 }
 
@@ -40,12 +38,10 @@ impl PluginFormat {
     }
 }
 
-/// VST3読込。
 pub fn load_vst3(path: &Path) -> Result<Vst3Wrapper, PluginError> {
     Vst3Wrapper::load(path)
 }
 
-/// CLAP読込。plugin_idはPluginCatalogEntry::plugin_id（factory ID文字列）をそのまま渡す。
 pub fn load_clap(path: &Path, plugin_id: &str) -> Result<ClapWrapper, PluginError> {
     let id = discover::clap_plugin_id_cstring(plugin_id)?;
     ClapWrapper::load(path, &id)

@@ -8,8 +8,6 @@ use crate::renderer::RenderEngine;
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
-/// Undo可能な正本データ（DocumentModel）のスナップショット履歴。
-/// ECS(EcsWorld)は焼き込み済み描画状態のためUndo対象に含めない。
 pub struct History {
     undo_stack: Vec<DocumentModel>,
     redo_stack: Vec<DocumentModel>,
@@ -25,7 +23,6 @@ impl History {
         }
     }
 
-    /// 編集操作の直前状態を積む。以後のredo系列は破棄する。
     fn push(&mut self, snapshot: DocumentModel) {
         self.undo_stack.push(snapshot);
         if self.undo_stack.len() > self.limit {
@@ -89,14 +86,11 @@ impl ProjectSession {
     }
 }
 
-/// メッセージのみの失敗（エラー型が不定・既に文字列化済み）: ログ出力+メッセージ送信。
 fn report_error(msg: &str) {
     eprintln!("{msg}");
     crate::crash_report::capture_message(msg);
 }
 
-/// I/Oエラー系の失敗（プロジェクト保存・オートセーブ）: ログ出力+構造化エラー送信。
-/// std::io::Errorはstd::error::Errorを実装するためスタックトレース付きで送信できる。
 fn report_io_error(context: &str, err: &std::io::Error) {
     eprintln!("{context}: {err}");
     crate::crash_report::capture_error(err);
@@ -105,10 +99,7 @@ fn report_io_error(context: &str, err: &std::io::Error) {
 pub struct AppState {
     pub sessions: Vec<ProjectSession>,
     pub active: usize,
-    /// クリップ切り取り/コピーのクリップボード（AviQtl::TimelineView::contextMenu相当）。
-    /// プロジェクト横断で共有する（AviUtl本体同様、セッション切替後も貼り付け可能とする）。
     pub clipboard: Vec<ObjectDoc>,
-    /// 全プロジェクト共有の直列レンダーキュー。
     pub render_queue: crate::export::RenderQueue,
 }
 
@@ -127,8 +118,6 @@ impl AppState {
     }
 }
 
-/// UIフレームとは独立して自動保存を監視する。保存処理自体もこのスレッドで行うため、
-/// プレビュー描画・入力処理を自動保存で停止させない。
 fn start_autosave_worker(state: &SharedAppState) {
     let state = Arc::clone(state);
     let _ = std::thread::Builder::new()
@@ -175,7 +164,6 @@ pub fn activate_session_by_dir(
     Ok(())
 }
 
-/// 既存セッションなら切替、未読込ならディスクから読み込み新規セッションとして追加する。
 pub fn open_project_session(state: &SharedAppState, dir: &std::path::Path) -> Result<(), String> {
     if activate_session_by_dir(state, dir).is_ok() {
         return Ok(());
@@ -188,7 +176,6 @@ pub fn open_project_session(state: &SharedAppState, dir: &std::path::Path) -> Re
     Ok(())
 }
 
-/// アクティブセッションと同一設定(fps/解像度/音声)で新規プロジェクトを作成し追加する。
 pub fn new_project_session(state: &SharedAppState) -> std::io::Result<()> {
     let (fps, width, height, audio_sample_rate, audio_channels) = {
         let s = state.lock().unwrap();
@@ -215,14 +202,11 @@ pub fn new_project_session(state: &SharedAppState) -> std::io::Result<()> {
     Ok(())
 }
 
-/// システム設定は全プロジェクト共通のため、先頭セッションのEcsWorldへ固定する。
 pub fn settings_world(state: &SharedAppState) -> Arc<Mutex<EcsWorld>> {
     let s = state.lock().unwrap();
     s.sessions[0].world.clone()
 }
 
-/// 編集操作の直前に必ず呼ぶ。現在のDocumentModelをUndoスタックへ退避する。
-/// UI層の各コールバック冒頭（world変更の直前）に配置する。
 pub fn snapshot_before_edit(state: &SharedAppState) {
     let world_holder = active_world(state);
     let snapshot = world_holder.lock().unwrap().to_document();
@@ -249,7 +233,6 @@ pub fn autosave_active(state: &SharedAppState) -> bool {
     result.is_ok()
 }
 
-/// システム設定の周期に従ってアクティブプロジェクトを自動保存する。
 pub fn autosave_if_due(state: &SharedAppState) {
     let (enabled, due) = {
         let world = active_world(state);
@@ -297,7 +280,6 @@ pub fn save_active(state: &SharedAppState) -> bool {
     result.is_ok()
 }
 
-/// アクティブセッションをUndoし、EcsWorldへ再焼き込みする。実行有無を返す。
 pub fn undo_active(state: &SharedAppState) -> bool {
     let world_holder = active_world(state);
     let current = world_holder.lock().unwrap().to_document();
@@ -315,7 +297,6 @@ pub fn undo_active(state: &SharedAppState) -> bool {
     true
 }
 
-/// アクティブセッションをRedoし、EcsWorldへ再焼き込みする。実行有無を返す。
 pub fn redo_active(state: &SharedAppState) -> bool {
     let world_holder = active_world(state);
     let current = world_holder.lock().unwrap().to_document();
@@ -333,13 +314,11 @@ pub fn redo_active(state: &SharedAppState) -> bool {
     true
 }
 
-/// アクティブセッションのプロジェクト名を反映したウィンドウタイトルを返す。
 pub fn active_project_window_title(state: &SharedAppState) -> String {
     let s = state.lock().unwrap();
     format!("NeoUtl - {}", s.sessions[s.active].meta.name)
 }
 
-/// 指定セッションのみをディスクへ保存する。成功時dirtyフラグを解除する。
 pub fn save_session(state: &SharedAppState, index: usize) -> bool {
     let world_holder = {
         let s = state.lock().unwrap();
@@ -360,8 +339,6 @@ pub fn save_session(state: &SharedAppState, index: usize) -> bool {
     result.is_ok()
 }
 
-/// 指定セッションを閉じる。最後の1件は閉じない。activeが閉じた位置以降を
-/// 指していた場合は隣接セッションへ繰り上げる。
 pub fn close_session(state: &SharedAppState, index: usize) -> Result<(), String> {
     let mut s = state.lock().unwrap();
     if s.sessions.len() <= 1 {
@@ -379,13 +356,11 @@ pub fn close_session(state: &SharedAppState, index: usize) -> Result<(), String>
     Ok(())
 }
 
-/// クリップボードへコピー/切り取り結果を格納する。
 pub fn set_clipboard(state: &SharedAppState, docs: Vec<crate::document::ObjectDoc>) {
     let mut s = state.lock().unwrap();
     s.clipboard = docs;
 }
 
-/// クリップボード内容の複製を取得する（貼り付け時に消費せず複数回貼り付け可能とする）。
 pub fn clipboard(state: &SharedAppState) -> Vec<crate::document::ObjectDoc> {
     state.lock().unwrap().clipboard.clone()
 }

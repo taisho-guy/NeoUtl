@@ -2,11 +2,8 @@ use crate::localization::tr;
 use crate::ui::types::CatalogRow;
 use egui::Context;
 
-/// カタログ実データ（EffectCatalogState/PluginCatalogState相当）はproperties.rs側が保持し、
-/// 本ダイアログへはこのtrait経由でのみ供給する（UI描画とカタログ構築の分離を維持するため）。
 pub trait EffectCatalogSource {
     fn categories(&self) -> &[String];
-    /// sort_mode: 0=カテゴリ順, 1=名前順, 2=最近使用順（Plugin側は2を無視して良い）
     fn filtered(&self, query: &str, sort_mode: i32, category: &str) -> Vec<CatalogRow>;
 }
 
@@ -34,8 +31,6 @@ impl EffectAddDialog {
         self.open = true;
     }
 
-    /// 確定時はSome(catalog_row.id)を返す。呼び出し側(properties.rs)がinvoke_add_effect/
-    /// mark_effect_usedを実行する（対象がEffect/Pluginかを知るのはproperties.rs側のため）。
     pub fn show(&mut self, ctx: &Context, source: &dyn EffectCatalogSource) -> Option<String> {
         if !self.open {
             return None;

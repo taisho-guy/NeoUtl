@@ -13,9 +13,6 @@ fn current_locale() -> &'static RwLock<String> {
     CURRENT_LOCALE.get_or_init(|| RwLock::new("ja".to_owned()))
 }
 
-/// Set the locale before any UI is constructed. The Japanese source text is
-/// intentionally used as the translation key so plugin metadata can be
-/// translated without changing the plugin ABI or its internal keys.
 pub fn initialize() {
     let locale = std::env::var("NEOUTL_LOCALE")
         .or_else(|_| std::env::var("LC_ALL"))
@@ -43,9 +40,6 @@ pub fn tr(source: &str) -> String {
     rust_i18n::t!(source).to_string()
 }
 
-/// Load an optional plugin-local catalog from `<plugin>/i18n/<locale>.yml`.
-/// Missing or invalid catalogs are ignored so third-party plugins remain
-/// compatible when they do not ship translations.
 pub fn load_plugin_catalog(plugin_path: &Path) {
     let Some(parent) = plugin_path.parent() else {
         return;

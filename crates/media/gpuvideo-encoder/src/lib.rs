@@ -1,7 +1,3 @@
-//! H.264/H.265 Vulkan HWエンコーダプラグイン。gpuvideo-decoderと同一のVulkanDeviceを
-//! 共有し、RGBA8UnormテクスチャをGPU内でNV12へ変換した上でエンコードする。
-//! Vulkan経路はLinuxのみで有効化する。
-
 #[cfg(target_os = "linux")]
 mod imp {
     use gpu_video::parameters::{
@@ -43,7 +39,6 @@ mod imp {
             .map_err(|e| e.to_string())
     }
 
-    /// RGBA8Unormテクスチャをエンコーダ入力解像度のNV12テクスチャへ変換する共通経路。
     struct Nv12Stage {
         converter: WgpuRgbaToNv12Converter,
         nv12_texture: wgpu::Texture,
@@ -179,8 +174,6 @@ mod imp {
 
     static SHARED_DEVICE: std::sync::OnceLock<Arc<GpuVideoDevice>> = std::sync::OnceLock::new();
 
-    /// main.rsが起動時に一度だけ呼ぶ。gpuvideo-decoder::set_shared_deviceと同一Arcを渡し、
-    /// プロセス内Vulkanデバイスを単一に保つ。
     pub fn set_shared_device(device: Arc<GpuVideoDevice>) {
         let _ = SHARED_DEVICE.set(device);
     }
@@ -259,7 +252,6 @@ mod imp {
 #[cfg(target_os = "linux")]
 pub use imp::*;
 
-/// Linux以外向け無効化スタブ。Vulkan非対応のため空配列を返す。
 #[cfg(not(target_os = "linux"))]
 pub fn native_vtables() -> Vec<neoutl_media_api::EncoderVTable> {
     Vec::new()

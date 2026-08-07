@@ -7,8 +7,6 @@ use crate::ui::preview::PreviewPanel;
 use std::cell::RefCell;
 use std::rc::Rc;
 
-/// データ層操作(追加/削除/分割/複製/切り取り/コピー/貼り付け/表示・ロック切替/シーン切替)。
-/// 全てEcsWorldへ委譲し、本ファイルは引数整形とsnapshot/refresh呼び出し順序のみを担う。
 impl TimelineWindow {
     pub(super) fn after_structural_edit(
         &mut self,

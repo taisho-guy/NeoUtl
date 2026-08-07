@@ -9,9 +9,6 @@ use egui_dock::{
 use std::cell::RefCell;
 use std::rc::Rc;
 
-/// egui_dockのタブ行のみを本体の意匠として利用する`TabViewer`。
-/// タブ本体(シーン内容)はTimelineWindow::bodyが別途描画するため`ui`は空実装とし、
-/// クリック/ダブルクリック/閉じる/追加のイベントのみ外部へ受け渡す。
 struct SceneTabViewer<'a> {
     switch_target: &'a mut Option<i32>,
     rename_target: &'a mut Option<i32>,
@@ -55,11 +52,6 @@ impl<'a> TabViewer for SceneTabViewer<'a> {
     }
 }
 
-/// egui_dock `DockArea` のタブ行のみを、行の高さに切り詰めたuiへ描画させる。
-/// タブ内容(node本体)はSCENE_TAB_HEIGHT内でほぼ0pxに畳まれるため描画されず、
-/// 見た目上は「クリーンなタブバー」単体として機能する。
-/// シーン一覧はworldの状態から毎フレーム再構築するため、DockStateも毎フレーム
-/// 再構築する（ドラッグによる並べ替え永続化はスコープ外）。
 impl TimelineWindow {
     pub(super) fn scene_tab_bar(
         &mut self,
