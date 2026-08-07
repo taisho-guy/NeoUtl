@@ -14,11 +14,8 @@ pub enum ExportCodec {
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub enum EncoderBackend {
-    /// GPU HW優先、失敗時ソフトウェアへ自動縮退（既定）。
     Auto,
-    /// GPU HW(gpuvideo-encoder, Vulkan)を強制使用。失敗時はエラーで即終了。
     GpuVideo,
-    /// ソフトウェア/gstreamer自動選択HW(vaapi等)経路を強制使用。
     Gstreamer,
 }
 
@@ -34,7 +31,6 @@ pub struct ExportJob {
     pub cancel: Option<std::sync::Arc<std::sync::atomic::AtomicBool>>,
 }
 
-/// ユーザーが名前を付けて再利用できる書き出し設定。
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ExportPreset {
     pub name: String,
@@ -104,7 +100,6 @@ pub fn save_export_presets(presets: &[ExportPreset]) -> Result<(), String> {
 pub enum QueueState {
     Idle,
     Running,
-    /// 中断UI未実装のため未使用（RenderQueue::cancel_current実装済み、呼び出し元未配置）。
     #[allow(dead_code)]
     Paused,
     CancelRequested,
@@ -116,7 +111,6 @@ pub struct QueuedJob {
     pub project_dir: PathBuf,
     pub id: u64,
 }
-/// 中断UI未実装のため各フィールドは現状cancel_current内でのみ参照される。
 #[allow(dead_code)]
 pub struct JobHandle {
     pub id: u64,
@@ -130,14 +124,11 @@ struct QueueInner {
     next_id: u64,
 }
 
-/// プロジェクトをまたいで投入できる直列レンダーキュー。
 #[derive(Clone)]
 pub struct RenderQueue {
     inner: Arc<Mutex<QueueInner>>,
 }
 
-/// エクスポート中断UIは未実装（export_dialog側にキャンセルボタン未配置）。
-/// バックエンドの中断経路は実装済みのため、UI実装までallowで保持する。
 #[allow(dead_code)]
 impl RenderQueue {
     pub fn new() -> Self {
@@ -221,8 +212,6 @@ impl Default for RenderQueue {
     }
 }
 
-/// GPU RGBA8Unormテクスチャをホストメモリへ読み出す。frame_gpu契約とは異なりexportは
-/// 非対話的直列処理のためprefetch/frame_gpu分離を要さず、都度同期readbackする。
 fn read_texture_rgba(
     device: &wgpu::Device,
     queue: &wgpu::Queue,
@@ -275,7 +264,6 @@ fn read_texture_rgba(
     out
 }
 
-/// gpuvideo-encoder(Vulkan HW)経路を試行し、初期化失敗時はNoneを返す。
 #[cfg(target_os = "linux")]
 fn try_create_gpuvideo_encoder(
     codec: ExportCodec,

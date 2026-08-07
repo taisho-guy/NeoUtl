@@ -1,7 +1,3 @@
-//! H.264ゼロコピー動画デコーダプラグイン。VulkanInstance(gpu-video crate)へ依存するため
-//! Vulkan経路はLinuxのみで有効化する。その他のOSではGStreamer等のCPU経路へ
-//! 自動的にフォールバックする（media/loader.rsのid昇順拡張子解決による）。
-
 #[cfg(target_os = "linux")]
 mod imp {
     use gpu_video::parameters::{
@@ -26,10 +22,6 @@ mod imp {
 
     const START_CODE: &[u8] = &[0, 0, 0, 1];
 
-    /// coded_width x coded_height（decoderが実際にVulkanドライバへ確保させた物理サイズ）
-    /// のRGBA変換先を確保する。NV12→RGBA変換の出力先をこのサイズに合わせることで、
-    /// 変換シェーダーによるパディング領域の引き伸ばしを避ける（有効領域のcropはこの後の
-    /// copy_texture_to_textureで行う）。
     fn create_crop_scratch_texture(
         device: &wgpu::Device,
         coded_width: u32,
@@ -51,10 +43,6 @@ mod imp {
         })
     }
 
-    /// decoder内部バッファリングにより「packet Nをfeedしても即座にframe Nが
-    /// 出力されるとは限らない」ため、対象frame_indexより先読みしてpendingへ
-    /// 積んでおく必要のあるフレーム数。値はgpu-video側の内部バッファ段数に
-    /// 対する保守的な余裕。
     const DECODE_LOOKAHEAD: i64 = 8;
 
     #[derive(Clone, Debug)]
@@ -180,27 +168,10 @@ mod imp {
         Ok(out)
     }
 
-    /// gpu-video crateのGPU decodeパス(wgpu::Device::as_hal内部リソースガード)は、
-    /// 同一wgpu::Deviceに対する複数スレッドからの同時呼び出しに対して排他制御されていない。
-    /// 共有デバイス構成下で複数GpuVideoDecoderインスタンスが並行してdecode()を実行すると、
-    /// as_hal()がリソース競合によりNoneを返しunwrapでpanicする(gpu-video側の既知の制約)。
-    /// decode()呼び出しのみを直列化する（NV12→RGBA変換・テクスチャ確保・queue.submitは
-    /// 通常のwgpu操作でありwgpu自体が内部同期するため、この範囲には含めない）。
-    ///
-    /// このMutexは全GpuVideoDecoderインスタンス間で共有される単一の静的ロックであり、
-    /// いずれか1インスタンスのdecode()呼び出しがgpu-video crate内部で無期限停止すると、
-    /// 保持スレッドはロックを永久に解放しない。worker.rs側は各frame_gpu()呼び出しを
-    /// 新規スレッドへ委譲するため、この状態で後続の全インスタンスがロック取得待ちの
-    /// スレッドを新規に生成し続け、いずれも解放されずに滞留する
-    /// （デコーダースレッド無限生成の直接要因）。lock()による無期限ブロックを禁止し、
-    /// 上限時間内のtry_lockポーリングへ置き換えることで、スレッドが最終的に必ず
-    /// 終了する（成功またはタイムアウトエラー）ことを保証する。
     static GPU_DECODE_LOCK: Mutex<()> = Mutex::new(());
     const GPU_DECODE_LOCK_WAIT: Duration = Duration::from_millis(1500);
     const GPU_DECODE_LOCK_POLL: Duration = Duration::from_millis(5);
 
-    /// GPU_DECODE_LOCKを上限時間内で取得する。取得不能時はErrを返し、
-    /// 呼び出し元スレッドを解放させる（無期限park禁止）。
     fn acquire_gpu_decode_lock(
         frame_index: i64,
     ) -> Result<std::sync::MutexGuard<'static, ()>, String> {
@@ -224,16 +195,6 @@ mod imp {
         }
     }
 
-    /// RGBA変換先テクスチャの固定プール。
-    ///
-    /// 旧実装は出力フレームごとにdevice.create_texture()を新規発行しており、
-    /// 頻繁なVkImage確保・解放がGPUアロケータの断片化・スループット低下要因となっていた。
-    /// open()時にDEFAULT_DECODE_CACHE_BYTES / costで算出した固定枚数を一括確保し、
-    /// 以降はスロットの再割当のみで運用する（確保コスト自体は当初のバイト予算LRUと同一挙動）。
-    ///
-    /// 呼び出し元スレッドを混同すると自明でない競合を生むため、
-    /// get/acquire_for_writeの双方でthread::current().id()を記録し、実際に単一スレッドから
-    /// しか呼ばれていないか検証可能にする。
     struct TextureCache {
         pool: Vec<wgpu::Texture>,
         free: VecDeque<usize>,
@@ -303,9 +264,6 @@ mod imp {
             Some(self.pool[slot].clone())
         }
 
-        /// indexの書き込み先テクスチャを確保する。既存スロットがあればそれを返し、
-        /// 無ければ空きスロット、それも無ければ最古indexのスロットを回収し再割当する。
-        /// 呼び出し側はこのテクスチャへNV12→RGBA変換結果を書き込む。
         fn acquire_for_write(&mut self, index: i64) -> wgpu::Texture {
             if let Some(&slot) = self.map.get(&index) {
                 self.order.retain(|&i| i != index);
@@ -351,9 +309,6 @@ mod imp {
         }
     }
 
-    /// open()時に demux を走査してメモリ化するH.264パケット。
-    ///
-    /// demux は Send 不可能な内部状態を持ちうるため、バイト列へ複製して所有権を保つ。
     struct EncodedPacket {
         display_index: i64,
         pts: i64,
@@ -361,9 +316,6 @@ mod imp {
         is_sync: bool,
     }
 
-    /// AVCC sample内のNALユニットを走査し、IDR(NALタイプ5)の有無でsync sample判定する。
-    /// symphonia Packetはコンテナ非依存でsync flagを保証しないため、ビットストリーム側の
-    /// NALタイプで自前判定する（コンテナのstss解析より単純かつ本デコーダの用途で十分）。
     fn packet_is_sync(cfg: &H264Config, sample_avcc: &[u8]) -> bool {
         let mut off = 0usize;
         while off + cfg.nal_length_size <= sample_avcc.len() {
@@ -391,7 +343,6 @@ mod imp {
         false
     }
 
-    /// packets中でidx以下の最も近いsync sampleのdisplay_indexを返す。無ければ0。
     fn find_prev_sync(packets: &[EncodedPacket], idx: i64) -> i64 {
         let idx = idx.clamp(0, packets.len() as i64 - 1);
         for i in (0..=idx).rev() {
@@ -426,8 +377,6 @@ mod imp {
             .map_err(|e| e.to_string())
     }
 
-    /// open()時に全パケットをメモリ化する。
-    /// 目的: prefetch/frame_gpu から demux を触らず、逐次demux崩壊を回避する。
     fn preload_packets(
         demux: &mut Box<dyn FormatReader>,
         track_id: u32,
@@ -474,68 +423,30 @@ mod imp {
         width: u32,
         height: u32,
 
-        /// decoder実装がVulkanドライバから受け取る実テクスチャの物理サイズ
-        /// （frame.data.size()、フレーム毎に問い合わせる）と、そのサイズで
-        /// 確保したcrop前RGBA変換先のキャッシュ。物理サイズはマクロブロック(16px)
-        /// 単位とは限らず、ドライバ・GPU依存のタイル境界で確保される場合がある
-        /// ため、次の16倍数への切り上げ等では推測しない。
-        /// display側(width/height)と物理サイズが一致しない場合、NV12→RGBA変換を
-        /// 物理サイズのscratchテクスチャへ行い、有効領域のみをcropしてcacheへ複製する
-        /// （変換先を直接display解像度にすると、変換シェーダーがソース全体を0..1で
-        /// サンプルするためパディング領域ごと引き伸ばされ、右端・下端に緑色の帯が生じる）。
-        /// (physical_width, physical_height, scratch_texture)。物理サイズが変化した
-        /// 場合のみ再確保する。
         crop_scratch: Option<(u32, u32, wgpu::Texture)>,
 
         fps: f64,
         total_frames: i64,
 
-        /// 全パケットをメモリ化したもの（AVCC sample bytes）
         packets: Vec<EncodedPacket>,
         cache: TextureCache,
 
-        /// prefetch が積む「まだ確定していない」パケット列（pendingはメモリ上のパケット参照）
         pending: VecDeque<EncodedPacket>,
 
-        /// pendingが現在カバーしているGOP先頭のdisplay_index。
-        /// pending.front()はframe_gpuの消費により前進するため、reset要否の判定に
-        /// pending.front()そのものを使うと「同一GOP内で単に消費が進んだだけ」を
-        /// 「GOP境界超過・シーク」と誤認する。この専用フィールドはprefetchが実際に
-        /// pendingを（reset経由で）組み直した時にのみ更新し、消費による前進では
-        /// 変化しない。
         planned_gop_start: Option<i64>,
 
-        /// avcC-derived H.264 config for AnnexB conversion
         h264_cfg: H264Config,
 
-        /// decoder再生成用。openで注入された共有デバイスをそのまま保持する。
         device: Arc<GpuVideoDevice>,
 
-        /// frame_gpuが最後にデコーダへ供給したpacketの次に来るべきdisplay_index。
-        /// pop_frontしたpacketのdisplay_indexがこれと一致しない場合、連続性が
-        /// 途切れている（シーク発生）とみなしdecoderを再生成しSPS/PPSを再注入する。
         expected_next: Option<i64>,
 
-        /// decoderが実際に出力したフレームへ割り当てる次のdisplay_index。
-        ///
-        /// feedしたpacket.display_indexをそのまま出力フレームのcacheキーに使うと、
-        /// decoder内部バッファリング（1 packet feedが即1 frame出力とは限らない）により
-        /// 出力とfeed順がずれてcacheキーが実際の表示順と食い違う。出力が確定した順に
-        /// この専用カウンタを進めてcacheキーとすることで、feed側のインデックスと
-        /// 出力側のインデックスを分離する。decoder再生成時は再生成の起点となる
-        /// sync sampleのdisplay_indexへ合わせてリセットする。
         next_output_index: i64,
 
-        /// create_wgpu_textures_decoder_h264を呼んだ累計回数。
-        /// discontinuous判定の誤爆でdecoder再生成・GPUリソース確保が
-        /// 想定外に高頻度発生していないかログで確認するためのカウンタ。
         reset_count: u64,
     }
 
     impl GpuVideoDecoder {
-        /// deviceはホスト（Slint/gpu-video Manual注入）が生成した共有インスタンスを渡す。
-        /// 本関数内でVulkanInstance/Adapter/Deviceを新規生成しない
-        /// （単一デバイス構成をホスト全体で維持するため）。
         pub fn open(path: &Path, device: &Arc<GpuVideoDevice>) -> Result<Self, String> {
             eprintln!(
                 "{}",
@@ -707,12 +618,6 @@ mod imp {
             self.total_frames
         }
 
-        /// バックグラウンドスレッド専用。demux は触らず、メモリ上の pending/pkts のみ操作する。
-        ///
-        /// pending は常に「直前sync sampleから連続するAVCC sample列」を保つ。
-        /// frame_indexが属するGOPの起点（needed_sync）とpending先頭が食い違う場合、
-        /// pendingを全消去して needed_sync からframe_indexまでを積み直す
-        /// （順再生の継続・GOP跨ぎ・逆シークの3ケースを同一ロジックで処理する）。
         fn prefetch(&mut self, frame_index: i64) -> Result<(), String> {
             eprintln!(
                 "{}",
@@ -792,7 +697,6 @@ mod imp {
             Ok(())
         }
 
-        /// workerスレッド専用。蓄積済みパケットをデコード・変換し確定テクスチャを返す。
         fn frame_gpu(
             &mut self,
             frame_index: i64,
@@ -1066,10 +970,6 @@ mod imp {
 
     static SHARED_DEVICE: std::sync::OnceLock<Arc<GpuVideoDevice>> = std::sync::OnceLock::new();
 
-    /// main.rsが起動時に一度だけ呼ぶ。本体プロセス内で直接呼ばれる素のRust関数呼び出しであり、
-    /// dylib境界（libloading + extern "C" + 生ポインタ受け渡し）を経由しない。
-    /// これによりVulkanDevice/wgpu::Deviceの内部レイアウトは常に単一コンパイル単位内で
-    /// 一貫し、ABI不一致によるas_hal()のNone化を構造的に排除する。
     pub fn set_shared_device(device: Arc<GpuVideoDevice>) {
         let _ = SHARED_DEVICE.set(device);
     }
@@ -1110,9 +1010,6 @@ mod imp {
             })
     }
 
-    /// src/media/loader.rsのネイティブプラグインレジストリへ直接登録するためのVTable生成。
-    /// dylibロード（libloading::Library::get）を経由せず、本体バイナリと同一コンパイル単位の
-    /// 関数ポインタをそのまま束ねるだけの操作。
     pub fn native_vtable() -> MediaVTable {
         MediaVTable {
             meta,
@@ -1126,8 +1023,6 @@ mod imp {
 #[cfg(target_os = "linux")]
 pub use imp::*;
 
-/// Linux以外向け無効化スタブ。gpu-video(Vulkan)非対応のため実デコード機能を持たず、
-/// MediaVTable登録もextensions_len=0のため実質何もマッチしない（安全側フォールバック）。
 #[cfg(not(target_os = "linux"))]
 pub mod macos_stub {
     use neoutl_media_api::{MediaKind, MediaMeta, MediaVTable};

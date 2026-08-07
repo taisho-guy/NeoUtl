@@ -1,10 +1,3 @@
-//! Codeberg(Gitea) `taisho-guy/NeoUtl` リリースAPIを用いた自己アップデート機構。
-//! GitHub非互換のため`self_update`のbuiltin backend（github/gitlab）は使用せず、
-//! リリースメタデータ取得は`ureq`直叩き、ダウンロード・展開は`zip`直接処理、
-//! 自己置換のみ`self_replace`クレートへ委譲する。
-//!
-//! 注意: 自己置換は`self_replace`クレートのAPI表面に依存する。
-
 use std::io::{Read, Write};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
@@ -44,8 +37,6 @@ struct ReleaseResponse {
     assets: Vec<ReleaseAssetResponse>,
 }
 
-/// build.yml matrix.artifact_nameと一致させる。prerelease限定運用のため
-/// prerelease判定は行わず、常に先頭（最新publish）を採用する。
 fn current_asset_name() -> Option<&'static str> {
     match (std::env::consts::OS, std::env::consts::ARCH) {
         ("linux", "x86_64") => Some("neoutl-linux-x86_64.zip"),
@@ -114,8 +105,6 @@ fn is_newer(remote_version: &str) -> Result<bool, String> {
     Ok(remote > current)
 }
 
-/// 起動時/手動チェック共通。バックグラウンドスレッドで完結し、結果を`state`へ書き込む。
-/// UI側は`show()`毎フレーム`state.lock()`で読むのみ（ExportDialog::progressと同型）。
 pub fn spawn_check(state: Arc<Mutex<UpdateStatus>>) {
     *state.lock().unwrap() = UpdateStatus::Checking;
     std::thread::spawn(move || {
@@ -134,7 +123,6 @@ pub fn spawn_check(state: Arc<Mutex<UpdateStatus>>) {
     });
 }
 
-/// ダウンロード済みzipアーカイブをdest_dir直下へ展開する。
 fn extract_zip_archive(
     archive_path: &std::path::Path,
     dest_dir: &std::path::Path,
@@ -232,8 +220,6 @@ fn apply_update(info: &UpdateInfo, state: &Arc<Mutex<UpdateStatus>>) -> Result<(
     Ok(())
 }
 
-/// ダウンロード〜自己置換までを別スレッドで実行する。完了後は再起動が必要。
-/// objects/effects/decoders/vst3-host-helper・macOS Resourcesは対象外（フェーズ1）。
 pub fn spawn_apply(state: Arc<Mutex<UpdateStatus>>, info: UpdateInfo) {
     std::thread::spawn(move || {
         let result = apply_update(&info, &state);

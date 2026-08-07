@@ -2,29 +2,20 @@ use shipyard::Component;
 
 use crate::ecs::types::{EffectInstance, EffectParam, Value};
 
-/// エフェクトメタデータ・パラメータスキーマは`crate::effects::loader::EffectSource`
-/// （dylib・Lua両供給元を統合した型）が保持する。ホストはこの層でFFI・Luaいずれの
-/// 詳細も意識しない。
 pub use neoutl_shared_abi::{ParamKind, ParamRowOwned};
 
 pub fn find_effect(id: &str) -> Option<std::sync::Arc<crate::effects::EffectSource>> {
     crate::effects::loader::by_id(id)
 }
 
-/// 指定エフェクトのパラメータスキーマを所有権付きで得る。
-/// dylib由来はunsafeな'static複製、Lua由来は既存Vecの複製であり、
-/// いずれもEffectSource::param_schemaへ委譲する（呼び出し元はこの区別を意識しない）。
 pub fn param_schema(source: &crate::effects::EffectSource) -> Vec<ParamRowOwned> {
     source.param_schema()
 }
 
-/// Clipに付随するエフェクトの順序付きスタック。
-/// AviQtl概念の「Effect[] (ordered list)」に相当。
 #[derive(Clone, Debug, Default, Component)]
 pub struct EffectStack(pub Vec<EffectInstance>);
 
 impl EffectStack {
-    /// 追加時にスキーマのdefault値をパラメータ初期値として展開する。
     pub fn push(&mut self, effect_id: impl Into<String>) {
         let effect_id = effect_id.into();
         let mut instance = EffectInstance::new(effect_id.clone());
@@ -82,9 +73,6 @@ impl EffectStack {
         self.set_param_value(index, key, Value::TrackRef(value));
     }
 
-    /// 基準値のみを更新する。既存の中間点は保持する
-    /// （挿入で丸ごと置換すると編集のたびに中間点が消える欠陥になるため、
-    /// 既存エントリがあればEffectParam::set_staticへ委譲する）。
     pub fn set_param_value(&mut self, index: usize, key: &str, value: Value) {
         if let Some(e) = self.0.get_mut(index) {
             match e.params.get_mut(key) {
@@ -96,8 +84,6 @@ impl EffectStack {
         }
     }
 
-    /// 指定フレームへ中間点を1件設定する。パラメータ未初期化なら
-    /// valueを基準値として新規作成する。
     pub fn set_keyframe(
         &mut self,
         index: usize,
@@ -137,9 +123,6 @@ impl EffectStack {
         }
     }
 
-    /// split_frame（絶対フレーム）でクリップを分割する。呼び出し元自身は各エフェクト・
-    /// 各パラメータの前半のみを残し、返り値が後半用のEffectStack（エフェクト構成・
-    /// enabled状態は同一のまま複製、パラメータのみEffectParam::split_atへ委譲）となる。
     pub fn split_at(&mut self, split_frame: i32) -> EffectStack {
         let second: Vec<EffectInstance> = self
             .0
@@ -160,8 +143,6 @@ impl EffectStack {
     }
 }
 
-/// 有効エフェクトのパラメータを「指定フレームで評価した値」で列挙。
-/// GPU実行は renderer 側の責務。
 pub fn compute_effect_params_at(
     stack: &EffectStack,
     frame: i32,

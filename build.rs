@@ -1,4 +1,3 @@
-// build.rs
 use std::{fs, path::PathBuf};
 
 fn main() {

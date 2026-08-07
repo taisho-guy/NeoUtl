@@ -1,4 +1,3 @@
-// 標準オブジェクトUniform契約。全ObjectVTable実装が共有するgroup(0)binding(0)レイアウト。
 struct Uniforms
 {
     float4x4 mvp;
@@ -19,8 +18,6 @@ struct VertexOutput
 static const uint MAX_SIDES = 32u;
 static const float PI = 3.14159265358979;
 
-// vertex_index: MAX_SIDES個の三角形ファン * (面前+面背)。
-// sides未満の三角形は中心点への縮退で不可視化する（固定vertex_countで可変辺数を実現）。
 [shader("vertex")]
 VertexOutput vs_main(uint in_vertex_index : SV_VertexID)
 {
@@ -49,8 +46,7 @@ VertexOutput vs_main(uint in_vertex_index : SV_VertexID)
         }
     }
 
-    // 背面は押し出し量だけZ方向へ複製する（extrude_depth==0なら2D同一面に潰れ不可視の裏面）。
-    if (!front)
+        if (!front)
     {
         pos.z = -u.extrude_depth;
     }

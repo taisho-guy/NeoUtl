@@ -17,10 +17,6 @@ pub struct EffectPlugin {
     _lib: Library,
 }
 
-/// エフェクト供給元。dylib(cdylib、`EffectVTable`経由)とLua(`neoutl-effect-lua`経由)を
-/// 単一の型で扱う。ホスト側消費コード(ecs::effects, renderer::pipeline)はこの型のみを
-/// 参照し、供給元固有のFFI呼び出し・生存期間管理を意識しない
-/// （dylib側のunsafe呼び出しはこのファイル内に閉じる）。
 pub enum EffectSource {
     Native(EffectPlugin),
     Lua(LuaEffectSource),
@@ -48,9 +44,6 @@ impl EffectSource {
         }
     }
 
-    /// 現フレームで適用するWGSLフラグメントシェーダソース。
-    /// Native側はプラグインdylib内'staticバイト列への参照、Lua側はLuaEffectSource所有の
-    /// Stringへの参照であり、いずれもEffectSource自身より長生きしない前提で借用する。
     pub fn wgsl_bytes(&self) -> &[u8] {
         match self {
             Self::Native(p) => {
@@ -65,10 +58,6 @@ impl EffectSource {
         }
     }
 
-    /// パラメータスキーマ。Native側はdylibの'static配列をunsafeで複製し、
-    /// Lua側は既に所有済みのVecをそのまま複製する
-    /// （複製コストは編集UI描画・エフェクト追加時のみ発生し、毎フレームapply_effect_chainでは
-    /// 呼び出し元がキャッシュ済みの値を使う想定）。
     pub fn param_schema(&self) -> Vec<ParamRowOwned> {
         match self {
             Self::Native(p) => {
@@ -85,9 +74,6 @@ impl EffectSource {
         }
     }
 
-    /// Uniforms構造体の必要バイト数。両供給元とも
-    /// `neoutl_effect_api::uniform_size_std(param_schema.len())`に一致する
-    /// （共有レイアウト契約`array<vec4<f32>, N>`のため、供給元非依存に計算できる）。
     pub fn uniform_size(&self) -> u32 {
         match self {
             Self::Native(p) => unsafe { (p.vtable.uniform_size)() },
@@ -95,10 +81,6 @@ impl EffectSource {
         }
     }
 
-    /// パラメータ評価値列をUniformsバイト表現へ詰める。
-    /// Native側はプラグイン固有pack_uniform（全実装pack_uniform_std委譲済み）、
-    /// Lua側はホスト共有のpack_uniform_stdを直接呼ぶ（Lua独自packは提供しない、
-    /// レイアウト契約を単一実装に固定するため）。
     pub fn pack_uniform(&self, params: &[f32], out: &mut [u8]) {
         match self {
             Self::Native(p) => unsafe {
@@ -120,9 +102,6 @@ fn registry_swap() -> &'static ArcSwap<Vec<Arc<EffectSource>>> {
     SWAP.get_or_init(|| ArcSwap::new(Arc::new(Vec::new())))
 }
 
-/// dylib(effects_dir)・Lua(scripts_dir)双方からエフェクトを収集し統合registryを構築する。
-/// id重複時は先勝ち（走査順: Native全件→Lua全件）とし、後続side loadでの
-/// 静かな上書きを避ける（システムAPI経由の動的登録drainは別経路、本registryとは独立）。
 pub fn load_all(effects_dir: &Path, scripts_dir: &Path) {
     let mut ids = std::collections::HashSet::new();
     let mut sources: Vec<Arc<EffectSource>> = Vec::new();
@@ -162,8 +141,6 @@ pub fn load_all(effects_dir: &Path, scripts_dir: &Path) {
     registry_swap().store(Arc::new(sources));
 }
 
-/// 現行スナップショットを返す。呼び出し側はフレーム内のみ保持し、以降は破棄する
-/// （旧Native側Libraryを無参照後即解放させる設計を担保するため、長期保持しない）。
 pub fn registry() -> Arc<Vec<Arc<EffectSource>>> {
     registry_swap().load_full()
 }
@@ -172,9 +149,6 @@ pub fn by_id(id: &str) -> Option<Arc<EffectSource>> {
     registry().iter().find(|p| p.id() == id).cloned()
 }
 
-/// Native(dylib)エフェクト1件の再ロード。既存id一致エントリのみ差し替える。
-/// Lua側エフェクトの再ロードは対象外（Phase7でLuaSystem側へ別途統合）。
-/// シンボル欠落・メタ不整合・id未検出時は現行registryを変更せずエラーを返す。
 pub fn reload_one(path: &Path) -> Result<(), String> {
     let new_plugin = load_one(path).map_err(|e| e.to_string())?;
     let current = registry_swap().load_full();
@@ -211,10 +185,6 @@ pub fn reload_one(path: &Path) -> Result<(), String> {
     Ok(())
 }
 
-/// Lua供給元エフェクトを一括差し替える。現行registry中のNative側全件は保持し、
-/// Lua側全件を渡されたsourcesで置換する（idはNative側優先で重複除外、
-/// LuaSystem::reload_dirがhooks/computes/effectsを事前に空化済みの前提で、
-/// 本関数はsourcesを当該dir由来の全件として扱う）。
 pub fn reload_lua(sources: Vec<LuaEffectSource>) {
     let current = registry_swap().load_full();
     let mut ids = std::collections::HashSet::new();
@@ -302,7 +272,6 @@ pub fn default_effects_dir() -> PathBuf {
     exe_dir.join("effects")
 }
 
-/// dylib探索ディレクトリと兄弟の`scripts/`をLuaスクリプトディレクトリとする。
 pub fn default_effects_lua_dir() -> PathBuf {
     default_effects_dir()
         .parent()

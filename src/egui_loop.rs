@@ -18,8 +18,6 @@ use winit::window::{Window, WindowId};
 
 const SURFACE_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Bgra8Unorm;
 
-/// 旧Slint版(`properties.slint`等)の配色(#0e0e12系パネル/#24242c境界線/#8aabffアクセント)
-/// をegui::Visualsへ移植する。ウィンドウ生成のたびに一度だけ適用する。
 pub struct RegisteredPreview {
     pub panel: Rc<RefCell<PreviewPanel>>,
     pub dialogs: Rc<RefCell<crate::ui::dialogs::DialogSet>>,
@@ -97,9 +95,6 @@ impl WindowKind {
         }
     }
 
-    /// ウィンドウ生成と同時に破棄可能な設定系ダイアログ種別。
-    /// 常駐ウィンドウ(Launcher/Preview/Timeline/Properties)とは異なり、
-    /// 実体ウィンドウの有無そのものが開閉状態を表す（非表示のまま保持しない）。
     fn is_lazy_dialog(self) -> bool {
         matches!(
             self,
@@ -114,8 +109,6 @@ impl WindowKind {
     }
 }
 
-/// SlintのWindow 1枚に対応するegui/winitの実ウィンドウ。
-/// WindowごとにContext・入力状態・Renderer・Surfaceを分離し、擬似ウィンドウ合成はしない。
 struct NativeWindow {
     kind: WindowKind,
     window: Arc<Window>,
@@ -124,11 +117,6 @@ struct NativeWindow {
     ctx: egui::Context,
     state: egui_winit::State,
     renderer: EguiRenderer,
-    /// OS側の表示状態。非表示中はGPU描画(surface取得/present)を一切行わない。
-    /// PresentMode::Fifoは非合成対象ウィンドウへのpresentがvsync待ちで復帰しない
-    /// 場合があり、そのままredrawを継続すると単一スレッドのイベントループ全体が
-    /// フリーズする。表示/非表示の唯一の実装箇所はwindow_eventのCloseRequested/
-    /// set_native_visibleとする。
     visible: bool,
 }
 
@@ -309,7 +297,6 @@ impl EguiMainWindow {
         self.project_windows_created = true;
     }
 
-    /// 設定系ダイアログの開閉フラグを読み取る。プロジェクト未読込時はNone。
     fn dialog_open_state(&self, kind: WindowKind) -> Option<bool> {
         let slot = self.slot.borrow();
         let p = slot.as_ref()?;
@@ -325,8 +312,6 @@ impl EguiMainWindow {
         })
     }
 
-    /// 開閉フラグとウィンドウ実体の有無を一致させる。生成/破棄のみを行い、
-    /// 「作ってから隠す」は行わない。開閉状態の唯一の実装箇所。
     fn sync_dialog_windows(&mut self, event_loop: &ActiveEventLoop) {
         for kind in [
             WindowKind::SystemSettings,
@@ -355,8 +340,6 @@ impl EguiMainWindow {
         }
     }
 
-    /// ダイアログの開閉フラグを書き換える。ウィンドウ実体の生成/破棄は
-    /// `sync_dialog_windows`が次回同期時に行う。
     fn set_dialog_open(slot: &PreviewSlot, kind: WindowKind, open: bool) {
         let slot_ref = slot.borrow();
         let Some(p) = slot_ref.as_ref() else {
@@ -563,8 +546,6 @@ pub fn run(gpu: Rc<SharedGpu>, slot: PreviewSlot) -> Result<(), Box<dyn std::err
     Ok(())
 }
 
-/// システムロケールを検出し、対応するフォントをegui既定フォント定義へ適用する。
-/// フォント検出・読込は`egui-system-fonts`クレートに委譲する。
 fn install_locale_fonts(ctx: &egui::Context) {
     egui_system_fonts::set_auto(ctx, egui_system_fonts::FontStyle::Sans);
 }

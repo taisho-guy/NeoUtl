@@ -1,11 +1,3 @@
-//! `properties.slint` PropertyRowの移植。
-//!
-//! Slint版はSliderがpointer-eventを公開しないため、changed連続発火から150ms無操作で
-//! releaseを推定するタイマーを要した。egui::Slider/DragValueはdrag_stopped()/
-//! lost_focus()で released を直接検知できるため、本実装はタイマーを持たず
-//! イベント駆動でcommit（区間セッション開始）/release（区間セッション終了）を確定する。
-//! ドラッグスクラブはegui::DragValueの標準挙動（ドラッグ距離*speed）をそのまま用いる。
-
 use super::segment::Segment;
 use crate::localization::effect_param_label;
 use std::collections::HashMap;

@@ -13,8 +13,6 @@ use serde::{Deserialize, Serialize};
 use std::ffi::{CString, c_void};
 use std::sync::OnceLock;
 
-/// 1区間分のカーブ本体とその直上に掛かるモディファイアスタック。
-/// AviUtl `GraphCurve`が自身の`modifiers`を保持する構造に対応する。
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct EasingPayload {
     pub kind: CurveKind,
@@ -41,9 +39,6 @@ pub fn ease(payload: &EasingPayload, t: f32) -> f32 {
     evaluate_kind_with_modifiers(&payload.kind, &payload.modifiers, t)
 }
 
-/// FFI境界を越えないインプロセス呼び出し（`neoutl-easing-standard`をrlibとして
-/// 直接依存するegui側エディタ）でも同一の符号化規則を使うための公開版。
-/// 不正または空のペイロードはLinearへフォールバックする。
 pub fn parse_payload(slice: &[u8]) -> EasingPayload {
     if slice.is_empty() {
         return EasingPayload::linear();
@@ -133,10 +128,6 @@ unsafe extern "C" fn evaluate_c(
     }
 }
 
-/// サードパーティ.dll/.so向けFFI経路。ホスト(NeoUtl本体)は本クレートをrlibとして
-/// 直接リンクしており、標準エンジンのカーブ編集UIは`src/ui/properties/easing_editor.rs`
-/// が`EasingPayload`/`parse_payload`/`encode_payload`をインプロセス直接呼び出しする
-/// ため、FFI別ウィンドウは開かず即Cancelを返す（サードパーティエンジンのみこの経路を使う）。
 unsafe extern "C" fn open_editor_window_c(
     _host_handle: *const c_void,
     _keyframes_ptr: *const KeyframeC,

@@ -1,8 +1,6 @@
 use super::{LAYER_HEIGHT, TimelineWindow};
 use egui::{Color32, Painter, Pos2, Rect, Stroke, Vec2};
 
-/// Slint `timeline-grid.slint` 相当。
-/// 各レイヤー行の背景縞(偶数行のみ)と罫線(全行)、フレーム目盛の縦線を描画する。
 impl TimelineWindow {
     pub(super) fn draw_grid(&self, painter: &Painter, rect: Rect, layer_count: i32) {
         let frame_interval = self.frame_interval();

@@ -6,10 +6,6 @@ use egui::{Pos2, Rect, Sense, Stroke, Vec2};
 use std::cell::RefCell;
 use std::rc::Rc;
 
-/// Slint `timeline/layer-header.slint` 相当。
-/// 配色は `ui.visuals()` (アプリ全体テーマ) から取得し、独自の固定色は持たない。
-/// 行の区切りは下辺1本の罫線のみとし、選択行のみ枠線で強調する
-/// (上下辺を重ねて描画すると境界が二重線になり凸凹に見えるため)。
 impl TimelineWindow {
     pub(super) fn layer_header(
         &mut self,

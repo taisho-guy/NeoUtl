@@ -1,5 +1,3 @@
-// 契約上のuniformにフレーム/時刻を持たないため、uv位置に基づく空間ワブルとして実装する
-// （時間軸アニメーションはホスト側でamplitude/frequencyをキーフレーム評価することで表現する）。
 struct Uniforms { float4 p[1]; };
 [[vk::binding(2, 0)]] ConstantBuffer<Uniforms> u;
 

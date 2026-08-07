@@ -20,7 +20,6 @@ impl ProjectSettingsWindow {
         }
     }
 
-    /// アクティブプロジェクトの現在値を反映してダイアログを開く。
     pub fn open(&mut self, state: &SharedAppState) {
         let world_holder = app_state::active_world(state);
         let world = world_holder.lock().unwrap();

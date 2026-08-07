@@ -12,7 +12,6 @@ use std::ffi::CStr;
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 
-/// スレッド安全共有状態。プラグインからのリスタート・処理要求を保持する。
 #[derive(Default)]
 struct NeoHostShared {
     restart_requested: AtomicBool,
@@ -33,7 +32,6 @@ impl<'a> SharedHandler<'a> for NeoHostShared {
     }
 }
 
-/// メインスレッド専有状態。初期化済みハンドルを保持する。
 struct NeoHostMainThread<'a> {
     instance: Option<InitializedPluginHandle<'a>>,
     param_info: Vec<crate::vst3::PluginParamInfo>,
@@ -56,10 +54,6 @@ impl HostHandlers for NeoHost {
     fn declare_extensions(_builder: &mut HostExtensions<Self>, _shared: &Self::Shared<'_>) {}
 }
 
-/// 状態遷移: Stopped(activate直後) → Started(start_processing) → process()を反復
-/// → Stopped(stop_processing) → PluginInstance::deactivate。
-/// `activate`呼び出し（`PluginInstance`側）と`InputAudioBuffers`/`OutputAudioBuffers`/
-/// `InputEvents`/`OutputEvents`の構築方法は未確認のため、`start`/`process`は保留。
 enum ProcessorState<H: clack_host::host::HostHandlers> {
     Stopped(StoppedPluginAudioProcessor<H>),
     Started(StartedPluginAudioProcessor<H>),
@@ -210,7 +204,6 @@ impl NeoPlugin for ClapWrapper {
         Ok(())
     }
 
-    /// CLAPの生APIから取得したパラメータ定義のスナップショットを返す。
     fn param_info(&self) -> Vec<crate::vst3::PluginParamInfo> {
         self.param_info.clone()
     }

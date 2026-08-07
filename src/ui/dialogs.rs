@@ -10,16 +10,12 @@ use std::cell::RefCell;
 use std::rc::Rc;
 use std::sync::{Arc, Mutex};
 
-/// フェーズ2でegui-native化済みの設定系ダイアログ一式。開閉は各構造体の`open`
-/// フィールドまたは`open()`/`open_for_edit()`が単一の起点であり、PreviewPanelの
-/// メニューは開要求フラグを立てるのみでダイアログ本体の状態は持たない。
 pub struct DialogSet {
     pub system_settings: SystemSettingsWindow,
     pub project_settings: ProjectSettingsWindow,
     pub scene_settings: SceneSettingsWindow,
     pub keybindings: KeybindingsWindow,
     pub export_dialog: ExportDialog,
-    /// 未保存プロジェクトタブを閉じる際の確認待ちセッションindex。
     pub confirm_close_session: Option<usize>,
 }
 
@@ -35,8 +31,6 @@ impl DialogSet {
         }
     }
 
-    /// プロジェクトタブを閉じる唯一の受け口。dirtyでなければ即時close_session、
-    /// dirtyならconfirm_close_sessionへ退避しUI側の確認ダイアログ表示を待つ。
     pub fn request_close_session(&mut self, state: &SharedAppState, index: usize) {
         let dirty = state
             .lock()
@@ -52,18 +46,14 @@ impl DialogSet {
         }
     }
 
-    /// タイムラインのシーンタブ右クリック等、外部起点でのシーン設定編集用。
     pub fn open_scene_edit(&mut self, state: &SharedAppState, scene_id: i32) {
         self.scene_settings.open_for_edit(state, scene_id);
     }
 
-    /// タイムラインの「新規シーン」操作起点。
     pub fn open_scene_create(&mut self, state: &SharedAppState) {
         self.scene_settings.open_for_create(state);
     }
 
-    /// Previewメニューからの表示要求だけを消費する。個々のダイアログ描画は
-    /// egui_loopの対応するネイティブwinitウィンドウで行う。
     pub fn sync_preview_requests(
         &mut self,
         state: &SharedAppState,

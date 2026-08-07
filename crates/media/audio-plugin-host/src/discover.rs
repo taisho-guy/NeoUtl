@@ -6,8 +6,6 @@ use std::ffi::CString;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-/// エフェクトカタログのCatalogRowへ直接写像可能な形へ正規化した1プラグイン分の情報。
-/// PluginChain::pushはこのpath/plugin_idのペアでプラグイン実体をロードする。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PluginCatalogEntry {
     pub format: PluginFormat,
@@ -17,8 +15,6 @@ pub struct PluginCatalogEntry {
     pub vendor: String,
 }
 
-/// dir配下のVST3バンドルを走査する。vst3-hostのビルトインスキャナ
-/// （モジュール単位でmoduleinfo.json優先、なければCOM経由の実ロードで内省）に委譲する。
 pub fn discover_vst3(dir: &Path) -> Vec<PluginCatalogEntry> {
     let report =
         vst3_host::discovery::discover_plugins_safe(&[dir.to_path_buf()], Duration::from_secs(3));
@@ -70,10 +66,6 @@ pub fn discover_vst3_file(path: &Path) -> Vec<PluginCatalogEntry> {
     .collect()
 }
 
-/// dir配下の`.clap`ファイルを走査する。ファイル単位でPluginEntryを一時ロードし、
-/// PluginFactory::plugin_descriptorsから列挙後、直ちにEntryを破棄する
-/// （実インスタンス化はPluginChainへ追加された時点まで遅延させる方針のため、
-/// ここではメタデータ取得のみに限定する）。
 pub fn discover_clap(dir: &Path) -> Vec<PluginCatalogEntry> {
     let mut files = Vec::new();
     collect_files(dir, "clap", &mut files);
@@ -172,9 +164,6 @@ fn discover_clap_file_impl(path: &Path) -> Vec<PluginCatalogEntry> {
         .collect()
 }
 
-/// CLAP factoryの`plugin_id`をロード時に渡すためのCString化。
-/// PluginId文字列はNUL終端要件（CLAP規約）を満たす前提だが、
-/// UI経由の値には保証がないため、ここで検証を1箇所へ集約する。
 pub fn clap_plugin_id_cstring(plugin_id: &str) -> Result<CString, crate::PluginError> {
     CString::new(plugin_id)
         .map_err(|e| crate::PluginError::Clap(format!("plugin_id contains NUL: {e}")))

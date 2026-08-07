@@ -3,21 +3,9 @@ local string_find = string.find
 local string_sub = string.sub
 local table_concat = table.concat
 
--- ==========================================
--- 1. 各言語ごとのパース高速ジャンプ用パターン
--- ==========================================
 local EXT_CONFIGS = {
-    rs = { jump = '[%/r%"]' },    -- Rust: //, /* */, ", r", r#", URL除外
-    lua = { jump = '[%-%"%\'%[]' }, -- Lua: --, --[[ ]], ", ', [[ ]], URL除外
-    slang = { jump = '[%/r%"]' },  -- Slang: Rust/C系と同様の構文
-    json = { jump = '[%"]' },       -- JSON: コメントなし、文字列のみ保護（念のため）
-    toml = { jump = '[%#%"%\']' },   -- TOML: #, ", ', """
-    yaml = { jump = '[%#%"%\']' }    -- YAML: #, ", '
-}
+    rs = { jump = '[%/r%"]' },        lua = { jump = '[%-%"%\'%[]' },     slang = { jump = '[%/r%"]' },      json = { jump = '[%"]' },           toml = { jump = '[%#%"%\']' },       yaml = { jump = '[%#%"%\']' }    }
 
--- ==========================================
--- 2. 究極高速化パースエンジン
--- ==========================================
 local function clean_comments(content, ext)
     local len = #content
     local result = {}
@@ -33,18 +21,14 @@ local function clean_comments(content, ext)
         i = next_idx
         local b1 = string_sub(content, i, i)
 
-        -- ------------------------------------------
-        -- 【共通】通常の文字列リテラル保護 ("..." や '...')
-        -- ------------------------------------------
-        if b1 == '"' or b1 == "'" then
+                                if b1 == '"' or b1 == "'" then
             local q = b1
             i = i + 1
             while i <= len do
                 local _, end_idx = string_find(content, q, i, true)
                 if not end_idx then i = len + 1 break end
                 
-                -- エスケープ文字（\" や \'）の逆算
-                local esc_count = 0
+                                local esc_count = 0
                 local check_idx = end_idx - 1
                 while check_idx >= i and string_sub(content, check_idx, check_idx) == '\\' do
                     esc_count = esc_count + 1
@@ -59,10 +43,7 @@ local function clean_comments(content, ext)
                 end
             end
 
-        -- ------------------------------------------
-        -- 【Rust / Slang】生文字列リテラル & C系コメント
-        -- ------------------------------------------
-        elseif (ext == "rs" or ext == "slang") and b1 == 'r' then
+                                elseif (ext == "rs" or ext == "slang") and b1 == 'r' then
             local n2 = string_sub(content, i+1, i+2)
             if string_sub(n2, 1, 1) == '"' then
                 i = i + 2
@@ -100,12 +81,8 @@ local function clean_comments(content, ext)
                 i = i + 1
             end
 
-        -- ------------------------------------------
-        -- 【Lua】ロングストリング & Luaコメント
-        -- ------------------------------------------
-        elseif ext == "lua" and b1 == '[' then
-            -- [[ ... ]] の検知（シャープ等がない純粋なリテラル開始のみ対応）
-            if string_sub(content, i+1, i+1) == '[' then
+                                elseif ext == "lua" and b1 == '[' then
+                        if string_sub(content, i+1, i+1) == '[' then
                 local _, end_idx = string_find(content, ']]', i + 2, true)
                 i = end_idx and (end_idx + 2) or (len + 1)
             else
@@ -117,13 +94,11 @@ local function clean_comments(content, ext)
                 result[r_idx] = string_sub(content, last_pos, i - 1)
                 r_idx = r_idx + 1
                 
-                -- --[[ 複数行コメント ]] の判定
-                if string_sub(content, i+2, i+3) == '[[' then
+                                if string_sub(content, i+2, i+3) == '[[' then
                     local _, e = string_find(content, "]]", i + 4, true)
                     i = e and (e + 2) or (len + 1)
                 else
-                    -- 通常の1行コメント
-                    local _, e = string_find(content, "\n", i + 2, true)
+                                        local _, e = string_find(content, "\n", i + 2, true)
                     i = e and (e + 1) or (len + 1)
                 end
                 last_pos = i
@@ -131,10 +106,7 @@ local function clean_comments(content, ext)
                 i = i + 1
             end
 
-        -- ------------------------------------------
-        -- 【TOML / YAML】# コメント
-        -- ------------------------------------------
-        elseif (ext == "toml" or ext == "yaml") and b1 == '#' then
+                                elseif (ext == "toml" or ext == "yaml") and b1 == '#' then
             result[r_idx] = string_sub(content, last_pos, i - 1)
             r_idx = r_idx + 1
             local _, e = string_find(content, "\n", i + 1, true)
@@ -153,9 +125,6 @@ local function clean_comments(content, ext)
     return nil
 end
 
--- ==========================================
--- 3. ファイル処理・OSコマンド実行
--- ==========================================
 local function remove_comments_from_file(filepath, ext)
     local file = io_open(filepath, "r")
     if not file then return end
@@ -174,8 +143,7 @@ local function remove_comments_from_file(filepath, ext)
 end
 
 local function scan_project()
-    -- 拡張子指定で対象を絞る（target, .git を弾きつつ高速find）
-    local cmd = (os.getenv("WINDIR") or os.getenv("windir"))
+        local cmd = (os.getenv("WINDIR") or os.getenv("windir"))
         and 'dir /b /s *.rs *.lua *.slang *.json *.toml *.yaml 2>nul' 
         or 'find . -type d -name "target" -prune -o -type d -name ".git" -prune -o -type f \\( -name "*.rs" -o -name "*.lua" -o -name "*.slang" -o -name "*.json" -o -name "*.toml" -o -name "*.yaml" \\) -print'
 
@@ -184,8 +152,7 @@ local function scan_project()
 
     for file in p:lines() do
         if file ~= "" then
-            local ext = string_sub(file, #file - 3) -- .xxx
-            ext = ext:match("%.([^%.]+)$") or file:match("%.([^%.]+)$")
+            local ext = string_sub(file, #file - 3)             ext = ext:match("%.([^%.]+)$") or file:match("%.([^%.]+)$")
             if ext and EXT_CONFIGS[ext] then
                 remove_comments_from_file(file, ext)
             end

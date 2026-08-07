@@ -68,11 +68,6 @@ impl ParamAccess for Transform {
 pub struct GlobalMatrix(pub [f32; 16]);
 
 impl Default for GlobalMatrix {
-    /// Transform::default()から必ず導出する。IDENTITY_MATRIX等の別経路の初期値は
-    /// 持たない（Transformとの乖離を構造的に不可能にするため）。
-    /// エンティティ生成時に本Defaultで挿入されたGlobalMatrixは、
-    /// set_transform()を一度も呼ばれていない状態でも常にTransform::default()と
-    /// 整合した正しい値になる。
     fn default() -> Self {
         compute_global_matrix(&Transform::default())
     }
@@ -92,9 +87,6 @@ pub fn mat4_mul(a: &[f32; 16], b: &[f32; 16]) -> [f32; 16] {
     r
 }
 
-/// Transform を列優先 4x4 行列へ合成する。順序: 平行移動 * 回転Z * 回転Y * 回転X * 拡大縮小。
-/// スケール項にはneoutl_object_api::UNIT_SIZE_PX（プラグイン頂点契約の基準サイズ）を
-/// 掛け、ローカル単位円（直径1.0）をworld空間のピクセル寸法へ写像する。
 pub fn compute_global_matrix(t: &Transform) -> GlobalMatrix {
     let translation: [f32; 16] = [
         1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, t.x, t.y, t.z, 1.0,
@@ -133,9 +125,6 @@ pub fn compute_global_matrix(t: &Transform) -> GlobalMatrix {
     GlobalMatrix(mat4_mul(&translation, &mat4_mul(&rotation, &scale)))
 }
 
-/// GlobalMatrixのUNIT_SIZE_PX基準スケール列を、メディアソースの実寸法へ置換する。
-/// T*R*Sの合成順序上、col0=scale_x*UNIT_SIZE_PX*R_col0、col1=scale_y*UNIT_SIZE_PX*R_col1
-/// であるため、列単位の比率乗算のみで回転・平行移動を保ったまま実寸化できる。
 pub fn rescale_for_source(global: &GlobalMatrix, source_w: f32, source_h: f32) -> GlobalMatrix {
     let mut m = global.0;
     let ratio_w = source_w / UNIT_SIZE_PX;
@@ -147,16 +136,11 @@ pub fn rescale_for_source(global: &GlobalMatrix, source_w: f32, source_h: f32) -
     GlobalMatrix(m)
 }
 
-/// 投影方式。全オブジェクトへ常にPerspectiveを適用する（過去のOrtho切替は
-/// X/Y軸回転時の描画消失バグの原因だったため廃止、ecs/systems.rs::projection_for参照）。
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Projection {
     Perspective { fov_deg: f32 },
 }
 
-/// 全Perspectiveプロジェクションが共有する既定画角。
-/// projection_for()（ecs/systems.rs）とCamera::for_resolution()の両方から参照する
-/// 唯一の定義元とし、値の重複・食い違いを防ぐ。
 pub const DEFAULT_FOV_DEG: f32 = 45.0;
 
 #[derive(Clone, Copy, Debug, Unique)]
@@ -172,10 +156,6 @@ pub struct Camera {
 }
 
 impl Camera {
-    /// プロジェクト解像度からカメラを導出する唯一の窓口。
-    /// DEFAULT_FOV_DEGのPerspectiveで、z=0平面のオブジェクトが
-    /// ちょうどproject_height一杯に収まる距離へpos_zを配置する。
-    /// シーン切替・解像度変更のたびにこれを呼び直せば、常に整合したカメラになる。
     pub fn for_resolution(project_width: f32, project_height: f32) -> Self {
         let half_fov = (DEFAULT_FOV_DEG * 0.5).to_radians();
         let pos_z = (project_height.max(1.0) * 0.5) / half_fov.tan();
@@ -268,8 +248,6 @@ pub fn compute_perspective_matrix(fov_deg: f32, aspect: f32, near: f32, far: f32
     ]
 }
 
-/// dimensionalityとCameraからMVPを合成する唯一の窓口。
-/// project_width/project_height はピクセル単位のプロジェクト解像度で、aspect算出に用いる。
 pub fn compute_mvp(
     global: &GlobalMatrix,
     cam: &Camera,

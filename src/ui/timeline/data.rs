@@ -3,8 +3,6 @@ use crate::objects::registry;
 use crate::ui::types::TimelineObject;
 use egui::Color32;
 
-/// EcsWorldの`TimelineData`をUI用`TimelineObject`へ変換する（毎フレーム再構築）。
-/// 波形テクスチャのみ`waveform_cache`により永続化する。
 impl TimelineWindow {
     pub(super) fn to_egui(
         &mut self,
@@ -53,9 +51,6 @@ impl TimelineWindow {
         }
     }
 
-    /// 波形テクスチャは音声デコード＋波形生成を伴うため、パス単位でegui::TextureHandleを
-    /// 保持し続ける（毎フレーム再構築は行わない）。ハンドルを保持しない限りegui側で
-    /// 参照カウントが尽き解放されるため、waveform_cacheが唯一の保持元となる。
     pub(super) fn waveform_texture(
         &mut self,
         ctx: &egui::Context,

@@ -1,7 +1,3 @@
-//! shader-slang/slang公式リリースをworkspace_root/slangへ導入する。
-//! 既存導入済みの場合はGitHub最新リリースのtag_nameと比較し、差分があれば更新する。
-//! Win/macOS/Linux、x86_64/aarch64の全組合せをGitHub Releaseアセット名から解決する。
-
 use serde::Deserialize;
 use std::env;
 use std::fs;
@@ -12,7 +8,6 @@ use std::process::Command;
 const RELEASES_API_URL: &str = "https://api.github.com/repos/shader-slang/slang/releases/latest";
 const VERSION_MARKER_FILENAME: &str = ".slang-version";
 
-/// slangc実行ファイル名（プラットフォーム別拡張子）。
 fn slangc_filename() -> &'static str {
     if cfg!(target_os = "windows") {
         "slangc.exe"
@@ -21,8 +16,6 @@ fn slangc_filename() -> &'static str {
     }
 }
 
-/// PATH環境変数上にシステム導入済みのslangcが存在するかを確認する。
-/// 見つかった場合はそのフルパスを返す（project_root/slangへの導入は不要と判断する）。
 fn find_system_slangc() -> Option<PathBuf> {
     let path_var = env::var_os("PATH")?;
     let filename = slangc_filename();
@@ -43,13 +36,10 @@ struct ReleaseInfo {
     assets: Vec<ReleaseAsset>,
 }
 
-/// 導入先ディレクトリ(workspace_root/slang)を返す。
 pub fn install_dir(workspace_root: &Path) -> PathBuf {
     workspace_root.join("slang")
 }
 
-/// project_root/slang配下の実行ファイル格納ディレクトリ(slang/bin)を返す。
-/// システム導入済みslangcを利用する場合はこのディレクトリは存在しない。
 pub fn bin_dir(workspace_root: &Path) -> PathBuf {
     install_dir(workspace_root).join("bin")
 }
@@ -58,7 +48,6 @@ fn version_marker_path(slang_dir: &Path) -> PathBuf {
     slang_dir.join(VERSION_MARKER_FILENAME)
 }
 
-/// 現在導入されているリリースのtag_nameを読み取る。未導入・破損時はNone。
 fn read_installed_tag(slang_dir: &Path) -> Option<String> {
     let text = fs::read_to_string(version_marker_path(slang_dir)).ok()?;
     let tag = text.trim();
@@ -77,8 +66,6 @@ fn write_installed_tag(slang_dir: &Path, tag_name: &str) {
     }
 }
 
-/// 現在のビルド環境に対応するSlangリリースアセット名の末尾識別子を返す。
-/// 例: "linux-x86_64" / "windows-aarch64" / "macos-x86_64"
 fn platform_tag() -> &'static str {
     let os = if cfg!(target_os = "windows") {
         "windows"
@@ -103,10 +90,6 @@ fn platform_tag() -> &'static str {
     }
 }
 
-/// CI環境変数GITHUB_TOKEN（またはGH_TOKEN）が設定されていればAuthorizationヘッダを付与する。
-/// 未認証リクエストはIP単位60回/時のためGitHub Actions共有ランナーでは容易に枯渇する
-/// （実際に403で発生）。認証済みリクエストは5000回/時まで緩和される。
-/// トークン未設定（ローカル開発環境等）では従来通り未認証で送信する。
 fn github_token() -> Option<String> {
     std::env::var("GITHUB_TOKEN")
         .or_else(|_| std::env::var("GH_TOKEN"))
@@ -128,8 +111,6 @@ fn fetch_latest_release() -> Result<ReleaseInfo, String> {
         .map_err(|err| format!("GitHub Releases APIレスポンス解析失敗: {err}"))
 }
 
-/// デバッグ情報・glibcバージョン別アセットを除外し、通常配布アセットのみを対象とする。
-/// 通常配布アセット名は "slang-{version}-{platform_tag}.zip" で終端する。
 fn select_asset<'a>(assets: &'a [ReleaseAsset], platform_tag: &str) -> Option<&'a ReleaseAsset> {
     let suffix = format!("-{platform_tag}.zip");
     assets.iter().find(|asset| asset.name.ends_with(&suffix))
@@ -152,8 +133,6 @@ fn download_asset_bytes(url: &str) -> Result<Vec<u8>, String> {
     Ok(bytes)
 }
 
-/// zipアーカイブをslang_dir直下へ展開する。展開前に既存内容を全削除し、
-/// 旧バージョンのファイルが混在しないようにする。
 fn extract_zip(bytes: &[u8], slang_dir: &Path) -> Result<(), String> {
     if slang_dir.exists() {
         fs::remove_dir_all(slang_dir).map_err(|err| format!("既存slang削除失敗: {err}"))?;
@@ -194,12 +173,6 @@ fn extract_zip(bytes: &[u8], slang_dir: &Path) -> Result<(), String> {
     Ok(())
 }
 
-/// workspace_root/slangへSlangを導入する。既に同一バージョンが導入済みならスキップする。
-/// project_root/slang未導入でも、PATH上にシステム導入済みのslangcがあればそれを利用し導入を省略する。
-/// ネットワーク到達不能時、導入済みのSlangが存在すればそれを継続利用し警告のみ出す。
-/// project_root/slang・システム双方とも未導入かつ取得不能な場合はビルド続行不能のためpanicする。
-/// offline=trueの場合は更新確認を含む通信を一切行わず、project_root/slangまたは
-/// システム導入済みのslangcをそのまま利用する（いずれも見つからない場合はpanicする）。
 pub fn ensure_installed(workspace_root: &Path, offline: bool) {
     let slang_dir = install_dir(workspace_root);
     let installed_tag = read_installed_tag(&slang_dir);
@@ -281,10 +254,6 @@ pub fn ensure_installed(workspace_root: &Path, offline: bool) {
     eprintln!("{}", t!("[xtask][slang] 導入完了: %{arg0}"));
 }
 
-/// build.rs（neoutl-object-shader-build等）がslangcを解決出来るよう、
-/// SLANG_DIRとPATH(slang/bin優先)をコマンドの環境変数として設定する。
-/// project_root/slang未導入（システムのslangcを利用する運用）の場合は何もしない
-/// （既存PATH上でslangcが解決出来ている前提のため）。
 pub fn apply_build_env(cmd: &mut Command, workspace_root: &Path) {
     let slang_dir = install_dir(workspace_root);
     let bin_dir = bin_dir(workspace_root);

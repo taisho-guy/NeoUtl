@@ -372,7 +372,6 @@ pub struct KeymapResource {
 }
 
 impl KeymapResource {
-    /// commandの現在の割当（上書き優先、無ければ既定）を返す。commandが複数既定を持つ場合は先頭を返す。
     pub fn binding_of(&self, command: CommandId) -> (Scope, OwnedBinding) {
         if let Some(o) = self.overrides.iter().find(|o| o.command == command) {
             return (o.scope, o.binding.clone());
@@ -392,7 +391,6 @@ impl KeymapResource {
             ))
     }
 
-    /// commandの割当を変更する。既存の上書きは置換、無ければ追加。
     pub fn set_binding(&mut self, command: CommandId, scope: Scope, binding: OwnedBinding) {
         if let Some(o) = self.overrides.iter_mut().find(|o| o.command == command) {
             o.scope = scope;
@@ -414,7 +412,6 @@ impl KeymapResource {
         self.overrides.clear();
     }
 
-    /// scope（またはGlobal）とキー組合せが一致する他コマンドをexcludeを除いて探す。
     pub fn conflict_of(
         &self,
         exclude: CommandId,
@@ -487,12 +484,10 @@ pub fn load_from_disk() -> Option<KeymapResource> {
 
 static ACTIVE_KEYMAP: OnceLock<Mutex<KeymapResource>> = OnceLock::new();
 
-/// プロセス全体で共有するカスタムキーマップ。初回アクセス時にディスクから読込む。
 pub fn active_keymap() -> &'static Mutex<KeymapResource> {
     ACTIVE_KEYMAP.get_or_init(|| Mutex::new(load_from_disk().unwrap_or_default()))
 }
 
-/// 各ウィンドウのraw-key-eventハンドラから呼ぶ、カスタム上書き込みの解決関数。
 pub fn resolve_active(
     scope: Scope,
     ctrl: bool,

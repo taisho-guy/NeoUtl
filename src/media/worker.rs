@@ -12,19 +12,8 @@ use std::thread::{self, ThreadId};
 use std::time::Duration;
 
 const PREFETCH_RADIUS: i64 = DECODE_PREFETCH_RADIUS;
-/// UIスレッド側テクスチャLRU(media/cache.rs::TextureLru)も同容量を共有する。
-/// gstreamer-decoder等CPU系デコーダの固定テクスチャプール枚数
-/// (neoutl_media_api::VIDEO_TEXTURE_POOL_CAPACITY)ともstale handle aliasing回避のため
-/// 同一値を維持する必要があり、GOP長等に応じた動的変更は禁止。
 pub(crate) const RING_CAPACITY: usize = DECODE_RING_CAPACITY;
 
-/// ここで保持するwgpu::Textureはgpuvideo-decoder側の固定プールスロットへの
-/// 参照であり、実体の生存はgpuvideo側TextureCacheの容量に依存する。
-/// RING_CAPACITYがgpuvideo側容量を上回ると、gpuvideo側が既に別フレーム用に
-/// 再割当て済みのスロットをこちらがまだ「有効」として保持し続け、
-/// 中身がすり替わったテクスチャ(stale handle aliasing)をUIへ返しかねない。
-/// 投機的先読みの窓(PREFETCH_RADIUS)より大きくは絶対に広げない安全側の
-/// 上限を明示的に課す。
 const SAFE_RING_CAPACITY: usize = {
     let radius_window = (PREFETCH_RADIUS as usize) * 2 + 2;
     if RING_CAPACITY < radius_window {
@@ -38,14 +27,6 @@ const STOP_SENTINEL: i64 = i64::MIN + 1;
 const NONE_SENTINEL: i64 = i64::MIN;
 const DECODE_WATCHDOG_TIMEOUT: Duration = Duration::from_millis(DECODE_WATCHDOG_TIMEOUT_MS);
 
-/// 準備完了フレームのVRAMテクスチャ保持。wgpu::Textureは参照カウント付きハンドルであり、
-/// 実体はgpuvideo-decoder側の固定プール(open()時に確保済み)に存在する。ここでの
-/// clone/保持は追加VRAM確保を発生させない(ゼロコピー維持)。
-///
-/// get/putいずれの参照でも該当indexを最新扱いへ昇格させる真のLRUとして動作する
-/// (旧実装はputでの新規挿入時のみ順序を更新し、既存hitやgetでは順序を
-/// 一切更新しない単純FIFOだったため、直近に読まれた頻出フレームが
-/// 未使用の古いフレームより先にevictされ得た)。
 struct TextureStore {
     map: HashMap<i64, wgpu::Texture>,
     order: VecDeque<i64>,
@@ -91,11 +72,8 @@ impl TextureStore {
     }
 }
 
-/// バックグラウンド専有スレッドへの1件のリクエスト。
 enum DecodeRequest {
-    /// prefetchのみ実行する(投機的先読み窓の事前構築用。GPU decode()は伴わない)。
     PrefetchOnly(i64),
-    /// prefetch + frame_gpu(GPU decode()を伴う)を実行し、確定テクスチャを返す。
     Full(i64),
 }
 
@@ -104,20 +82,6 @@ enum DecodeResponse {
     FrameDone(i64, Result<wgpu::Texture, String>),
 }
 
-/// decoder1個につき専有される永続バックグラウンドスレッド。
-///
-/// 旧実装はframe_gpu()呼び出し1回ごとにthread::spawnしていたため、再生中は
-/// 毎フレームOSスレッドが生成・破棄され続けていた(ログ上でframe_gpu呼び出し毎に
-/// ThreadIdが変わっていた現象の直接原因)。本実装ではDecodeThreadHandle::spawn()時に
-/// 1回だけスレッドを起動し、decoder本体の所有権もそのスレッドへ完全に移す。
-/// 以後この1本のスレッドがprefetch/frame_gpu双方を順に処理し続ける。
-///
-/// watchdogタイムアウト時、この専有スレッドはgpu-video内部の無期限待機に
-/// 取り残され回収不能となる(ハードウェアデコーダのブロッキング呼び出しである以上、
-/// 安全に中断する手段がないため構造的に不可避)。この場合でも新規スレッドは
-/// 一切追加生成されず、当該decoderインスタンス用のスレッドが1本残留するのみに
-/// 留める。またこのスレッドの内部ループが完了/終了した際に必ずログを出すため、
-/// リークが発生したかどうかは常に事後確認可能(可観測)にする。
 struct DecodeThreadHandle {
     req_tx: mpsc::Sender<DecodeRequest>,
     resp_rx: mpsc::Receiver<DecodeResponse>,
@@ -208,9 +172,6 @@ impl DecodeThreadHandle {
         }
     }
 
-    /// watchdog付きでprefetch+frame_gpuを1回実行する。タイムアウト時はこのハンドル自体を
-    /// 「hung」として以後使用不能にする(内部スレッドは回収せず残留させる。
-    /// 安全な強制終了手段がgpu-video側に存在しないため)。
     fn frame_gpu_watched(&mut self, frame_index: i64) -> Result<wgpu::Texture, String> {
         if self.hung {
             return Err(format!(
@@ -257,16 +218,6 @@ pub struct DecodeWorker {
 }
 
 impl DecodeWorker {
-    /// prefetch()とframe_gpu()(GPU decode()呼び出しを含む)を単一の永続バックグラウンド
-    /// スレッドへ集約する。UIスレッドはVRAMテクスチャストア(TextureStore)の非ブロッキング
-    /// 読み取り(poll_texture)のみを行い、decoder.frame_gpu()を直接呼ばない。
-    /// これによりUIスレッドはGOPデコード完了を待たず毎回即座に制御を返す。
-    ///
-    /// decoder.frame_gpu()の監視(DECODE_WATCHDOG_TIMEOUT超過時の分離)はdecoder本体を
-    /// 専有するDecodeThreadHandleに対して行う。当該スレッドがgpu-videoクレート内部の
-    /// 無期限待機に陥った場合、decoderごと手放し、on_fail経由で世代切り替えを誘発して
-    /// このワーカー自身を終了する。タイムアウトのたびに新規スレッドを増やすことはない
-    /// (1 decoderにつき最大1スレッド)。
     pub fn spawn(
         generation: u64,
         decoder: Box<dyn VideoSource>,
@@ -429,9 +380,6 @@ impl DecodeWorker {
         cvar.notify_one();
     }
 
-    /// UIスレッド専用・非ブロッキング。VRAMテクスチャストアへの読み取りのみを行い、
-    /// 未準備時は即座にNoneを返す。decode()呼び出しはこの呼び出しの中では発生しない
-    /// (バックグラウンドスレッドが既に完了させたテクスチャのみを参照する)。
     pub fn poll_texture(&self, frame_index: i64) -> Option<wgpu::Texture> {
         self.store.lock().unwrap().get(frame_index)
     }

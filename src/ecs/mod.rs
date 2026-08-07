@@ -26,10 +26,6 @@ use shipyard::{
 };
 use transform::{Camera, GlobalMatrix, Transform, compute_global_matrix};
 
-/// to_document()の元Viewを束ねる集約ビュー。
-/// shipyard 0.11のSystem<(), B>実装はクロージャ引数個数に上限があり、
-/// 11個の個別Viewパラメータはこの上限を超過してコンパイルエラーとなる。
-/// 個別Viewを1個の派生Borrow構造体へ集約し、クロージャの引数を1個に圧縮する。
 #[derive(Borrow, BorrowInfo)]
 struct ObjectQueryViews<'v> {
     object_ids: View<'v, ObjectId>,
@@ -49,7 +45,6 @@ struct ObjectQueryViews<'v> {
     scene_objects: View<'v, SceneObject>,
 }
 
-/// タイムラインUIに渡すオブジェクト情報（Slint型に非依存）
 #[derive(Clone, Debug)]
 pub struct TimelineData {
     pub id: i32,
@@ -61,7 +56,6 @@ pub struct TimelineData {
     pub media_trim_in_frame: i64,
 }
 
-/// シーン設定ウィンドウとの受け渡し用（AviQtl::UI::SceneData の設定サブセットに相当）
 #[derive(Clone, Debug)]
 pub struct SceneSettings {
     pub name: String,
@@ -97,10 +91,6 @@ impl From<&SceneMeta> for SceneSettings {
 
 pub struct EcsWorld {
     pub world: World,
-    /// タイムラインUIの選択オブジェクトID集合。TimelineWindow::showが毎フレーム
-    /// 書き込み、PropertiesPanel::showが読み取る、ウィンドウをまたいだ選択状態の
-    /// 単一の真実源。shipyard ECSではなく単純フィールドとする（永続化対象外の
-    /// 一時UI状態のため）。
     selected_ids: std::collections::HashSet<usize>,
 }
 
@@ -119,12 +109,10 @@ impl EcsWorld {
         }
     }
 
-    /// タイムラインUIの選択状態を書き込む。TimelineWindow::showが毎フレーム呼ぶ。
     pub fn set_selected_ids(&mut self, ids: std::collections::HashSet<usize>) {
         self.selected_ids = ids;
     }
 
-    /// 指定オブジェクトが選択中か判定する。PropertiesPanel::showが毎フレーム参照する。
     pub fn is_selected(&self, id: usize) -> bool {
         self.selected_ids.contains(&id)
     }
@@ -168,7 +156,6 @@ impl EcsWorld {
         id
     }
 
-    /// 図形オブジェクトを追加する。ShapeParamsコンポーネントを併せて付与する。
     pub fn add_shape_object(
         &mut self,
         start: i32,
@@ -184,7 +171,6 @@ impl EcsWorld {
         id
     }
 
-    /// 動画・画像・音声オブジェクトを追加する。MediaSourceコンポーネントを併せて付与する。
     pub fn add_media_object(
         &mut self,
         start: i32,
@@ -200,8 +186,6 @@ impl EcsWorld {
         id
     }
 
-    /// シーンオブジェクトを追加する。SceneObjectコンポーネントを併せて付与する。
-    /// 呼び出し側（timeline.rs）でwould_create_scene_cycle判定済みのtarget_sceneを渡すこと。
     pub fn add_scene_object(
         &mut self,
         start: i32,
@@ -235,8 +219,6 @@ impl EcsWorld {
         }
     }
 
-    /// 複数オブジェクトの一括削除。個々にdelete_objectを適用する
-    /// （1回のみのupdate-total-frames呼び出しで正規化を完結させる）。
     pub fn delete_objects(&mut self, ids: &[usize]) {
         for &id in ids {
             let mut target_entity = None;
@@ -346,10 +328,6 @@ impl EcsWorld {
             });
     }
 
-    /// アクティブシーンの解像度・FPSをProjectResourceへ確定反映する唯一の窓口。
-    /// Cameraはproject_width/heightに依存するため、解像度確定のたびにここで
-    /// Camera::for_resolution()により必ず再導出する。個別呼び出し側で
-    /// Cameraを直接いじる必要はない。
     fn apply_scene_resolution(&mut self, width: u32, height: u32, fps: u32) {
         self.world
             .run(|mut project: UniqueViewMut<ProjectResource>| {
@@ -394,8 +372,6 @@ impl EcsWorld {
         )
     }
 
-    /// アクティブシーンのグリッド設定に基づき吸着させたフレーム番号を返す。
-    /// SceneMeta::enable_snap/magnetic_snap_range/grid_intervalを実際に消費する唯一の経路。
     fn snap_to_active_scene(&self, frame: i32) -> i32 {
         self.world.run(|scenes: UniqueView<SceneResource>| {
             scenes
@@ -404,11 +380,6 @@ impl EcsWorld {
         })
     }
 
-    /// グリッドスナップに続く第2段階の吸着。グリッドで吸着済みの場合はそれを優先し
-    /// （両者が競合した場合の挙動を一意に決定するため）、グリッド未吸着の場合のみ
-    /// 同一レイヤー上の他クリップ端（start-frame/end-frame）と再生ヘッド位置を
-    /// 候補として磁力スナップを試みる。excludeIdは対象クリップ自身を候補から除く。
-    /// enable-snap無効時、またはmagnetic-snap-range<=0の場合は吸着しない。
     fn snap_magnetic(&self, frame: i32, layer: i32, exclude_id: usize) -> i32 {
         let grid_snapped = self.snap_to_active_scene(frame);
         if grid_snapped != frame {
@@ -456,11 +427,6 @@ impl EcsWorld {
         self.find_entity(object_id).is_some()
     }
 
-    /// クリップの単純平行移動。TimeRangeの変更に合わせて、ネイティブパラメータ
-    /// （KeyframeTracks）・エフェクトパラメータ（EffectStack）双方の中間点も
-    /// deltaだけシフトする。resize_objectがクランプ・再構築を行うのと対称に、
-    /// move_objectは中間点の絶対フレーム位置をクリップ本体と同じ量だけ動かす
-    /// （移動は中間点へ影響しない、という非対称設計を解消する）。
     pub fn move_object(&mut self, object_id: usize, new_start: i32, new_layer: i32) {
         let new_start = self.snap_magnetic(new_start, new_layer, object_id);
         self.world.run(
@@ -503,13 +469,6 @@ impl EcsWorld {
         self.update_total_frames();
     }
 
-    /// クリップ伸縮。中間点の境界クランプ則（neoutl_interp::clamp_and_reseed、
-    /// 詳細はそのドキュメントコメント参照）をネイティブパラメータ（KeyframeTracks）・
-    /// エフェクトパラメータ（EffectStack）双方へ適用する。旧範囲(old_start/old_end)を
-    /// TimeRange上書き前に確保してからクランプへ渡すため、内部点は「絶対フレーム
-    /// 不変」ではなく「クリップ内相対位置不変」でスケールされる。
-    /// 1フレーム未満へ縮む要求はrange.end_frameの下限クランプで最小幅1フレームへ
-    /// 丸められ、破綻（0/負幅）を構造的に排除する。
     pub fn resize_object(&mut self, object_id: usize, new_start: i32, new_end: i32) {
         let layer = self.object_layer(object_id).unwrap_or(0);
         let new_start = self.snap_magnetic(new_start, layer, object_id);
@@ -559,10 +518,6 @@ impl EcsWorld {
         })
     }
 
-    /// リップル移動。対象クリップをmove_objectと同一則で移動し、同一レイヤー上で
-    /// 旧start-frame以降にある全クリップ（対象自身を除く）へ移動量deltaをそのまま
-    /// 伝播させる（AviUtl「リップル編集」相当）。レイヤーは対象クリップの現在値を
-    /// 保持したまま移動する（リップル移動はレイヤー変更を伴わない）。
     pub fn ripple_move_object(&mut self, object_id: usize, new_start: i32) {
         let Some(layer) = self.object_layer(object_id) else {
             return;
@@ -595,11 +550,6 @@ impl EcsWorld {
         }
     }
 
-    /// リップル伸縮。対象クリップのend-frameをresize_objectと同一則で変更し、
-    /// 同一レイヤー上で旧end-frame以降にある全クリップへ変化量deltaを平行移動
-    /// として伝播させる（後続クリップ自体は伸縮せず、位置のみ追従する）。
-    /// start-frame側（左端リサイズ）のリップルは対象外とする
-    /// （左端はクリップ自身の trim-in のみに影響し、後続位置は変化しないため）。
     pub fn ripple_resize_object(&mut self, object_id: usize, new_end: i32) {
         let Some(layer) = self.object_layer(object_id) else {
             return;
@@ -638,8 +588,6 @@ impl EcsWorld {
         }
     }
 
-    /// ObjectDocから1エンティティを生成する（load_document/paste_objects共通処理）。
-    /// idはo.idをそのまま使用するため、呼び出し側で一意性を保証すること。
     fn spawn_object_from_doc(&mut self, o: &ObjectDoc) -> shipyard::EntityId {
         let entity = self.world.add_entity((
             ObjectId(o.id),
@@ -692,8 +640,6 @@ impl EcsWorld {
             })
     }
 
-    /// idsで指定した全オブジェクトのObjectDocスナップショットを返す（クリップボード用）。
-    /// 複数選択（AviQtl::TimelineView::shouldApplyToSelection相当）を前提に、
     pub fn copy_objects(&self, ids: &[usize]) -> Vec<ObjectDoc> {
         self.world.run(|views: ObjectQueryViews| {
             let mut docs = Vec::new();
@@ -743,12 +689,6 @@ impl EcsWorld {
         })
     }
 
-    /// クリップボードのdocsをアクティブシーンへ貼り付ける。docs内の最小start-frame・
-    /// 最小layerを基準（アンカー）とし、target-frame/target-layerを新アンカーとして
-    /// 各オブジェクトの相対位置（複数選択の位置関係）を保ったまま配置する
-    /// （AviQtl::TimelineView::pasteClip相当。単一貼り付けもdocs長1の特殊形として扱う）。
-    /// 新規idはEcsWorld::next_idから採番し、貼り付け先はアクティブシーンに固定する。
-    /// 戻り値は新規生成した全idsで、呼び出し側の選択状態更新に使う。
     pub fn paste_objects(
         &mut self,
         docs: &[ObjectDoc],
@@ -781,9 +721,6 @@ impl EcsWorld {
         new_ids
     }
 
-    /// 複数選択オブジェクトの複製。copy_objects→paste_objectsの合成で、
-    /// AviQtl::TimelineView::handleCommand("clip.duplicate")と同じくカーソル位置・
-    /// 選択レイヤーを新アンカーとして貼り付ける。
     pub fn duplicate_objects(
         &mut self,
         ids: &[usize],
@@ -794,24 +731,12 @@ impl EcsWorld {
         self.paste_objects(&docs, target_frame, target_layer)
     }
 
-    /// 複数選択オブジェクトの切り取り。コピー内容を返しつつ元オブジェクトを削除する
-    /// （呼び出し側でRust側の戻り値をアプリ全体のクリップボード状態へ格納する）。
     pub fn cut_objects(&mut self, ids: &[usize]) -> Vec<ObjectDoc> {
         let docs = self.copy_objects(ids);
         self.delete_objects(ids);
         docs
     }
 
-    /// object_idを絶対フレームsplit_frameで2分割する。前半（元エンティティ）は
-    /// [start_frame, split_frame)、後半（新規エンティティ）は[split_frame, end_frame)
-    /// を保持する。中間点はAviQtl EffectModel::splitTracks相当のロジックで追従する:
-    /// - フレーム番号は絶対値のまま変更しない（apply/evaluateが絶対フレーム基準のため）
-    /// - 分割点をまたぐ区間は、分割点での評価値を後半側の基準値（フィールド初期値）へ
-    ///   複製し、値が瞬断しないようにする
-    /// - 分割点より前の中間点は前半へ、後の中間点は後半へ、それぞれ絶対フレームのまま残す
-    /// PluginParams（プラグイン固有パラメータ）はParamAccess非対応のため中間点追従の
-    /// 対象外（そのまま複製のみ）。split_frameが区間内部でない場合はNoneを返す。
-    /// 戻り値は新規生成したオブジェクトのid。
     pub fn split_object(&mut self, object_id: usize, split_frame: i32) -> Option<usize> {
         let entity = self.find_entity(object_id)?;
 
@@ -1179,10 +1104,6 @@ impl EcsWorld {
             .run(|audio: View<AudioParams>| audio.get(entity).ok().copied())
     }
 
-    /// ネイティブパラメータ（Transform/TextContent/ShapeParams/AudioParams）のkeyへ
-    /// 中間点を1件設定する。KeyframeTracks未付与のエンティティには新規付与する
-    /// （set_plugin_paramと同一方針: 都度読み出し→書き換え→add_component）。
-    /// 評価（描画時の実効値算出）はecs::systems側でのみ行い、ここでは行わない。
     pub fn set_keyframe(
         &mut self,
         object_id: usize,
@@ -1214,8 +1135,6 @@ impl EcsWorld {
         });
     }
 
-    /// frameを起点とする区間の適用モード(標準/補間)を設定する。
-    /// AviUtl Curve Editorの「適用モード」に対応。カーブ形状(engine_payload)とは独立に切り替わる。
     pub fn set_keyframe_apply_mode(
         &mut self,
         object_id: usize,
@@ -1233,7 +1152,6 @@ impl EcsWorld {
         });
     }
 
-    /// ネイティブパラメータの中間点をドラッグ移動する。移動先に既存点がある場合は失敗する。
     pub fn move_keyframe(
         &mut self,
         object_id: usize,
@@ -1265,7 +1183,6 @@ impl EcsWorld {
         })
     }
 
-    /// エフェクトパラメータへの中間点設定。EffectStack::set_keyframeへ委譲する。
     pub fn set_effect_keyframe(
         &mut self,
         object_id: usize,
@@ -1355,7 +1272,6 @@ impl EcsWorld {
         })
     }
 
-    /// scene_id -> このシーン内に配置されたSceneObjectのtarget_scene一覧。
     fn scene_edges(&self) -> HashMap<i32, Vec<i32>> {
         self.world.run(
             |scene_ids: View<SceneId>, scene_objects: View<SceneObject>| {
@@ -1370,8 +1286,6 @@ impl EcsWorld {
         )
     }
 
-    /// fromシーン内へtargetシーンを配置した場合に循環参照が生じるか判定する。
-    /// targetから到達可能な全シーンを深さ優先で辿り、fromへ戻る経路の有無を見る。
     pub fn would_create_scene_cycle(&self, from_scene: i32, target_scene: i32) -> bool {
         if from_scene == target_scene {
             return true;
@@ -1393,7 +1307,6 @@ impl EcsWorld {
         false
     }
 
-    /// scene_idを参照しているSceneObjectが属する全シーンidを返す（削除可否判定用）。
     pub fn scenes_referencing(&self, scene_id: i32) -> Vec<i32> {
         self.world.run(
             |scene_ids: View<SceneId>, scene_objects: View<SceneObject>| {
@@ -1410,7 +1323,6 @@ impl EcsWorld {
         )
     }
 
-    /// scene_idを削除する。他シーンのSceneObjectから参照中であれば削除せずfalseを返す。
     pub fn remove_scene(&mut self, scene_id: i32) -> bool {
         if !self.scenes_referencing(scene_id).is_empty() {
             return false;
@@ -1587,9 +1499,6 @@ impl EcsWorld {
         }
     }
 
-    /// 既存エンティティは全削除の上、doc.objectsから再生成する
-    /// （差分検出をせず毎回全再構築。オブジェクト数が数千規模になるまでは
-    /// 個別差分焼き込みより実装単純性を優先する）。
     pub fn load_document(&mut self, doc: &DocumentModel) {
         let all: Vec<shipyard::EntityId> = self
             .world

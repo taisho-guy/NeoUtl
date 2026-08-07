@@ -1,7 +1,6 @@
 use egui_wgpu::wgpu;
 use std::sync::Arc;
 
-/// winit surface・egui_wgpu::Renderer・RenderEngineの3者へ配る単一のDevice/Queue。
 pub struct SharedGpu {
     pub instance: wgpu::Instance,
     pub device: Arc<wgpu::Device>,

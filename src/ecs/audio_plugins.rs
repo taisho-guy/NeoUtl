@@ -11,10 +11,6 @@ fn next_plugin_instance_uid() -> u64 {
     NEXT_PLUGIN_INSTANCE_UID.fetch_add(1, Ordering::Relaxed)
 }
 
-/// PluginChainが保持する1件分のメタデータ。実体（Box<dyn NeoPlugin>）はここに含めない
-/// （ShipyardのComponentはSend + 'staticかつ複製・シリアライズ対象となるため、
-/// COMハンドル等を内包する実体をそのまま持たせない）。実体はAudioEngine
-/// （src/audio/mixer.rs管轄）側でentity idキーのマップとして別途保持する。
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct PluginInstanceRef {
     #[serde(default)]
@@ -23,14 +19,11 @@ pub struct PluginInstanceRef {
     pub path: PathBuf,
     pub plugin_id: String,
     pub bypass: bool,
-    /// パラメータID→正規化値(0.0..=1.0、VST3のParameter::value空間に合わせる)。
     pub params: HashMap<u32, f64>,
     #[serde(default)]
     pub param_info: Vec<PluginParamInfo>,
 }
 
-/// audioオブジェクトに付随するプラグイン（VST3/CLAP）の順序付きチェーン。
-/// EffectStackの音声版に相当し、永続化・UI操作の骨格を同一に保つ。
 #[derive(Clone, Debug, Default, Component, Serialize, Deserialize)]
 pub struct PluginChain(pub Vec<PluginInstanceRef>);
 

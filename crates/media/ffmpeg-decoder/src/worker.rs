@@ -1,16 +1,3 @@
-//! prefetch(バックグラウンドスレッド起点)とframe_gpu(UIスレッド起点)を単一キューへ
-//! 直列化するワーカースレッド。`DecoderCore`(input/decoder/last_display_index/exhausted)
-//! を本スレッドのみが排他所有するため、2スレッドが同一AVFormatContextへ独立にシークを
-//! 発行し互いの位置を破壊し合うライブロックは構造的に発生しない。
-//!
-//! キュー処理方針:
-//! - `FrameGpu`要求は到着順に即時実行し、結果をoneshotチャネルで呼び出し元(UIスレッド)
-//!   へ返す。UIスレッドは`recv()`でブロックして待つ。
-//! - `Prefetch`要求は結果を待たれない（fire-and-forget）。連続して複数件キューに
-//!   溜まっている場合、先読み対象は最新の1件のみ意味を持つ（古い目標値は追い越し済み）
-//!   ため、直近にキューされていた分をまとめて最新値へ縮約してから1回だけ実行する。
-//!   これにより「古いprefetch目標へ向けたシーク」が後続要求の処理を遅延させない。
-
 use crate::decoder_core::DecoderCore;
 use std::sync::mpsc::{Receiver, Sender, channel};
 use std::thread::JoinHandle;

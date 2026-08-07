@@ -1,8 +1,5 @@
 #![allow(non_camel_case_types)]
 
-/// オブジェクト・エフェクト双方が対応する次元。ホストはこの値でカメラ行列を切替える。
-/// エフェクトは現状常時2Dパス（フルスクリーンポストプロセス）で適用するため、
-/// EffectMetaはこの型を保持しない（ObjectMeta専用）。
 #[repr(u8)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Dimensionality {
@@ -11,9 +8,6 @@ pub enum Dimensionality {
     Both = 2,
 }
 
-/// 設定ダイアログUI生成用のパラメータ種別。
-/// Enumはオブジェクト側、Textはエフェクト側で導入されたが、
-/// 型共有方針により両APIが同一列挙を参照する。
 #[repr(u8)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ParamKind {
@@ -24,18 +18,11 @@ pub enum ParamKind {
     Text = 4,
     FilePath = 5,
     Track = 6,
-    /// 区切り線。表示専用でvalueを保持しない（FILTER_ITEM_SEPARATOR相当）。
     Separator = 7,
-    /// 折り畳み可能な見出し。default_floatを初期開閉状態(0=閉/1=開)に転用する
-    /// （FILTER_ITEM_GROUP相当）。開閉状態自体はホストUI側のローカル状態として保持し、
-    /// プロジェクトファイルへは保存しない。
     Group = 8,
-    /// フォルダ選択。FilePathと同じ文字列値・ダイアログ種別のみ異なる
-    /// （FILTER_ITEM_FOLDER相当）。
     Folder = 9,
 }
 
-/// C ABI越しに渡す固定長文字列参照。
 #[repr(C)]
 #[derive(Clone, Copy)]
 pub struct StrRef {
@@ -51,8 +38,6 @@ impl StrRef {
         }
     }
 
-    /// # Safety
-    /// ptr/lenが生成元の'static文字列バイト列を指し続けていること。
     pub unsafe fn as_str(&self) -> &'static str {
         unsafe { std::str::from_utf8_unchecked(std::slice::from_raw_parts(self.ptr, self.len)) }
     }
@@ -60,7 +45,6 @@ impl StrRef {
 unsafe impl Send for StrRef {}
 unsafe impl Sync for StrRef {}
 
-/// enum_optionsのNUL区切り結合文字列を選択肢列へ分解する。空文字列は空Vecとする。
 pub fn split_enum_options(joined: &str) -> Vec<&str> {
     if joined.is_empty() {
         Vec::new()
@@ -69,12 +53,6 @@ pub fn split_enum_options(joined: &str) -> Vec<&str> {
     }
 }
 
-/// float既定値のみ格納。Bool/Enumはdefault_floatを0/1として解釈する。
-/// Text/FilePath/Trackはdefault_floatを不使用（0.0固定）とし、ホスト側の初期値は
-/// それぞれ空文字列/空文字列/未選択(-1)とする。
-/// enum_optionsはkind==EnumのときのみNUL区切り文字列（例"A\0B\0C"）として解釈する
-/// （'static配列参照をC ABI越しに渡す手段がないため、単一StrRefへ結合する）。
-/// kind!=Enumのenum_optionsは空StrRefとする。
 #[repr(C)]
 #[derive(Clone, Copy)]
 pub struct ParamSchema {
@@ -96,12 +74,6 @@ pub struct WgslSource {
 unsafe impl Send for WgslSource {}
 unsafe impl Sync for WgslSource {}
 
-/// ParamSchema(C ABI・'static寿命前提)の所有権付き複製。
-///
-/// 供給元の文字列寿命から切り離してホスト側で保持するための型。
-/// Lua供給エフェクト（'static寿命を持たない）とdylib供給エフェクトを同一型で
-/// 扱うためのブリッジ。ホスト側消費コード(ecs::effects, renderer::pipeline)は
-/// 以降この型のみを参照し、供給元固有の生存期間・unsafe変換を意識しない。
 #[derive(Clone, Debug, PartialEq)]
 pub struct ParamRowOwned {
     pub key: String,
@@ -115,9 +87,6 @@ pub struct ParamRowOwned {
 }
 
 impl ParamSchema {
-    /// # Safety
-    /// self.key/label/enum_optionsが有効な'static文字列バイト列を指し続けていること
-    /// （dylibプラグインのstatic配列由来である場合に限り安全）。
     pub unsafe fn to_owned_row(&self) -> ParamRowOwned {
         unsafe {
             ParamRowOwned {

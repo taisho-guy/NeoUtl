@@ -1,5 +1,3 @@
-//! 音声波形のマルチ解像度アセット。UI要素を生成せず、表示幅に応じた
-//! min/maxピーク列だけを共有する。
 use neoutl_media_api::AudioBuffer;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -23,7 +21,6 @@ fn cache() -> &'static RwLock<HashMap<PathBuf, Arc<WaveformAsset>>> {
     CACHE.get_or_init(|| RwLock::new(HashMap::new()))
 }
 
-/// 音声サンプルを最大512段階のマルチ解像度ピークへ変換する。
 pub fn build(path: &Path, audio: &AudioBuffer) -> Arc<WaveformAsset> {
     let mut levels: Vec<Arc<[Peak]>> = Vec::new();
     let current = make_peaks(audio, 1);

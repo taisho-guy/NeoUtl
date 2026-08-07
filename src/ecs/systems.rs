@@ -17,8 +17,6 @@ use std::collections::HashMap;
 pub struct ActiveObject {
     pub kind_id: u32,
     pub source_frame: i64,
-    /// ObjectId由来のクリップ識別子。MediaCache::frame_atのinstance_keyとして渡し、
-    /// 同一ソースファイルを複数クリップが同時参照する際のデコードセッション分離に用いる。
     pub clip_instance: u64,
     pub text_content: Option<TextContent>,
     pub shape_params: Option<ShapeParams>,
@@ -26,34 +24,15 @@ pub struct ActiveObject {
     pub mvp: [f32; 16],
     pub opacity: f32,
     pub effects: Vec<(String, HashMap<String, Value>)>,
-    /// SCENE_STABLE_IDオブジェクトのみSome((target_scene, local_frame))。
-    /// local_frameはtarget_scene側の評価フレーム（0.4.0時点は
-    /// クリップ開始からtarget_scene側frame 0起点固定、シーン内時間オフセット未対応）。
     pub nested_scene: Option<(i32, i32)>,
 }
 
-/// シーン内の全オブジェクトへ適用する射影方式。常にPerspectiveを返す。
-///
-/// 過去の実装はkind_idのDimensionality（2D/3D/Both）によりOrtho/Perspectiveを
-/// オブジェクトごとに切り替えていたが、これは誤りだった。奥行き0の平面（Text/Image/
-/// Video等のTwoDオブジェクト）をOrtho射影下でX軸・Y軸回転させると、遠近法的な
-/// 奥行き手がかりが一切生じないまま幅または高さがcos(角度)倍で線形に0へ収束するだけになり、
-/// 「回転しているように見えず、ただ描画範囲が狭まって消える」という誤動作を引き起こす
-/// （Z軸回転はOrtho/Perspective双方で平面内回転として同一に見えるため、この問題は
-/// X軸・Y軸回転でのみ顕在化する）。Dimensionality::Both指定のShapeのみPerspectiveと
-/// なるため、Shapeだけが正しく回転して見える非対称な挙動が生じていた。
-///
-/// Camera::for_resolutionは非回転時にPerspectiveでもOrtho同等（z=0平面がproject_height
-/// 一杯に一致）となるよう設計されているため、全オブジェクトをPerspectiveへ統一しても
-/// 静止表示（回転なし）への影響はない。
 fn projection_for(_kind_id: u32) -> Projection {
     Projection::Perspective {
         fov_deg: DEFAULT_FOV_DEG,
     }
 }
 
-/// get_active_objects_systemの引数タプル型定義。
-/// clippy::type_complexityの指摘に基づき、関数シグネチャ直書きから分離する。
 type UniqueGroupViews<'v> = (
     UniqueView<'v, TimelineResource>,
     UniqueView<'v, SceneResource>,
@@ -77,22 +56,16 @@ type PayloadGroupViews<'v> = (
     View<'v, EffectStack>,
 );
 
-/// TimeRange・SceneId双方の合致判定。get_active_objects_system/get_active_audio_system
-/// 双方が共有する唯一の定義元。
 fn is_active_at(range: &TimeRange, scene: &SceneId, active_scene: i32, frame: i32) -> bool {
     scene.0 == active_scene && frame >= range.start_frame && frame < range.end_frame
 }
 
-/// タイムライン表示・プレビュー用の従来呼び出し窓口。アクティブシーン・現在フレームを
-/// 暗黙参照する。ネストしたシーン内評価にはget_active_objects_system_atを直接使うこと。
 pub fn get_active_objects_system(world: &EcsWorld) -> Vec<ActiveObject> {
     let active_scene = world.active_scene();
     let current = world.current_frame();
     get_active_objects_system_at(world, active_scene, current)
 }
 
-/// 指定scene_id・frameでの評価。SceneObjectレンダリングの再帰呼び出しの起点となる
-/// （renderer::pipeline::render_sceneがnested_sceneを見てこの関数を再帰呼び出しする）。
 pub fn get_active_objects_system_at(
     world: &EcsWorld,
     active_scene: i32,
@@ -215,8 +188,6 @@ type AudioPayloadViews<'v> = (
     View<'v, crate::ecs::audio_plugins::PluginChain>,
 );
 
-/// AudioMixer::process_frameのtick駆動点として使用し、get_active_objects_systemとは
-/// 独立に（タイムライン描画とは非同期に）呼び出される前提のためframeを明示引数化する。
 pub fn get_active_audio_system(
     world: &EcsWorld,
     frame: i32,

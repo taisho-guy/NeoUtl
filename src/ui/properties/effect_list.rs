@@ -26,8 +26,6 @@ fn toggle_group_open(object_id: usize, effect_index: i32, label: &str) {
     *entry = !*entry;
 }
 
-/// 左サイドバー用の簡易一覧。有効トグル・並び替え・削除のみを扱い、
-/// パラメータ編集は右側`effects_section`(詳細)に委ねる（旧properties.slint踏襲）。
 pub fn effects_sidebar(ui: &mut egui::Ui, world: &mut EcsWorld, id: usize) {
     let effects = world.get_effects(id);
     if effects.is_empty() {
@@ -190,7 +188,6 @@ pub fn effects_section(
     }
 }
 
-/// Float/Color以外のkind別入力ウィジェット。変更があった場合のみSome(Value)を返す。
 fn param_widget(
     ui: &mut egui::Ui,
     object_id: usize,

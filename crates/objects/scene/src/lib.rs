@@ -4,9 +4,6 @@ use neoutl_object_api::{
 };
 use std::sync::OnceLock;
 
-/// ネイティブUIスキーマはecs::object_schema::SCENE_SCHEMA側で定義する
-/// （target_sceneの選択肢がSceneResource.scenesに依存し実行時構築を要するため、
-/// 静的FFIスキーマでは表現できない。AUDIO_STABLE_ID等と同様、この配列は空のままとする）。
 static PARAM_SCHEMA: &[ParamSchema] = &[];
 
 static META: ObjectMeta = ObjectMeta {
@@ -30,8 +27,6 @@ unsafe extern "C" fn wgsl() -> WgslSource {
         len: 0,
     }
 }
-/// SCENE_STABLE_IDはホスト（renderer::pipeline::render_scene_texture）が
-/// 直接描画するため、VIDEO/IMAGE/AUDIO同様にrenderは呼ばれない。
 unsafe extern "C" fn render(_ctx: *const RenderContext) {}
 
 #[unsafe(no_mangle)]

@@ -1,11 +1,3 @@
-//! `properties.slint` `label-clicked => root.edit-keyframes(...)`の移植先。
-//! `Curve_Editor移植計画.md` 4節に対応。左ペイン(キーフレーム/セグメント/
-//! モディファイア)・右ペイン(グラフ)の2ペイン構成。
-//!
-//! カーブは`neoutl-easing-standard`をrlibとして直接呼び出し(FFI非経由)、
-//! `ease()`が返す実際の補間値を`egui_plot`でサンプル描画する。
-//! Bezierは制御点をegui_plotキャンバス上でドラッグ操作できる。
-
 use crate::easings::loader::curve_presets;
 use crate::ecs::EcsWorld;
 use crate::ecs::components::ParamAccess;
@@ -15,15 +7,12 @@ use egui_plot::{HLine, Line, Plot, PlotPoint, PlotPoints, Points, VLine};
 use neoutl_easing_standard::{CurveKind, Modifier, ease, encode_payload, parse_payload};
 use std::sync::Mutex;
 
-/// 汎用ハンドル種別。1つの`Plot`パッド内で複数ハンドルを最近傍判定するために使う。
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum HandleId {
     A,
     B,
 }
 
-/// ポインタ位置に最も近いハンドルを返す。`HIT_RADIUS_SQ`内でなくても
-/// 最近傍側へ常時追従させる(AviUtl側もドラッグ開始点からの継続追従方式)。
 fn hit_test(pointer: PlotPoint, a: [f32; 2], b: [f32; 2]) -> HandleId {
     if dist2(pointer, a[0], a[1]) <= dist2(pointer, b[0], b[1]) {
         HandleId::A
@@ -32,8 +21,6 @@ fn hit_test(pointer: PlotPoint, a: [f32; 2], b: [f32; 2]) -> HandleId {
     }
 }
 
-/// 編集対象トラックの識別子。ホスト側の`EcsWorld`アクセサはオブジェクト系と
-/// エフェクト系でシグネチャが異なるため列挙で吸収する。
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum TrackTarget {
     Object {
@@ -56,7 +43,6 @@ struct EditorState {
 
 static ACTIVE: Mutex<Option<EditorState>> = Mutex::new(None);
 
-/// ラベルクリック時の起点。同一対象を再クリックした場合は閉じる(トグル)。
 pub fn toggle(target: TrackTarget, label: &str) {
     let mut guard = ACTIVE.lock().unwrap();
     let already_this = guard.as_ref().is_some_and(|s| s.target == target);
@@ -119,7 +105,6 @@ fn set_kf(
     }
 }
 
-/// AviUtl Curve Editorの「適用モード(標準/補間)」に対応する区間トグル。
 fn set_apply_mode(world: &mut EcsWorld, target: &TrackTarget, frame: i32, mode: ApplyMode) {
     match target {
         TrackTarget::Object { object_id, key } => {
@@ -182,8 +167,6 @@ fn base_value(world: &EcsWorld, target: &TrackTarget) -> f32 {
     }
 }
 
-/// AviQtlの`normalizeTrackForDuration`相当。開始・終了は区間の境界であり、
-/// 実キーフレームが無い場合でもEasingEditorから見える状態にする。
 fn ensure_endpoint_keyframes(world: &mut EcsWorld, target: &TrackTarget, track: &[Keyframe]) {
     let object_id = match target {
         TrackTarget::Object { object_id, .. } | TrackTarget::Effect { object_id, .. } => *object_id,
@@ -253,8 +236,6 @@ fn default_modifier(name: &str) -> Modifier {
     }
 }
 
-/// `egui_loop.rs`の`WindowKind::EasingEditor`ネイティブウィンドウから毎フレーム呼ばれる。
-/// 対象が無ければ即falseを返し、呼び出し側がウィンドウを破棄する。
 pub fn show(ctx: &egui::Context, ui: &mut egui::Ui, world: &mut EcsWorld) -> bool {
     return show_curve_editor_layout(ctx, ui, world);
     #[allow(unreachable_code)]
@@ -623,8 +604,6 @@ pub fn show(ctx: &egui::Context, ui: &mut egui::Ui, world: &mut EcsWorld) -> boo
     }
 }
 
-/// Curve Editorの本体レイアウト。AviUtl版の「左グラフ／右プリセット／下部適用」を
-/// そのままNeoUtlの即時UIへ写像する。キーフレーム一覧はここへ持ち込まない。
 fn show_curve_editor_layout(ctx: &egui::Context, ui: &mut egui::Ui, world: &mut EcsWorld) -> bool {
     let Some((target, label, selected_frame)) = ACTIVE
         .lock()

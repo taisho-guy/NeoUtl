@@ -37,9 +37,6 @@ impl From<mlua::Error> for LuaEffectError {
     }
 }
 
-/// サンドボックス許可ライブラリ: table/string/math のみ。
-/// io/os/package/debug/ffiは含めない（ファイルI・O・プロセス起動・生ポインタ操作を
-/// スクリプトから不可能にし、ゼロコピー境界とホストプロセスの安全を両立する）。
 fn sandboxed_lua() -> mlua::Result<Lua> {
     Lua::new_with(
         StdLib::TABLE | StdLib::STRING | StdLib::MATH,
@@ -64,8 +61,6 @@ pub fn load(path: &Path) -> Result<LuaEffectSource, LuaEffectError> {
     build_effect_source(&table, path)
 }
 
-/// dir配下の*.luaを昇順で全読込する。個別スクリプトの失敗は当該ファイルのみ
-/// 除外して継続する（build_effect_pipelines_from_registryの既存除外方針と対称）。
 pub fn load_dir(dir: &Path) -> Vec<LuaEffectSource> {
     let entries = match std::fs::read_dir(dir) {
         Ok(e) => e,
@@ -104,8 +99,6 @@ pub fn load_dir(dir: &Path) -> Vec<LuaEffectSource> {
         .collect()
 }
 
-/// テーブルからLuaEffectSourceを構築する。ファイル由来(load)・
-/// system.register_effect経由の動的登録の双方から共有される唯一の構築経路。
 pub fn build_effect_source(table: &Table, path: &Path) -> Result<LuaEffectSource, LuaEffectError> {
     let id: String = table
         .get("id")

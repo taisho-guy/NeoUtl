@@ -2,8 +2,6 @@ use crate::localization::tr;
 use crate::ui::types::{ContextMenuItem, ObjectKindItem};
 use egui::Color32;
 
-/// 汎用ヘルパー群。egui::Colorの明暗調整、右クリックメニュー項目の構築、
-/// egui::KeyのショートカットDSL用文字列化。TimelineWindowの状態に依存しない。
 pub(super) fn brighten(c: Color32, factor: f32) -> Color32 {
     let f = |v: u8| {
         (v as f32 + (255.0 - v as f32) * factor)
@@ -18,8 +16,6 @@ pub(super) fn darken(c: Color32, factor: f32) -> Color32 {
     Color32::from_rgb(f(c.r()), f(c.g()), f(c.b()))
 }
 
-/// 背景色の相対輝度から可読性の高い前景色(白/黒)を返す。
-/// sRGB係数(ITU-R BT.709)でガンマ補正込みの輝度を算出し、閾値0.5で判定する。
 pub(super) fn readable_text_color(bg: Color32) -> Color32 {
     let channel = |v: u8| {
         let c = v as f32 / 255.0;
@@ -49,7 +45,6 @@ fn sep() -> ContextMenuItem {
     }
 }
 
-/// サブメニューを持たない無効項目（未実装機能のプレースホルダ）。
 fn disabled_leaf(label: String, action: i32) -> ContextMenuItem {
     ContextMenuItem {
         label,
@@ -62,7 +57,6 @@ fn disabled_leaf(label: String, action: i32) -> ContextMenuItem {
     }
 }
 
-/// 未実装のサブメニュー親（矢印は付与するが常時無効、中身は空）。
 fn disabled_submenu_parent(label: String) -> ContextMenuItem {
     ContextMenuItem {
         label,
@@ -75,20 +69,6 @@ fn disabled_submenu_parent(label: String) -> ContextMenuItem {
     }
 }
 
-/// タイムライン右クリックメニューの項目集合を構築する唯一の経路。
-/// hit-id>=0（クリップ上）: 切り取り→コピー→貼り付け→削除→複製→分割→区切り→
-///   左側に詰める(未実装)→切り取りして詰める(未実装)→切り出し(未実装)→
-///   長さを変更(未実装)→区切り→整列(未実装)→区切り→
-///   オブジェクト名を変更(未実装)→区切り→中間点を追加(未実装)→中間点を削除(未実装)→
-///   区切り→グループ化(未実装)→グループ解除(未実装)→区切り→
-///   エイリアスをファイルに保存(未実装)→エイリアスを作成(未実装)
-/// hit-id<0（背景上）: AviUtl互換の背景メニュー構成。
-///   メディアオブジェクトを追加→フィルタオブジェクトを追加(未実装)→区切り→
-///   フィルタ効果を追加(未実装)→区切り→貼り付け→空のフレームを挿入(未実装)→区切り→
-///   選択範囲を切り取り(未実装)→選択範囲を切り取りして詰める(未実装)→区切り→
-///   オブジェクト選択→プラグイン(未実装)→区切り→
-///   グリッド(BPM)の表示[チェック]→音声波形の表示[チェック]→区切り→
-///   オプション(未実装)→ウィンドウ配置(未実装)
 pub(super) fn build_context_menu(
     hit_id: i32,
     clipboard_empty: bool,
@@ -264,12 +244,6 @@ pub(super) fn build_context_menu(
     ]
 }
 
-/// レイヤーヘッダー右クリックメニューの項目集合を構築する。
-/// レイヤーのロック→レイヤーの表示→レイヤーを設定(未実装)→レイヤー名を変更(未実装)→
-/// 他のレイヤーを表示/非表示(未実装)→区切り→レイヤーを挿入(未実装)→レイヤーを削除(未実装)→
-/// 区切り→レイヤーの表示(全レイヤー一覧submenu)→区切り→
-/// グリッド(BPM)の表示[チェック]→音声波形の表示[チェック]→区切り→
-/// オプション(未実装)→ウィンドウ配置(未実装)
 pub(super) fn build_layer_menu(
     layer: i32,
     layer_states: &[(bool, bool)],
@@ -355,7 +329,6 @@ pub(super) fn build_layer_menu(
     ]
 }
 
-/// ui::preview（プロジェクトタブショートカット解決）と共有するためcrate公開。
 pub(crate) fn egui_key_name(key: egui::Key) -> String {
     use egui::Key;
     match key {

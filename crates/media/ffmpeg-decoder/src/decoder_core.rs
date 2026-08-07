@@ -1,9 +1,3 @@
-//! `DecoderCore`は単一のワーカースレッドからのみ所有・呼び出しされる前提のデコード実体。
-//! `prefetch_at`と`frame_gpu_at`は同一スレッド上で逐次実行されるため、
-//! `input`/`decoder`/`last_display_index`/`exhausted`に対する競合するシークは発生しない。
-//! GPU→CPU 1回転送 + CPU側RGBA8合成方式は変更しない
-//! （Vulkan統一ゼロコピー撤回の経緯は本ファイル導入前と同一。詳細はworker.rs冒頭コメント参照）。
-
 use ffmpeg_next as ffmpeg;
 use ffmpeg_next::util::frame::Video as VideoFrame;
 use ffmpeg_sys_next as sys;
@@ -16,8 +10,6 @@ pub struct IndexEntry {
     pub key: bool,
 }
 
-/// テクスチャキャッシュ。GPU→CPU転送+RGBA8アップロード済みのwgpu::Textureを
-/// LRU保持する（VRAM上限は呼び出し側のcapacity_countで制御）。
 struct TextureCache {
     capacity_count: usize,
     order: VecDeque<i64>,
@@ -56,7 +48,6 @@ impl TextureCache {
     }
 }
 
-/// hw_device_ctx確保後のAVBufferRef所有権ラッパ。Drop時にav_buffer_unref。
 struct HwDeviceCtx(*mut sys::AVBufferRef);
 unsafe impl Send for HwDeviceCtx {}
 impl Drop for HwDeviceCtx {
@@ -65,7 +56,6 @@ impl Drop for HwDeviceCtx {
     }
 }
 
-/// OS別のネイティブハードウェアデコード種別。Vulkan統一パスへの入力側デバイス種別。
 #[cfg(target_os = "windows")]
 const NATIVE_HW_TYPE: sys::AVHWDeviceType = sys::AVHWDeviceType::AV_HWDEVICE_TYPE_D3D11VA;
 #[cfg(target_os = "linux")]
@@ -73,8 +63,6 @@ const NATIVE_HW_TYPE: sys::AVHWDeviceType = sys::AVHWDeviceType::AV_HWDEVICE_TYP
 #[cfg(target_os = "macos")]
 const NATIVE_HW_TYPE: sys::AVHWDeviceType = sys::AVHWDeviceType::AV_HWDEVICE_TYPE_VIDEOTOOLBOX;
 
-/// 対象デコーダが NATIVE_HW_TYPE + デコーダ側 pix_fmt の組み合わせをサポートする場合のみ
-/// hw_device_ctxを確保する。非対応時は None を返しソフトウェアデコードへフォールバックする。
 unsafe fn try_create_hw_device_ctx(
     codec: *const sys::AVCodec,
 ) -> Option<(HwDeviceCtx, sys::AVPixelFormat)> {
@@ -112,8 +100,6 @@ unsafe fn try_create_hw_device_ctx(
     Some((HwDeviceCtx(device_ctx), pix_fmt))
 }
 
-/// ハードウェアフレームをシステムメモリ(NV12想定)へ転送する。
-/// GPU→CPU 1回のコピーのみ。色空間変換(swscale)は行わない。
 unsafe fn transfer_hw_frame_to_sw(
     hw_frame: *mut sys::AVFrame,
 ) -> Result<*mut sys::AVFrame, String> {
@@ -129,7 +115,6 @@ unsafe fn transfer_hw_frame_to_sw(
     Ok(sw_frame)
 }
 
-/// NV12(Y平面 + インターリーブUV平面)をRGBA8へCPU変換する(BT.709 limited range想定)。
 fn nv12_to_rgba8(sw_frame: *const sys::AVFrame, width: u32, height: u32) -> Vec<u8> {
     let frame = unsafe { &*sw_frame };
     let y_stride = frame.linesize[0] as usize;
@@ -162,8 +147,6 @@ fn nv12_to_rgba8(sw_frame: *const sys::AVFrame, width: u32, height: u32) -> Vec<
     out
 }
 
-/// P010LE(Y平面16bit + インターリーブUV平面16bit、有効値は各ワード上位10bit)を
-/// RGBA8へCPU変換する(BT.709 limited range想定)。HEVC Main10のVAAPI転送先フォーマット。
 fn p010le_to_rgba8(sw_frame: *const sys::AVFrame, width: u32, height: u32) -> Vec<u8> {
     let frame = unsafe { &*sw_frame };
     let y_stride_words = frame.linesize[0] as usize / 2;
@@ -206,7 +189,6 @@ fn p010le_to_rgba8(sw_frame: *const sys::AVFrame, width: u32, height: u32) -> Ve
     out
 }
 
-/// hw_pix_fmtデコード済みフレームをRGBA8のwgpu::Textureへアップロードする。
 unsafe fn upload_hw_frame_as_texture(
     device: &wgpu::Device,
     queue: &wgpu::Queue,
@@ -260,11 +242,6 @@ unsafe fn upload_hw_frame_as_texture(
     Ok(texture)
 }
 
-/// MLT `producer_avformat.c` の手法を移植: `av_seek_frame`をストリーム番号を明示して
-/// 直接呼び出す。ffmpeg-nextの安全ラッパー`Input::seek`はstream=-1固定でAV_TIME_BASE
-/// (マイクロ秒)単位を要求するが、本デコーダの`IndexEntry::pts`は`decoded.pts()`由来の
-/// 「ストリーム固有タイムベース」値であり、そのまま渡すと単位が一致せず常にファイル
-/// 先頭付近への誤ったシークになる。`AVSEEK_FLAG_BACKWARD`も必須。
 unsafe fn seek_stream_backward(
     input: &mut ffmpeg::format::context::Input,
     stream_index: usize,
@@ -285,8 +262,6 @@ unsafe fn seek_stream_backward(
     Ok(())
 }
 
-/// FFmpeg公式サンプル`hw_decode.c`が必須とするコールバック。`AVCodecContext.opaque`に
-/// 事前に格納したhw_pix_fmtと照合して返す。
 unsafe extern "C" fn get_hw_format(
     ctx: *mut sys::AVCodecContext,
     pix_fmts: *const sys::AVPixelFormat,
@@ -336,14 +311,8 @@ pub fn build_index(
 
 const TEXTURE_CACHE_CAPACITY: usize =
     (neoutl_media_api::DEFAULT_DECODE_CACHE_BYTES / (1920 * 1080 * 4)) as usize;
-/// MLT `producer_avformat.c` L1857-1859 相当。前方への要求位置が現在位置から
-/// この閾値以上離れている場合、逐次デコードでなくシークで追いつく。
 const SEEK_THRESHOLD: i64 = 64;
 
-/// 単一ワーカースレッドが専有するデコード状態。`input`/`decoder`への全アクセスは
-/// `prefetch_at`/`frame_gpu_at`経由のみとし、両者は`worker.rs`の直列ループからしか
-/// 呼び出されない（＝呼び出し元が単一スレッドである不変条件をモジュール外へ公開しない
-/// ことで保証する）。
 pub struct DecoderCore {
     input: ffmpeg::format::context::Input,
     stream_index: usize,
@@ -356,11 +325,7 @@ pub struct DecoderCore {
     index: Vec<IndexEntry>,
     cache: TextureCache,
     last_display_index: i64,
-    /// packets()が尽きてtarget未到達のまま関数を抜けた直後にtrueとなる。次回呼び出しで
-    /// 強制的にシークさせるためのフラグ。
     exhausted: bool,
-    /// get_hw_formatコールバックがAVCodecContext.opaque経由で参照するhw_pix_fmt。
-    /// デコーダより長生きさせる必要があるためヒープ確保しDropで解放する。
     hw_pix_fmt_box: Option<*mut sys::AVPixelFormat>,
 }
 
@@ -376,17 +341,6 @@ impl Drop for DecoderCore {
     }
 }
 
-/// FFmpeg内部ログ(hwaccel初期化失敗時の`vaInitialize failed`等)を可視化する。
-/// 現状の観測(`hw_pix_fmt`はSome=hw_device_ctx確保に成功=VAAPI経由の
-/// av_hwdevice_ctx_createまでは成功しているにもかかわらず、実デコード時に
-/// hw_pix_fmtフレームが1枚も出力されない)は、hw_device_ctx確保後の
-/// 「実プロファイル/解像度に対するhwaccelコンテキスト初期化」段階での失敗を
-/// 強く示唆する。この段階のエラーはffmpeg-next側のResult型に現れず、
-/// libavcodec内部でav_log経由にのみ出力される。
-/// Cコールバック(`av_log_set_callback`)によるRust側捕捉はva_list引数の受け渡しに
-/// `#![feature(c_variadic)]`(nightly限定)を要するため実装不能。
-/// 代わりにログレベルのみ引き上げ、デフォルトコールバック(stderr出力)経由で
-/// 診断メッセージをそのまま可視化する。
 static AV_LOG_LEVEL_INIT: std::sync::Once = std::sync::Once::new();
 fn install_av_log_level() {
     AV_LOG_LEVEL_INIT.call_once(|| unsafe {
@@ -481,9 +435,6 @@ impl DecoderCore {
         0
     }
 
-    /// ワーカースレッド専用。デコードのみ実行し内部indexへ位置を反映する。
-    /// GPU操作（テクスチャ生成）は行わない。単一スレッドから逐次呼ばれる前提のため
-    /// `frame_gpu_at`とのシーク競合は構造的に発生しない。
     pub fn prefetch_at(&mut self, target_index: i64) -> Result<(), String> {
         let target = target_index.clamp(0, self.total_frames() - 1);
         if self.cache.contains(target) {
@@ -561,10 +512,6 @@ impl DecoderCore {
         Err("EOF".to_owned())
     }
 
-    /// ワーカースレッド専用。target_indexのネイティブハードウェアフレームを再デコードし、
-    /// av_hwframe_transfer_dataでシステムメモリへ転送のうえRGBA8変換・アップロードする。
-    /// 単一スレッドから逐次呼ばれる前提のため`prefetch_at`とのシーク競合は構造的に
-    /// 発生しない。本関数はハードウェアデコード成立時のみ動作する。
     pub fn frame_gpu_at(
         &mut self,
         frame_index: i64,
@@ -641,9 +588,6 @@ impl DecoderCore {
         }
     }
 
-    /// receive_frameをEAGAIN相当まで汲み尽くし、hw_pix_fmt一致フレームをアップロード・
-    /// キャッシュする。target到達時のみSome(texture)を返す。prefetch_at/frame_gpu_atの
-    /// 呼び出し順序(packets枯渇前→send_eof後)で2回呼ばれる想定の共通処理。
     fn drain_hw_frames(
         &mut self,
         decoded: &mut VideoFrame,

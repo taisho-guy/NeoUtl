@@ -21,8 +21,6 @@ fn registry_swap() -> &'static ArcSwap<Vec<Arc<ObjectPlugin>>> {
     SWAP.get_or_init(|| ArcSwap::new(Arc::new(Vec::new())))
 }
 
-/// stable_id -> kind_id 対応表。初回発行順を保持し、再ロードでもstable_id一致の限り
-/// 同一kind_idを再利用する（プロセス内キャッシュのみ、保存形式は既存の数値kind_idのまま）。
 fn kind_id_table() -> &'static Mutex<(HashMap<String, u32>, u32)> {
     static TABLE: OnceLock<Mutex<(HashMap<String, u32>, u32)>> = OnceLock::new();
     TABLE.get_or_init(|| Mutex::new((HashMap::new(), 0)))
@@ -95,8 +93,6 @@ pub fn load_all(objects_dir: &Path) {
     registry_swap().store(Arc::new(plugins));
 }
 
-/// 現行スナップショットを返す。呼び出し側はフレーム内のみ保持し、以降は破棄する
-/// （旧Libraryを無参照後即解放させる設計を担保するため、長期保持しない）。
 pub fn registry() -> Arc<Vec<Arc<ObjectPlugin>>> {
     registry_swap().load_full()
 }
@@ -105,9 +101,6 @@ pub fn by_kind_id(kind_id: u32) -> Option<Arc<ObjectPlugin>> {
     registry().iter().find(|p| p.kind_id == kind_id).cloned()
 }
 
-/// 単一プラグインファイルの再ロード。既存stable_id一致エントリのみ差し替える。
-/// 未一致（新規プラグイン）は対象外としエラーを返す（kind_id空間の実行時拡張は別課題）。
-/// シンボル欠落・メタ不整合時は現行registryを変更せずエラーを返す。
 pub fn reload_one(path: &Path) -> Result<(), String> {
     let new_plugin = load_one(path).map_err(|e| e.to_string())?;
     let current = registry_swap().load_full();

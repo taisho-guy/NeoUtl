@@ -1,9 +1,6 @@
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-/// slangc実行ファイルのパスを解決する。
-/// SLANG_DIR環境変数（<SLANG_DIR>/bin/slangc[.exe]）を優先し、
-/// 未設定時はPATH上のslangcをそのまま起動する。
 fn resolve_slangc() -> PathBuf {
     let exe_name = if cfg!(windows) {
         "slangc.exe"
@@ -16,11 +13,6 @@ fn resolve_slangc() -> PathBuf {
     }
 }
 
-/// オブジェクトクレートのbuild.rsから呼ぶ唯一の関数。
-/// vs_main・fs_mainを単一.slangファイル内に完結させる形式（エフェクトと異なり共有頂点契約を持たない）を
-/// slangc単体呼び出しでWGSLへコンパイルし、OUT_DIR/{label}.wgslへ出力する。
-/// ビルド時にslangc終了コードを検査するため、コンパイル失敗はcargo build自体を失敗させる
-/// （実行時にシェーダ不正へ到達することがない）。
 pub fn compile_object_shader(label: &str, source_relpath: &str) {
     let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIRが未設定");
     let source_path = Path::new(&manifest_dir).join(source_relpath);

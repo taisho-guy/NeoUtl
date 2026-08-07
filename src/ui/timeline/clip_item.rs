@@ -9,8 +9,6 @@ use egui::{Color32, Painter, Pos2, Rect, Sense, Stroke, Vec2};
 use std::cell::RefCell;
 use std::rc::Rc;
 
-/// Slint `timeline/clip-item.slint` 相当。クリップ本体・波形・キーフレーム
-/// マーカーの描画と、移動/リサイズ/キーフレームドラッグの入力処理を担う。
 impl TimelineWindow {
     pub(super) fn clip_ui(
         &mut self,

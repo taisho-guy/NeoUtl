@@ -10,34 +10,24 @@ pub enum Range {
 
 #[derive(Clone, Copy, Debug)]
 pub struct ParamSchema {
-    /// プロパティパネルの折り畳みセクション名。UI側の見出しグルーピングは未実装のため
-    /// 現状は読み出されない（実装時にproperties.rsのグループ描画へ渡す）。
     #[allow(dead_code)]
     pub group: &'static str,
     pub key: &'static str,
     pub label: &'static str,
     pub kind: ParamKind,
     pub range: Range,
-    /// kind==Enumのときのみ選択肢を保持する。それ以外のkindでは空スライス。
-    /// EnumのComboBox描画が未実装のため現状は読み出されない。
     #[allow(dead_code)]
     pub enum_options: &'static [&'static str],
-    /// 表示条件（設定項目の動的な増減）。同一グループ内の他キーの現在値がdepends_eqと
-    /// 一致する場合のみUI上に表示する。Noneの場合は常時表示。
-    /// 対象キーがBoolの場合は1.0=true/0.0=falseとの比較、Enumの場合はインデックス比較になる。
     pub depends_on: Option<&'static str>,
     pub depends_eq: f32,
 }
 
-/// depends_on/depends_eqを付与する。const文脈で既存ビルダーの結果を包む形で使う。
-/// 例: dep(bool_field(GROUP, "pan", "パン"), "mute", 0.0)
 pub const fn dep(mut schema: ParamSchema, on: &'static str, eq: f32) -> ParamSchema {
     schema.depends_on = Some(on);
     schema.depends_eq = eq;
     schema
 }
 
-/// depends_onが未設定なら常にtrue。
 pub fn is_visible(schema: &ParamSchema, get: impl Fn(&str) -> f32) -> bool {
     match schema.depends_on {
         None => true,
@@ -95,7 +85,6 @@ const fn bool_field(group: &'static str, key: &'static str, label: &'static str)
     }
 }
 
-/// 文字列専用フィールド。数値min/max/stepは不使用（Range::Fixed(0.0, 0.0)はダミー値）。
 const fn text_field(group: &'static str, key: &'static str, label: &'static str) -> ParamSchema {
     ParamSchema {
         group,

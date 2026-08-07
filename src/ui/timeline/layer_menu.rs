@@ -11,8 +11,6 @@ use std::rc::Rc;
 const MENU_WIDTH: f32 = 220.0;
 const ROW_HEIGHT: f32 = 24.0;
 
-/// レイヤーヘッダー右クリックメニュー。項目集合の生成は
-/// `util::build_layer_menu` に一本化し、描画は`context_menu::menu_row`を共用する。
 impl TimelineWindow {
     pub(super) fn open_layer_menu(&mut self, pos: Pos2, layer: i32, layer_states: &[LayerState]) {
         let states: Vec<(bool, bool)> =

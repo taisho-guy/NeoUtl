@@ -7,10 +7,6 @@ use std::collections::{HashMap, HashSet, VecDeque};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, OnceLock};
 
-/// UIスレッド側で生成したテクスチャのLRUキャッシュ。
-/// デコードスレッドはCPUバイト列のみを返すため、UIスレッドが毎フレーム
-/// create_texture + write_texture を行う。同一フレームの再描画時の再アップロードを
-/// 抑制するため、変換済みテクスチャを容量付きで保持する。
 struct TextureLru {
     map: HashMap<i64, wgpu::Texture>,
     order: VecDeque<i64>,
@@ -44,15 +40,11 @@ impl TextureLru {
     }
 }
 
-/// UIスレッド側テクスチャLRUの容量。worker側リング(worker::RING_CAPACITY)と共有し、
-/// config::DECODE_RING_CAPACITYを唯一の定義元とする。
 struct VideoInstance {
     pending_decoder: Option<Box<dyn VideoSource>>,
     worker: Option<DecodeWorker>,
     texture_cache: TextureLru,
-    /// 直近にframe_gpuで確定したフレーム番号。目的フレーム未準備時の代用元。
     last_index: Option<i64>,
-    /// worker側で保持している最終エラー（次回フレーム返却用/デバッグ用）。
     last_worker_error: Option<String>,
 }
 
@@ -74,24 +66,14 @@ struct VideoEntry {
     height: u32,
     fps: f64,
     total_frames: i64,
-    /// spawn前の未使用デコーダ。最初にframe_atを呼んだインスタンスへ移譲する。
-    /// 2つ目以降の同時インスタンスはopen_video_excludingで個別に新規オープンする
-    /// （同一ファイルを複数のタイムラインクリップが同時参照する場合、GStreamer
-    /// パイプラインは1本につき1つの再生ヘッドしか持てないため共有できない）。
     pending_decoder: Option<Box<dyn VideoSource>>,
-    /// クリップインスタンス（呼び出し側が渡すkey。通常はECS上のObjectId）ごとの
-    /// デコードセッション。同一ファイルの複数同時利用（同一ソースを2箇所の
-    /// タイムラインクリップで使う等）間でシークヘッドが競合しないよう分離する。
     instances: HashMap<u64, VideoInstance>,
-    /// 現在採用中のデコーダプラグインid（フォールバック判定・ログ用）。
     plugin_id: String,
-    /// prefetch連続失敗により見限った（今後候補から除外する）プラグインidの集合。
     failed_plugins: HashSet<String>,
 }
 
 struct ImageEntry {
     decoder: Box<dyn ImageSource>,
-    /// 画像は単一フレーム固定のため初回アップロード結果を恒久的に再利用する。
     texture: Option<wgpu::Texture>,
 }
 
@@ -99,13 +81,10 @@ enum PathEntry {
     Video(VideoEntry),
     Image(ImageEntry),
     Audio(Arc<AudioBuffer>),
-    /// open失敗を記憶し、毎フレームの再オープン試行を防ぐ。evict()で解除可能。
     Failed(String),
 }
 
 pub struct MediaCache {
-    /// マップ操作（挿入・参照）のみを保護する短命ロック。デコード本体は
-    /// 各パスのDecodeWorkerが専有スレッドで行うため、ここでは待機しない。
     entries: Mutex<HashMap<PathBuf, Arc<Mutex<PathEntry>>>>,
     redraw: Mutex<Option<Arc<dyn Fn() + Send + Sync>>>,
 }
@@ -117,14 +96,6 @@ fn ext_of(path: &Path) -> Result<String, String> {
         .ok_or_else(|| t!("拡張子なし: %{arg0}", arg0 = format!("{}", path.display())).to_string())
 }
 
-/// 拡張子に対応する動画デコーダプラグインをloader::decoder_priority順（同値はid昇順）で
-/// 順次試行する。excluded_pluginsに
-/// 含まれるidは連続失敗により見限られた候補のため試行対象から除外する。
-/// 各プラグインのopen_videoが返すErrはハードウェア/ドライバ側の実行時制約
-/// （例: Vulkan Video非対応環境でのgpuvideo-decoder）を含みうるため、
-/// 1プラグインの失敗だけでは即座にopen_video全体を失敗とせず次候補へ移る。
-/// 全候補が失敗（または除外済み）の場合のみ、各プラグインの理由を連結して返す。
-/// 成功時は採用したプラグインidも合わせて返す（フォールバック判定用）。
 fn open_video_excluding(
     path: &Path,
     excluded_plugins: &HashSet<String>,
@@ -343,18 +314,11 @@ impl MediaCache {
             .clone()
     }
 
-    /// 既存エントリのみ返す。新規ロードは行わない（entries mutex の待ちを避けるため）。
     fn entry_existing(&self, path: &Path) -> Option<Arc<Mutex<PathEntry>>> {
         let map = self.entries.lock().unwrap();
         map.get(path).cloned()
     }
 
-    /// DecodeWorkerのon_fail経由で呼ばれる。prefetch連続失敗により現在のデコーダ
-    /// プラグインを見限り、除外集合に加えた上で次点候補（拡張子重複時の後順位
-    /// デコーダ、例: gpuvideo失敗時のgstreamer）へ再オープンする。
-    /// 候補が尽きた場合はエントリをFailedへ遷移させ、以後の再試行を止める。
-    /// worker自体は既にon_fail呼び出し直後に終了しているため、ここでは
-    /// pending_decoder/workerを新しいものへ差し替えるのみでよい。
     pub fn schedule_prefetch_failure_with_reason(path: PathBuf, reason: String) {
         eprintln!(
             "{}",
@@ -449,11 +413,6 @@ impl MediaCache {
         (self.redraw_handle())();
     }
 
-    /// UIスレッド専用。目的フレームの準備完了を確認後、decoder.frame_gpu()を
-    /// worker/cache間で共有するMutex越しに直接呼びテクスチャを取得する。
-    /// これにより create_texture + write_texture もデコーダ実体もUIスレッド上で
-    /// 完結し、Surface::present() との wgpu SnatchLock デッドロックを回避する。
-    /// 未完成時は直前に完成した最新フレームで代用し、表示の継続性を保つ。
     pub fn frame_at(
         &self,
         path: &Path,
@@ -566,8 +525,6 @@ impl MediaCache {
         }
     }
 
-    /// ソース映像/画像のピクセル寸法を返す。open時点で確定済みの値のみ参照するため
-    /// デコードスレッドの完了状況に依存しない。
     pub fn dimensions(&self, path: &Path) -> Result<(u32, u32), String> {
         let entry = self.entry_existing(path).ok_or_else(|| {
             t!(
@@ -589,7 +546,6 @@ impl MediaCache {
         }
     }
 
-    /// ソース動画のフレームレート。プロジェクトFPSとの比率換算に用いる（画像/音声は不使用）。
     pub fn source_fps(&self, path: &Path) -> Result<f64, String> {
         let entry = self.entry_existing(path).ok_or_else(|| {
             t!(
@@ -653,8 +609,6 @@ impl MediaCache {
         }
     }
 
-    /// 波形解析など、音声を明示的に要求する利用者向けAPI。
-    /// 初回のみデコーダを構築し、以後は既存の音声キャッシュを返す。
     pub fn load_audio(&self, path: &Path) -> Result<Arc<AudioBuffer>, String> {
         let _ = self.entry(path);
         self.audio(path)

@@ -16,10 +16,6 @@ pub struct ProjectMeta {
     pub audio_channels: u32,
 }
 
-/// ディスク上のプロジェクトファイル形式。DocumentModel（正本データ）をそのまま保持する。
-/// `objects`は`#[serde(default)]`により旧形式ファイル（オブジェクト未保存）読込時は空Vecで補完する。
-/// `SceneMeta`のランタイム専用フィールド（`total_frames`・`layer_states`）は
-/// `SceneMeta`側の`#[serde(skip)]`で除外される。
 #[derive(Serialize, Deserialize)]
 struct ProjectFile {
     name: String,
@@ -102,8 +98,6 @@ pub fn load_project(dir: &Path) -> Option<ProjectMeta> {
     })
 }
 
-/// プロジェクトディレクトリからDocumentModel（正本データ）全体を復元する。
-/// EcsWorld::load_documentへそのまま渡す。
 pub fn load_document(dir: &Path) -> Option<DocumentModel> {
     let file = read_file(dir)?;
     Some(DocumentModel {
@@ -182,7 +176,6 @@ pub fn create_project(
     Ok(meta)
 }
 
-/// 編集コマンド確定・オートセーブ・Undo/Redo後の再保存等、保存が必要な全箇所からこの関数を呼ぶ。
 pub fn save_document(dir: &Path, doc: &DocumentModel) -> std::io::Result<()> {
     let active_scene_meta = doc.scenes.iter().find(|s| s.id == doc.active_scene);
     let file = ProjectFile {
@@ -273,8 +266,6 @@ pub fn finish_runtime_session() {
     let _ = std::fs::remove_file(runtime_marker_path());
 }
 
-/// EcsWorldの現在状態（DocumentModelへ変換した上で）をディスクへ確定する。
-/// プロジェクトディレクトリ未確定（新規未保存等）の場合は何もしない。
 pub fn save_from_world(world: &EcsWorld) -> std::io::Result<()> {
     let project = world.get_project();
     let Some(dir) = project.dir else {

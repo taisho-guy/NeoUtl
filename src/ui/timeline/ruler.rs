@@ -5,8 +5,6 @@ use egui::{Pos2, Rect, Sense, Stroke, Vec2};
 use std::cell::RefCell;
 use std::rc::Rc;
 
-/// Slint `timeline/ruler.slint` 相当。目盛描画・スクラブ・ホイールズームを担う。
-/// 配色はハードコードを排し、全て `ui.visuals()` (アプリ全体テーマ) から取得する。
 impl TimelineWindow {
     pub(super) fn ruler(
         &mut self,
