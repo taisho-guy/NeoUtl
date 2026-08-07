@@ -51,6 +51,10 @@ impl VideoSource for FfmpegVideoDecoder {
         self.worker.send(Command::Prefetch(frame_index))
     }
 
+    fn set_output_size(&mut self, width: u32, height: u32) {
+        let _ = self.worker.send(Command::SetOutputSize(width, height));
+    }
+
     fn frame_gpu(
         &mut self,
         frame_index: i64,

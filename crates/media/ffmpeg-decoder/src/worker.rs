@@ -10,6 +10,7 @@ pub enum Command {
         wgpu::Queue,
         Sender<Result<wgpu::Texture, String>>,
     ),
+    SetOutputSize(u32, u32),
 }
 
 pub struct WorkerHandle {
@@ -51,24 +52,50 @@ impl Drop for WorkerHandle {
 fn run(mut core: DecoderCore, cmd_rx: Receiver<Command>) {
     while let Ok(first) = cmd_rx.recv() {
         let mut pending_prefetch: Option<i64> = None;
-        apply(&mut core, first, &mut pending_prefetch);
+        let mut pending_frame_gpu: Option<Command> = None;
+        apply_or_defer(
+            &mut core,
+            first,
+            &mut pending_prefetch,
+            &mut pending_frame_gpu,
+        );
         while let Ok(next) = cmd_rx.try_recv() {
-            apply(&mut core, next, &mut pending_prefetch);
+            apply_or_defer(
+                &mut core,
+                next,
+                &mut pending_prefetch,
+                &mut pending_frame_gpu,
+            );
         }
         if let Some(target) = pending_prefetch {
             let _ = core.prefetch_at(target);
         }
+        if let Some(Command::FrameGpu(target, device, queue, resp)) = pending_frame_gpu {
+            let result = core.frame_gpu_at(target, &device, &queue);
+            let _ = resp.send(result);
+        }
     }
 }
 
-fn apply(core: &mut DecoderCore, cmd: Command, pending_prefetch: &mut Option<i64>) {
+fn apply_or_defer(
+    core: &mut DecoderCore,
+    cmd: Command,
+    pending_prefetch: &mut Option<i64>,
+    pending_frame_gpu: &mut Option<Command>,
+) {
     match cmd {
         Command::Prefetch(target) => {
             *pending_prefetch = Some(target);
         }
         Command::FrameGpu(target, device, queue, resp) => {
-            let result = core.frame_gpu_at(target, &device, &queue);
-            let _ = resp.send(result);
+            if let Some(Command::FrameGpu(_, _, _, stale_resp)) =
+                pending_frame_gpu.replace(Command::FrameGpu(target, device, queue, resp))
+            {
+                let _ = stale_resp.send(Err("superseded".to_owned()));
+            }
+        }
+        Command::SetOutputSize(width, height) => {
+            core.set_output_size(width, height);
         }
     }
 }
