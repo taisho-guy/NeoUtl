@@ -55,7 +55,11 @@ impl PropertiesPanel {
         let holder = app_state::active_world(state);
         let mut world = holder.lock().unwrap();
         let objects = world.get_timeline_objects();
-        if self.selected.is_none() || !self.selected.is_some_and(|id| world.object_exists(id)) {
+        if let Some(sel) = objects.iter().find(|o| world.is_selected(o.id as usize)) {
+            self.selected = Some(sel.id as usize);
+        } else if self.selected.is_none()
+            || !self.selected.is_some_and(|id| world.object_exists(id))
+        {
             self.selected = objects.first().map(|o| o.id as usize);
         }
         let Some(id) = self.selected else {

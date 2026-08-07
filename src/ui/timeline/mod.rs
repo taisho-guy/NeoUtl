@@ -187,6 +187,14 @@ impl TimelineWindow {
             self.reset_session(&world);
         }
 
+        {
+            let world_holder = app_state::active_world(state);
+            world_holder
+                .lock()
+                .unwrap()
+                .set_selected_ids(self.selected_ids.iter().map(|&id| id as usize).collect());
+        }
+
         egui::CentralPanel::default().show(ui, |ui| {
             self.body(ui, state, preview_panel, &(), dialogs);
         });

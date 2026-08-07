@@ -18,6 +18,25 @@ pub(super) fn darken(c: Color32, factor: f32) -> Color32 {
     Color32::from_rgb(f(c.r()), f(c.g()), f(c.b()))
 }
 
+/// 背景色の相対輝度から可読性の高い前景色(白/黒)を返す。
+/// sRGB係数(ITU-R BT.709)でガンマ補正込みの輝度を算出し、閾値0.5で判定する。
+pub(super) fn readable_text_color(bg: Color32) -> Color32 {
+    let channel = |v: u8| {
+        let c = v as f32 / 255.0;
+        if c <= 0.04045 {
+            c / 12.92
+        } else {
+            ((c + 0.055) / 1.055).powf(2.4)
+        }
+    };
+    let luminance = 0.2126 * channel(bg.r()) + 0.7152 * channel(bg.g()) + 0.0722 * channel(bg.b());
+    if luminance > 0.5 {
+        Color32::BLACK
+    } else {
+        Color32::WHITE
+    }
+}
+
 fn sep() -> ContextMenuItem {
     ContextMenuItem {
         label: String::new(),

@@ -89,26 +89,49 @@ pub fn keyframe_track(
     );
 
     let last = boundary_frames.len().saturating_sub(1);
+    let mut origins = DRAG_ORIGIN.lock().unwrap();
+    let origins = origins.get_or_insert_with(std::collections::HashMap::new);
+    if !response.dragged() && !response.drag_started() && !response.drag_stopped() {
+        origins.remove(&track_id);
+    }
+    let dragging_origin = origins.get(&track_id).copied();
+    let drag_preview_x = dragging_origin.and_then(|_| {
+        if response.dragged() {
+            response
+                .interact_pointer_pos()
+                .map(|p| p.x.clamp(rect.left(), rect.right()))
+        } else {
+            None
+        }
+    });
+
     let mut nearest: Option<(usize, i32, f32)> = None;
     for (idx, &f) in boundary_frames.iter().enumerate() {
         let is_endpoint = idx == 0 || idx == last;
-        let px = x_at(f);
+        let is_dragged_point = dragging_origin == Some(f);
+        let px = if is_dragged_point {
+            drag_preview_x.unwrap_or_else(|| x_at(f))
+        } else {
+            x_at(f)
+        };
         let color = if is_endpoint {
             egui::Color32::from_rgb(0x6a, 0x6a, 0x76)
+        } else if is_dragged_point {
+            egui::Color32::from_rgb(0x8a, 0xab, 0xff)
         } else {
             egui::Color32::from_rgb(0x3a, 0x6d, 0xf0)
         };
         painter.circle_filled(egui::pos2(px, rect.center().y), POINT_RADIUS, color);
-        if let Some(pos) = response.hover_pos().or(response.interact_pointer_pos()) {
-            let d = (pos.x - px).abs();
-            if d <= POINT_RADIUS * 2.5 && nearest.map(|(_, _, nd)| d < nd).unwrap_or(true) {
-                nearest = Some((idx, f, d));
+        if dragging_origin.is_none() {
+            if let Some(pos) = response.hover_pos().or(response.interact_pointer_pos()) {
+                let d = (pos.x - px).abs();
+                if d <= POINT_RADIUS * 2.5 && nearest.map(|(_, _, nd)| d < nd).unwrap_or(true) {
+                    nearest = Some((idx, f, d));
+                }
             }
         }
     }
     let hit_endpoint = |idx: usize| idx == 0 || idx == last;
-    let mut origins = DRAG_ORIGIN.lock().unwrap();
-    let origins = origins.get_or_insert_with(std::collections::HashMap::new);
 
     if response.drag_started() {
         if let Some((idx, f, _)) = nearest {
