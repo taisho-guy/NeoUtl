@@ -271,7 +271,10 @@ mod imp {
             eprintln!(
                 "{}",
                 t!(
-                    "[gpuvideo][cache] pool allocated capacity=%{arg0} cost_per_slot=%{arg1} limit=%{arg2}"
+                    "[gpuvideo][cache] pool allocated capacity=%{arg0} cost_per_slot=%{arg1} limit=%{arg2}",
+                    arg0 = capacity,
+                    arg1 = cost,
+                    arg2 = byte_budget_capacity
                 )
             );
 
@@ -290,7 +293,11 @@ mod imp {
             eprintln!(
                 "{}",
                 t!(
-                    "[gpuvideo][cache] get hit index=%{arg0} slot=%{arg1} thread={:?} entries=%{arg3}"
+                    "[gpuvideo][cache] get hit index=%{arg0} slot=%{arg1} thread=%{arg2} entries=%{arg3}",
+                    arg0 = index,
+                    arg1 = slot,
+                    arg2 = format!("{:?}", thread::current().id()),
+                    arg3 = self.map.len()
                 )
             );
             Some(self.pool[slot].clone())
@@ -317,7 +324,11 @@ mod imp {
                 eprintln!(
                     "{}",
                     t!(
-                        "[gpuvideo][cache] evict index=%{arg0} slot=%{arg1} thread={:?} entries=%{arg3}"
+                        "[gpuvideo][cache] evict index=%{arg0} slot=%{arg1} thread=%{arg2} entries=%{arg3}",
+                        arg0 = oldest,
+                        arg1 = s,
+                        arg2 = format!("{:?}", thread::current().id()),
+                        arg3 = self.map.len()
                     )
                 );
                 s
@@ -328,7 +339,12 @@ mod imp {
             eprintln!(
                 "{}",
                 t!(
-                    "[gpuvideo][cache] put index=%{arg0} slot=%{arg1} thread={:?} entries=%{arg3}/%{arg4}"
+                    "[gpuvideo][cache] put index=%{arg0} slot=%{arg1} thread=%{arg2} entries=%{arg3}/%{arg4}",
+                    arg0 = index,
+                    arg1 = slot,
+                    arg2 = format!("{:?}", thread::current().id()),
+                    arg3 = self.map.len(),
+                    arg4 = self.pool.len()
                 )
             );
             self.pool[slot].clone()
@@ -521,7 +537,13 @@ mod imp {
         /// 本関数内でVulkanInstance/Adapter/Deviceを新規生成しない
         /// （単一デバイス構成をホスト全体で維持するため）。
         pub fn open(path: &Path, device: &Arc<GpuVideoDevice>) -> Result<Self, String> {
-            eprintln!("{}", t!("[gpuvideo] open_video begin path=%{arg0}"));
+            eprintln!(
+                "{}",
+                t!(
+                    "[gpuvideo] open_video begin path=%{arg0}",
+                    arg0 = path.display()
+                )
+            );
 
             let mut demux = probe(path)?;
             let track_id = find_h264_track_id(demux.as_ref()).ok_or("H.264トラック未検出")?;
@@ -579,7 +601,9 @@ mod imp {
             eprintln!(
                 "{}",
                 t!(
-                    "[gpuvideo][open] create_wgpu_textures_decoder_h264 begin path=%{arg0} thread={:?}"
+                    "[gpuvideo][open] create_wgpu_textures_decoder_h264 begin path=%{arg0} thread=%{arg1}",
+                    arg0 = path.display(),
+                    arg1 = format!("{:?}", thread::current().id())
                 )
             );
             let decoder = device
@@ -588,15 +612,21 @@ mod imp {
                     let msg = format!("create_wgpu_textures_decoder_h264 failed: {e}");
                     eprintln!(
                         "{}",
-                        t!("[gpuvideo] open_video failed path=%{arg0} reason=%{arg1}")
+                        t!(
+                            "[gpuvideo] open_video failed path=%{arg0} reason=%{arg1}",
+                            arg0 = path.display(),
+                            arg1 = &msg
+                        )
                     );
                     msg
                 })?;
             eprintln!(
                 "{}",
                 t!(
-                    "[gpuvideo][open] create_wgpu_textures_decoder_h264 end path=%{arg0} elapsed_ms=%{arg1} thread={:?}",
-                    arg1 = decoder_init_started.elapsed().as_millis()
+                    "[gpuvideo][open] create_wgpu_textures_decoder_h264 end path=%{arg0} elapsed_ms=%{arg1} thread=%{arg2}",
+                    arg0 = path.display(),
+                    arg1 = decoder_init_started.elapsed().as_millis(),
+                    arg2 = format!("{:?}", thread::current().id())
                 )
             );
 
@@ -612,22 +642,33 @@ mod imp {
                 let msg = format!("WgpuNv12ToRgbaConverter::new failed: {e}");
                 eprintln!(
                     "{}",
-                    t!("[gpuvideo] open_video failed path=%{arg0} reason=%{arg1}")
+                    t!(
+                        "[gpuvideo] open_video failed path=%{arg0} reason=%{arg1}",
+                        arg0 = path.display(),
+                        arg1 = &msg
+                    )
                 );
                 msg
             })?;
             eprintln!(
                 "{}",
                 t!(
-                    "[gpuvideo][open] converter init end path=%{arg0} elapsed_ms=%{arg1} thread={:?}",
-                    arg1 = converter_init_started.elapsed().as_millis()
+                    "[gpuvideo][open] converter init end path=%{arg0} elapsed_ms=%{arg1} thread=%{arg2}",
+                    arg0 = path.display(),
+                    arg1 = converter_init_started.elapsed().as_millis(),
+                    arg2 = format!("{:?}", thread::current().id())
                 )
             );
 
             eprintln!(
                 "{}",
                 t!(
-                    "[gpuvideo] open_video ok path=%{arg0} codec=h264 %{arg1}x%{arg2} fps=%{arg3} frames=%{arg4}"
+                    "[gpuvideo] open_video ok path=%{arg0} codec=h264 %{arg1}x%{arg2} fps=%{arg3} frames=%{arg4}",
+                    arg0 = path.display(),
+                    arg1 = width,
+                    arg2 = height,
+                    arg3 = fps,
+                    arg4 = total_frames
                 )
             );
 
@@ -676,7 +717,13 @@ mod imp {
             eprintln!(
                 "{}",
                 t!(
-                    "[gpuvideo][prefetch] enter frame_index=%{arg0} thread={:?} pending_len=%{arg2} pending_front={:?} pending_back={:?} cache_entries=%{arg5}"
+                    "[gpuvideo][prefetch] enter frame_index=%{arg0} thread=%{arg1} pending_len=%{arg2} pending_front=%{arg3} pending_back=%{arg4} cache_entries=%{arg5}",
+                    arg0 = frame_index,
+                    arg1 = format!("{:?}", thread::current().id()),
+                    arg2 = self.pending.len(),
+                    arg3 = format!("{:?}", self.pending.front().map(|p| p.display_index)),
+                    arg4 = format!("{:?}", self.pending.back().map(|p| p.display_index)),
+                    arg5 = self.cache.map.len()
                 )
             );
             if self.cache.map.contains_key(&frame_index) {
@@ -685,7 +732,7 @@ mod imp {
 
             if frame_index < 0 || (frame_index as usize) >= self.packets.len() {
                 let msg = format!("prefetch EOF (frame={frame_index})");
-                eprintln!("{}", t!("[gpuvideo] prefetch failed %{arg0}"));
+                eprintln!("{}", t!("[gpuvideo] prefetch failed %{arg0}", arg0 = &msg));
                 return Err(msg);
             }
 
@@ -700,7 +747,12 @@ mod imp {
             eprintln!(
                 "{}",
                 t!(
-                    "[gpuvideo][prefetch] plan frame_index=%{arg0} needed_sync=%{arg1} queue_end=%{arg2} reset=%{arg3} thread={:?}"
+                    "[gpuvideo][prefetch] plan frame_index=%{arg0} needed_sync=%{arg1} queue_end=%{arg2} reset=%{arg3} thread=%{arg4}",
+                    arg0 = frame_index,
+                    arg1 = needed_sync,
+                    arg2 = queue_end,
+                    arg3 = reset,
+                    arg4 = format!("{:?}", thread::current().id())
                 )
             );
 
@@ -750,13 +802,23 @@ mod imp {
             eprintln!(
                 "{}",
                 t!(
-                    "[gpuvideo][frame_gpu] enter frame_index=%{arg0} thread={:?} pending_len=%{arg2} expected_next={:?} next_output_index=%{arg4} reset_count=%{arg5}"
+                    "[gpuvideo][frame_gpu] enter frame_index=%{arg0} thread=%{arg1} pending_len=%{arg2} expected_next=%{arg3} next_output_index=%{arg4} reset_count=%{arg5}",
+                    arg0 = frame_index,
+                    arg1 = format!("{:?}", thread::current().id()),
+                    arg2 = self.pending.len(),
+                    arg3 = format!("{:?}", self.expected_next),
+                    arg4 = self.next_output_index,
+                    arg5 = self.reset_count
                 )
             );
             if let Some(cached) = self.cache.get(frame_index) {
                 eprintln!(
                     "{}",
-                    t!("[gpuvideo][frame_gpu] cache_hit frame_index=%{arg0} thread={:?}")
+                    t!(
+                        "[gpuvideo][frame_gpu] cache_hit frame_index=%{arg0} thread=%{arg1}",
+                        arg0 = frame_index,
+                        arg1 = format!("{:?}", thread::current().id())
+                    )
                 );
                 return Ok(cached);
             }
@@ -768,7 +830,9 @@ mod imp {
                         eprintln!(
                             "{}",
                             t!(
-                                "[gpuvideo] frame_gpu warning: non-sync packet at decode-run start display_index=%{arg0} frame_index=%{arg1}"
+                                "[gpuvideo] frame_gpu warning: non-sync packet at decode-run start display_index=%{arg0} frame_index=%{arg1}",
+                                arg0 = packet.display_index,
+                                arg1 = frame_index
                             )
                         );
                     }
@@ -777,7 +841,11 @@ mod imp {
                     eprintln!(
                         "{}",
                         t!(
-                            "[gpuvideo][reset] begin #%{arg0} display_index=%{arg1} frame_index=%{arg2} thread={:?}"
+                            "[gpuvideo][reset] begin #%{arg0} display_index=%{arg1} frame_index=%{arg2} thread=%{arg3}",
+                            arg0 = self.reset_count,
+                            arg1 = packet.display_index,
+                            arg2 = frame_index,
+                            arg3 = format!("{:?}", thread::current().id())
                         )
                     );
                     self.decoder = self
@@ -785,14 +853,16 @@ mod imp {
                         .create_wgpu_textures_decoder_h264(DecoderParameters::default())
                         .map_err(|e| {
                             let msg = format!("decoder再生成失敗 (frame={frame_index}) err={e}");
-                            eprintln!("{}", t!("[gpuvideo] frame_gpu failed %{arg0}"));
+                            eprintln!("{}", t!("[gpuvideo] frame_gpu failed %{arg0}", arg0 = &msg));
                             msg
                         })?;
                     eprintln!(
                         "{}",
                         t!(
-                            "[gpuvideo][reset] end #%{arg0} elapsed_ms=%{arg1} thread={:?}",
-                            arg1 = reset_started.elapsed().as_millis()
+                            "[gpuvideo][reset] end #%{arg0} elapsed_ms=%{arg1} thread=%{arg2}",
+                            arg0 = self.reset_count,
+                            arg1 = reset_started.elapsed().as_millis(),
+                            arg2 = format!("{:?}", thread::current().id())
                         )
                     );
                     self.next_output_index = packet.display_index;
@@ -804,7 +874,13 @@ mod imp {
                 eprintln!(
                     "{}",
                     t!(
-                        "[gpuvideo] feed display_index=%{arg0} frame_index=%{arg1} is_sync=%{arg2} pts=%{arg3} avcc_len=%{arg4} annexb_len=%{arg5}"
+                        "[gpuvideo] feed display_index=%{arg0} frame_index=%{arg1} is_sync=%{arg2} pts=%{arg3} avcc_len=%{arg4} annexb_len=%{arg5}",
+                        arg0 = packet.display_index,
+                        arg1 = frame_index,
+                        arg2 = packet.is_sync,
+                        arg3 = packet.pts,
+                        arg4 = packet.data.len(),
+                        arg5 = annexb.len()
                     )
                 );
 
@@ -822,26 +898,33 @@ mod imp {
                 eprintln!(
                     "{}",
                     t!(
-                        "[gpuvideo][decode] call_begin display_index=%{arg0} frame_index=%{arg1} thread={:?}"
+                        "[gpuvideo][decode] call_begin display_index=%{arg0} frame_index=%{arg1} thread=%{arg2}",
+                        arg0 = packet.display_index,
+                        arg1 = frame_index,
+                        arg2 = format!("{:?}", thread::current().id())
                     )
                 );
                 let frames = {
                     let _guard = acquire_gpu_decode_lock(frame_index).map_err(|e| {
-                        eprintln!("{}", t!("[gpuvideo] frame_gpu failed %{arg0}"));
+                        eprintln!("{}", t!("[gpuvideo] frame_gpu failed %{arg0}", arg0 = &e));
                         e
                     })?;
                     self.decoder.decode(chunk)
                 }
                 .map_err(|e| {
                     let msg = format!("decoder.decode failed (frame={frame_index}) err={e}");
-                    eprintln!("{}", t!("[gpuvideo] frame_gpu failed %{arg0}"));
+                    eprintln!("{}", t!("[gpuvideo] frame_gpu failed %{arg0}", arg0 = &msg));
                     msg
                 })?;
                 eprintln!(
                     "{}",
                     t!(
-                        "[gpuvideo][decode] call_end display_index=%{arg0} frame_index=%{arg1} elapsed_ms=%{arg2} output_count=%{arg3} thread={:?}",
-                        arg2 = decode_started.elapsed().as_millis()
+                        "[gpuvideo][decode] call_end display_index=%{arg0} frame_index=%{arg1} elapsed_ms=%{arg2} output_count=%{arg3} thread=%{arg4}",
+                        arg0 = packet.display_index,
+                        arg1 = frame_index,
+                        arg2 = decode_started.elapsed().as_millis(),
+                        arg3 = frames.len(),
+                        arg4 = format!("{:?}", thread::current().id())
                     )
                 );
 
@@ -851,7 +934,11 @@ mod imp {
 
                     eprintln!(
                         "{}",
-                        t!("[gpuvideo] output display_index=%{arg0} frame_index=%{arg1}")
+                        t!(
+                            "[gpuvideo] output display_index=%{arg0} frame_index=%{arg1}",
+                            arg0 = display_index,
+                            arg1 = frame_index
+                        )
                     );
 
                     let rgba = self.cache.acquire_for_write(display_index);
@@ -863,7 +950,10 @@ mod imp {
                                 let msg = format!(
                                     "create_input_bind_group failed (frame={frame_index}) err={e}"
                                 );
-                                eprintln!("{}", t!("[gpuvideo] frame_gpu failed %{arg0}"));
+                                eprintln!(
+                                    "{}",
+                                    t!("[gpuvideo] frame_gpu failed %{arg0}", arg0 = &msg)
+                                );
                                 msg
                             })?;
 
@@ -888,7 +978,12 @@ mod imp {
                             eprintln!(
                                 "{}",
                                 t!(
-                                    "[gpuvideo] crop scratch (re)allocate physical=%{arg0}x%{arg1} display=%{arg2}x%{arg3} frame_index=%{arg4}"
+                                    "[gpuvideo] crop scratch (re)allocate physical=%{arg0}x%{arg1} display=%{arg2}x%{arg3} frame_index=%{arg4}",
+                                    arg0 = physical_width,
+                                    arg1 = physical_height,
+                                    arg2 = self.width,
+                                    arg3 = self.height,
+                                    arg4 = frame_index
                                 )
                             );
                             self.crop_scratch = Some((
@@ -935,8 +1030,11 @@ mod imp {
                     eprintln!(
                         "{}",
                         t!(
-                            "[gpuvideo][convert] display_index=%{arg0} frame_index=%{arg1} elapsed_ms=%{arg2} thread={:?}",
-                            arg2 = convert_started.elapsed().as_millis()
+                            "[gpuvideo][convert] display_index=%{arg0} frame_index=%{arg1} elapsed_ms=%{arg2} thread=%{arg3}",
+                            arg0 = display_index,
+                            arg1 = frame_index,
+                            arg2 = convert_started.elapsed().as_millis(),
+                            arg3 = format!("{:?}", thread::current().id())
                         )
                     );
 
@@ -953,7 +1051,13 @@ mod imp {
             eprintln!(
                 "{}",
                 t!(
-                    "[gpuvideo] frame_gpu failed frame=%{arg0} reason=%{arg1} thread={:?} next_output_index=%{arg3} expected_next={:?} reset_count=%{arg5}"
+                    "[gpuvideo] frame_gpu failed frame=%{arg0} reason=%{arg1} thread=%{arg2} next_output_index=%{arg3} expected_next=%{arg4} reset_count=%{arg5}",
+                    arg0 = frame_index,
+                    arg1 = &msg,
+                    arg2 = format!("{:?}", thread::current().id()),
+                    arg3 = self.next_output_index,
+                    arg4 = format!("{:?}", self.expected_next),
+                    arg5 = self.reset_count
                 )
             );
             Err(msg)
@@ -998,7 +1102,10 @@ mod imp {
             .map(|d| Box::new(d) as Box<dyn VideoSource>)
             .map_err(|e| {
                 let msg = format!("open_video failed path={} err={e}", path.display());
-                eprintln!("{}", t!("[gpuvideo] open_video failed %{arg0}"));
+                eprintln!(
+                    "{}",
+                    t!("[gpuvideo] open_video failed %{arg0}", arg0 = &msg)
+                );
                 msg
             })
     }
