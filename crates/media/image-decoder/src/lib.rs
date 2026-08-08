@@ -39,10 +39,11 @@ impl ImageSource for StaticImageDecoder {
             mip_level_count: 1,
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
-            format: wgpu::TextureFormat::Rgba8Unorm,
+            format: wgpu::TextureFormat::Rgba16Float,
             usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
             view_formats: &[],
         });
+        let float_data = neoutl_color::u8_to_rgba16f(&self.rgba);
         queue.write_texture(
             wgpu::TexelCopyTextureInfo {
                 texture: &texture,
@@ -50,10 +51,10 @@ impl ImageSource for StaticImageDecoder {
                 origin: wgpu::Origin3d::ZERO,
                 aspect: wgpu::TextureAspect::All,
             },
-            &self.rgba,
+            bytemuck::cast_slice(&float_data),
             wgpu::TexelCopyBufferLayout {
                 offset: 0,
-                bytes_per_row: Some(self.width * 4),
+                bytes_per_row: Some(self.width * 8),
                 rows_per_image: Some(self.height),
             },
             wgpu::Extent3d {

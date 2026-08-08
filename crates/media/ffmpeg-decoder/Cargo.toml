@@ -5,6 +5,8 @@ edition = "2024"
 
 [dependencies]
 neoutl-media-api = { path = "../../neoutl-media-api" }
+neoutl-color = { path = "../../neoutl-color" }
+bytemuck = "1"
 ffmpeg-next = { version = "9", features = ["codec", "format", "software-resampling"] }
 ffmpeg-sys-next = { version = "9", features = ["swscale"] }
 libc = "0.2"

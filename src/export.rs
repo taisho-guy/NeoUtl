@@ -219,7 +219,7 @@ fn read_texture_rgba(
 ) -> Vec<u8> {
     let width = texture.width();
     let height = texture.height();
-    let bytes_per_row = (width * 4).div_ceil(256) * 256;
+    let bytes_per_row = (width * 8).div_ceil(256) * 256;
     let buffer = device.create_buffer(&wgpu::BufferDescriptor {
         label: Some("export readback"),
         size: (bytes_per_row * height) as u64,
@@ -254,14 +254,63 @@ fn read_texture_rgba(
     rx.recv().ok();
 
     let padded = slice.get_mapped_range();
-    let mut out = Vec::with_capacity((width * height * 4) as usize);
+    let mut float_dense = Vec::with_capacity((width * height * 4) as usize);
     for row in 0..height {
         let start = (row * bytes_per_row) as usize;
-        out.extend_from_slice(&padded[start..start + (width * 4) as usize]);
+        let end = start + (width * 8) as usize;
+        float_dense.extend(
+            padded[start..end]
+                .chunks_exact(2)
+                .map(|b| half::f16::from_le_bytes([b[0], b[1]])),
+        );
     }
     drop(padded);
     buffer.unmap();
-    out
+    neoutl_color::rgba16f_to_u8(&float_dense)
+}
+
+fn to_rgba8_texture(
+    device: &wgpu::Device,
+    queue: &wgpu::Queue,
+    src: &wgpu::Texture,
+) -> wgpu::Texture {
+    let width = src.width();
+    let height = src.height();
+    let pixels = read_texture_rgba(device, queue, src);
+    let dst = device.create_texture(&wgpu::TextureDescriptor {
+        label: Some("export nv12-bridge rgba8"),
+        size: wgpu::Extent3d {
+            width,
+            height,
+            depth_or_array_layers: 1,
+        },
+        mip_level_count: 1,
+        sample_count: 1,
+        dimension: wgpu::TextureDimension::D2,
+        format: wgpu::TextureFormat::Rgba8Unorm,
+        usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+        view_formats: &[],
+    });
+    queue.write_texture(
+        wgpu::TexelCopyTextureInfo {
+            texture: &dst,
+            mip_level: 0,
+            origin: wgpu::Origin3d::ZERO,
+            aspect: wgpu::TextureAspect::All,
+        },
+        &pixels,
+        wgpu::TexelCopyBufferLayout {
+            offset: 0,
+            bytes_per_row: Some(width * 4),
+            rows_per_image: Some(height),
+        },
+        wgpu::Extent3d {
+            width,
+            height,
+            depth_or_array_layers: 1,
+        },
+    );
+    dst
 }
 
 #[cfg(target_os = "linux")]
@@ -383,7 +432,8 @@ pub fn run(state: &SharedAppState, mut job: ExportJob) -> Result<(), String> {
             let pts = (frame_index - job.start_frame) as i64 * frame_duration_ns;
             if let Some(enc) = gpuvideo_encoder.as_mut() {
                 let force_keyframe = pts == 0;
-                match enc.encode_rgba(&texture, &device, &queue, pts, force_keyframe) {
+                let bridge_texture = to_rgba8_texture(&device, &queue, &texture);
+                match enc.encode_rgba(&bridge_texture, &device, &queue, pts, force_keyframe) {
                     Ok(mut c) => chunks.append(&mut c),
                     Err(e) => {
                         if job.backend == EncoderBackend::GpuVideo {
