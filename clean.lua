@@ -148,9 +148,14 @@ local function remove_comments_from_file(filepath, ext)
     end
 end
 
+local function pattern_escape(s)
+    return s:gsub("[%^%$%(%)%%%.%[%]%*%+%-%?]", "%%%1")
+end
+
 local function is_excluded(filepath)
     for _, dir in ipairs(EXCLUDE_DIRS) do
-        if filepath:find("[/\\]" .. dir .. "[/\\]") or filepath:find("^%.?[/\\]?" .. dir .. "[/\\]") then
+        local d = pattern_escape(dir)
+        if filepath:find("[/\\]" .. d .. "[/\\]") or filepath:find("^%.?[/\\]?" .. d .. "[/\\]") then
             return true
         end
     end
