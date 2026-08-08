@@ -397,7 +397,7 @@ pub fn init_vulkan_context(
     }))
 }
 
-pub struct Nv12ConvertEngine {
+pub struct SemiPlanarConvertEngine {
     device: ash::Device,
     queue: ash::vk::Queue,
     command_pool: ash::vk::CommandPool,
@@ -411,7 +411,7 @@ pub struct Nv12ConvertEngine {
     sampler: ash::vk::Sampler,
 }
 
-impl Nv12ConvertEngine {
+impl SemiPlanarConvertEngine {
     pub unsafe fn new(
         handles: &VulkanRawHandles,
         entry: &ash::Entry,
@@ -556,12 +556,14 @@ impl Nv12ConvertEngine {
         dst_image: ash::vk::Image,
         width: u32,
         height: u32,
+        y_plane_format: ash::vk::Format,
+        uv_plane_format: ash::vk::Format,
     ) -> Result<(), String> {
         unsafe {
             let y_view_info = ash::vk::ImageViewCreateInfo::default()
                 .image(src_image)
                 .view_type(ash::vk::ImageViewType::TYPE_2D)
-                .format(ash::vk::Format::R8_UNORM)
+                .format(y_plane_format)
                 .subresource_range(
                     ash::vk::ImageSubresourceRange::default()
                         .aspect_mask(ash::vk::ImageAspectFlags::PLANE_0)
@@ -578,7 +580,7 @@ impl Nv12ConvertEngine {
             let uv_view_info = ash::vk::ImageViewCreateInfo::default()
                 .image(src_image)
                 .view_type(ash::vk::ImageViewType::TYPE_2D)
-                .format(ash::vk::Format::R8G8_UNORM)
+                .format(uv_plane_format)
                 .subresource_range(
                     ash::vk::ImageSubresourceRange::default()
                         .aspect_mask(ash::vk::ImageAspectFlags::PLANE_1)
@@ -773,7 +775,7 @@ impl Nv12ConvertEngine {
     }
 }
 
-impl Drop for Nv12ConvertEngine {
+impl Drop for SemiPlanarConvertEngine {
     fn drop(&mut self) {
         unsafe {
             self.device.destroy_sampler(self.sampler, None);
