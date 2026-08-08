@@ -397,4 +397,397 @@ pub fn init_vulkan_context(
     }))
 }
 
+pub struct Nv12ConvertEngine {
+    device: ash::Device,
+    queue: ash::vk::Queue,
+    command_pool: ash::vk::CommandPool,
+    command_buffer: ash::vk::CommandBuffer,
+    fence: ash::vk::Fence,
+    descriptor_set_layout: ash::vk::DescriptorSetLayout,
+    pipeline_layout: ash::vk::PipelineLayout,
+    pipeline: ash::vk::Pipeline,
+    shader_module: ash::vk::ShaderModule,
+    descriptor_pool: ash::vk::DescriptorPool,
+    sampler: ash::vk::Sampler,
+}
+
+impl Nv12ConvertEngine {
+    pub unsafe fn new(
+        handles: &VulkanRawHandles,
+        entry: &ash::Entry,
+        spirv_code: &[u8],
+    ) -> Result<Self, String> {
+        unsafe {
+            let instance = ash::Instance::load(
+                &ash::StaticFn {
+                    get_instance_proc_addr: handles.get_instance_proc_addr,
+                },
+                handles.instance,
+            );
+            let device = ash::Device::load(instance.fp_v1_0(), handles.device);
+
+            let pool_info = ash::vk::CommandPoolCreateInfo::default()
+                .queue_family_index(handles.queue_family_index)
+                .flags(ash::vk::CommandPoolCreateFlags::TRANSIENT);
+            let command_pool = device
+                .create_command_pool(&pool_info, None)
+                .map_err(|e| format!("create_command_pool失敗: {e}"))?;
+
+            let alloc_info = ash::vk::CommandBufferAllocateInfo::default()
+                .command_pool(command_pool)
+                .level(ash::vk::CommandBufferLevel::PRIMARY)
+                .command_buffer_count(1);
+            let command_buffer = device
+                .allocate_command_buffers(&alloc_info)
+                .map_err(|e| format!("allocate_command_buffers失敗: {e}"))?[0];
+
+            let fence = device
+                .create_fence(&ash::vk::FenceCreateInfo::default(), None)
+                .map_err(|e| format!("create_fence失敗: {e}"))?;
+
+            let sampler_info = ash::vk::SamplerCreateInfo::default()
+                .mag_filter(ash::vk::Filter::LINEAR)
+                .min_filter(ash::vk::Filter::LINEAR)
+                .address_mode_u(ash::vk::SamplerAddressMode::CLAMP_TO_EDGE)
+                .address_mode_v(ash::vk::SamplerAddressMode::CLAMP_TO_EDGE)
+                .address_mode_w(ash::vk::SamplerAddressMode::CLAMP_TO_EDGE)
+                .mipmap_mode(ash::vk::SamplerMipmapMode::NEAREST);
+            let sampler = device
+                .create_sampler(&sampler_info, None)
+                .map_err(|e| format!("create_sampler失敗: {e}"))?;
+
+            let bindings = [
+                ash::vk::DescriptorSetLayoutBinding::default()
+                    .binding(0)
+                    .descriptor_type(ash::vk::DescriptorType::SAMPLED_IMAGE)
+                    .descriptor_count(1)
+                    .stage_flags(ash::vk::ShaderStageFlags::COMPUTE),
+                ash::vk::DescriptorSetLayoutBinding::default()
+                    .binding(1)
+                    .descriptor_type(ash::vk::DescriptorType::SAMPLED_IMAGE)
+                    .descriptor_count(1)
+                    .stage_flags(ash::vk::ShaderStageFlags::COMPUTE),
+                ash::vk::DescriptorSetLayoutBinding::default()
+                    .binding(2)
+                    .descriptor_type(ash::vk::DescriptorType::SAMPLER)
+                    .descriptor_count(1)
+                    .stage_flags(ash::vk::ShaderStageFlags::COMPUTE),
+                ash::vk::DescriptorSetLayoutBinding::default()
+                    .binding(3)
+                    .descriptor_type(ash::vk::DescriptorType::STORAGE_IMAGE)
+                    .descriptor_count(1)
+                    .stage_flags(ash::vk::ShaderStageFlags::COMPUTE),
+            ];
+            let layout_info = ash::vk::DescriptorSetLayoutCreateInfo::default().bindings(&bindings);
+            let descriptor_set_layout = device
+                .create_descriptor_set_layout(&layout_info, None)
+                .map_err(|e| format!("create_descriptor_set_layout失敗: {e}"))?;
+
+            let set_layouts = [descriptor_set_layout];
+            let pipeline_layout_info =
+                ash::vk::PipelineLayoutCreateInfo::default().set_layouts(&set_layouts);
+            let pipeline_layout = device
+                .create_pipeline_layout(&pipeline_layout_info, None)
+                .map_err(|e| format!("create_pipeline_layout失敗: {e}"))?;
+
+            if spirv_code.len() % 4 != 0 {
+                return Err("SPIR-Vバイト列長が4の倍数でない".to_owned());
+            }
+            let spirv_words: Vec<u32> = spirv_code
+                .chunks_exact(4)
+                .map(|c| u32::from_ne_bytes([c[0], c[1], c[2], c[3]]))
+                .collect();
+            let shader_info = ash::vk::ShaderModuleCreateInfo::default().code(&spirv_words);
+            let shader_module = device
+                .create_shader_module(&shader_info, None)
+                .map_err(|e| format!("create_shader_module失敗: {e}"))?;
+
+            let entry_name = c"cs_main";
+            let stage_info = ash::vk::PipelineShaderStageCreateInfo::default()
+                .stage(ash::vk::ShaderStageFlags::COMPUTE)
+                .module(shader_module)
+                .name(entry_name);
+            let pipeline_info = ash::vk::ComputePipelineCreateInfo::default()
+                .stage(stage_info)
+                .layout(pipeline_layout);
+            let pipeline = device
+                .create_compute_pipelines(ash::vk::PipelineCache::null(), &[pipeline_info], None)
+                .map_err(|(_, e)| format!("create_compute_pipelines失敗: {e}"))?[0];
+
+            let pool_sizes = [
+                ash::vk::DescriptorPoolSize::default()
+                    .ty(ash::vk::DescriptorType::SAMPLED_IMAGE)
+                    .descriptor_count(2),
+                ash::vk::DescriptorPoolSize::default()
+                    .ty(ash::vk::DescriptorType::SAMPLER)
+                    .descriptor_count(1),
+                ash::vk::DescriptorPoolSize::default()
+                    .ty(ash::vk::DescriptorType::STORAGE_IMAGE)
+                    .descriptor_count(1),
+            ];
+            let descriptor_pool_info = ash::vk::DescriptorPoolCreateInfo::default()
+                .max_sets(1)
+                .pool_sizes(&pool_sizes);
+            let descriptor_pool = device
+                .create_descriptor_pool(&descriptor_pool_info, None)
+                .map_err(|e| format!("create_descriptor_pool失敗: {e}"))?;
+
+            Ok(Self {
+                device,
+                queue: handles.queue,
+                command_pool,
+                command_buffer,
+                fence,
+                descriptor_set_layout,
+                pipeline_layout,
+                pipeline,
+                shader_module,
+                descriptor_pool,
+                sampler,
+            })
+        }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub unsafe fn convert(
+        &self,
+        src_image: ash::vk::Image,
+        src_layout: ash::vk::ImageLayout,
+        dst_image: ash::vk::Image,
+        width: u32,
+        height: u32,
+    ) -> Result<(), String> {
+        unsafe {
+            let y_view_info = ash::vk::ImageViewCreateInfo::default()
+                .image(src_image)
+                .view_type(ash::vk::ImageViewType::TYPE_2D)
+                .format(ash::vk::Format::R8_UNORM)
+                .subresource_range(
+                    ash::vk::ImageSubresourceRange::default()
+                        .aspect_mask(ash::vk::ImageAspectFlags::PLANE_0)
+                        .base_mip_level(0)
+                        .level_count(1)
+                        .base_array_layer(0)
+                        .layer_count(1),
+                );
+            let y_view = self
+                .device
+                .create_image_view(&y_view_info, None)
+                .map_err(|e| format!("Yプレーンビュー生成失敗: {e}"))?;
+
+            let uv_view_info = ash::vk::ImageViewCreateInfo::default()
+                .image(src_image)
+                .view_type(ash::vk::ImageViewType::TYPE_2D)
+                .format(ash::vk::Format::R8G8_UNORM)
+                .subresource_range(
+                    ash::vk::ImageSubresourceRange::default()
+                        .aspect_mask(ash::vk::ImageAspectFlags::PLANE_1)
+                        .base_mip_level(0)
+                        .level_count(1)
+                        .base_array_layer(0)
+                        .layer_count(1),
+                );
+            let uv_view = self
+                .device
+                .create_image_view(&uv_view_info, None)
+                .map_err(|e| format!("UVプレーンビュー生成失敗: {e}"))?;
+
+            let dst_view_info = ash::vk::ImageViewCreateInfo::default()
+                .image(dst_image)
+                .view_type(ash::vk::ImageViewType::TYPE_2D)
+                .format(ash::vk::Format::R8G8B8A8_UNORM)
+                .subresource_range(
+                    ash::vk::ImageSubresourceRange::default()
+                        .aspect_mask(ash::vk::ImageAspectFlags::COLOR)
+                        .base_mip_level(0)
+                        .level_count(1)
+                        .base_array_layer(0)
+                        .layer_count(1),
+                );
+            let dst_view = self
+                .device
+                .create_image_view(&dst_view_info, None)
+                .map_err(|e| format!("出力ビュー生成失敗: {e}"))?;
+
+            let set_layouts = [self.descriptor_set_layout];
+            let alloc_info = ash::vk::DescriptorSetAllocateInfo::default()
+                .descriptor_pool(self.descriptor_pool)
+                .set_layouts(&set_layouts);
+            let descriptor_set = self
+                .device
+                .allocate_descriptor_sets(&alloc_info)
+                .map_err(|e| format!("allocate_descriptor_sets失敗: {e}"))?[0];
+
+            let y_image_info = [ash::vk::DescriptorImageInfo::default()
+                .image_view(y_view)
+                .image_layout(ash::vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)];
+            let uv_image_info = [ash::vk::DescriptorImageInfo::default()
+                .image_view(uv_view)
+                .image_layout(ash::vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)];
+            let sampler_info = [ash::vk::DescriptorImageInfo::default().sampler(self.sampler)];
+            let dst_image_info = [ash::vk::DescriptorImageInfo::default()
+                .image_view(dst_view)
+                .image_layout(ash::vk::ImageLayout::GENERAL)];
+
+            let writes = [
+                ash::vk::WriteDescriptorSet::default()
+                    .dst_set(descriptor_set)
+                    .dst_binding(0)
+                    .descriptor_type(ash::vk::DescriptorType::SAMPLED_IMAGE)
+                    .image_info(&y_image_info),
+                ash::vk::WriteDescriptorSet::default()
+                    .dst_set(descriptor_set)
+                    .dst_binding(1)
+                    .descriptor_type(ash::vk::DescriptorType::SAMPLED_IMAGE)
+                    .image_info(&uv_image_info),
+                ash::vk::WriteDescriptorSet::default()
+                    .dst_set(descriptor_set)
+                    .dst_binding(2)
+                    .descriptor_type(ash::vk::DescriptorType::SAMPLER)
+                    .image_info(&sampler_info),
+                ash::vk::WriteDescriptorSet::default()
+                    .dst_set(descriptor_set)
+                    .dst_binding(3)
+                    .descriptor_type(ash::vk::DescriptorType::STORAGE_IMAGE)
+                    .image_info(&dst_image_info),
+            ];
+            self.device.update_descriptor_sets(&writes, &[]);
+
+            self.device
+                .reset_command_buffer(
+                    self.command_buffer,
+                    ash::vk::CommandBufferResetFlags::empty(),
+                )
+                .map_err(|e| format!("reset_command_buffer失敗: {e}"))?;
+            let begin_info = ash::vk::CommandBufferBeginInfo::default()
+                .flags(ash::vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT);
+            self.device
+                .begin_command_buffer(self.command_buffer, &begin_info)
+                .map_err(|e| format!("begin_command_buffer失敗: {e}"))?;
+
+            let src_subresource = ash::vk::ImageSubresourceRange::default()
+                .aspect_mask(
+                    ash::vk::ImageAspectFlags::PLANE_0 | ash::vk::ImageAspectFlags::PLANE_1,
+                )
+                .base_mip_level(0)
+                .level_count(1)
+                .base_array_layer(0)
+                .layer_count(1);
+            let src_barrier = ash::vk::ImageMemoryBarrier::default()
+                .old_layout(src_layout)
+                .new_layout(ash::vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
+                .src_queue_family_index(ash::vk::QUEUE_FAMILY_IGNORED)
+                .dst_queue_family_index(ash::vk::QUEUE_FAMILY_IGNORED)
+                .image(src_image)
+                .subresource_range(src_subresource)
+                .dst_access_mask(ash::vk::AccessFlags::SHADER_READ);
+
+            let dst_subresource = ash::vk::ImageSubresourceRange::default()
+                .aspect_mask(ash::vk::ImageAspectFlags::COLOR)
+                .base_mip_level(0)
+                .level_count(1)
+                .base_array_layer(0)
+                .layer_count(1);
+            let dst_barrier_to_general = ash::vk::ImageMemoryBarrier::default()
+                .old_layout(ash::vk::ImageLayout::UNDEFINED)
+                .new_layout(ash::vk::ImageLayout::GENERAL)
+                .src_queue_family_index(ash::vk::QUEUE_FAMILY_IGNORED)
+                .dst_queue_family_index(ash::vk::QUEUE_FAMILY_IGNORED)
+                .image(dst_image)
+                .subresource_range(dst_subresource)
+                .dst_access_mask(ash::vk::AccessFlags::SHADER_WRITE);
+
+            self.device.cmd_pipeline_barrier(
+                self.command_buffer,
+                ash::vk::PipelineStageFlags::TOP_OF_PIPE,
+                ash::vk::PipelineStageFlags::COMPUTE_SHADER,
+                ash::vk::DependencyFlags::empty(),
+                &[],
+                &[],
+                &[src_barrier, dst_barrier_to_general],
+            );
+
+            self.device.cmd_bind_pipeline(
+                self.command_buffer,
+                ash::vk::PipelineBindPoint::COMPUTE,
+                self.pipeline,
+            );
+            self.device.cmd_bind_descriptor_sets(
+                self.command_buffer,
+                ash::vk::PipelineBindPoint::COMPUTE,
+                self.pipeline_layout,
+                0,
+                &[descriptor_set],
+                &[],
+            );
+            self.device.cmd_dispatch(
+                self.command_buffer,
+                width.div_ceil(8),
+                height.div_ceil(8),
+                1,
+            );
+
+            let dst_barrier_to_shader_read = ash::vk::ImageMemoryBarrier::default()
+                .old_layout(ash::vk::ImageLayout::GENERAL)
+                .new_layout(ash::vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
+                .src_queue_family_index(ash::vk::QUEUE_FAMILY_IGNORED)
+                .dst_queue_family_index(ash::vk::QUEUE_FAMILY_IGNORED)
+                .image(dst_image)
+                .subresource_range(dst_subresource)
+                .src_access_mask(ash::vk::AccessFlags::SHADER_WRITE)
+                .dst_access_mask(ash::vk::AccessFlags::SHADER_READ);
+            self.device.cmd_pipeline_barrier(
+                self.command_buffer,
+                ash::vk::PipelineStageFlags::COMPUTE_SHADER,
+                ash::vk::PipelineStageFlags::FRAGMENT_SHADER,
+                ash::vk::DependencyFlags::empty(),
+                &[],
+                &[],
+                &[dst_barrier_to_shader_read],
+            );
+
+            self.device
+                .end_command_buffer(self.command_buffer)
+                .map_err(|e| format!("end_command_buffer失敗: {e}"))?;
+            self.device
+                .reset_fences(&[self.fence])
+                .map_err(|e| format!("reset_fences失敗: {e}"))?;
+            let command_buffers = [self.command_buffer];
+            let submit_info = ash::vk::SubmitInfo::default().command_buffers(&command_buffers);
+            self.device
+                .queue_submit(self.queue, &[submit_info], self.fence)
+                .map_err(|e| format!("queue_submit失敗: {e}"))?;
+            self.device
+                .wait_for_fences(&[self.fence], true, u64::MAX)
+                .map_err(|e| format!("wait_for_fences失敗: {e}"))?;
+
+            self.device.destroy_image_view(y_view, None);
+            self.device.destroy_image_view(uv_view, None);
+            self.device.destroy_image_view(dst_view, None);
+            self.device
+                .free_descriptor_sets(self.descriptor_pool, &[descriptor_set])
+                .map_err(|e| format!("free_descriptor_sets失敗: {e}"))?;
+
+            Ok(())
+        }
+    }
+}
+
+impl Drop for Nv12ConvertEngine {
+    fn drop(&mut self) {
+        unsafe {
+            self.device.destroy_sampler(self.sampler, None);
+            self.device
+                .destroy_descriptor_pool(self.descriptor_pool, None);
+            self.device.destroy_pipeline(self.pipeline, None);
+            self.device.destroy_shader_module(self.shader_module, None);
+            self.device
+                .destroy_pipeline_layout(self.pipeline_layout, None);
+            self.device
+                .destroy_descriptor_set_layout(self.descriptor_set_layout, None);
+            self.device.destroy_command_pool(self.command_pool, None);
+        }
+    }
+}
+
 use ash::vk::Handle;

@@ -17,6 +17,7 @@ const AV_PIX_FMT_NONE: i32 = -1;
 const AV_PIX_FMT_VULKAN: i32 = 152;
 const AV_PIX_FMT_RGB0: i32 = 121;
 const AV_PIX_FMT_BGR0: i32 = 122;
+const AV_PIX_FMT_NV12: i32 = 23;
 
 const AV_CODEC_CAP_FRAME_THREADS: i32 = 1 << 12;
 const AV_CODEC_CAP_SLICE_THREADS: i32 = 1 << 13;
@@ -188,6 +189,7 @@ struct GpuPipeline {
     wgpu_device: Arc<wgpu::Device>,
     vulkan_ctx: Arc<NeoutlVulkanContext>,
     derived_frames_ctx: *mut sys::AVBufferRef,
+    nv12_engine: Option<vulkan::Nv12ConvertEngine>,
 }
 
 unsafe impl Send for GpuPipeline {}
@@ -419,10 +421,19 @@ fn build_gpu_pipeline(
         }
     };
 
+    let nv12_engine = unsafe {
+        vulkan::extract_vulkan_raw_handles(&wgpu_device).and_then(|handles| {
+            static NV12_SPIRV: &[u8] =
+                include_bytes!(concat!(env!("OUT_DIR"), "/nv12_to_rgba.spv"));
+            vulkan::Nv12ConvertEngine::new(&handles, &entry, NV12_SPIRV).ok()
+        })
+    };
+
     Some(GpuPipeline {
         wgpu_device,
         vulkan_ctx,
         derived_frames_ctx: ptr::null_mut(),
+        nv12_engine,
     })
 }
 
@@ -458,7 +469,12 @@ fn try_convert_to_gpu(ctx: &mut OpenContext, av_frame: *mut sys::AVFrame) -> Opt
     }
     let sw_format = unsafe { (*ctx.dec_ctx).sw_pix_fmt };
     let sw_format_i32 = unsafe { std::mem::transmute::<sys::AVPixelFormat, i32>(sw_format) };
-    if sw_format_i32 != AV_PIX_FMT_RGB0 && sw_format_i32 != AV_PIX_FMT_BGR0 {
+    let is_direct_rgba = sw_format_i32 == AV_PIX_FMT_RGB0 || sw_format_i32 == AV_PIX_FMT_BGR0;
+    let is_nv12 = sw_format_i32 == AV_PIX_FMT_NV12;
+    if !is_direct_rgba && !is_nv12 {
+        return None;
+    }
+    if is_nv12 && gpu.nv12_engine.is_none() {
         return None;
     }
 
@@ -498,7 +514,9 @@ fn try_convert_to_gpu(ctx: &mut OpenContext, av_frame: *mut sys::AVFrame) -> Opt
         sample_count: 1,
         dimension: wgpu::TextureDimension::D2,
         format: wgpu::TextureFormat::Rgba8Unorm,
-        usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+        usage: wgpu::TextureUsages::TEXTURE_BINDING
+            | wgpu::TextureUsages::COPY_DST
+            | wgpu::TextureUsages::STORAGE_BINDING,
         view_formats: &[],
     };
     let target_texture = gpu.wgpu_device.create_texture(&target_desc);
@@ -512,13 +530,26 @@ fn try_convert_to_gpu(ctx: &mut OpenContext, av_frame: *mut sys::AVFrame) -> Opt
         return None;
     };
 
-    let copy_result = unsafe {
-        gpu.vulkan_ctx
-            .copy_engine
-            .copy_image(src_image, dst_vk_image, ctx.width, ctx.height)
+    let convert_result = if is_nv12 {
+        let engine = gpu.nv12_engine.as_ref()?;
+        unsafe {
+            engine.convert(
+                src_image.image,
+                src_image.layout,
+                dst_vk_image,
+                ctx.width,
+                ctx.height,
+            )
+        }
+    } else {
+        unsafe {
+            gpu.vulkan_ctx
+                .copy_engine
+                .copy_image(src_image, dst_vk_image, ctx.width, ctx.height)
+        }
     };
-    if let Err(e) = copy_result {
-        eprintln!("[neoutl-video-decoder] VkImageコピー失敗: {e}");
+    if let Err(e) = convert_result {
+        eprintln!("[neoutl-video-decoder] GPUフレーム変換失敗: {e}");
         return None;
     }
 

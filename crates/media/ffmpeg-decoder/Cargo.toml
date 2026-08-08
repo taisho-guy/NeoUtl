@@ -11,3 +11,6 @@ libc = "0.2"
 wgpu = { version = "29", features = ["vulkan-portability"] }
 wgpu-hal = { version = "29", features = ["vulkan"] }
 ash = "0.38"
+
+[build-dependencies]
+neoutl-object-shader-build.workspace = true
