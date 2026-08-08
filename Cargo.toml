@@ -113,3 +113,4 @@ debug = 1
 [patch.crates-io]
 wgpu = { path = "neoutl-wgpu/wgpu" }
 wgpu-core = { path = "neoutl-wgpu/wgpu-core" }
+wgpu-hal = { path = "neoutl-wgpu/wgpu-hal" }

@@ -6,7 +6,7 @@ use std::time::{Duration, Instant};
 use neoutl_media_api::{MediaKind, MediaMeta, MediaVTable, VideoSource};
 
 use crate::decoder::{VideoDecoder, VideoMeta};
-use crate::frame::VideoFrameStore;
+use crate::frame::{VideoFrame, VideoFrameStore};
 
 const FRAME_WAIT_TIMEOUT: Duration = Duration::from_secs(5);
 const FRAME_WAIT_POLL: Duration = Duration::from_millis(2);
@@ -26,9 +26,16 @@ impl FfmpegVideoSource {
         let store = VideoFrameStore::new();
         let (tx, rx) = mpsc::channel::<VideoMeta>();
         let store_thread = store.clone();
-        let decoder = VideoDecoder::open(path, CLIP_KEY.to_owned(), store_thread, move |meta| {
-            let _ = tx.send(meta);
-        });
+        let decoder = VideoDecoder::open(
+            path,
+            CLIP_KEY.to_owned(),
+            store_thread,
+            None,
+            None,
+            move |meta| {
+                let _ = tx.send(meta);
+            },
+        );
         let meta = rx
             .recv_timeout(FRAME_WAIT_TIMEOUT)
             .map_err(|e| format!("動画メタ情報取得タイムアウト: {e}"))?;
@@ -72,7 +79,7 @@ impl VideoSource for FfmpegVideoSource {
         self.decoder.seek_to_frame(frame_index);
 
         let deadline = Instant::now() + FRAME_WAIT_TIMEOUT;
-        let rgba = loop {
+        let frame = loop {
             if let Some(frame) = self.store.frame(CLIP_KEY) {
                 break frame;
             }
@@ -84,11 +91,18 @@ impl VideoSource for FfmpegVideoSource {
             std::thread::sleep(FRAME_WAIT_POLL);
         };
 
+        let cpu_frame = match frame {
+            VideoFrame::Gpu(gpu_frame) => {
+                return Ok(gpu_frame.texture.clone());
+            }
+            VideoFrame::Cpu(cpu_frame) => cpu_frame,
+        };
+
         let texture = device.create_texture(&wgpu::TextureDescriptor {
             label: Some("neoutl-ffmpeg-decoder frame"),
             size: wgpu::Extent3d {
-                width: rgba.width,
-                height: rgba.height,
+                width: cpu_frame.width,
+                height: cpu_frame.height,
                 depth_or_array_layers: 1,
             },
             mip_level_count: 1,
@@ -106,15 +120,15 @@ impl VideoSource for FfmpegVideoSource {
                 origin: wgpu::Origin3d::ZERO,
                 aspect: wgpu::TextureAspect::All,
             },
-            &rgba.data,
+            &cpu_frame.data,
             wgpu::TexelCopyBufferLayout {
                 offset: 0,
-                bytes_per_row: Some(rgba.width * 4),
-                rows_per_image: Some(rgba.height),
+                bytes_per_row: Some(cpu_frame.width * 4),
+                rows_per_image: Some(cpu_frame.height),
             },
             wgpu::Extent3d {
-                width: rgba.width,
-                height: rgba.height,
+                width: cpu_frame.width,
+                height: cpu_frame.height,
                 depth_or_array_layers: 1,
             },
         );

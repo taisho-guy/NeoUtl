@@ -1,13 +1,12 @@
 use std::collections::{HashMap, HashSet, VecDeque};
-use std::sync::Arc;
 
-use crate::frame::Rgba8Frame;
+use crate::frame::VideoFrame;
 
 pub struct FrameLruCache {
     max_cost: i64,
     used_cost: i64,
     order: VecDeque<i64>,
-    map: HashMap<i64, (Arc<Rgba8Frame>, i64)>,
+    map: HashMap<i64, (VideoFrame, i64)>,
 }
 
 impl FrameLruCache {
@@ -25,7 +24,7 @@ impl FrameLruCache {
         self.evict_until_within_budget();
     }
 
-    pub fn get(&mut self, index: i64) -> Option<Arc<Rgba8Frame>> {
+    pub fn get(&mut self, index: i64) -> Option<VideoFrame> {
         let frame = self.map.get(&index)?.0.clone();
         self.order.retain(|&i| i != index);
         self.order.push_back(index);
@@ -36,7 +35,7 @@ impl FrameLruCache {
         self.map.contains_key(&index)
     }
 
-    pub fn insert(&mut self, index: i64, frame: Arc<Rgba8Frame>) {
+    pub fn insert(&mut self, index: i64, frame: VideoFrame) {
         if let Some((_, old_cost)) = self.map.remove(&index) {
             self.used_cost -= old_cost;
             self.order.retain(|&i| i != index);
@@ -64,7 +63,7 @@ pub struct GopCacheBlock {
     pub keyframe_index: i64,
     pub start: i64,
     pub end: i64,
-    pub frames: HashMap<i64, Arc<Rgba8Frame>>,
+    pub frames: HashMap<i64, VideoFrame>,
 }
 
 pub struct GopCache {
@@ -80,7 +79,7 @@ impl GopCache {
         }
     }
 
-    pub fn get(&mut self, frame_index: i64) -> Option<Arc<Rgba8Frame>> {
+    pub fn get(&mut self, frame_index: i64) -> Option<VideoFrame> {
         let pos = self.blocks.iter().position(|b| {
             frame_index >= b.start && frame_index <= b.end && b.frames.contains_key(&frame_index)
         })?;

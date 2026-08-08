@@ -8,11 +8,15 @@ use std::thread::JoinHandle;
 use ffmpeg_sys_next as sys;
 
 use crate::cache::{FrameLruCache, GopCache, GopCacheBlock};
-use crate::frame::{Rgba8Frame, VideoFrameStore};
+use crate::frame::{GpuFrame, Rgba8Frame, VideoFrame, VideoFrameStore};
 use crate::index::{FrameIndex, build_index};
+use crate::vulkan::{self, NeoutlVulkanContext};
 
 const SWS_BILINEAR: i32 = 2;
 const AV_PIX_FMT_NONE: i32 = -1;
+const AV_PIX_FMT_VULKAN: i32 = 152;
+const AV_PIX_FMT_RGB0: i32 = 121;
+const AV_PIX_FMT_BGR0: i32 = 122;
 
 const AV_CODEC_CAP_FRAME_THREADS: i32 = 1 << 12;
 const AV_CODEC_CAP_SLICE_THREADS: i32 = 1 << 13;
@@ -49,6 +53,8 @@ impl VideoDecoder {
         path: impl AsRef<Path>,
         clip_key: String,
         store: Arc<VideoFrameStore>,
+        gpu_device: Option<Arc<wgpu::Device>>,
+        gpu_queue: Option<Arc<wgpu::Queue>>,
         on_ready: impl FnOnce(VideoMeta) + Send + 'static,
     ) -> Self {
         let shared = Arc::new((
@@ -73,6 +79,8 @@ impl VideoDecoder {
                     path,
                     clip_key,
                     store,
+                    gpu_device,
+                    gpu_queue,
                     shared_thread,
                     is_ready_thread,
                     last_requested_thread,
@@ -122,6 +130,33 @@ impl Drop for VideoDecoder {
 
 struct HwPixFmtBox {
     pix_fmt: i32,
+    hw_device_ctx: *mut sys::AVBufferRef,
+}
+
+unsafe fn try_request_rgb0_frames_ctx(
+    ctx: *mut sys::AVCodecContext,
+    hw_device_ctx: *mut sys::AVBufferRef,
+    hw_pix_fmt: i32,
+) {
+    unsafe {
+        if hw_device_ctx.is_null() || !(*ctx).hw_frames_ctx.is_null() {
+            return;
+        }
+        let frames_ref = sys::av_hwframe_ctx_alloc(hw_device_ctx);
+        if frames_ref.is_null() {
+            return;
+        }
+        let frames_ctx = (*frames_ref).data as *mut sys::AVHWFramesContext;
+        (*frames_ctx).format = std::mem::transmute::<i32, sys::AVPixelFormat>(hw_pix_fmt);
+        (*frames_ctx).sw_format = std::mem::transmute::<i32, sys::AVPixelFormat>(AV_PIX_FMT_BGR0);
+        (*frames_ctx).width = (*ctx).width;
+        (*frames_ctx).height = (*ctx).height;
+        (*frames_ctx).initial_pool_size = 20;
+        if sys::av_hwframe_ctx_init(frames_ref) == 0 {
+            (*ctx).hw_frames_ctx = sys::av_buffer_ref(frames_ref);
+        }
+        sys::av_buffer_unref(&mut { frames_ref });
+    }
 }
 
 unsafe extern "C" fn hw_get_format(
@@ -129,19 +164,41 @@ unsafe extern "C" fn hw_get_format(
     pixfmts: *const sys::AVPixelFormat,
 ) -> sys::AVPixelFormat {
     unsafe {
-        let hw_pix_fmt = if (*ctx).opaque.is_null() {
-            AV_PIX_FMT_NONE
+        let hw_box = if (*ctx).opaque.is_null() {
+            None
         } else {
-            (*((*ctx).opaque as *const HwPixFmtBox)).pix_fmt
+            Some(&*((*ctx).opaque as *const HwPixFmtBox))
         };
+        let hw_pix_fmt = hw_box.map(|b| b.pix_fmt).unwrap_or(AV_PIX_FMT_NONE);
         let mut p = pixfmts;
         while std::mem::transmute::<sys::AVPixelFormat, i32>(*p) != AV_PIX_FMT_NONE {
             if std::mem::transmute::<sys::AVPixelFormat, i32>(*p) == hw_pix_fmt {
+                if let Some(hw_box) = hw_box {
+                    try_request_rgb0_frames_ctx(ctx, hw_box.hw_device_ctx, hw_pix_fmt);
+                }
                 return *p;
             }
             p = p.add(1);
         }
         *pixfmts
+    }
+}
+
+struct GpuPipeline {
+    wgpu_device: Arc<wgpu::Device>,
+    vulkan_ctx: Arc<NeoutlVulkanContext>,
+    derived_frames_ctx: *mut sys::AVBufferRef,
+}
+
+unsafe impl Send for GpuPipeline {}
+
+impl Drop for GpuPipeline {
+    fn drop(&mut self) {
+        unsafe {
+            if !self.derived_frames_ctx.is_null() {
+                sys::av_buffer_unref(&mut self.derived_frames_ctx);
+            }
+        }
     }
 }
 
@@ -157,7 +214,8 @@ struct OpenContext {
     index: FrameIndex,
     hw_device_ctx: *mut sys::AVBufferRef,
     hw_pix_fmt_box: Option<Box<HwPixFmtBox>>,
-    last_good_frame: Option<Arc<Rgba8Frame>>,
+    gpu_pipeline: Option<GpuPipeline>,
+    last_good_frame: Option<VideoFrame>,
 }
 
 unsafe impl Send for OpenContext {}
@@ -221,7 +279,7 @@ unsafe fn try_init_hw_device(codec: *const sys::AVCodec) -> Option<(*mut sys::AV
     }
 }
 
-fn open_input(path: &Path) -> Result<OpenContext, String> {
+fn open_input(path: &Path, gpu_device: &Option<Arc<wgpu::Device>>) -> Result<OpenContext, String> {
     unsafe {
         let mut fmt_ctx: *mut sys::AVFormatContext = ptr::null_mut();
         let c_path = CString::new(path.to_string_lossy().as_bytes())
@@ -285,6 +343,7 @@ fn open_input(path: &Path) -> Result<OpenContext, String> {
             hw_device_ctx = created_hw_ctx;
             let boxed = Box::new(HwPixFmtBox {
                 pix_fmt: hw_pix_fmt,
+                hw_device_ctx: created_hw_ctx,
             });
             (*dec_ctx).opaque = boxed.as_ref() as *const HwPixFmtBox as *mut c_void;
             (*dec_ctx).get_format = Some(hw_get_format);
@@ -313,6 +372,8 @@ fn open_input(path: &Path) -> Result<OpenContext, String> {
         let width = (*dec_ctx).width.max(0) as u32;
         let height = (*dec_ctx).height.max(0) as u32;
 
+        let gpu_pipeline = build_gpu_pipeline(gpu_device, hw_device_ctx);
+
         if sys::av_seek_frame(fmt_ctx, stream_index, 0, sys::AVSEEK_FLAG_BACKWARD) < 0 {
             sys::av_seek_frame(fmt_ctx, -1, 0, sys::AVSEEK_FLAG_BACKWARD);
         }
@@ -334,9 +395,35 @@ fn open_input(path: &Path) -> Result<OpenContext, String> {
             index,
             hw_device_ctx,
             hw_pix_fmt_box,
+            gpu_pipeline,
             last_good_frame: None,
         })
     }
+}
+
+fn build_gpu_pipeline(
+    gpu_device: &Option<Arc<wgpu::Device>>,
+    hw_device_ctx: *mut sys::AVBufferRef,
+) -> Option<GpuPipeline> {
+    let wgpu_device = gpu_device.clone()?;
+    if hw_device_ctx.is_null() {
+        return None;
+    }
+
+    let entry = unsafe { ash::Entry::load().ok()? };
+    let vulkan_ctx = match vulkan::init_vulkan_context(&wgpu_device, &entry) {
+        Ok(ctx) => ctx,
+        Err(e) => {
+            eprintln!("[neoutl-video-decoder] Vulkan相互運用初期化失敗、CPU経路使用: {e}");
+            return None;
+        }
+    };
+
+    Some(GpuPipeline {
+        wgpu_device,
+        vulkan_ctx,
+        derived_frames_ctx: ptr::null_mut(),
+    })
 }
 
 fn seek_to_keyframe(ctx: &mut OpenContext, keyframe_index: i64) {
@@ -362,7 +449,84 @@ fn seek_to_keyframe(ctx: &mut OpenContext, keyframe_index: i64) {
     }
 }
 
-unsafe fn convert_to_rgba8(ctx: &mut OpenContext, av_frame: *mut sys::AVFrame) -> Rgba8Frame {
+fn try_convert_to_gpu(ctx: &mut OpenContext, av_frame: *mut sys::AVFrame) -> Option<VideoFrame> {
+    let gpu = ctx.gpu_pipeline.as_mut()?;
+    let frame_format = unsafe { (*av_frame).format };
+    let hw_pix_fmt = ctx.hw_pix_fmt_box.as_ref()?.pix_fmt;
+    if frame_format != hw_pix_fmt {
+        return None;
+    }
+    let sw_format = unsafe { (*ctx.dec_ctx).sw_pix_fmt };
+    let sw_format_i32 = unsafe { std::mem::transmute::<sys::AVPixelFormat, i32>(sw_format) };
+    if sw_format_i32 != AV_PIX_FMT_RGB0 && sw_format_i32 != AV_PIX_FMT_BGR0 {
+        return None;
+    }
+
+    if gpu.derived_frames_ctx.is_null() {
+        let src_frames_ctx = unsafe { (*ctx.dec_ctx).hw_frames_ctx };
+        if src_frames_ctx.is_null() {
+            return None;
+        }
+        match vulkan::create_derived_vulkan_frames_ctx(src_frames_ctx, &gpu.vulkan_ctx.device_ctx) {
+            Ok(derived) => gpu.derived_frames_ctx = derived,
+            Err(e) => {
+                eprintln!("[neoutl-video-decoder] Vulkan導出フレームコンテキスト生成失敗: {e}");
+                ctx.gpu_pipeline = None;
+                return None;
+            }
+        }
+    }
+
+    let derived = match vulkan::transfer_to_vulkan_frame(av_frame, gpu.derived_frames_ctx) {
+        Ok(d) => d,
+        Err(e) => {
+            eprintln!("[neoutl-video-decoder] Vulkanフレーム導出転送失敗: {e}");
+            return None;
+        }
+    };
+
+    let src_image = unsafe { vulkan::vk_image_of(&derived) };
+
+    let target_desc = wgpu::TextureDescriptor {
+        label: Some("neoutl-video-gpu-frame"),
+        size: wgpu::Extent3d {
+            width: ctx.width,
+            height: ctx.height,
+            depth_or_array_layers: 1,
+        },
+        mip_level_count: 1,
+        sample_count: 1,
+        dimension: wgpu::TextureDimension::D2,
+        format: wgpu::TextureFormat::Rgba8Unorm,
+        usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+        view_formats: &[],
+    };
+    let target_texture = gpu.wgpu_device.create_texture(&target_desc);
+
+    let dst_vk_image = unsafe {
+        target_texture
+            .as_hal::<wgpu_hal::api::Vulkan>()
+            .map(|hal_texture| hal_texture.raw_handle())
+    };
+    let Some(dst_vk_image) = dst_vk_image else {
+        return None;
+    };
+
+    let copy_result = unsafe {
+        gpu.vulkan_ctx
+            .copy_engine
+            .copy_image(src_image, dst_vk_image, ctx.width, ctx.height)
+    };
+    if let Err(e) = copy_result {
+        eprintln!("[neoutl-video-decoder] VkImageコピー失敗: {e}");
+        return None;
+    }
+
+    let gpu_frame = GpuFrame::new(target_texture, ctx.width, ctx.height);
+    Some(VideoFrame::Gpu(Arc::new(gpu_frame)))
+}
+
+unsafe fn convert_to_rgba8_cpu(ctx: &mut OpenContext, av_frame: *mut sys::AVFrame) -> Rgba8Frame {
     unsafe {
         let hw_pix_fmt = ctx
             .hw_pix_fmt_box
@@ -452,17 +616,27 @@ unsafe fn convert_to_rgba8(ctx: &mut OpenContext, av_frame: *mut sys::AVFrame) -
     }
 }
 
+fn convert_frame(ctx: &mut OpenContext, av_frame: *mut sys::AVFrame) -> VideoFrame {
+    if let Some(gpu_frame) = try_convert_to_gpu(ctx, av_frame) {
+        return gpu_frame;
+    }
+    let rgba = unsafe { convert_to_rgba8_cpu(ctx, av_frame) };
+    VideoFrame::Cpu(Arc::new(rgba))
+}
+
 #[allow(clippy::too_many_arguments)]
 fn run_worker(
     path: std::path::PathBuf,
     clip_key: String,
     store: Arc<VideoFrameStore>,
+    gpu_device: Option<Arc<wgpu::Device>>,
+    _gpu_queue: Option<Arc<wgpu::Queue>>,
     shared: Arc<(Mutex<Mailbox>, Condvar)>,
     is_ready: Arc<AtomicBool>,
     last_requested_frame: Arc<AtomicI64>,
     on_ready: impl FnOnce(VideoMeta) + Send + 'static,
 ) {
-    let mut ctx = match open_input(&path) {
+    let mut ctx = match open_input(&path, &gpu_device) {
         Ok(ctx) => ctx,
         Err(e) => {
             eprintln!("[neoutl-video-decoder] open失敗: {e}");
@@ -614,8 +788,7 @@ fn decode_task(
             *last_decoded_frame = decoded_index;
 
             if !frame_cache.contains(decoded_index) {
-                let rgba = unsafe { convert_to_rgba8(ctx, av_frame) };
-                let frame = Arc::new(rgba);
+                let frame = convert_frame(ctx, av_frame);
                 frame_cache.insert(decoded_index, frame.clone());
                 new_gop_block.frames.insert(decoded_index, frame.clone());
                 ctx.last_good_frame = Some(frame.clone());
