@@ -3377,6 +3377,7 @@ version = "0.0.0"
 dependencies = [
  "ffmpeg-next",
  "ffmpeg-sys-next",
+ "libc",
  "neoutl-media-api",
  "wgpu",
 ]
