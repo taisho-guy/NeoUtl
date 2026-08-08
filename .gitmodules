@@ -1,0 +1,3 @@
+[submodule "neoutl-wgpu"]
+	path = neoutl-wgpu
+	url = https://codeberg.org/taisho-guy/neoutl-wgpu
