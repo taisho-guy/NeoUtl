@@ -8,7 +8,8 @@ local DEFAULT_EXTENSIONS = {
     ".gitignore", ".md", ".txt", ".rst", ".glsl", ".frag", ".vert", ".slang",
     ".wgsl", ".def", ".vcxproj", ".filters", ".props", ".targets", ".sln",
     ".vcproj", ".vdproj", ".sass", ".scss", ".css", ".html", ".htm",
-    ".nuspec", ".config", ".editorconfig", ".resx", ".manifest"
+    ".nuspec", ".config", ".editorconfig", ".resx", ".manifest", ".metal", 
+    ".vert", ".glsl", ".hlsl", "js"
 }
 
 local DEFAULT_FILENAMES = {
