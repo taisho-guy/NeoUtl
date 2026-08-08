@@ -22,6 +22,10 @@ local EXCLUDE_FILES = {
     ["yarn.lock"]=true, ["Icons.js"]=true, ["Cargo.lock"]=true
 }
 
+local EXCLUDE_DIRS = {
+    "neoutl-wgpu"
+}
+
 local function parse_path(path)
     local filename = path:match("[^/]+$") or path
     local ext = filename:match("%.[^.]+$") or ""
@@ -64,6 +68,17 @@ local function scan_directory(root_dir, ignore_patterns)
 
         if path:find("/%.git/") or path:match("/%.git$") then
             should_exclude = true
+        end
+
+        do
+            local rel_path = path:sub(#root_dir + 2)
+            for _, target in ipairs(EXCLUDE_DIRS) do
+                target = target:gsub("^/+", ""):gsub("/+$", "")
+                if rel_path == target or rel_path:sub(1, #target + 1) == target .. "/" then
+                    should_exclude = true
+                    break
+                end
+            end
         end
 
         if filename:find("project_context") then
