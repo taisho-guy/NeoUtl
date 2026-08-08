@@ -1,5 +1,4 @@
-use std::ffi::c_void;
-use std::os::raw::{c_int, c_uint};
+use std::os::raw::{c_int, c_uint, c_void};
 use std::ptr;
 use std::sync::Arc;
 
@@ -7,7 +6,6 @@ use ffmpeg_sys_next as sys;
 
 const AV_HWDEVICE_TYPE_VULKAN: sys::AVHWDeviceType = sys::AVHWDeviceType::AV_HWDEVICE_TYPE_VULKAN;
 const AV_PIX_FMT_VULKAN: i32 = 152;
-const FF_API_VULKAN_FIXED_QUEUES: u32 = 0;
 
 #[repr(C)]
 struct AVVulkanDeviceContext {
@@ -414,7 +412,7 @@ pub struct SemiPlanarConvertEngine {
 impl SemiPlanarConvertEngine {
     pub unsafe fn new(
         handles: &VulkanRawHandles,
-        entry: &ash::Entry,
+        _entry: &ash::Entry,
         spirv_code: &[u8],
     ) -> Result<Self, String> {
         unsafe {
