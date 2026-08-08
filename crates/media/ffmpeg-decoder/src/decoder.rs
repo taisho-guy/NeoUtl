@@ -13,11 +13,40 @@ use crate::index::{FrameIndex, build_index};
 use crate::vulkan::{self, NeoutlVulkanContext};
 
 const SWS_BILINEAR: i32 = 2;
-const AV_PIX_FMT_NONE: i32 = -1;
-const AV_PIX_FMT_VULKAN: i32 = 152;
-const AV_PIX_FMT_RGB0: i32 = 121;
-const AV_PIX_FMT_BGR0: i32 = 122;
-const AV_PIX_FMT_NV12: i32 = 23;
+fn pf(fmt: sys::AVPixelFormat) -> i32 {
+    fmt as i32
+}
+
+fn av_pix_fmt_none() -> i32 {
+    pf(sys::AVPixelFormat::AV_PIX_FMT_NONE)
+}
+fn av_pix_fmt_vulkan() -> i32 {
+    pf(sys::AVPixelFormat::AV_PIX_FMT_VULKAN)
+}
+fn av_pix_fmt_rgb0() -> i32 {
+    pf(sys::AVPixelFormat::AV_PIX_FMT_RGB0)
+}
+fn av_pix_fmt_bgr0() -> i32 {
+    pf(sys::AVPixelFormat::AV_PIX_FMT_BGR0)
+}
+fn av_pix_fmt_nv12() -> i32 {
+    pf(sys::AVPixelFormat::AV_PIX_FMT_NV12)
+}
+fn av_pix_fmt_p010le() -> i32 {
+    pf(sys::AVPixelFormat::AV_PIX_FMT_P010LE)
+}
+fn av_pix_fmt_p012le() -> i32 {
+    pf(sys::AVPixelFormat::AV_PIX_FMT_P012LE)
+}
+fn av_pix_fmt_p016le() -> i32 {
+    pf(sys::AVPixelFormat::AV_PIX_FMT_P016LE)
+}
+fn av_pix_fmt_yuv420p10le() -> i32 {
+    pf(sys::AVPixelFormat::AV_PIX_FMT_YUV420P10LE)
+}
+fn av_pix_fmt_yuv420p12le() -> i32 {
+    pf(sys::AVPixelFormat::AV_PIX_FMT_YUV420P12LE)
+}
 
 const AV_CODEC_CAP_FRAME_THREADS: i32 = 1 << 12;
 const AV_CODEC_CAP_SLICE_THREADS: i32 = 1 << 13;
@@ -131,25 +160,62 @@ impl Drop for VideoDecoder {
 
 struct HwPixFmtBox {
     pix_fmt: i32,
+    stream_sw_format: i32,
     hw_device_ctx: *mut sys::AVBufferRef,
 }
 
-unsafe fn try_request_rgb0_frames_ctx(
+fn semi_planar_view_formats(sw_format_i32: i32) -> Option<(ash::vk::Format, ash::vk::Format)> {
+    if sw_format_i32 == av_pix_fmt_nv12() {
+        Some((ash::vk::Format::R8_UNORM, ash::vk::Format::R8G8_UNORM))
+    } else if sw_format_i32 == av_pix_fmt_p010le()
+        || sw_format_i32 == av_pix_fmt_p012le()
+        || sw_format_i32 == av_pix_fmt_p016le()
+    {
+        Some((ash::vk::Format::R16_UNORM, ash::vk::Format::R16G16_UNORM))
+    } else {
+        None
+    }
+}
+
+fn resolve_hw_sw_format(stream_sw_format: i32) -> Option<i32> {
+    if stream_sw_format == av_pix_fmt_nv12() {
+        Some(av_pix_fmt_nv12())
+    } else if stream_sw_format == av_pix_fmt_yuv420p10le() {
+        Some(av_pix_fmt_p010le())
+    } else if stream_sw_format == av_pix_fmt_yuv420p12le() {
+        Some(av_pix_fmt_p012le())
+    } else if stream_sw_format == av_pix_fmt_p010le()
+        || stream_sw_format == av_pix_fmt_p012le()
+        || stream_sw_format == av_pix_fmt_p016le()
+    {
+        Some(stream_sw_format)
+    } else if stream_sw_format == av_pix_fmt_rgb0() || stream_sw_format == av_pix_fmt_bgr0() {
+        Some(stream_sw_format)
+    } else {
+        None
+    }
+}
+
+unsafe fn try_request_hw_frames_ctx(
     ctx: *mut sys::AVCodecContext,
     hw_device_ctx: *mut sys::AVBufferRef,
     hw_pix_fmt: i32,
+    stream_sw_format: i32,
 ) {
     unsafe {
         if hw_device_ctx.is_null() || !(*ctx).hw_frames_ctx.is_null() {
             return;
         }
+        let Some(sw_format) = resolve_hw_sw_format(stream_sw_format) else {
+            return;
+        };
         let frames_ref = sys::av_hwframe_ctx_alloc(hw_device_ctx);
         if frames_ref.is_null() {
             return;
         }
         let frames_ctx = (*frames_ref).data as *mut sys::AVHWFramesContext;
         (*frames_ctx).format = std::mem::transmute::<i32, sys::AVPixelFormat>(hw_pix_fmt);
-        (*frames_ctx).sw_format = std::mem::transmute::<i32, sys::AVPixelFormat>(AV_PIX_FMT_BGR0);
+        (*frames_ctx).sw_format = std::mem::transmute::<i32, sys::AVPixelFormat>(sw_format);
         (*frames_ctx).width = (*ctx).width;
         (*frames_ctx).height = (*ctx).height;
         (*frames_ctx).initial_pool_size = 20;
@@ -170,12 +236,17 @@ unsafe extern "C" fn hw_get_format(
         } else {
             Some(&*((*ctx).opaque as *const HwPixFmtBox))
         };
-        let hw_pix_fmt = hw_box.map(|b| b.pix_fmt).unwrap_or(AV_PIX_FMT_NONE);
+        let hw_pix_fmt = hw_box.map(|b| b.pix_fmt).unwrap_or(av_pix_fmt_none());
         let mut p = pixfmts;
-        while std::mem::transmute::<sys::AVPixelFormat, i32>(*p) != AV_PIX_FMT_NONE {
+        while std::mem::transmute::<sys::AVPixelFormat, i32>(*p) != av_pix_fmt_none() {
             if std::mem::transmute::<sys::AVPixelFormat, i32>(*p) == hw_pix_fmt {
                 if let Some(hw_box) = hw_box {
-                    try_request_rgb0_frames_ctx(ctx, hw_box.hw_device_ctx, hw_pix_fmt);
+                    try_request_hw_frames_ctx(
+                        ctx,
+                        hw_box.hw_device_ctx,
+                        hw_pix_fmt,
+                        hw_box.stream_sw_format,
+                    );
                 }
                 return *p;
             }
@@ -189,7 +260,7 @@ struct GpuPipeline {
     wgpu_device: Arc<wgpu::Device>,
     vulkan_ctx: Arc<NeoutlVulkanContext>,
     derived_frames_ctx: *mut sys::AVBufferRef,
-    nv12_engine: Option<vulkan::Nv12ConvertEngine>,
+    semi_planar_engine: Option<vulkan::SemiPlanarConvertEngine>,
 }
 
 unsafe impl Send for GpuPipeline {}
@@ -218,6 +289,14 @@ struct OpenContext {
     hw_pix_fmt_box: Option<Box<HwPixFmtBox>>,
     gpu_pipeline: Option<GpuPipeline>,
     last_good_frame: Option<VideoFrame>,
+    last_convert_path: ConvertPath,
+}
+
+#[derive(PartialEq, Eq, Clone, Copy)]
+enum ConvertPath {
+    Unknown,
+    GpuZeroCopy,
+    CpuRam,
 }
 
 unsafe impl Send for OpenContext {}
@@ -241,7 +320,47 @@ impl Drop for OpenContext {
     }
 }
 
-unsafe fn try_init_hw_device(codec: *const sys::AVCodec) -> Option<(*mut sys::AVBufferRef, i32)> {
+unsafe fn config_supports_sw_format(
+    hw_device_ctx: *mut sys::AVBufferRef,
+    config: *const sys::AVCodecHWConfig,
+    stream_sw_format: sys::AVPixelFormat,
+) -> bool {
+    unsafe {
+        let stream_sw_format_i32 = std::mem::transmute::<sys::AVPixelFormat, i32>(stream_sw_format);
+        let Some(target_sw_format) = resolve_hw_sw_format(stream_sw_format_i32) else {
+            return false;
+        };
+        let want_sw_format = std::mem::transmute::<i32, sys::AVPixelFormat>(target_sw_format);
+
+        let mut constraints =
+            sys::av_hwdevice_get_hwframe_constraints(hw_device_ctx, config as *const c_void);
+        if constraints.is_null() {
+            return true;
+        }
+        let valid_sw_formats = (*constraints).valid_sw_formats;
+        let supported = if valid_sw_formats.is_null() {
+            true
+        } else {
+            let mut p = valid_sw_formats;
+            let mut found = false;
+            while std::mem::transmute::<sys::AVPixelFormat, i32>(*p) != av_pix_fmt_none() {
+                if *p == want_sw_format {
+                    found = true;
+                    break;
+                }
+                p = p.add(1);
+            }
+            found
+        };
+        sys::av_hwframe_constraints_free(&mut constraints);
+        supported
+    }
+}
+
+unsafe fn try_init_hw_device(
+    codec: *const sys::AVCodec,
+    stream_sw_format: sys::AVPixelFormat,
+) -> Option<(*mut sys::AVBufferRef, i32)> {
     unsafe {
         for name in HW_DEVICE_TYPE_NAMES {
             let c_name = CString::new(*name).ok()?;
@@ -268,10 +387,16 @@ unsafe fn try_init_hw_device(codec: *const sys::AVCodec) -> Option<(*mut sys::AV
                         0,
                     );
                     if ret == 0 {
-                        return Some((
-                            hw_device_ctx,
-                            std::mem::transmute::<sys::AVPixelFormat, i32>((*config).pix_fmt),
-                        ));
+                        if config_supports_sw_format(hw_device_ctx, config, stream_sw_format) {
+                            return Some((
+                                hw_device_ctx,
+                                std::mem::transmute::<sys::AVPixelFormat, i32>((*config).pix_fmt),
+                            ));
+                        }
+                        eprintln!(
+                            "[neoutl-video-decoder] HWデバイス({name})はストリームフォーマット非対応、次候補探索"
+                        );
+                        sys::av_buffer_unref(&mut hw_device_ctx);
                     }
                 }
                 i += 1;
@@ -341,10 +466,14 @@ fn open_input(path: &Path, gpu_device: &Option<Arc<wgpu::Device>>) -> Result<Ope
         let mut hw_device_ctx: *mut sys::AVBufferRef = ptr::null_mut();
         let mut hw_pix_fmt_box: Option<Box<HwPixFmtBox>> = None;
 
-        if let Some((created_hw_ctx, hw_pix_fmt)) = try_init_hw_device(codec) {
+        let stream_sw_format =
+            std::mem::transmute::<i32, sys::AVPixelFormat>((*(*stream).codecpar).format);
+
+        if let Some((created_hw_ctx, hw_pix_fmt)) = try_init_hw_device(codec, stream_sw_format) {
             hw_device_ctx = created_hw_ctx;
             let boxed = Box::new(HwPixFmtBox {
                 pix_fmt: hw_pix_fmt,
+                stream_sw_format: std::mem::transmute::<sys::AVPixelFormat, i32>(stream_sw_format),
                 hw_device_ctx: created_hw_ctx,
             });
             (*dec_ctx).opaque = boxed.as_ref() as *const HwPixFmtBox as *mut c_void;
@@ -399,6 +528,7 @@ fn open_input(path: &Path, gpu_device: &Option<Arc<wgpu::Device>>) -> Result<Ope
             hw_pix_fmt_box,
             gpu_pipeline,
             last_good_frame: None,
+            last_convert_path: ConvertPath::Unknown,
         })
     }
 }
@@ -421,11 +551,11 @@ fn build_gpu_pipeline(
         }
     };
 
-    let nv12_engine = unsafe {
+    let semi_planar_engine = unsafe {
         vulkan::extract_vulkan_raw_handles(&wgpu_device).and_then(|handles| {
-            static NV12_SPIRV: &[u8] =
-                include_bytes!(concat!(env!("OUT_DIR"), "/nv12_to_rgba.spv"));
-            vulkan::Nv12ConvertEngine::new(&handles, &entry, NV12_SPIRV).ok()
+            static SEMI_PLANAR_SPIRV: &[u8] =
+                include_bytes!(concat!(env!("OUT_DIR"), "/semi_planar_to_rgba.spv"));
+            vulkan::SemiPlanarConvertEngine::new(&handles, &entry, SEMI_PLANAR_SPIRV).ok()
         })
     };
 
@@ -433,7 +563,7 @@ fn build_gpu_pipeline(
         wgpu_device,
         vulkan_ctx,
         derived_frames_ctx: ptr::null_mut(),
-        nv12_engine,
+        semi_planar_engine,
     })
 }
 
@@ -460,35 +590,45 @@ fn seek_to_keyframe(ctx: &mut OpenContext, keyframe_index: i64) {
     }
 }
 
-fn try_convert_to_gpu(ctx: &mut OpenContext, av_frame: *mut sys::AVFrame) -> Option<VideoFrame> {
-    let gpu = ctx.gpu_pipeline.as_mut()?;
+enum ConvertOutcome {
+    Gpu(VideoFrame),
+    CpuFallback(&'static str),
+}
+
+fn try_convert_to_gpu(ctx: &mut OpenContext, av_frame: *mut sys::AVFrame) -> ConvertOutcome {
+    let Some(gpu) = ctx.gpu_pipeline.as_mut() else {
+        return ConvertOutcome::CpuFallback("GPUパイプライン未初期化(Vulkan相互運用不可)");
+    };
     let frame_format = unsafe { (*av_frame).format };
-    let hw_pix_fmt = ctx.hw_pix_fmt_box.as_ref()?.pix_fmt;
+    let Some(hw_pix_fmt_box) = ctx.hw_pix_fmt_box.as_ref() else {
+        return ConvertOutcome::CpuFallback("HWデコード非有効(全候補非対応または失敗)");
+    };
+    let hw_pix_fmt = hw_pix_fmt_box.pix_fmt;
     if frame_format != hw_pix_fmt {
-        return None;
+        return ConvertOutcome::CpuFallback("デコード結果がHWサーフェスでない");
     }
     let sw_format = unsafe { (*ctx.dec_ctx).sw_pix_fmt };
     let sw_format_i32 = unsafe { std::mem::transmute::<sys::AVPixelFormat, i32>(sw_format) };
-    let is_direct_rgba = sw_format_i32 == AV_PIX_FMT_RGB0 || sw_format_i32 == AV_PIX_FMT_BGR0;
-    let is_nv12 = sw_format_i32 == AV_PIX_FMT_NV12;
-    if !is_direct_rgba && !is_nv12 {
-        return None;
+    let is_direct_rgba = sw_format_i32 == av_pix_fmt_rgb0() || sw_format_i32 == av_pix_fmt_bgr0();
+    let semi_planar_view_formats = semi_planar_view_formats(sw_format_i32);
+    if !is_direct_rgba && semi_planar_view_formats.is_none() {
+        return ConvertOutcome::CpuFallback("sw_pix_fmtがRGB0/BGR0/NV12/P010LE/P012LE/P016LE以外");
     }
-    if is_nv12 && gpu.nv12_engine.is_none() {
-        return None;
+    if semi_planar_view_formats.is_some() && gpu.semi_planar_engine.is_none() {
+        return ConvertOutcome::CpuFallback("セミプラナー変換エンジン未初期化");
     }
 
     if gpu.derived_frames_ctx.is_null() {
         let src_frames_ctx = unsafe { (*ctx.dec_ctx).hw_frames_ctx };
         if src_frames_ctx.is_null() {
-            return None;
+            return ConvertOutcome::CpuFallback("hw_frames_ctx未設定");
         }
         match vulkan::create_derived_vulkan_frames_ctx(src_frames_ctx, &gpu.vulkan_ctx.device_ctx) {
             Ok(derived) => gpu.derived_frames_ctx = derived,
             Err(e) => {
                 eprintln!("[neoutl-video-decoder] Vulkan導出フレームコンテキスト生成失敗: {e}");
                 ctx.gpu_pipeline = None;
-                return None;
+                return ConvertOutcome::CpuFallback("Vulkan導出フレームコンテキスト生成失敗");
             }
         }
     }
@@ -497,7 +637,7 @@ fn try_convert_to_gpu(ctx: &mut OpenContext, av_frame: *mut sys::AVFrame) -> Opt
         Ok(d) => d,
         Err(e) => {
             eprintln!("[neoutl-video-decoder] Vulkanフレーム導出転送失敗: {e}");
-            return None;
+            return ConvertOutcome::CpuFallback("Vulkanフレーム導出転送失敗");
         }
     };
 
@@ -527,11 +667,13 @@ fn try_convert_to_gpu(ctx: &mut OpenContext, av_frame: *mut sys::AVFrame) -> Opt
             .map(|hal_texture| hal_texture.raw_handle())
     };
     let Some(dst_vk_image) = dst_vk_image else {
-        return None;
+        return ConvertOutcome::CpuFallback("wgpuテクスチャからVkImageハンドル取得失敗");
     };
 
-    let convert_result = if is_nv12 {
-        let engine = gpu.nv12_engine.as_ref()?;
+    let convert_result = if let Some((y_format, uv_format)) = semi_planar_view_formats {
+        let Some(engine) = gpu.semi_planar_engine.as_ref() else {
+            return ConvertOutcome::CpuFallback("セミプラナー変換エンジン未初期化");
+        };
         unsafe {
             engine.convert(
                 src_image.image,
@@ -539,6 +681,8 @@ fn try_convert_to_gpu(ctx: &mut OpenContext, av_frame: *mut sys::AVFrame) -> Opt
                 dst_vk_image,
                 ctx.width,
                 ctx.height,
+                y_format,
+                uv_format,
             )
         }
     } else {
@@ -550,11 +694,11 @@ fn try_convert_to_gpu(ctx: &mut OpenContext, av_frame: *mut sys::AVFrame) -> Opt
     };
     if let Err(e) = convert_result {
         eprintln!("[neoutl-video-decoder] GPUフレーム変換失敗: {e}");
-        return None;
+        return ConvertOutcome::CpuFallback("GPUフレーム変換(VkImageコピー/コンピュート)失敗");
     }
 
     let gpu_frame = GpuFrame::new(target_texture, ctx.width, ctx.height);
-    Some(VideoFrame::Gpu(Arc::new(gpu_frame)))
+    ConvertOutcome::Gpu(VideoFrame::Gpu(Arc::new(gpu_frame)))
 }
 
 unsafe fn convert_to_rgba8_cpu(ctx: &mut OpenContext, av_frame: *mut sys::AVFrame) -> Rgba8Frame {
@@ -563,10 +707,10 @@ unsafe fn convert_to_rgba8_cpu(ctx: &mut OpenContext, av_frame: *mut sys::AVFram
             .hw_pix_fmt_box
             .as_ref()
             .map(|b| b.pix_fmt)
-            .unwrap_or(AV_PIX_FMT_NONE);
+            .unwrap_or(av_pix_fmt_none());
 
         let mut sw_frame: *mut sys::AVFrame = ptr::null_mut();
-        let src_frame = if (*av_frame).format == hw_pix_fmt && hw_pix_fmt != AV_PIX_FMT_NONE {
+        let src_frame = if (*av_frame).format == hw_pix_fmt && hw_pix_fmt != av_pix_fmt_none() {
             sw_frame = sys::av_frame_alloc();
             if sys::av_hwframe_transfer_data(sw_frame, av_frame, 0) == 0 {
                 sw_frame
@@ -648,11 +792,40 @@ unsafe fn convert_to_rgba8_cpu(ctx: &mut OpenContext, av_frame: *mut sys::AVFram
 }
 
 fn convert_frame(ctx: &mut OpenContext, av_frame: *mut sys::AVFrame) -> VideoFrame {
-    if let Some(gpu_frame) = try_convert_to_gpu(ctx, av_frame) {
-        return gpu_frame;
+    let (frame, path, reason) = match try_convert_to_gpu(ctx, av_frame) {
+        ConvertOutcome::Gpu(frame) => (frame, ConvertPath::GpuZeroCopy, None),
+        ConvertOutcome::CpuFallback(reason) => {
+            let rgba = unsafe { convert_to_rgba8_cpu(ctx, av_frame) };
+            (
+                VideoFrame::Cpu(Arc::new(rgba)),
+                ConvertPath::CpuRam,
+                Some(reason),
+            )
+        }
+    };
+
+    if ctx.last_convert_path != path {
+        match path {
+            ConvertPath::GpuZeroCopy => {
+                eprintln!(
+                    "[neoutl-video-decoder][転送経路] VRAM内ゼロコピーへ切替(RAM転送なし) size={}x{}",
+                    ctx.width, ctx.height
+                );
+            }
+            ConvertPath::CpuRam => {
+                eprintln!(
+                    "[neoutl-video-decoder][転送経路] CPU/RAM経由へ切替(GPU→RAM→GPU転送発生) 理由={} size={}x{}",
+                    reason.unwrap_or("不明"),
+                    ctx.width,
+                    ctx.height
+                );
+            }
+            ConvertPath::Unknown => {}
+        }
+        ctx.last_convert_path = path;
     }
-    let rgba = unsafe { convert_to_rgba8_cpu(ctx, av_frame) };
-    VideoFrame::Cpu(Arc::new(rgba))
+
+    frame
 }
 
 #[allow(clippy::too_many_arguments)]
