@@ -3,6 +3,12 @@ local string_find = string.find
 local string_sub = string.sub
 local table_concat = table.concat
 
+local EXCLUDE_DIRS = {
+    "target",
+    ".git",
+    "neoutl-wgpu",
+}
+
 local EXT_CONFIGS = {
     rs = { jump = '[%/r%"]' },        lua = { jump = '[%-%"%\'%[]' },     slang = { jump = '[%/r%"]' },      json = { jump = '[%"]' },           toml = { jump = '[%#%"%\']' },       yaml = { jump = '[%#%"%\']' }    }
 
@@ -142,16 +148,25 @@ local function remove_comments_from_file(filepath, ext)
     end
 end
 
+local function is_excluded(filepath)
+    for _, dir in ipairs(EXCLUDE_DIRS) do
+        if filepath:find("[/\\]" .. dir .. "[/\\]") or filepath:find("^%.?[/\\]?" .. dir .. "[/\\]") then
+            return true
+        end
+    end
+    return false
+end
+
 local function scan_project()
         local cmd = (os.getenv("WINDIR") or os.getenv("windir"))
         and 'dir /b /s *.rs *.lua *.slang *.json *.toml *.yaml 2>nul' 
-        or 'find . -type d -name "target" -prune -o -type d -name ".git" -prune -o -type f \\( -name "*.rs" -o -name "*.lua" -o -name "*.slang" -o -name "*.json" -o -name "*.toml" -o -name "*.yaml" \\) -print'
+        or 'find . -type f \\( -name "*.rs" -o -name "*.lua" -o -name "*.slang" -o -name "*.json" -o -name "*.toml" -o -name "*.yaml" \\) -print'
 
     local p = io.popen(cmd)
     if not p then return end
 
     for file in p:lines() do
-        if file ~= "" then
+        if file ~= "" and not is_excluded(file) then
             local ext = string_sub(file, #file - 3)             ext = ext:match("%.([^%.]+)$") or file:match("%.([^%.]+)$")
             if ext and EXT_CONFIGS[ext] then
                 remove_comments_from_file(file, ext)
