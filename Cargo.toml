@@ -2,6 +2,7 @@
 members = [
     ".",
     "crates/neoutl-shared-abi",
+    "crates/neoutl-color",
     "crates/neoutl-object-api",
     "crates/neoutl-effect-api",
     "crates/neoutl-effect-lua",
@@ -26,6 +27,9 @@ resolver = "2"
 
 [workspace.dependencies]
 neoutl-shared-abi = { path = "crates/neoutl-shared-abi" }
+neoutl-color = { path = "crates/neoutl-color" }
+bytemuck = "1"
+half = "2"
 neoutl-object-api = { path = "crates/neoutl-object-api" }
 neoutl-effect-api = { path = "crates/neoutl-effect-api" }
 neoutl-effect-lua = { path = "crates/neoutl-effect-lua" }
@@ -48,6 +52,9 @@ edition = "2024"
 
 [dependencies]
 neoutl-shared-abi.workspace = true
+neoutl-color.workspace = true
+bytemuck.workspace = true
+half.workspace = true
 neoutl-object-api.workspace = true
 neoutl-effect-api.workspace = true
 neoutl-effect-lua.workspace = true
@@ -73,7 +80,6 @@ tempfile = "3"
 wgpu = "29"
 wgpu_text = "29"
 tokio = { version = "1", features = ["rt-multi-thread", "sync"] }
-bytemuck = { version = "1", features = ["derive"] }
 shipyard = "0.11"
 rust-yaml = { version = "1", features = ["serde"] }
 serde = { version = "1", features = ["derive"] }

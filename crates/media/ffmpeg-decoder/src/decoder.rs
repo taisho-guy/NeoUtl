@@ -47,6 +47,12 @@ fn av_pix_fmt_yuv420p10le() -> i32 {
 fn av_pix_fmt_yuv420p12le() -> i32 {
     pf(sys::AVPixelFormat::AV_PIX_FMT_YUV420P12LE)
 }
+fn av_pix_fmt_yuv420p() -> i32 {
+    pf(sys::AVPixelFormat::AV_PIX_FMT_YUV420P)
+}
+fn av_pix_fmt_yuvj420p() -> i32 {
+    pf(sys::AVPixelFormat::AV_PIX_FMT_YUVJ420P)
+}
 
 const AV_CODEC_CAP_FRAME_THREADS: i32 = 1 << 12;
 const AV_CODEC_CAP_SLICE_THREADS: i32 = 1 << 13;
@@ -179,6 +185,9 @@ fn semi_planar_view_formats(sw_format_i32: i32) -> Option<(ash::vk::Format, ash:
 
 fn resolve_hw_sw_format(stream_sw_format: i32) -> Option<i32> {
     if stream_sw_format == av_pix_fmt_nv12() {
+        Some(av_pix_fmt_nv12())
+    } else if stream_sw_format == av_pix_fmt_yuv420p() || stream_sw_format == av_pix_fmt_yuvj420p()
+    {
         Some(av_pix_fmt_nv12())
     } else if stream_sw_format == av_pix_fmt_yuv420p10le() {
         Some(av_pix_fmt_p010le())

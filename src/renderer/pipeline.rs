@@ -107,7 +107,7 @@ fn build_text_target(
         device,
         width,
         height,
-        wgpu::TextureFormat::Rgba8Unorm,
+        wgpu::TextureFormat::Rgba16Float,
     );
     TextRenderTarget {
         texture,
@@ -154,7 +154,7 @@ fn create_texture(device: &wgpu::Device, width: u32, height: u32) -> wgpu::Textu
         mip_level_count: 1,
         sample_count: 1,
         dimension: wgpu::TextureDimension::D2,
-        format: wgpu::TextureFormat::Rgba8Unorm,
+        format: wgpu::TextureFormat::Rgba16Float,
         usage: wgpu::TextureUsages::RENDER_ATTACHMENT
             | wgpu::TextureUsages::TEXTURE_BINDING
             | wgpu::TextureUsages::COPY_SRC
@@ -219,7 +219,7 @@ fn build_pipeline(
                 module: &shader,
                 entry_point: Some("fs_main"),
                 targets: &[Some(wgpu::ColorTargetState {
-                    format: wgpu::TextureFormat::Rgba8Unorm,
+                    format: wgpu::TextureFormat::Rgba16Float,
                     blend: Some(wgpu::BlendState::ALPHA_BLENDING),
                     write_mask: wgpu::ColorWrites::ALL,
                 })],
@@ -282,7 +282,7 @@ fn create_effect_texture(device: &wgpu::Device, width: u32, height: u32) -> wgpu
         mip_level_count: 1,
         sample_count: 1,
         dimension: wgpu::TextureDimension::D2,
-        format: wgpu::TextureFormat::Rgba8Unorm,
+        format: wgpu::TextureFormat::Rgba16Float,
         usage: wgpu::TextureUsages::RENDER_ATTACHMENT
             | wgpu::TextureUsages::TEXTURE_BINDING
             | wgpu::TextureUsages::COPY_DST
@@ -312,7 +312,7 @@ fn build_effect_pipeline(
                 module: &shader,
                 entry_point: Some("fs_main"),
                 targets: &[Some(wgpu::ColorTargetState {
-                    format: wgpu::TextureFormat::Rgba8Unorm,
+                    format: wgpu::TextureFormat::Rgba16Float,
                     blend: None,
                     write_mask: wgpu::ColorWrites::ALL,
                 })],
@@ -627,7 +627,7 @@ fn build_composite_pipeline(
             module: &shader,
             entry_point: Some("fs_main"),
             targets: &[Some(wgpu::ColorTargetState {
-                format: wgpu::TextureFormat::Rgba8Unorm,
+                format: wgpu::TextureFormat::Rgba16Float,
                 blend: Some(wgpu::BlendState::ALPHA_BLENDING),
                 write_mask: wgpu::ColorWrites::ALL,
             })],
@@ -682,7 +682,7 @@ fn build_media_pipeline(
             module: &shader,
             entry_point: Some("fs_main"),
             targets: &[Some(wgpu::ColorTargetState {
-                format: wgpu::TextureFormat::Rgba8Unorm,
+                format: wgpu::TextureFormat::Rgba16Float,
                 blend: Some(wgpu::BlendState::ALPHA_BLENDING),
                 write_mask: wgpu::ColorWrites::ALL,
             })],
@@ -1886,14 +1886,14 @@ mod tests {
         pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor::default())).ok()
     }
 
-    fn read_texture_rgba8(
+    fn read_texture_rgba16f(
         device: &wgpu::Device,
         queue: &wgpu::Queue,
         texture: &wgpu::Texture,
         width: u32,
         height: u32,
-    ) -> Vec<u8> {
-        let unpadded_bytes_per_row = width * 4;
+    ) -> Vec<f32> {
+        let unpadded_bytes_per_row = width * 8;
         let align = wgpu::COPY_BYTES_PER_ROW_ALIGNMENT;
         let padded_bytes_per_row = unpadded_bytes_per_row.div_ceil(align) * align;
         let buffer_size = (padded_bytes_per_row * height) as wgpu::BufferAddress;
@@ -1952,6 +1952,9 @@ mod tests {
         drop(padded);
         output_buffer.unmap();
         dense
+            .chunks_exact(2)
+            .map(|b| half::f16::from_le_bytes([b[0], b[1]]).to_f32())
+            .collect()
     }
 
     #[test]
@@ -1975,7 +1978,7 @@ mod tests {
         let project = ProjectResource::new();
         engine.render(&[], &project);
 
-        let pixels = read_texture_rgba8(
+        let pixels = read_texture_rgba16f(
             &engine.device,
             &engine.queue,
             &engine.texture,
@@ -1983,7 +1986,7 @@ mod tests {
             engine.render_height,
         );
         assert_eq!(pixels.len(), (32 * 32 * 4) as usize);
-        let alpha_values: Vec<u8> = pixels.iter().skip(3).step_by(4).copied().collect();
+        let alpha_values: Vec<f32> = pixels.iter().skip(3).step_by(4).copied().collect();
         assert!(alpha_values.iter().all(|&a| a == alpha_values[0]));
     }
 
@@ -2021,7 +2024,7 @@ mod tests {
         );
         engine.render(&[plain, with_effect], &project);
 
-        let pixels = read_texture_rgba8(
+        let pixels = read_texture_rgba16f(
             &engine.device,
             &engine.queue,
             &engine.texture,
@@ -2044,7 +2047,7 @@ mod tests {
         let obj_b = make_active_object(u32::MAX, vec![("effect-b".to_string(), HashMap::new())]);
         engine.render(&[obj_a, obj_b], &project);
 
-        let pixels = read_texture_rgba8(
+        let pixels = read_texture_rgba16f(
             &engine.device,
             &engine.queue,
             &engine.texture,
@@ -2067,7 +2070,7 @@ mod tests {
 
         let project = ProjectResource::new();
         engine.render(&[], &project);
-        let pixels = read_texture_rgba8(
+        let pixels = read_texture_rgba16f(
             &engine.device,
             &engine.queue,
             &engine.texture,

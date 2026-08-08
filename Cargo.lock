@@ -19,8 +19,10 @@ dependencies = [
  "egui_material_icons",
  "egui_plot",
  "gpu-video",
+ "half",
  "libloading 0.9.0",
  "neoutl-audio-plugin-host",
+ "neoutl-color",
  "neoutl-easing-api",
  "neoutl-easing-standard",
  "neoutl-effect-api",
@@ -2272,6 +2274,7 @@ version = "2.7.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6ea2d84b969582b4b1864a92dc5d27cd2b77b622a8d79306834f1be5ba20d84b"
 dependencies = [
+ "bytemuck",
  "cfg-if",
  "crunchy",
  "num-traits",
@@ -3176,6 +3179,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "neoutl-color"
+version = "0.1.0"
+dependencies = [
+ "bytemuck",
+ "half",
+]
+
+[[package]]
 name = "neoutl-easing-api"
 version = "0.1.0"
 dependencies = [
@@ -3383,9 +3394,11 @@ name = "neoutl-media-ffmpeg-decoder"
 version = "0.0.0"
 dependencies = [
  "ash",
+ "bytemuck",
  "ffmpeg-next",
  "ffmpeg-sys-next",
  "libc",
+ "neoutl-color",
  "neoutl-media-api",
  "neoutl-object-shader-build",
  "wgpu",
@@ -3428,7 +3441,9 @@ dependencies = [
 name = "neoutl-media-image-decoder"
 version = "0.0.0"
 dependencies = [
+ "bytemuck",
  "image",
+ "neoutl-color",
  "neoutl-media-api",
  "wgpu",
 ]
