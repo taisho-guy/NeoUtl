@@ -10,6 +10,7 @@ use ffmpeg_sys_next as sys;
 use crate::cache::{FrameLruCache, GopCache, GopCacheBlock};
 use crate::frame::{GpuFrame, Rgba8Frame, VideoFrame, VideoFrameStore};
 use crate::index::{FrameIndex, build_index};
+use crate::vaapi_probe::probe_vaapi_node;
 use crate::vulkan::{self, NeoutlVulkanContext};
 
 const SWS_BILINEAR: i32 = 2;
@@ -20,6 +21,7 @@ fn pf(fmt: sys::AVPixelFormat) -> i32 {
 fn av_pix_fmt_none() -> i32 {
     pf(sys::AVPixelFormat::AV_PIX_FMT_NONE)
 }
+#[allow(dead_code)]
 fn av_pix_fmt_vulkan() -> i32 {
     pf(sys::AVPixelFormat::AV_PIX_FMT_VULKAN)
 }
@@ -288,6 +290,7 @@ struct OpenContext {
     fmt_ctx: *mut sys::AVFormatContext,
     dec_ctx: *mut sys::AVCodecContext,
     stream_index: i32,
+    #[allow(dead_code)]
     time_base: (i32, i32),
     fps: f64,
     width: u32,
@@ -329,22 +332,48 @@ impl Drop for OpenContext {
     }
 }
 
+fn is_10bit_pix_fmt(stream_sw_format_i32: i32) -> bool {
+    stream_sw_format_i32 == av_pix_fmt_yuv420p10le()
+        || stream_sw_format_i32 == av_pix_fmt_yuv420p12le()
+        || stream_sw_format_i32 == av_pix_fmt_p010le()
+        || stream_sw_format_i32 == av_pix_fmt_p012le()
+}
+
 unsafe fn config_supports_sw_format(
     hw_device_ctx: *mut sys::AVBufferRef,
     config: *const sys::AVCodecHWConfig,
     stream_sw_format: sys::AVPixelFormat,
+    device_type: sys::AVHWDeviceType,
 ) -> bool {
     unsafe {
         let stream_sw_format_i32 = std::mem::transmute::<sys::AVPixelFormat, i32>(stream_sw_format);
         let Some(target_sw_format) = resolve_hw_sw_format(stream_sw_format_i32) else {
+            eprintln!(
+                "[neoutl-video-decoder][diag] resolve_hw_sw_format失敗 stream_sw_format={stream_sw_format_i32}"
+            );
             return false;
         };
         let want_sw_format = std::mem::transmute::<i32, sys::AVPixelFormat>(target_sw_format);
+        eprintln!(
+            "[neoutl-video-decoder][diag] config_supports_sw_format開始 config_pix_fmt={:?} want_sw_format={target_sw_format}",
+            (*config).pix_fmt
+        );
+
+        if device_type == sys::AVHWDeviceType::AV_HWDEVICE_TYPE_VAAPI {
+            eprintln!(
+                "[neoutl-video-decoder][diag] VAAPIはprobe段階でvaCreateConfig実検証済みのためFFmpeg制約問い合わせを省略、対応扱い"
+            );
+            return true;
+        }
 
         let mut constraints =
             sys::av_hwdevice_get_hwframe_constraints(hw_device_ctx, config as *const c_void);
         if constraints.is_null() {
-            return true;
+            eprintln!(
+                "[neoutl-video-decoder][diag] av_hwdevice_get_hwframe_constraints=NULL(制約問い合わせ失敗) config_pix_fmt={:?} → 非対応扱いとしてフォールバック",
+                (*config).pix_fmt
+            );
+            return false;
         }
         let valid_sw_formats = (*constraints).valid_sw_formats;
         let supported = if valid_sw_formats.is_null() {
@@ -352,17 +381,36 @@ unsafe fn config_supports_sw_format(
         } else {
             let mut p = valid_sw_formats;
             let mut found = false;
+            let mut listed = Vec::new();
             while std::mem::transmute::<sys::AVPixelFormat, i32>(*p) != av_pix_fmt_none() {
+                listed.push(std::mem::transmute::<sys::AVPixelFormat, i32>(*p));
                 if *p == want_sw_format {
                     found = true;
                     break;
                 }
                 p = p.add(1);
             }
+            eprintln!(
+                "[neoutl-video-decoder][diag] valid_sw_formats={listed:?} want={target_sw_format} found={found}"
+            );
             found
         };
         sys::av_hwframe_constraints_free(&mut constraints);
         supported
+    }
+}
+
+fn vaapi_render_node_candidates(
+    codec: *const sys::AVCodec,
+    stream_sw_format: sys::AVPixelFormat,
+) -> Vec<CString> {
+    let codec_id = unsafe { (*codec).id };
+    let stream_sw_format_i32 =
+        unsafe { std::mem::transmute::<sys::AVPixelFormat, i32>(stream_sw_format) };
+    let want_10bit = is_10bit_pix_fmt(stream_sw_format_i32);
+    match probe_vaapi_node(codec_id, want_10bit) {
+        Some(node) => vec![node.device_path],
+        None => Vec::new(),
     }
 }
 
@@ -371,46 +419,112 @@ unsafe fn try_init_hw_device(
     stream_sw_format: sys::AVPixelFormat,
 ) -> Option<(*mut sys::AVBufferRef, i32)> {
     unsafe {
+        eprintln!(
+            "[neoutl-video-decoder][diag] try_init_hw_device開始 codec={:?} stream_sw_format={:?}",
+            (*codec).id,
+            stream_sw_format
+        );
         for name in HW_DEVICE_TYPE_NAMES {
             let c_name = CString::new(*name).ok()?;
             let device_type = sys::av_hwdevice_find_type_by_name(c_name.as_ptr());
             if device_type == sys::AVHWDeviceType::AV_HWDEVICE_TYPE_NONE {
+                eprintln!("[neoutl-video-decoder][diag] デバイスタイプ未検出 name={name}");
                 continue;
             }
 
-            let mut i = 0;
-            loop {
-                let config = sys::avcodec_get_hw_config(codec, i);
-                if config.is_null() {
-                    break;
-                }
-                let methods = (*config).methods;
-                let matches_method = (methods & AV_CODEC_HW_CONFIG_METHOD_HW_DEVICE_CTX) != 0;
-                if matches_method && (*config).device_type == device_type {
-                    let mut hw_device_ctx: *mut sys::AVBufferRef = ptr::null_mut();
-                    let ret = sys::av_hwdevice_ctx_create(
-                        &mut hw_device_ctx,
-                        device_type,
-                        ptr::null(),
-                        ptr::null_mut(),
-                        0,
+            let device_paths: Vec<Option<CString>> =
+                if device_type == sys::AVHWDeviceType::AV_HWDEVICE_TYPE_VAAPI {
+                    let nodes = vaapi_render_node_candidates(codec, stream_sw_format);
+                    eprintln!(
+                        "[neoutl-video-decoder][diag] VAAPIノード候補数={} nodes={:?}",
+                        nodes.len(),
+                        nodes
+                            .iter()
+                            .map(|c| c.to_string_lossy())
+                            .collect::<Vec<_>>()
                     );
-                    if ret == 0 {
-                        if config_supports_sw_format(hw_device_ctx, config, stream_sw_format) {
-                            return Some((
-                                hw_device_ctx,
-                                std::mem::transmute::<sys::AVPixelFormat, i32>((*config).pix_fmt),
-                            ));
-                        }
-                        eprintln!(
-                            "[neoutl-video-decoder] HWデバイス({name})はストリームフォーマット非対応、次候補探索"
-                        );
-                        sys::av_buffer_unref(&mut hw_device_ctx);
+                    if nodes.is_empty() {
+                        continue;
                     }
+                    nodes.into_iter().map(Some).collect()
+                } else {
+                    vec![None]
+                };
+
+            for device_path in &device_paths {
+                let mut i = 0;
+                loop {
+                    let config = sys::avcodec_get_hw_config(codec, i);
+                    if config.is_null() {
+                        eprintln!(
+                            "[neoutl-video-decoder][diag] avcodec_get_hw_config終端 name={name} config_index={i}"
+                        );
+                        break;
+                    }
+                    let methods = (*config).methods;
+                    let matches_method = (methods & AV_CODEC_HW_CONFIG_METHOD_HW_DEVICE_CTX) != 0;
+                    eprintln!(
+                        "[neoutl-video-decoder][diag] config走査 name={name} index={i} device_type={:?} config_device_type={:?} methods={methods:#x} matches_method={matches_method}",
+                        device_type,
+                        (*config).device_type
+                    );
+                    if matches_method && (*config).device_type == device_type {
+                        let path_ptr = device_path
+                            .as_ref()
+                            .map(|p| p.as_ptr())
+                            .unwrap_or(ptr::null());
+                        let path_label = device_path
+                            .as_ref()
+                            .map(|p| p.to_string_lossy().into_owned())
+                            .unwrap_or_else(|| "既定".to_owned());
+                        eprintln!(
+                            "[neoutl-video-decoder][diag] av_hwdevice_ctx_create呼出 name={name} node={path_label} config_pix_fmt={:?}",
+                            (*config).pix_fmt
+                        );
+                        let mut hw_device_ctx: *mut sys::AVBufferRef = ptr::null_mut();
+                        let ret = sys::av_hwdevice_ctx_create(
+                            &mut hw_device_ctx,
+                            device_type,
+                            path_ptr,
+                            ptr::null_mut(),
+                            0,
+                        );
+                        eprintln!(
+                            "[neoutl-video-decoder][diag] av_hwdevice_ctx_create結果 name={name} node={path_label} ret={ret}"
+                        );
+                        if ret == 0 {
+                            let format_ok = config_supports_sw_format(
+                                hw_device_ctx,
+                                config,
+                                stream_sw_format,
+                                device_type,
+                            );
+                            eprintln!(
+                                "[neoutl-video-decoder][diag] config_supports_sw_format結果 name={name} node={path_label} format_ok={format_ok}"
+                            );
+                            if format_ok {
+                                return Some((
+                                    hw_device_ctx,
+                                    std::mem::transmute::<sys::AVPixelFormat, i32>(
+                                        (*config).pix_fmt,
+                                    ),
+                                ));
+                            }
+                            eprintln!(
+                                "[neoutl-video-decoder] HWデバイス({name}, node={path_label})はストリームフォーマット非対応、次候補探索"
+                            );
+                            sys::av_buffer_unref(&mut hw_device_ctx);
+                        } else {
+                            eprintln!(
+                                "[neoutl-video-decoder] HWデバイス初期化失敗 name={name} node={path_label} ret={ret}"
+                            );
+                        }
+                    }
+                    i += 1;
                 }
-                i += 1;
             }
         }
+        eprintln!("[neoutl-video-decoder][diag] try_init_hw_device全候補探索終了、HW初期化失敗");
         None
     }
 }

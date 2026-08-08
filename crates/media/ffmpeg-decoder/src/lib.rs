@@ -3,6 +3,9 @@ pub mod decoder;
 pub mod frame;
 pub mod index;
 mod source;
+mod vaapi_config_verify;
+mod vaapi_probe;
+mod vaapi_sys;
 pub mod vulkan;
 
 pub use decoder::{VideoDecoder, VideoMeta};

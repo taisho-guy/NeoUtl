@@ -13,6 +13,7 @@ libc = "0.2"
 wgpu = { version = "29", features = ["vulkan-portability"] }
 wgpu-hal = { version = "29", features = ["vulkan"] }
 ash = "0.38"
+libva = { package = "cros-libva-extended", version = "=0.0.13-extended.2" }
 
 [build-dependencies]
 neoutl-object-shader-build.workspace = true

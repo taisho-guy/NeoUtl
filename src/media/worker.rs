@@ -212,6 +212,7 @@ pub struct DecodeWorker {
     signal: Arc<(Mutex<bool>, Condvar)>,
     store: Arc<Mutex<TextureStore>>,
     last_error: Arc<Mutex<Option<String>>>,
+    #[allow(dead_code)]
     exact_queue: Arc<Mutex<VecDeque<i64>>>,
 
     task: Option<tokio::task::JoinHandle<()>>,
@@ -398,6 +399,7 @@ impl DecodeWorker {
         cvar.notify_one();
     }
 
+    #[allow(dead_code)]
     pub fn request_exact(&self, frame_index: i64) {
         self.exact_queue.lock().unwrap().push_back(frame_index);
         let (lock, cvar) = &*self.signal;

@@ -625,7 +625,6 @@ fn show_curve_editor_layout(ctx: &egui::Context, ui: &mut egui::Ui, world: &mut 
     let mut edited_payload = None;
     let visuals = ctx.style_of(ctx.theme()).visuals.clone();
     let accent = visuals.selection.bg_fill;
-    let text_color = visuals.text_color();
     let weak_text = visuals.weak_text_color();
 
     ui.horizontal(|ui| {
