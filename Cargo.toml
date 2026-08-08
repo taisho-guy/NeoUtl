@@ -21,6 +21,7 @@ members = [
     "crates/neoutl-object-shader-build",
     "crates/xtask", "crates/media/audio-plugin-host",
 ]
+exclude = ["neoutl-wgpu"]
 resolver = "2"
 
 [workspace.dependencies]
@@ -108,3 +109,7 @@ codegen-units = 1
 panic = "unwind"
 strip = false
 debug = 1
+
+[patch.crates-io]
+wgpu = { path = "neoutl-wgpu/wgpu" }
+wgpu-core = { path = "neoutl-wgpu/wgpu-core" }
