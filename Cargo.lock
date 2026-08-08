@@ -3387,6 +3387,7 @@ dependencies = [
  "ffmpeg-sys-next",
  "libc",
  "neoutl-media-api",
+ "neoutl-object-shader-build",
  "wgpu",
  "wgpu-hal",
 ]

@@ -47,6 +47,37 @@ pub fn compile_object_shader(label: &str, source_relpath: &str) {
     println!("{}", t!("cargo:rerun-if-changed=%{arg0}"));
     println!("{}", t!("cargo:rerun-if-env-changed=SLANG_DIR"));
 }
+
+pub fn compile_compute_spirv(label: &str, source_relpath: &str, entry: &str) {
+    let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIRが未設定");
+    let source_path = Path::new(&manifest_dir).join(source_relpath);
+    let out_dir = std::env::var("OUT_DIR").expect("OUT_DIRが未設定");
+    let dest_path = PathBuf::from(&out_dir).join(format!("{label}.spv"));
+
+    let output = Command::new(resolve_slangc())
+        .arg(&source_path)
+        .arg("-entry")
+        .arg(entry)
+        .arg("-stage")
+        .arg("compute")
+        .arg("-target")
+        .arg("spirv")
+        .arg("-o")
+        .arg(&dest_path)
+        .output()
+        .expect("slangc起動失敗。SLANG_DIR環境変数またはPATHを確認してください");
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        panic!(
+            "Slang→SPIR-Vコンパイル失敗: label={label} source={} stderr={stderr}",
+            source_path.display()
+        );
+    }
+
+    println!("{}", t!("cargo:rerun-if-changed=%{arg0}"));
+    println!("{}", t!("cargo:rerun-if-env-changed=SLANG_DIR"));
+}
 rust_i18n::i18n!("../../i18n");
 #[macro_use]
 extern crate rust_i18n;
