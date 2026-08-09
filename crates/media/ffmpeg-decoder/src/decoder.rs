@@ -2,7 +2,7 @@ use std::ffi::{CString, c_void};
 use std::path::Path;
 use std::ptr;
 use std::sync::atomic::{AtomicBool, AtomicI64, Ordering};
-use std::sync::{Arc, Condvar, Mutex};
+use std::sync::{Arc, Condvar, Mutex, OnceLock};
 use std::thread::JoinHandle;
 
 use ffmpeg_sys_next as sys;
@@ -14,6 +14,20 @@ use crate::vaapi_probe::probe_vaapi_node;
 use crate::vulkan::{self, NeoutlVulkanContext};
 
 const SWS_BILINEAR: i32 = 2;
+
+static SHARED_WGPU: OnceLock<(Arc<wgpu::Device>, Arc<wgpu::Queue>)> = OnceLock::new();
+
+pub fn set_shared_wgpu_device(device: Arc<wgpu::Device>, queue: Arc<wgpu::Queue>) {
+    let _ = SHARED_WGPU.set((device, queue));
+}
+
+pub fn shared_wgpu_device() -> Option<Arc<wgpu::Device>> {
+    SHARED_WGPU.get().map(|(device, _)| device.clone())
+}
+
+pub fn shared_wgpu_queue() -> Option<Arc<wgpu::Queue>> {
+    SHARED_WGPU.get().map(|(_, queue)| queue.clone())
+}
 fn pf(fmt: sys::AVPixelFormat) -> i32 {
     fmt as i32
 }
@@ -272,6 +286,7 @@ struct GpuPipeline {
     vulkan_ctx: Arc<NeoutlVulkanContext>,
     derived_frames_ctx: *mut sys::AVBufferRef,
     semi_planar_engine: Option<vulkan::SemiPlanarConvertEngine>,
+    _entry: ash::Entry,
 }
 
 unsafe impl Send for GpuPipeline {}
@@ -409,7 +424,13 @@ fn vaapi_render_node_candidates(
         unsafe { std::mem::transmute::<sys::AVPixelFormat, i32>(stream_sw_format) };
     let want_10bit = is_10bit_pix_fmt(stream_sw_format_i32);
     match probe_vaapi_node(codec_id, want_10bit) {
-        Some(node) => vec![node.device_path],
+        Some(node) => {
+            eprintln!(
+                "[neoutl-video-decoder][diag] VAAPIノード確定 path={:?} matched_profile={:?}",
+                node.device_path, node.matched_profile
+            );
+            vec![node.device_path]
+        }
         None => Vec::new(),
     }
 }
@@ -419,6 +440,7 @@ unsafe fn try_init_hw_device(
     stream_sw_format: sys::AVPixelFormat,
 ) -> Option<(*mut sys::AVBufferRef, i32)> {
     unsafe {
+        sys::av_log_set_level(sys::AV_LOG_DEBUG);
         eprintln!(
             "[neoutl-video-decoder][diag] try_init_hw_device開始 codec={:?} stream_sw_format={:?}",
             (*codec).id,
@@ -660,33 +682,62 @@ fn build_gpu_pipeline(
     gpu_device: &Option<Arc<wgpu::Device>>,
     hw_device_ctx: *mut sys::AVBufferRef,
 ) -> Option<GpuPipeline> {
+    eprintln!("[neoutl-video-decoder][diag][gpu-pipeline] 開始");
     let wgpu_device = gpu_device.clone()?;
+    eprintln!("[neoutl-video-decoder][diag][gpu-pipeline] wgpu_device取得済み");
     if hw_device_ctx.is_null() {
+        eprintln!("[neoutl-video-decoder][diag][gpu-pipeline] hw_device_ctx null、中断");
         return None;
     }
 
+    eprintln!("[neoutl-video-decoder][diag][gpu-pipeline] ash::Entry::load開始");
     let entry = unsafe { ash::Entry::load().ok()? };
+    eprintln!("[neoutl-video-decoder][diag][gpu-pipeline] ash::Entry::load完了");
+
+    eprintln!("[neoutl-video-decoder][diag][gpu-pipeline] init_vulkan_context開始");
     let vulkan_ctx = match vulkan::init_vulkan_context(&wgpu_device, &entry) {
-        Ok(ctx) => ctx,
+        Ok(ctx) => {
+            eprintln!("[neoutl-video-decoder][diag][gpu-pipeline] init_vulkan_context成功");
+            ctx
+        }
         Err(e) => {
             eprintln!("[neoutl-video-decoder] Vulkan相互運用初期化失敗、CPU経路使用: {e}");
             return None;
         }
     };
 
+    eprintln!(
+        "[neoutl-video-decoder][diag][gpu-pipeline] extract_vulkan_raw_handles開始(semi_planar用)"
+    );
     let semi_planar_engine = unsafe {
         vulkan::extract_vulkan_raw_handles(&wgpu_device).and_then(|handles| {
+            eprintln!("[neoutl-video-decoder][diag][gpu-pipeline] raw_handles取得済み、SemiPlanarConvertEngine::new開始");
             static SEMI_PLANAR_SPIRV: &[u8] =
                 include_bytes!(concat!(env!("OUT_DIR"), "/semi_planar_to_rgba.spv"));
-            vulkan::SemiPlanarConvertEngine::new(&handles, &entry, SEMI_PLANAR_SPIRV).ok()
+            let result = vulkan::SemiPlanarConvertEngine::new(&handles, &entry, SEMI_PLANAR_SPIRV);
+            match &result {
+                Ok(_) => eprintln!(
+                    "[neoutl-video-decoder][diag][gpu-pipeline] SemiPlanarConvertEngine::new成功"
+                ),
+                Err(e) => eprintln!(
+                    "[neoutl-video-decoder][diag][gpu-pipeline] SemiPlanarConvertEngine::new失敗: {e}"
+                ),
+            }
+            result.ok()
         })
     };
+    eprintln!(
+        "[neoutl-video-decoder][diag][gpu-pipeline] semi_planar_engine確定 有効={}",
+        semi_planar_engine.is_some()
+    );
 
+    eprintln!("[neoutl-video-decoder][diag][gpu-pipeline] GpuPipeline構築完了");
     Some(GpuPipeline {
         wgpu_device,
         vulkan_ctx,
         derived_frames_ctx: ptr::null_mut(),
         semi_planar_engine,
+        _entry: entry,
     })
 }
 
@@ -730,7 +781,14 @@ fn try_convert_to_gpu(ctx: &mut OpenContext, av_frame: *mut sys::AVFrame) -> Con
     if frame_format != hw_pix_fmt {
         return ConvertOutcome::CpuFallback("デコード結果がHWサーフェスでない");
     }
-    let sw_format = unsafe { (*ctx.dec_ctx).sw_pix_fmt };
+    let hw_frames_ctx_ref = unsafe { (*ctx.dec_ctx).hw_frames_ctx };
+    if hw_frames_ctx_ref.is_null() {
+        return ConvertOutcome::CpuFallback("hw_frames_ctx未設定(sw_format取得不能)");
+    }
+    let sw_format = unsafe {
+        let frames_ctx = (*hw_frames_ctx_ref).data as *mut sys::AVHWFramesContext;
+        (*frames_ctx).sw_format
+    };
     let sw_format_i32 = unsafe { std::mem::transmute::<sys::AVPixelFormat, i32>(sw_format) };
     let is_direct_rgba = sw_format_i32 == av_pix_fmt_rgb0() || sw_format_i32 == av_pix_fmt_bgr0();
     let semi_planar_view_formats = semi_planar_view_formats(sw_format_i32);

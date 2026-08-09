@@ -17,3 +17,5 @@ libva = { package = "cros-libva-extended", version = "=0.0.13-extended.2" }
 
 [build-dependencies]
 neoutl-object-shader-build.workspace = true
+cc = "1"
+pkg-config = "0.3"

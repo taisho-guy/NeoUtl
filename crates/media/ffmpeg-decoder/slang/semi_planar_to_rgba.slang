@@ -2,7 +2,7 @@
 [[vk::binding(0, 0)]] Texture2D<float> plane_y;
 [[vk::binding(1, 0)]] Texture2D<float2> plane_uv;
 [[vk::binding(2, 0)]] SamplerState chroma_sampler;
-[[vk::binding(3, 0)]] RWTexture2D<float4> output;
+[[vk::binding(3, 0)]] [format("rgba8")] RWTexture2D<float4> output;
 
 [shader("compute")]
 [numthreads(8, 8, 1)]
