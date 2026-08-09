@@ -7,45 +7,21 @@ use ffmpeg_sys_next as sys;
 const AV_HWDEVICE_TYPE_VULKAN: sys::AVHWDeviceType = sys::AVHWDeviceType::AV_HWDEVICE_TYPE_VULKAN;
 const AV_PIX_FMT_VULKAN: i32 = 152;
 
-#[repr(C)]
-struct AVVulkanDeviceContext {
-    get_proc_addr: *mut c_void,
-    inst: usize,
-    phys_dev: usize,
-    act_dev: usize,
-    device_features: [u8; 512],
-    enabled_inst_extensions: *mut *const i8,
-    nb_enabled_inst_extensions: c_int,
-    enabled_dev_extensions: *mut *const i8,
-    nb_enabled_dev_extensions: c_int,
-    queue_family_index: c_int,
-    nb_graphics_queues: c_int,
-    queue_family_tx_index: c_int,
-    nb_tx_queues: c_int,
-    queue_family_comp_index: c_int,
-    nb_comp_queues: c_int,
-    queue_family_encode_index: c_int,
-    nb_encode_queues: c_int,
-    queue_family_decode_index: c_int,
-    nb_decode_queues: c_int,
-    alloc: *mut c_void,
-    lock_queue: *mut c_void,
-    unlock_queue: *mut c_void,
-}
+unsafe extern "C" {
+    fn neoutl_vk_configure_device_ctx(
+        av_hw_device_ctx: *mut sys::AVBufferRef,
+        get_proc_addr: *mut c_void,
+        instance: u64,
+        phys_dev: u64,
+        act_dev: u64,
+        queue_family_index: c_uint,
+    ) -> c_int;
 
-#[repr(C)]
-struct AVVkFrame {
-    img: [u64; 8],
-    tiling: c_int,
-    mem: [usize; 8],
-    size: [u64; 8],
-    flags: c_uint,
-    sem: [u64; 8],
-    sem_value: [u64; 8],
-    layout: [c_int; 8],
-    access: [u64; 8],
-    queue_family: [c_int; 8],
-    internal: *mut c_void,
+    fn neoutl_vk_frame_query_image0(
+        av_vk_frame: *mut c_void,
+        out_image0: *mut u64,
+        out_layout0: *mut c_int,
+    ) -> c_int;
 }
 
 pub struct VulkanRawHandles {
@@ -100,23 +76,20 @@ pub fn create_av_vulkan_device_ctx(
             return Err("av_hwdevice_ctx_alloc失敗".to_owned());
         }
 
-        let hwctx = (*av_hw_device_ctx).data as *mut sys::AVHWDeviceContext;
-        let vk_ctx = (*hwctx).hwctx as *mut AVVulkanDeviceContext;
-
-        (*vk_ctx).get_proc_addr = handles.get_instance_proc_addr as *mut c_void;
-        (*vk_ctx).inst = handles.instance.as_raw() as usize;
-        (*vk_ctx).phys_dev = handles.physical_device.as_raw() as usize;
-        (*vk_ctx).act_dev = handles.device.as_raw() as usize;
-        (*vk_ctx).queue_family_index = handles.queue_family_index as c_int;
-        (*vk_ctx).nb_graphics_queues = 1;
-        (*vk_ctx).queue_family_tx_index = handles.queue_family_index as c_int;
-        (*vk_ctx).nb_tx_queues = 1;
-        (*vk_ctx).queue_family_comp_index = handles.queue_family_index as c_int;
-        (*vk_ctx).nb_comp_queues = 1;
-        (*vk_ctx).queue_family_encode_index = -1;
-        (*vk_ctx).nb_encode_queues = 0;
-        (*vk_ctx).queue_family_decode_index = -1;
-        (*vk_ctx).nb_decode_queues = 0;
+        let configure_ret = neoutl_vk_configure_device_ctx(
+            av_hw_device_ctx,
+            handles.get_instance_proc_addr as *mut c_void,
+            handles.instance.as_raw(),
+            handles.physical_device.as_raw(),
+            handles.device.as_raw(),
+            handles.queue_family_index,
+        );
+        if configure_ret < 0 {
+            sys::av_buffer_unref(&mut { av_hw_device_ctx });
+            return Err(format!(
+                "neoutl_vk_configure_device_ctx失敗: ret={configure_ret}"
+            ));
+        }
 
         if sys::av_hwdevice_ctx_init(av_hw_device_ctx) < 0 {
             sys::av_buffer_unref(&mut { av_hw_device_ctx });
@@ -172,13 +145,19 @@ pub fn transfer_to_vulkan_frame(
         if dst_frame.is_null() {
             return Err("av_frame_alloc失敗".to_owned());
         }
-        if sys::av_hwframe_get_buffer(derived_frames_ctx, dst_frame, 0) < 0 {
+        (*dst_frame).format = AV_PIX_FMT_VULKAN;
+        (*dst_frame).hw_frames_ctx = sys::av_buffer_ref(derived_frames_ctx);
+        if (*dst_frame).hw_frames_ctx.is_null() {
             sys::av_frame_free(&mut { dst_frame });
-            return Err("av_hwframe_get_buffer失敗".to_owned());
+            return Err("hw_frames_ctx参照確保失敗".to_owned());
         }
-        if sys::av_hwframe_transfer_data(dst_frame, src_frame, 0) < 0 {
+        let map_flags = sys::AV_HWFRAME_MAP_READ as i32 as c_int;
+        let map_ret = sys::av_hwframe_map(dst_frame, src_frame, map_flags);
+        if map_ret < 0 {
             sys::av_frame_free(&mut { dst_frame });
-            return Err("av_hwframe_transfer_data(Vulkan導出)失敗".to_owned());
+            return Err(format!(
+                "av_hwframe_map失敗(VAAPI→Vulkanゼロコピー導出) ret={map_ret}"
+            ));
         }
         Ok(DerivedVulkanFrame {
             av_frame: dst_frame,
@@ -193,10 +172,14 @@ pub struct VkImageHandle {
 
 pub unsafe fn vk_image_of(frame: &DerivedVulkanFrame) -> VkImageHandle {
     unsafe {
-        let vk_frame = (*frame.av_frame).data[0] as *mut AVVkFrame;
+        let vk_frame_ptr = (*frame.av_frame).data[0] as *mut c_void;
+        let mut image0: u64 = 0;
+        let mut layout0: c_int = 0;
+        let ret = neoutl_vk_frame_query_image0(vk_frame_ptr, &mut image0, &mut layout0);
+        assert_eq!(ret, 0, "neoutl_vk_frame_query_image0失敗 ret={ret}");
         VkImageHandle {
-            image: ash::vk::Image::from_raw((*vk_frame).img[0]),
-            layout: ash::vk::ImageLayout::from_raw((*vk_frame).layout[0]),
+            image: ash::vk::Image::from_raw(image0),
+            layout: ash::vk::ImageLayout::from_raw(layout0),
         }
     }
 }
@@ -385,10 +368,16 @@ pub fn init_vulkan_context(
     device: &wgpu::Device,
     entry: &ash::Entry,
 ) -> Result<Arc<NeoutlVulkanContext>, String> {
+    eprintln!("[neoutl-video-decoder][diag][vulkan] extract_vulkan_raw_handles開始");
     let handles = unsafe { extract_vulkan_raw_handles(device) }
         .ok_or_else(|| "Vulkan生ハンドル取得失敗(バックエンド非Vulkan)".to_owned())?;
+    eprintln!("[neoutl-video-decoder][diag][vulkan] raw_handles取得済み");
+    eprintln!("[neoutl-video-decoder][diag][vulkan] create_av_vulkan_device_ctx開始");
     let device_ctx = create_av_vulkan_device_ctx(&handles)?;
+    eprintln!("[neoutl-video-decoder][diag][vulkan] create_av_vulkan_device_ctx成功");
+    eprintln!("[neoutl-video-decoder][diag][vulkan] CopyEngine::new開始");
     let copy_engine = unsafe { CopyEngine::new(&handles, entry)? };
+    eprintln!("[neoutl-video-decoder][diag][vulkan] CopyEngine::new成功");
     Ok(Arc::new(NeoutlVulkanContext {
         device_ctx,
         copy_engine,
@@ -416,32 +405,43 @@ impl SemiPlanarConvertEngine {
         spirv_code: &[u8],
     ) -> Result<Self, String> {
         unsafe {
+            eprintln!("[neoutl-video-decoder][diag][semi-planar] Instance::load開始");
             let instance = ash::Instance::load(
                 &ash::StaticFn {
                     get_instance_proc_addr: handles.get_instance_proc_addr,
                 },
                 handles.instance,
             );
+            eprintln!(
+                "[neoutl-video-decoder][diag][semi-planar] Instance::load完了、Device::load開始"
+            );
             let device = ash::Device::load(instance.fp_v1_0(), handles.device);
+            eprintln!("[neoutl-video-decoder][diag][semi-planar] Device::load完了");
 
             let pool_info = ash::vk::CommandPoolCreateInfo::default()
                 .queue_family_index(handles.queue_family_index)
                 .flags(ash::vk::CommandPoolCreateFlags::TRANSIENT);
+            eprintln!("[neoutl-video-decoder][diag][semi-planar] create_command_pool開始");
             let command_pool = device
                 .create_command_pool(&pool_info, None)
                 .map_err(|e| format!("create_command_pool失敗: {e}"))?;
+            eprintln!("[neoutl-video-decoder][diag][semi-planar] create_command_pool完了");
 
             let alloc_info = ash::vk::CommandBufferAllocateInfo::default()
                 .command_pool(command_pool)
                 .level(ash::vk::CommandBufferLevel::PRIMARY)
                 .command_buffer_count(1);
+            eprintln!("[neoutl-video-decoder][diag][semi-planar] allocate_command_buffers開始");
             let command_buffer = device
                 .allocate_command_buffers(&alloc_info)
                 .map_err(|e| format!("allocate_command_buffers失敗: {e}"))?[0];
+            eprintln!("[neoutl-video-decoder][diag][semi-planar] allocate_command_buffers完了");
 
+            eprintln!("[neoutl-video-decoder][diag][semi-planar] create_fence開始");
             let fence = device
                 .create_fence(&ash::vk::FenceCreateInfo::default(), None)
                 .map_err(|e| format!("create_fence失敗: {e}"))?;
+            eprintln!("[neoutl-video-decoder][diag][semi-planar] create_fence完了");
 
             let sampler_info = ash::vk::SamplerCreateInfo::default()
                 .mag_filter(ash::vk::Filter::LINEAR)
@@ -450,9 +450,11 @@ impl SemiPlanarConvertEngine {
                 .address_mode_v(ash::vk::SamplerAddressMode::CLAMP_TO_EDGE)
                 .address_mode_w(ash::vk::SamplerAddressMode::CLAMP_TO_EDGE)
                 .mipmap_mode(ash::vk::SamplerMipmapMode::NEAREST);
+            eprintln!("[neoutl-video-decoder][diag][semi-planar] create_sampler開始");
             let sampler = device
                 .create_sampler(&sampler_info, None)
                 .map_err(|e| format!("create_sampler失敗: {e}"))?;
+            eprintln!("[neoutl-video-decoder][diag][semi-planar] create_sampler完了");
 
             let bindings = [
                 ash::vk::DescriptorSetLayoutBinding::default()
@@ -477,16 +479,20 @@ impl SemiPlanarConvertEngine {
                     .stage_flags(ash::vk::ShaderStageFlags::COMPUTE),
             ];
             let layout_info = ash::vk::DescriptorSetLayoutCreateInfo::default().bindings(&bindings);
+            eprintln!("[neoutl-video-decoder][diag][semi-planar] create_descriptor_set_layout開始");
             let descriptor_set_layout = device
                 .create_descriptor_set_layout(&layout_info, None)
                 .map_err(|e| format!("create_descriptor_set_layout失敗: {e}"))?;
+            eprintln!("[neoutl-video-decoder][diag][semi-planar] create_descriptor_set_layout完了");
 
             let set_layouts = [descriptor_set_layout];
             let pipeline_layout_info =
                 ash::vk::PipelineLayoutCreateInfo::default().set_layouts(&set_layouts);
+            eprintln!("[neoutl-video-decoder][diag][semi-planar] create_pipeline_layout開始");
             let pipeline_layout = device
                 .create_pipeline_layout(&pipeline_layout_info, None)
                 .map_err(|e| format!("create_pipeline_layout失敗: {e}"))?;
+            eprintln!("[neoutl-video-decoder][diag][semi-planar] create_pipeline_layout完了");
 
             if spirv_code.len() % 4 != 0 {
                 return Err("SPIR-Vバイト列長が4の倍数でない".to_owned());
@@ -495,12 +501,19 @@ impl SemiPlanarConvertEngine {
                 .chunks_exact(4)
                 .map(|c| u32::from_ne_bytes([c[0], c[1], c[2], c[3]]))
                 .collect();
+            eprintln!(
+                "[neoutl-video-decoder][diag][semi-planar] SPIR-Vワード数={} 先頭magic={:#010x}",
+                spirv_words.len(),
+                spirv_words.first().copied().unwrap_or(0)
+            );
             let shader_info = ash::vk::ShaderModuleCreateInfo::default().code(&spirv_words);
+            eprintln!("[neoutl-video-decoder][diag][semi-planar] create_shader_module開始");
             let shader_module = device
                 .create_shader_module(&shader_info, None)
                 .map_err(|e| format!("create_shader_module失敗: {e}"))?;
+            eprintln!("[neoutl-video-decoder][diag][semi-planar] create_shader_module完了");
 
-            let entry_name = c"cs_main";
+            let entry_name = c"main";
             let stage_info = ash::vk::PipelineShaderStageCreateInfo::default()
                 .stage(ash::vk::ShaderStageFlags::COMPUTE)
                 .module(shader_module)
@@ -508,9 +521,13 @@ impl SemiPlanarConvertEngine {
             let pipeline_info = ash::vk::ComputePipelineCreateInfo::default()
                 .stage(stage_info)
                 .layout(pipeline_layout);
+            eprintln!(
+                "[neoutl-video-decoder][diag][semi-planar] create_compute_pipelines開始 pipeline_layout={pipeline_layout:?} shader_module={shader_module:?}"
+            );
             let pipeline = device
                 .create_compute_pipelines(ash::vk::PipelineCache::null(), &[pipeline_info], None)
                 .map_err(|(_, e)| format!("create_compute_pipelines失敗: {e}"))?[0];
+            eprintln!("[neoutl-video-decoder][diag][semi-planar] create_compute_pipelines完了");
 
             let pool_sizes = [
                 ash::vk::DescriptorPoolSize::default()
@@ -526,9 +543,13 @@ impl SemiPlanarConvertEngine {
             let descriptor_pool_info = ash::vk::DescriptorPoolCreateInfo::default()
                 .max_sets(1)
                 .pool_sizes(&pool_sizes);
+            eprintln!("[neoutl-video-decoder][diag][semi-planar] create_descriptor_pool開始");
             let descriptor_pool = device
                 .create_descriptor_pool(&descriptor_pool_info, None)
                 .map_err(|e| format!("create_descriptor_pool失敗: {e}"))?;
+            eprintln!(
+                "[neoutl-video-decoder][diag][semi-planar] create_descriptor_pool完了、Self構築"
+            );
 
             Ok(Self {
                 device,

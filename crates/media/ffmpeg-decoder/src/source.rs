@@ -30,8 +30,8 @@ impl FfmpegVideoSource {
             path,
             CLIP_KEY.to_owned(),
             store_thread,
-            None,
-            None,
+            crate::decoder::shared_wgpu_device(),
+            crate::decoder::shared_wgpu_queue(),
             move |meta| {
                 let _ = tx.send(meta);
             },

@@ -31,11 +31,15 @@ pub fn init_shared_gpu() -> Result<SharedGpu, Box<dyn std::error::Error>> {
         neoutl_media_gpuvideo_encoder::set_shared_device(gpu_device);
         crate::renderer::pipeline::install_device_lost_watcher(&device);
 
+        let device = Arc::new(device);
+        let queue = Arc::new(queue);
+        neoutl_media_ffmpeg_decoder::set_shared_wgpu_device(device.clone(), queue.clone());
+
         let _ = adapter;
         return Ok(SharedGpu {
             instance,
-            device: Arc::new(device),
-            queue: Arc::new(queue),
+            device,
+            queue,
         });
     }
 

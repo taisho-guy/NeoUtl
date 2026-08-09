@@ -8,21 +8,27 @@ pub struct ProbedVaapiNode {
     pub matched_profile: VAProfile::Type,
 }
 
+fn codec_name(codec_id: ffmpeg_sys_next::AVCodecID) -> String {
+    unsafe {
+        let ptr = ffmpeg_sys_next::avcodec_get_name(codec_id);
+        std::ffi::CStr::from_ptr(ptr).to_string_lossy().into_owned()
+    }
+}
+
 fn codec_id_to_va_profiles(codec_id: ffmpeg_sys_next::AVCodecID) -> &'static [VAProfile::Type] {
-    use ffmpeg_sys_next::AVCodecID::*;
-    match codec_id {
-        AV_CODEC_ID_H264 => &[
+    match codec_name(codec_id).as_str() {
+        "h264" => &[
             VAProfile::VAProfileH264High,
             VAProfile::VAProfileH264Main,
             VAProfile::VAProfileH264ConstrainedBaseline,
         ],
-        AV_CODEC_ID_HEVC => &[VAProfile::VAProfileHEVCMain, VAProfile::VAProfileHEVCMain10],
-        AV_CODEC_ID_VP9 => &[
+        "hevc" => &[VAProfile::VAProfileHEVCMain, VAProfile::VAProfileHEVCMain10],
+        "vp9" => &[
             VAProfile::VAProfileVP9Profile0,
             VAProfile::VAProfileVP9Profile2,
         ],
-        AV_CODEC_ID_AV1 => &[VAProfile::VAProfileAV1Profile0],
-        AV_CODEC_ID_VP8 => &[VAProfile::VAProfileVP8Version0_3],
+        "av1" => &[VAProfile::VAProfileAV1Profile0],
+        "vp8" => &[VAProfile::VAProfileVP8Version0_3],
         _ => &[],
     }
 }
@@ -58,7 +64,10 @@ pub fn probe_vaapi_node(
     codec_id: ffmpeg_sys_next::AVCodecID,
     want_10bit: bool,
 ) -> Option<ProbedVaapiNode> {
-    eprintln!("[vaapi-probe] probe_vaapi_node開始 codec_id={codec_id:?} want_10bit={want_10bit}");
+    eprintln!(
+        "[vaapi-probe] probe_vaapi_node開始 codec_id={codec_id:?} codec_name={} want_10bit={want_10bit}",
+        codec_name(codec_id)
+    );
     let profiles = codec_id_to_va_profiles(codec_id);
     if profiles.is_empty() {
         eprintln!(
