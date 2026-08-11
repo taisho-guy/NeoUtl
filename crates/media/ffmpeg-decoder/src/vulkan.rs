@@ -96,7 +96,35 @@ pub fn create_av_vulkan_device_ctx(
             return Err("av_hwdevice_ctx_init(Vulkan)失敗".to_owned());
         }
 
+        log_enabled_vulkan_extensions(av_hw_device_ctx);
+
         Ok(NeoutlVulkanDeviceCtx { av_hw_device_ctx })
+    }
+}
+
+unsafe fn log_enabled_vulkan_extensions(av_hw_device_ctx: *mut sys::AVBufferRef) {
+    unsafe {
+        let device_ctx = (*av_hw_device_ctx).data as *mut sys::AVHWDeviceContext;
+        let vk_ctx = (*device_ctx).hwctx as *mut sys::AVVulkanDeviceContext;
+        let names: Vec<String> = (0..(*vk_ctx).nb_enabled_dev_extensions)
+            .map(|i| {
+                let ptr = *(*vk_ctx).enabled_dev_extensions.offset(i as isize);
+                std::ffi::CStr::from_ptr(ptr).to_string_lossy().into_owned()
+            })
+            .collect();
+        eprintln!(
+            "[neoutl-video-decoder][diag][vulkan] 有効化デバイス拡張(count={}): {:?}",
+            (*vk_ctx).nb_enabled_dev_extensions,
+            names
+        );
+        let drm_related: Vec<&String> = names
+            .iter()
+            .filter(|n| n.contains("external_memory") || n.contains("drm_format_modifier"))
+            .collect();
+        eprintln!(
+            "[neoutl-video-decoder][diag][vulkan] DRM/external_memory関連拡張: {:?}",
+            drm_related
+        );
     }
 }
 
