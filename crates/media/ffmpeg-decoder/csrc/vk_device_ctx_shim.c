@@ -1,8 +1,24 @@
 #include <stdint.h>
+#include <stdlib.h>
+#include <string.h>
 
 #include <libavutil/buffer.h>
 #include <libavutil/hwcontext.h>
 #include <libavutil/hwcontext_vulkan.h>
+
+static char **copy_extension_names(const char *const *names, int count) {
+    if (count <= 0) {
+        return NULL;
+    }
+    char **out = (char **)av_malloc_array((size_t)count, sizeof(char *));
+    if (!out) {
+        return NULL;
+    }
+    for (int i = 0; i < count; i++) {
+        out[i] = av_strdup(names[i]);
+    }
+    return out;
+}
 
 int neoutl_vk_configure_device_ctx(
     AVBufferRef *av_hw_device_ctx,
@@ -10,7 +26,11 @@ int neoutl_vk_configure_device_ctx(
     uint64_t instance,
     uint64_t phys_dev,
     uint64_t act_dev,
-    unsigned int queue_family_index)
+    unsigned int queue_family_index,
+    const char *const *enabled_inst_extensions,
+    int nb_enabled_inst_extensions,
+    const char *const *enabled_dev_extensions,
+    int nb_enabled_dev_extensions)
 {
     if (!av_hw_device_ctx || !av_hw_device_ctx->data) {
         return -1;
@@ -33,6 +53,20 @@ int neoutl_vk_configure_device_ctx(
     vk_ctx->qf[vk_ctx->nb_qf].flags =
         VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT | VK_QUEUE_TRANSFER_BIT;
     vk_ctx->nb_qf++;
+
+    // FFmpeg側は実際にVkInstance/VkDevice生成時に有効化された拡張の一覧を
+    // 把握する手段を持たない(既存デバイスの再ラップのため)。呼び出し元が
+    // 生成時点で保持していた一覧をそのまま渡し、ここで複製して設定する。
+    // これが未設定(count=0)のままだと、FFmpegはDRM/external_memory系の
+    // 相互運用能力を「無効」と誤認し、ゼロコピー導出経路(VAAPI→Vulkan等)を
+    // 常時拒否する。
+    vk_ctx->enabled_inst_extensions =
+        (const char *const *)copy_extension_names(enabled_inst_extensions, nb_enabled_inst_extensions);
+    vk_ctx->nb_enabled_inst_extensions = nb_enabled_inst_extensions;
+
+    vk_ctx->enabled_dev_extensions =
+        (const char *const *)copy_extension_names(enabled_dev_extensions, nb_enabled_dev_extensions);
+    vk_ctx->nb_enabled_dev_extensions = nb_enabled_dev_extensions;
 
     return 0;
 }
