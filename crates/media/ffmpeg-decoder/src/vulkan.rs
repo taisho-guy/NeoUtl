@@ -15,6 +15,10 @@ unsafe extern "C" {
         phys_dev: u64,
         act_dev: u64,
         queue_family_index: c_uint,
+        enabled_inst_extensions: *const *const std::os::raw::c_char,
+        nb_enabled_inst_extensions: c_int,
+        enabled_dev_extensions: *const *const std::os::raw::c_char,
+        nb_enabled_dev_extensions: c_int,
     ) -> c_int;
 
     fn neoutl_vk_frame_query_image0(
@@ -31,6 +35,7 @@ pub struct VulkanRawHandles {
     pub queue: ash::vk::Queue,
     pub queue_family_index: u32,
     pub get_instance_proc_addr: ash::vk::PFN_vkGetInstanceProcAddr,
+    pub device_extensions: Vec<&'static std::ffi::CStr>,
 }
 
 pub unsafe fn extract_vulkan_raw_handles(device: &wgpu::Device) -> Option<VulkanRawHandles> {
@@ -46,6 +51,7 @@ pub unsafe fn extract_vulkan_raw_handles(device: &wgpu::Device) -> Option<Vulkan
             queue: hal_device.raw_queue(),
             queue_family_index: hal_device.queue_family_index(),
             get_instance_proc_addr: raw_entry.static_fn().get_instance_proc_addr,
+            device_extensions: hal_device.enabled_device_extensions().to_vec(),
         })
     }
 }
@@ -76,6 +82,12 @@ pub fn create_av_vulkan_device_ctx(
             return Err("av_hwdevice_ctx_alloc失敗".to_owned());
         }
 
+        let dev_ext_ptrs: Vec<*const std::os::raw::c_char> = handles
+            .device_extensions
+            .iter()
+            .map(|name| name.as_ptr())
+            .collect();
+
         let configure_ret = neoutl_vk_configure_device_ctx(
             av_hw_device_ctx,
             handles.get_instance_proc_addr as *mut c_void,
@@ -83,6 +95,10 @@ pub fn create_av_vulkan_device_ctx(
             handles.physical_device.as_raw(),
             handles.device.as_raw(),
             handles.queue_family_index,
+            ptr::null(),
+            0,
+            dev_ext_ptrs.as_ptr(),
+            dev_ext_ptrs.len() as c_int,
         );
         if configure_ret < 0 {
             sys::av_buffer_unref(&mut { av_hw_device_ctx });

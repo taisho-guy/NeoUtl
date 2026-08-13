@@ -8,12 +8,10 @@ use std::thread::JoinHandle;
 use ffmpeg_sys_next as sys;
 
 use crate::cache::{FrameLruCache, GopCache, GopCacheBlock};
-use crate::frame::{GpuFrame, Rgba8Frame, VideoFrame, VideoFrameStore};
+use crate::frame::{GpuFrame, VideoFrame, VideoFrameStore};
 use crate::index::{FrameIndex, build_index};
 use crate::vaapi_probe::probe_vaapi_node;
 use crate::vulkan::{self, NeoutlVulkanContext};
-
-const SWS_BILINEAR: i32 = 2;
 
 static SHARED_WGPU: OnceLock<(Arc<wgpu::Device>, Arc<wgpu::Queue>)> = OnceLock::new();
 
@@ -310,20 +308,11 @@ struct OpenContext {
     fps: f64,
     width: u32,
     height: u32,
-    sws_ctx: *mut sys::SwsContext,
     index: FrameIndex,
     hw_device_ctx: *mut sys::AVBufferRef,
     hw_pix_fmt_box: Option<Box<HwPixFmtBox>>,
     gpu_pipeline: Option<GpuPipeline>,
     last_good_frame: Option<VideoFrame>,
-    last_convert_path: ConvertPath,
-}
-
-#[derive(PartialEq, Eq, Clone, Copy)]
-enum ConvertPath {
-    Unknown,
-    GpuZeroCopy,
-    CpuRam,
 }
 
 unsafe impl Send for OpenContext {}
@@ -331,9 +320,6 @@ unsafe impl Send for OpenContext {}
 impl Drop for OpenContext {
     fn drop(&mut self) {
         unsafe {
-            if !self.sws_ctx.is_null() {
-                sys::sws_freeContext(self.sws_ctx);
-            }
             if !self.dec_ctx.is_null() {
                 sys::avcodec_free_context(&mut self.dec_ctx);
             }
@@ -667,13 +653,11 @@ fn open_input(path: &Path, gpu_device: &Option<Arc<wgpu::Device>>) -> Result<Ope
             fps: if fps > 0.0 { fps } else { 30.0 },
             width,
             height,
-            sws_ctx: ptr::null_mut(),
             index,
             hw_device_ctx,
             hw_pix_fmt_box,
             gpu_pipeline,
             last_good_frame: None,
-            last_convert_path: ConvertPath::Unknown,
         })
     }
 }
@@ -766,24 +750,24 @@ fn seek_to_keyframe(ctx: &mut OpenContext, keyframe_index: i64) {
 
 enum ConvertOutcome {
     Gpu(VideoFrame),
-    CpuFallback(&'static str),
+    Unsupported(&'static str),
 }
 
 fn try_convert_to_gpu(ctx: &mut OpenContext, av_frame: *mut sys::AVFrame) -> ConvertOutcome {
     let Some(gpu) = ctx.gpu_pipeline.as_mut() else {
-        return ConvertOutcome::CpuFallback("GPUパイプライン未初期化(Vulkan相互運用不可)");
+        return ConvertOutcome::Unsupported("GPUパイプライン未初期化(Vulkan相互運用不可)");
     };
     let frame_format = unsafe { (*av_frame).format };
     let Some(hw_pix_fmt_box) = ctx.hw_pix_fmt_box.as_ref() else {
-        return ConvertOutcome::CpuFallback("HWデコード非有効(全候補非対応または失敗)");
+        return ConvertOutcome::Unsupported("HWデコード非有効(全候補非対応または失敗)");
     };
     let hw_pix_fmt = hw_pix_fmt_box.pix_fmt;
     if frame_format != hw_pix_fmt {
-        return ConvertOutcome::CpuFallback("デコード結果がHWサーフェスでない");
+        return ConvertOutcome::Unsupported("デコード結果がHWサーフェスでない");
     }
     let hw_frames_ctx_ref = unsafe { (*ctx.dec_ctx).hw_frames_ctx };
     if hw_frames_ctx_ref.is_null() {
-        return ConvertOutcome::CpuFallback("hw_frames_ctx未設定(sw_format取得不能)");
+        return ConvertOutcome::Unsupported("hw_frames_ctx未設定(sw_format取得不能)");
     }
     let sw_format = unsafe {
         let frames_ctx = (*hw_frames_ctx_ref).data as *mut sys::AVHWFramesContext;
@@ -793,23 +777,23 @@ fn try_convert_to_gpu(ctx: &mut OpenContext, av_frame: *mut sys::AVFrame) -> Con
     let is_direct_rgba = sw_format_i32 == av_pix_fmt_rgb0() || sw_format_i32 == av_pix_fmt_bgr0();
     let semi_planar_view_formats = semi_planar_view_formats(sw_format_i32);
     if !is_direct_rgba && semi_planar_view_formats.is_none() {
-        return ConvertOutcome::CpuFallback("sw_pix_fmtがRGB0/BGR0/NV12/P010LE/P012LE/P016LE以外");
+        return ConvertOutcome::Unsupported("sw_pix_fmtがRGB0/BGR0/NV12/P010LE/P012LE/P016LE以外");
     }
     if semi_planar_view_formats.is_some() && gpu.semi_planar_engine.is_none() {
-        return ConvertOutcome::CpuFallback("セミプラナー変換エンジン未初期化");
+        return ConvertOutcome::Unsupported("セミプラナー変換エンジン未初期化");
     }
 
     if gpu.derived_frames_ctx.is_null() {
         let src_frames_ctx = unsafe { (*ctx.dec_ctx).hw_frames_ctx };
         if src_frames_ctx.is_null() {
-            return ConvertOutcome::CpuFallback("hw_frames_ctx未設定");
+            return ConvertOutcome::Unsupported("hw_frames_ctx未設定");
         }
         match vulkan::create_derived_vulkan_frames_ctx(src_frames_ctx, &gpu.vulkan_ctx.device_ctx) {
             Ok(derived) => gpu.derived_frames_ctx = derived,
             Err(e) => {
                 eprintln!("[neoutl-video-decoder] Vulkan導出フレームコンテキスト生成失敗: {e}");
                 ctx.gpu_pipeline = None;
-                return ConvertOutcome::CpuFallback("Vulkan導出フレームコンテキスト生成失敗");
+                return ConvertOutcome::Unsupported("Vulkan導出フレームコンテキスト生成失敗");
             }
         }
     }
@@ -818,7 +802,7 @@ fn try_convert_to_gpu(ctx: &mut OpenContext, av_frame: *mut sys::AVFrame) -> Con
         Ok(d) => d,
         Err(e) => {
             eprintln!("[neoutl-video-decoder] Vulkanフレーム導出転送失敗: {e}");
-            return ConvertOutcome::CpuFallback("Vulkanフレーム導出転送失敗");
+            return ConvertOutcome::Unsupported("Vulkanフレーム導出転送失敗");
         }
     };
 
@@ -848,12 +832,12 @@ fn try_convert_to_gpu(ctx: &mut OpenContext, av_frame: *mut sys::AVFrame) -> Con
             .map(|hal_texture| hal_texture.raw_handle())
     };
     let Some(dst_vk_image) = dst_vk_image else {
-        return ConvertOutcome::CpuFallback("wgpuテクスチャからVkImageハンドル取得失敗");
+        return ConvertOutcome::Unsupported("wgpuテクスチャからVkImageハンドル取得失敗");
     };
 
     let convert_result = if let Some((y_format, uv_format)) = semi_planar_view_formats {
         let Some(engine) = gpu.semi_planar_engine.as_ref() else {
-            return ConvertOutcome::CpuFallback("セミプラナー変換エンジン未初期化");
+            return ConvertOutcome::Unsupported("セミプラナー変換エンジン未初期化");
         };
         unsafe {
             engine.convert(
@@ -875,138 +859,24 @@ fn try_convert_to_gpu(ctx: &mut OpenContext, av_frame: *mut sys::AVFrame) -> Con
     };
     if let Err(e) = convert_result {
         eprintln!("[neoutl-video-decoder] GPUフレーム変換失敗: {e}");
-        return ConvertOutcome::CpuFallback("GPUフレーム変換(VkImageコピー/コンピュート)失敗");
+        return ConvertOutcome::Unsupported("GPUフレーム変換(VkImageコピー/コンピュート)失敗");
     }
 
     let gpu_frame = GpuFrame::new(target_texture, ctx.width, ctx.height);
-    ConvertOutcome::Gpu(VideoFrame::Gpu(Arc::new(gpu_frame)))
+    ConvertOutcome::Gpu(VideoFrame(Arc::new(gpu_frame)))
 }
 
-unsafe fn convert_to_rgba8_cpu(ctx: &mut OpenContext, av_frame: *mut sys::AVFrame) -> Rgba8Frame {
-    unsafe {
-        let hw_pix_fmt = ctx
-            .hw_pix_fmt_box
-            .as_ref()
-            .map(|b| b.pix_fmt)
-            .unwrap_or(av_pix_fmt_none());
-
-        let mut sw_frame: *mut sys::AVFrame = ptr::null_mut();
-        let src_frame = if (*av_frame).format == hw_pix_fmt && hw_pix_fmt != av_pix_fmt_none() {
-            sw_frame = sys::av_frame_alloc();
-            if sys::av_hwframe_transfer_data(sw_frame, av_frame, 0) == 0 {
-                sw_frame
-            } else {
-                sys::av_frame_free(&mut sw_frame);
-                av_frame
-            }
-        } else {
-            av_frame
-        };
-
-        let width = ctx.width as i32;
-        let height = ctx.height as i32;
-        let src_format = std::mem::transmute::<i32, sys::AVPixelFormat>((*src_frame).format);
-
-        let result = if src_format == sys::AVPixelFormat::AV_PIX_FMT_RGBA {
-            let src_linesize = (*src_frame).linesize[0] as usize;
-            let dst_stride = (width * 4) as usize;
-            let mut data = vec![0u8; dst_stride * height as usize];
-            let src_ptr = (*src_frame).data[0];
-            for row in 0..height as usize {
-                std::ptr::copy_nonoverlapping(
-                    src_ptr.add(row * src_linesize),
-                    data.as_mut_ptr().add(row * dst_stride),
-                    dst_stride,
-                );
-            }
-            Rgba8Frame {
-                width: width as u32,
-                height: height as u32,
-                data,
-            }
-        } else {
-            ctx.sws_ctx = sys::sws_getCachedContext(
-                ctx.sws_ctx,
-                width,
-                height,
-                src_format,
-                width,
-                height,
-                sys::AVPixelFormat::AV_PIX_FMT_RGBA,
-                SWS_BILINEAR,
-                ptr::null_mut(),
-                ptr::null_mut(),
-                ptr::null(),
+fn convert_frame(ctx: &mut OpenContext, av_frame: *mut sys::AVFrame) -> Option<VideoFrame> {
+    match try_convert_to_gpu(ctx, av_frame) {
+        ConvertOutcome::Gpu(frame) => Some(frame),
+        ConvertOutcome::Unsupported(reason) => {
+            eprintln!(
+                "[neoutl-video-decoder][非対応] GPUデコード経路失敗、フレームを破棄 理由={reason} size={}x{}",
+                ctx.width, ctx.height
             );
-
-            let mut data: Vec<u8> = vec![0u8; (width * height * 4) as usize];
-            let mut dst_data = [
-                data.as_mut_ptr(),
-                ptr::null_mut(),
-                ptr::null_mut(),
-                ptr::null_mut(),
-            ];
-            let dst_linesize = [width * 4, 0, 0, 0];
-
-            sys::sws_scale(
-                ctx.sws_ctx,
-                (*src_frame).data.as_ptr() as *const *const u8,
-                (*src_frame).linesize.as_ptr(),
-                0,
-                height,
-                dst_data.as_mut_ptr(),
-                dst_linesize.as_ptr(),
-            );
-
-            Rgba8Frame {
-                width: width as u32,
-                height: height as u32,
-                data,
-            }
-        };
-
-        if !sw_frame.is_null() {
-            sys::av_frame_free(&mut sw_frame);
+            None
         }
-        result
     }
-}
-
-fn convert_frame(ctx: &mut OpenContext, av_frame: *mut sys::AVFrame) -> VideoFrame {
-    let (frame, path, reason) = match try_convert_to_gpu(ctx, av_frame) {
-        ConvertOutcome::Gpu(frame) => (frame, ConvertPath::GpuZeroCopy, None),
-        ConvertOutcome::CpuFallback(reason) => {
-            let rgba = unsafe { convert_to_rgba8_cpu(ctx, av_frame) };
-            (
-                VideoFrame::Cpu(Arc::new(rgba)),
-                ConvertPath::CpuRam,
-                Some(reason),
-            )
-        }
-    };
-
-    if ctx.last_convert_path != path {
-        match path {
-            ConvertPath::GpuZeroCopy => {
-                eprintln!(
-                    "[neoutl-video-decoder][転送経路] VRAM内ゼロコピーへ切替(RAM転送なし) size={}x{}",
-                    ctx.width, ctx.height
-                );
-            }
-            ConvertPath::CpuRam => {
-                eprintln!(
-                    "[neoutl-video-decoder][転送経路] CPU/RAM経由へ切替(GPU→RAM→GPU転送発生) 理由={} size={}x{}",
-                    reason.unwrap_or("不明"),
-                    ctx.width,
-                    ctx.height
-                );
-            }
-            ConvertPath::Unknown => {}
-        }
-        ctx.last_convert_path = path;
-    }
-
-    frame
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -1173,14 +1043,18 @@ fn decode_task(
             *last_decoded_frame = decoded_index;
 
             if !frame_cache.contains(decoded_index) {
-                let frame = convert_frame(ctx, av_frame);
-                frame_cache.insert(decoded_index, frame.clone());
-                new_gop_block.frames.insert(decoded_index, frame.clone());
-                ctx.last_good_frame = Some(frame.clone());
+                match convert_frame(ctx, av_frame) {
+                    Some(frame) => {
+                        frame_cache.insert(decoded_index, frame.clone());
+                        new_gop_block.frames.insert(decoded_index, frame.clone());
+                        ctx.last_good_frame = Some(frame.clone());
 
-                if decoded_index == target && !target_dispatched {
-                    store.set_frame(clip_key, frame);
-                    target_dispatched = true;
+                        if decoded_index == target && !target_dispatched {
+                            store.set_frame(clip_key, frame);
+                            target_dispatched = true;
+                        }
+                    }
+                    None => {}
                 }
             } else if decoded_index == target && !target_dispatched {
                 if let Some(frame) = frame_cache.get(decoded_index) {

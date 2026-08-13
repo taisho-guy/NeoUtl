@@ -3,18 +3,6 @@ use std::sync::{Arc, Mutex};
 
 use ffmpeg_sys_next as sys;
 
-pub struct Rgba8Frame {
-    pub width: u32,
-    pub height: u32,
-    pub data: Vec<u8>,
-}
-
-impl Rgba8Frame {
-    pub fn byte_cost(&self) -> i64 {
-        self.data.len() as i64
-    }
-}
-
 pub struct OwnedAvFrame {
     pub(crate) raw: *mut sys::AVFrame,
 }
@@ -50,40 +38,20 @@ impl GpuFrame {
     }
 }
 
-pub enum VideoFrame {
-    Cpu(Arc<Rgba8Frame>),
-    Gpu(Arc<GpuFrame>),
-}
+#[derive(Clone)]
+pub struct VideoFrame(pub Arc<GpuFrame>);
 
 impl VideoFrame {
     pub fn byte_cost(&self) -> i64 {
-        match self {
-            VideoFrame::Cpu(f) => f.byte_cost(),
-            VideoFrame::Gpu(_) => 0,
-        }
+        0
     }
 
     pub fn width(&self) -> u32 {
-        match self {
-            VideoFrame::Cpu(f) => f.width,
-            VideoFrame::Gpu(f) => f.width,
-        }
+        self.0.width
     }
 
     pub fn height(&self) -> u32 {
-        match self {
-            VideoFrame::Cpu(f) => f.height,
-            VideoFrame::Gpu(f) => f.height,
-        }
-    }
-}
-
-impl Clone for VideoFrame {
-    fn clone(&self) -> Self {
-        match self {
-            VideoFrame::Cpu(f) => VideoFrame::Cpu(f.clone()),
-            VideoFrame::Gpu(f) => VideoFrame::Gpu(f.clone()),
-        }
+        self.0.height
     }
 }
 
