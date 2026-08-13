@@ -357,3 +357,128 @@ impl InlineDisplaySurface {
         )
     }
 }
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
+pub enum PluginFormat {
+    Vst3,
+    Clap,
+    Lv2,
+    Vst2,
+    Au,
+    Sf2,
+    Sfz,
+    Jsfx,
+    Internal,
+}
+
+impl PluginFormat {
+    pub fn from_path(path: &std::path::Path) -> Option<Self> {
+        let ext = path.extension().and_then(|e| e.to_str())?;
+        match ext.to_lowercase().as_str() {
+            "vst3" => Some(Self::Vst3),
+            "clap" => Some(Self::Clap),
+            "lv2" => Some(Self::Lv2),
+            "vst" | "dll" | "so" | "dylib" => Some(Self::Vst2),
+            "component" => Some(Self::Au),
+            "sf2" => Some(Self::Sf2),
+            "sfz" => Some(Self::Sfz),
+            "jsfx" => Some(Self::Jsfx),
+            _ => None,
+        }
+    }
+
+    pub fn to_plugin_type(&self) -> PluginType {
+        match self {
+            Self::Vst3 => PluginType::Vst3,
+            Self::Clap => PluginType::Clap,
+            Self::Lv2 => PluginType::Lv2,
+            Self::Vst2 => PluginType::Vst2,
+            Self::Au => PluginType::Au,
+            Self::Sf2 => PluginType::Sf2,
+            Self::Sfz => PluginType::Sfz,
+            Self::Jsfx => PluginType::Jsfx,
+            Self::Internal => PluginType::Internal,
+        }
+    }
+}
+
+impl From<PluginType> for PluginFormat {
+    fn from(t: PluginType) -> Self {
+        match t {
+            PluginType::Vst3 => Self::Vst3,
+            PluginType::Clap => Self::Clap,
+            PluginType::Lv2 => Self::Lv2,
+            PluginType::Vst2 => Self::Vst2,
+            PluginType::Au => Self::Au,
+            PluginType::Sf2 => Self::Sf2,
+            PluginType::Sfz => Self::Sfz,
+            PluginType::Jsfx => Self::Jsfx,
+            _ => Self::Internal,
+        }
+    }
+}
+
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+pub struct PluginParamInfo {
+    pub id: u32,
+    pub name: String,
+    pub symbol: String,
+    pub unit: String,
+    pub comment: String,
+    pub min: f64,
+    pub max: f64,
+    pub default: f64,
+}
+
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+pub struct PluginCatalogEntry {
+    pub format: PluginFormat,
+    pub name: String,
+    pub vendor: String,
+    pub plugin_id: String,
+    pub path: std::path::PathBuf,
+}
+
+#[derive(Debug, Clone, Copy, Default)]
+pub struct ParameterRanges {
+    pub default: f32,
+    pub min: f32,
+    pub max: f32,
+    pub step: f32,
+    pub step_small: f32,
+    pub step_large: f32,
+}
+
+pub fn discover_vst3_paths(root: &std::path::Path) -> Vec<std::path::PathBuf> {
+    discover_by_ext(root, "vst3")
+}
+
+pub fn discover_clap_paths(root: &std::path::Path) -> Vec<std::path::PathBuf> {
+    discover_by_ext(root, "clap")
+}
+
+pub fn discover_lv2_paths(root: &std::path::Path) -> Vec<std::path::PathBuf> {
+    discover_by_ext(root, "lv2")
+}
+
+fn discover_by_ext(root: &std::path::Path, target_ext: &str) -> Vec<std::path::PathBuf> {
+    let mut paths = Vec::new();
+    if !root.exists() {
+        return paths;
+    }
+    if let Ok(entries) = std::fs::read_dir(root) {
+        for entry in entries.flatten() {
+            let p = entry.path();
+            if let Some(ext) = p.extension().and_then(|e| e.to_str()) {
+                if ext.eq_ignore_ascii_case(target_ext) {
+                    paths.push(p.clone());
+                    continue;
+                }
+            }
+            if p.is_dir() {
+                paths.extend(discover_by_ext(&p, target_ext));
+            }
+        }
+    }
+    paths
+}

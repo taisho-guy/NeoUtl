@@ -487,6 +487,71 @@ impl CarlaHost {
             }
         }
     }
+
+    pub fn process_stereo(
+        &self,
+        plugin_id: u32,
+        in_l: &[f32],
+        in_r: &[f32],
+        out_l: &mut [f32],
+        out_r: &mut [f32],
+        frames: usize,
+    ) {
+        if frames == 0 {
+            return;
+        }
+        unsafe {
+            ffi::carla_plugin_process_stereo(
+                self.handle,
+                plugin_id,
+                in_l.as_ptr(),
+                in_r.as_ptr(),
+                out_l.as_mut_ptr(),
+                out_r.as_mut_ptr(),
+                frames as u32,
+            );
+        }
+    }
+
+    pub fn parameter_ranges(&self, plugin_id: u32, param_id: u32) -> Option<ParameterRanges> {
+        unsafe {
+            let ptr = ffi::carla_get_parameter_ranges(self.handle, plugin_id, param_id);
+            if ptr.is_null() {
+                None
+            } else {
+                Some(ParameterRanges {
+                    default: (*ptr).def,
+                    min: (*ptr).min,
+                    max: (*ptr).max,
+                    step: (*ptr).step,
+                    step_small: (*ptr).stepSmall,
+                    step_large: (*ptr).stepLarge,
+                })
+            }
+        }
+    }
+
+    pub fn full_param_info_list(&self, plugin_id: u32) -> Vec<PluginParamInfo> {
+        let count_info = self.parameter_count(plugin_id);
+        let count = count_info.ins + count_info.outs;
+        let mut list = Vec::with_capacity(count as usize);
+        for id in 0..count {
+            if let Some(info) = self.parameter_info(plugin_id, id) {
+                let ranges = self.parameter_ranges(plugin_id, id);
+                list.push(PluginParamInfo {
+                    id,
+                    name: info.name,
+                    symbol: info.symbol,
+                    unit: info.unit,
+                    comment: info.comment,
+                    min: ranges.as_ref().map_or(0.0, |r| r.min as f64),
+                    max: ranges.as_ref().map_or(1.0, |r| r.max as f64),
+                    default: ranges.as_ref().map_or(0.0, |r| r.default as f64),
+                });
+            }
+        }
+        list
+    }
 }
 
 impl Drop for CarlaHost {
