@@ -13,6 +13,6 @@ neoutl-effect-lua = { path = "../neoutl-effect-lua" }
 mlua = { version = "0.12", default-features = false, features = ["vendored", "send"] }
 
 [features]
-default = []
+default = ["luajit"]
 luajit = ["mlua/luajit"]
 lua54 = ["mlua/lua54"]

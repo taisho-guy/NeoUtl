@@ -3,7 +3,7 @@ use crate::ecs::audio_plugins::PluginInstanceRef;
 use crate::ecs::components::{AudioParams, MediaSource};
 use crate::ecs::systems::get_active_audio_system;
 use crate::media;
-use neoutl_audio_plugin_host::{NeoPlugin, PluginFormat, load_clap, load_vst3};
+use carla_host_sys::{BinaryType, CarlaHost, EngineOption, EngineProcessMode, EngineTransportMode};
 use neoutl_media_api::AudioBuffer;
 use rodio::Source;
 use rodio::stream::{DeviceSinkBuilder, MixerDeviceSink};
@@ -28,6 +28,7 @@ pub struct AudioMixer {
     clip_phase: HashMap<usize, f64>,
     clip_last_tick: HashMap<usize, Instant>,
     plugin_instances: HashMap<u64, CachedPlugin>,
+    carla_host: Option<CarlaHost>,
 }
 
 unsafe impl Send for AudioMixer {}
@@ -35,7 +36,7 @@ unsafe impl Send for AudioMixer {}
 struct CachedPlugin {
     path: PathBuf,
     plugin_id: String,
-    plugin: Option<Box<dyn NeoPlugin>>,
+    carla_id: Option<u32>,
 }
 
 impl AudioMixer {
@@ -45,6 +46,43 @@ impl AudioMixer {
             sample_rate as usize * channels as usize * RING_CAPACITY_SECONDS,
         )));
         let output = build_output(sample_rate, channels, ring.clone())?;
+        let carla_host = match CarlaHost::new() {
+            Ok(mut h) => {
+                let _ = h.set_engine_option(
+                    EngineOption::ProcessMode,
+                    EngineProcessMode::ContinuousRack as i32,
+                    None,
+                );
+                let _ = h.set_engine_option(
+                    EngineOption::TransportMode,
+                    EngineTransportMode::Internal as i32,
+                    None,
+                );
+                let _ =
+                    h.set_engine_option(EngineOption::AudioSampleRate, sample_rate as i32, None);
+                if let Err(e) = h.init_engine("Dummy", "NeoUtlMixer") {
+                    eprintln!(
+                        "{}",
+                        t!(
+                            "[NeoUtl] Carla engine 初期化警告: %{arg0}",
+                            arg0 = format!("{:?}", e)
+                        )
+                    );
+                }
+                Some(h)
+            }
+            Err(e) => {
+                eprintln!(
+                    "{}",
+                    t!(
+                        "[NeoUtl] CarlaHost 生成失敗: %{arg0}",
+                        arg0 = format!("{:?}", e)
+                    )
+                );
+                None
+            }
+        };
+
         Ok(Self {
             output: Some(output),
             ring,
@@ -54,6 +92,7 @@ impl AudioMixer {
             clip_phase: HashMap::new(),
             clip_last_tick: HashMap::new(),
             plugin_instances: HashMap::new(),
+            carla_host,
         })
     }
 
@@ -67,6 +106,7 @@ impl AudioMixer {
             clip_phase: HashMap::new(),
             clip_last_tick: HashMap::new(),
             plugin_instances: HashMap::new(),
+            carla_host: None,
         }
     }
 
@@ -252,6 +292,9 @@ impl AudioMixer {
         chan_l: &mut [f32],
         chan_r: &mut [f32],
     ) {
+        let Some(host) = self.carla_host.as_mut() else {
+            return;
+        };
         let frames = chan_l.len();
         for instance_ref in chain {
             if instance_ref.bypass {
@@ -263,99 +306,70 @@ impl AudioMixer {
                 instance_ref.instance_uid
             };
             let stale = self.plugin_instances.get(&key).is_none_or(|c| {
-                c.path != instance_ref.path || c.plugin_id != instance_ref.plugin_id
+                c.path != instance_ref.path
+                    || c.plugin_id != instance_ref.plugin_id
+                    || c.carla_id.is_none()
             });
             if stale {
-                self.plugin_instances
-                    .insert(key, load_plugin_instance(instance_ref));
+                if let Some(old_plugin) = self.plugin_instances.remove(&key) {
+                    if let Some(pid) = old_plugin.carla_id {
+                        let _ = host.remove_plugin(pid);
+                    }
+                }
+                let name = instance_ref
+                    .path
+                    .file_stem()
+                    .and_then(|s| s.to_str())
+                    .unwrap_or("plugin");
+                let carla_id = match host.add_plugin(
+                    BinaryType::NATIVE,
+                    instance_ref.format.to_plugin_type(),
+                    instance_ref.path.to_str(),
+                    Some(name),
+                    None,
+                    0,
+                    0,
+                ) {
+                    Ok(pid) => Some(pid),
+                    Err(err) => {
+                        eprintln!(
+                            "{}",
+                            t!(
+                                "[NeoUtl] audio_mixer: Carlaプラグイン生成失敗 path=%{arg0}: %{arg1}",
+                                arg0 = format!("{}", instance_ref.path.display()),
+                                arg1 = format!("{:?}", err)
+                            )
+                        );
+                        None
+                    }
+                };
+                self.plugin_instances.insert(
+                    key,
+                    CachedPlugin {
+                        path: instance_ref.path.clone(),
+                        plugin_id: instance_ref.plugin_id.clone(),
+                        carla_id,
+                    },
+                );
             }
-            let Some(cached) = self.plugin_instances.get_mut(&key) else {
+
+            let Some(cached) = self.plugin_instances.get(&key) else {
                 continue;
             };
-            let Some(plugin) = cached.plugin.as_mut() else {
+            let Some(plugin_id) = cached.carla_id else {
                 continue;
             };
 
             for (&param_id, &value) in &instance_ref.params {
-                if let Err(err) = plugin.set_parameter(param_id, value) {
-                    eprintln!(
-                        "{}",
-                        t!(
-                            "[NeoUtl] audio_mixer: parameter設定失敗 path=%{arg0} id=%{arg1}: %{arg2}",
-                            arg2 = format!("{}", err)
-                        )
-                    );
-                }
+                host.set_parameter_value(plugin_id, param_id, value as f32);
             }
 
             let mut out_l = vec![0.0f32; frames];
             let mut out_r = vec![0.0f32; frames];
-            {
-                let inputs: [&[f32]; 2] = [chan_l, chan_r];
-                let mut outputs: [&mut [f32]; 2] = [&mut out_l, &mut out_r];
-                plugin.process(&inputs, &mut outputs, frames);
-            }
+            host.process_stereo(plugin_id, chan_l, chan_r, &mut out_l, &mut out_r, frames);
             chan_l.copy_from_slice(&out_l);
             chan_r.copy_from_slice(&out_r);
         }
-    }
-}
-
-fn load_plugin_instance(instance_ref: &PluginInstanceRef) -> CachedPlugin {
-    let plugin: Option<Box<dyn NeoPlugin>> = match instance_ref.format {
-        PluginFormat::Vst3 => match load_vst3(&instance_ref.path) {
-            Ok(mut p) => {
-                if let Err(err) = p.start() {
-                    eprintln!(
-                        "{}",
-                        t!(
-                            "[NeoUtl] audio_mixer: vst3 start失敗 %{arg0}: %{arg1}",
-                            arg1 = format!("{}", err)
-                        )
-                    );
-                }
-                Some(Box::new(p))
-            }
-            Err(err) => {
-                eprintln!(
-                    "{}",
-                    t!(
-                        "[NeoUtl] audio_mixer: vst3ホスト生成失敗 path=%{arg0}: %{arg1}",
-                        arg1 = format!("{}", err)
-                    )
-                );
-                None
-            }
-        },
-        PluginFormat::Clap => match load_clap(&instance_ref.path, &instance_ref.plugin_id) {
-            Ok(mut p) => {
-                if let Err(err) = p.start() {
-                    eprintln!(
-                        "{}",
-                        t!(
-                            "[NeoUtl] audio_mixer: clap start失敗 %{arg0}: %{arg1}",
-                            arg1 = format!("{}", err)
-                        )
-                    );
-                }
-                Some(Box::new(p))
-            }
-            Err(err) => {
-                eprintln!(
-                    "{}",
-                    t!(
-                        "[NeoUtl] audio_mixer: clapホスト生成失敗 path=%{arg0} id=%{arg1}: %{arg2}",
-                        arg2 = format!("{}", err)
-                    )
-                );
-                None
-            }
-        },
-    };
-    CachedPlugin {
-        path: instance_ref.path.clone(),
-        plugin_id: instance_ref.plugin_id.clone(),
-        plugin,
     }
 }
 

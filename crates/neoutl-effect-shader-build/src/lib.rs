@@ -7,10 +7,31 @@ fn resolve_slangc() -> PathBuf {
     } else {
         "slangc"
     };
-    match std::env::var("SLANG_DIR") {
-        Ok(dir) => Path::new(&dir).join("bin").join(exe_name),
-        Err(_) => PathBuf::from(exe_name),
+    if let Ok(dir) = std::env::var("SLANG_DIR") {
+        let p = Path::new(&dir).join("bin").join(exe_name);
+        if p.exists() {
+            return p;
+        }
+        let p = Path::new(&dir).join(exe_name);
+        if p.exists() {
+            return p;
+        }
     }
+    if let Ok(manifest) = std::env::var("CARGO_MANIFEST_DIR") {
+        let mut cur = PathBuf::from(manifest);
+        loop {
+            let candidate = cur.join("slang").join("bin").join(exe_name);
+            if candidate.exists() {
+                return candidate;
+            }
+            if let Some(parent) = cur.parent() {
+                cur = parent.to_path_buf();
+            } else {
+                break;
+            }
+        }
+    }
+    PathBuf::from(exe_name)
 }
 
 pub fn compile_effect_fragment(label: &str, fragment_relpath: &str) {

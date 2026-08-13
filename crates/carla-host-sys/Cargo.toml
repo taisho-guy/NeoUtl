@@ -7,6 +7,7 @@ license = "GPL-2.0-or-later"
 
 [dependencies]
 thiserror = "2"
+serde = { version = "1", features = ["derive"] }
 egui = { version = "0.35", optional = true }
 raw-window-handle = { version = "0.6", optional = true }
 
@@ -16,4 +17,5 @@ egui = ["dep:egui", "dep:raw-window-handle"]
 
 [build-dependencies]
 cmake = "0.1"
+cc = "1.0"
 bindgen = "0.72"

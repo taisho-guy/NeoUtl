@@ -1,5 +1,5 @@
-use neoutl_audio_plugin_host::{
-    PluginCatalogEntry, PluginFormat, discover_clap_paths, discover_vst3_paths,
+use carla_host_sys::{
+    PluginCatalogEntry, PluginFormat, discover_clap_paths, discover_lv2_paths, discover_vst3_paths,
 };
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
@@ -33,6 +33,23 @@ pub fn load_all(plugins_dir: &Path) {
             entries.extend(discover_clap_paths(&root).into_iter().map(|path| {
                 PluginCatalogEntry {
                     format: PluginFormat::Clap,
+                    name: path
+                        .file_stem()
+                        .and_then(|n| n.to_str())
+                        .unwrap_or_default()
+                        .to_owned(),
+                    vendor: String::new(),
+                    plugin_id: path.to_string_lossy().into_owned(),
+                    path,
+                }
+            }));
+        }
+        let mut lv2_roots = system_lv2_dirs();
+        lv2_roots.push(plugins_dir.to_path_buf());
+        for root in lv2_roots {
+            entries.extend(discover_lv2_paths(&root).into_iter().map(|path| {
+                PluginCatalogEntry {
+                    format: PluginFormat::Lv2,
                     name: path
                         .file_stem()
                         .and_then(|n| n.to_str())
@@ -131,6 +148,35 @@ fn system_clap_dirs() -> Vec<PathBuf> {
         }
         if let Some(common) = std::env::var_os("COMMONPROGRAMFILES") {
             roots.push(PathBuf::from(common).join("CLAP"));
+        }
+    }
+    roots
+}
+
+fn system_lv2_dirs() -> Vec<PathBuf> {
+    let mut roots = Vec::new();
+    add_env_paths(&mut roots, "LV2_PATH");
+    #[cfg(target_os = "linux")]
+    {
+        if let Some(home) = home_dir() {
+            roots.push(home.join(".lv2"));
+        }
+        roots.extend([
+            PathBuf::from("/usr/lib/lv2"),
+            PathBuf::from("/usr/local/lib/lv2"),
+        ]);
+    }
+    #[cfg(target_os = "macos")]
+    {
+        if let Some(home) = home_dir() {
+            roots.push(home.join("Library/Audio/Plug-Ins/LV2"));
+        }
+        roots.push(PathBuf::from("/Library/Audio/Plug-Ins/LV2"));
+    }
+    #[cfg(target_os = "windows")]
+    {
+        if let Some(common) = std::env::var_os("COMMONPROGRAMFILES") {
+            roots.push(PathBuf::from(common).join("LV2"));
         }
     }
     roots

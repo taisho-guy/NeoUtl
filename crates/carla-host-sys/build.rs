@@ -117,10 +117,25 @@ fn main() {
     let include_dirs = [
         carla_source_dir.clone(),
         carla_source_dir.join("backend"),
+        carla_source_dir.join("backend").join("engine"),
+        carla_source_dir.join("backend").join("plugin"),
         carla_source_dir.join("includes"),
         carla_source_dir.join("modules"),
+        carla_source_dir.join("modules").join("distrho"),
+        carla_source_dir.join("modules").join("water"),
         carla_source_dir.join("utils"),
     ];
+
+    println!("cargo:rerun-if-changed=src/carla_bridge_ext.cpp");
+    let mut cc_builder = cc::Build::new();
+    cc_builder
+        .cpp(true)
+        .std("c++11")
+        .file("src/carla_bridge_ext.cpp");
+    for inc in &include_dirs {
+        cc_builder.include(inc);
+    }
+    cc_builder.compile("carla_bridge_ext");
 
     let mut bindgen_builder = bindgen::Builder::default()
         .header("src/wrapper.h")

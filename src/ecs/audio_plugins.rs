@@ -1,4 +1,4 @@
-use neoutl_audio_plugin_host::{PluginFormat, PluginParamInfo};
+use carla_host_sys::{PluginFormat, PluginParamInfo};
 use serde::{Deserialize, Serialize};
 use shipyard::Component;
 use std::collections::HashMap;

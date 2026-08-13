@@ -17,7 +17,6 @@ struct DiscoveredCrate {
 }
 
 const WORKSPACE_EXCLUDED_DIRS: &[&str] = &[
-    "audio-plugin-host",
     "ffmpeg-decoder",
     "gstreamer-encoder",
     "gpuvideo-decoder",
@@ -329,7 +328,7 @@ fn main() {
             ("effects", effects.as_slice()),
             ("decoders", decoders.as_slice()),
         ],
-        &["NeoUtl", "vst3-host"],
+        &["NeoUtl"],
         &lua_feature,
     );
 

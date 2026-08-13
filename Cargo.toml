@@ -21,7 +21,6 @@ members = [
     "crates/neoutl-effect-shader-build",
     "crates/neoutl-object-shader-build",
     "crates/xtask",
-    "crates/media/audio-plugin-host",
     "crates/carla-host-sys",
 ]
 exclude = ["neoutl-wgpu"]
@@ -75,7 +74,7 @@ neoutl-media-gpuvideo-decoder = { path = "crates/media/gpuvideo-decoder" }
 neoutl-media-ffmpeg-decoder = { path = "crates/media/ffmpeg-decoder" }
 neoutl-media-gpuvideo-encoder = { path = "crates/media/gpuvideo-encoder" }
 neoutl-media-gstreamer-encoder = { path = "crates/media/gstreamer-encoder" }
-neoutl-audio-plugin-host = { path = "crates/media/audio-plugin-host" }
+carla-host-sys.workspace = true
 self-replace = "1"
 sentry = { version = "0.49", default-features = false, features = ["backtrace", "contexts", "panic"] }
 semver = "1"
