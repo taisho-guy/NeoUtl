@@ -1,3 +1,6 @@
 [submodule "neoutl-wgpu"]
 	path = neoutl-wgpu
 	url = git@codeberg.org:taisho-guy/neoutl-wgpu.git
+[submodule "Carla"]
+	path = Carla
+	url = https://github.com/falkTX/Carla.git

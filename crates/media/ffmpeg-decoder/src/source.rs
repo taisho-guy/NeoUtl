@@ -72,8 +72,8 @@ impl VideoSource for FfmpegVideoSource {
     fn frame_gpu(
         &mut self,
         frame_index: i64,
-        device: &wgpu::Device,
-        queue: &wgpu::Queue,
+        _device: &wgpu::Device,
+        _queue: &wgpu::Queue,
     ) -> Result<wgpu::Texture, String> {
         self.store.invalidate_frame(CLIP_KEY);
         self.decoder.seek_to_frame(frame_index);
@@ -91,51 +91,7 @@ impl VideoSource for FfmpegVideoSource {
             std::thread::sleep(FRAME_WAIT_POLL);
         };
 
-        let cpu_frame = match frame {
-            VideoFrame::Gpu(gpu_frame) => {
-                return Ok(gpu_frame.texture.clone());
-            }
-            VideoFrame::Cpu(cpu_frame) => cpu_frame,
-        };
-
-        let texture = device.create_texture(&wgpu::TextureDescriptor {
-            label: Some("neoutl-ffmpeg-decoder frame"),
-            size: wgpu::Extent3d {
-                width: cpu_frame.width,
-                height: cpu_frame.height,
-                depth_or_array_layers: 1,
-            },
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format: wgpu::TextureFormat::Rgba16Float,
-            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
-            view_formats: &[],
-        });
-
-        let float_data = neoutl_color::u8_to_rgba16f(&cpu_frame.data);
-
-        queue.write_texture(
-            wgpu::TexelCopyTextureInfo {
-                texture: &texture,
-                mip_level: 0,
-                origin: wgpu::Origin3d::ZERO,
-                aspect: wgpu::TextureAspect::All,
-            },
-            bytemuck::cast_slice(&float_data),
-            wgpu::TexelCopyBufferLayout {
-                offset: 0,
-                bytes_per_row: Some(cpu_frame.width * 8),
-                rows_per_image: Some(cpu_frame.height),
-            },
-            wgpu::Extent3d {
-                width: cpu_frame.width,
-                height: cpu_frame.height,
-                depth_or_array_layers: 1,
-            },
-        );
-
-        Ok(texture)
+        Ok(frame.0.texture.clone())
     }
 }
 

@@ -1,0 +1,8 @@
+[package]
+name = "neo-media-cache"
+version = "0.0.0"
+edition = "2024"
+
+[dependencies]
+wgpu = "29"
+neo-media-core = { path = "../neo-media-core" }

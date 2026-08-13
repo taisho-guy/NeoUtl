@@ -20,12 +20,15 @@ members = [
     "crates/media/ffmpeg-decoder",
     "crates/neoutl-effect-shader-build",
     "crates/neoutl-object-shader-build",
-    "crates/xtask", "crates/media/audio-plugin-host",
+    "crates/xtask",
+    "crates/media/audio-plugin-host",
+    "crates/carla-host-sys",
 ]
 exclude = ["neoutl-wgpu"]
 resolver = "2"
 
 [workspace.dependencies]
+carla-host-sys = { path = "crates/carla-host-sys" }
 neoutl-shared-abi = { path = "crates/neoutl-shared-abi" }
 neoutl-color = { path = "crates/neoutl-color" }
 bytemuck = "1"
@@ -107,11 +110,13 @@ neoutl-object-shader-build.workspace = true
 
 [target.'cfg(target_os = "linux")'.dependencies]
 gpu-video = { version = "0.4", features = ["wgpu"] }
+ash = "0.38"
+wgpu-hal = { version = "29", features = ["vulkan"] }
 
 [profile.release]
 opt-level = 3
-lto = "fat"
-codegen-units = 1
+lto = "thin"
+codegen-units = 16
 panic = "unwind"
 strip = false
 debug = 1
