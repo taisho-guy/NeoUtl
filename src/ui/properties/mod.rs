@@ -16,7 +16,6 @@ pub struct PropertiesPanel {
     pub open: bool,
     pub effect_add: EffectAddDialog,
     selected: Option<usize>,
-    catalog: EffectCatalogState,
 }
 
 impl PropertiesPanel {
@@ -25,17 +24,41 @@ impl PropertiesPanel {
             open: true,
             effect_add: EffectAddDialog::new(),
             selected: None,
-            catalog: EffectCatalogState::build(),
         }
     }
 
-    pub fn show_effect_add(&mut self, ctx: &egui::Context, state: &SharedAppState) {
-        if let Some(effect_id) = self.effect_add.show(ctx, &self.catalog) {
+    pub fn show_effect_add(&mut self, ui: &mut egui::Ui, state: &SharedAppState) {
+        let holder = app_state::active_world(state);
+        let mut world = holder.lock().unwrap();
+        let is_audio = self
+            .selected
+            .map_or(false, |id| world.get_audio_params(id).is_some());
+
+        let catalog = if is_audio {
+            EffectCatalogState::build_audio()
+        } else {
+            EffectCatalogState::build_video_and_audio()
+        };
+
+        if let Some(selected_id) = self.effect_add.show(ui, &catalog) {
             if let Some(id) = self.selected {
-                let holder = app_state::active_world(state);
-                holder.lock().unwrap().add_effect(id, &effect_id);
+                if let Some(plugin_entry) =
+                    crate::audio::plugin_registry::find_by_id_or_path(&selected_id)
+                {
+                    let mixer_holder = crate::app_state::active_audio_mixer(state);
+                    let mut mixer = mixer_holder.lock().unwrap();
+                    let param_info = mixer.probe_plugin_param_info(
+                        plugin_entry.format,
+                        &plugin_entry.path,
+                        &plugin_entry.plugin_id,
+                    );
+                    drop(mixer);
+                    world.add_audio_plugin(id, &plugin_entry, param_info);
+                } else {
+                    world.add_effect(id, &selected_id);
+                }
             }
-            crate::ui::effect_catalog::mark_effect_used(&effect_id);
+            crate::ui::effect_catalog::mark_effect_used(&selected_id);
         }
     }
 

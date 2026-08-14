@@ -6,7 +6,7 @@ use std::time::{Duration, Instant};
 use neoutl_media_api::{MediaKind, MediaMeta, MediaVTable, VideoSource};
 
 use crate::decoder::{VideoDecoder, VideoMeta};
-use crate::frame::{VideoFrame, VideoFrameStore};
+use crate::frame::VideoFrameStore;
 
 const FRAME_WAIT_TIMEOUT: Duration = Duration::from_secs(5);
 const FRAME_WAIT_POLL: Duration = Duration::from_millis(2);

@@ -458,7 +458,21 @@ pub fn discover_clap_paths(root: &std::path::Path) -> Vec<std::path::PathBuf> {
 }
 
 pub fn discover_lv2_paths(root: &std::path::Path) -> Vec<std::path::PathBuf> {
-    discover_by_ext(root, "lv2")
+    let mut paths = discover_by_ext(root, "lv2");
+    paths.retain(|p| {
+        if let Ok(entries) = std::fs::read_dir(p) {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
+                    if ext == "so" || ext == "dll" || ext == "dylib" {
+                        return true;
+                    }
+                }
+            }
+        }
+        false
+    });
+    paths
 }
 
 fn discover_by_ext(root: &std::path::Path, target_ext: &str) -> Vec<std::path::PathBuf> {
@@ -481,4 +495,60 @@ fn discover_by_ext(root: &std::path::Path, target_ext: &str) -> Vec<std::path::P
         }
     }
     paths
+}
+
+#[derive(Debug, Clone)]
+pub struct CachedPluginInfo {
+    pub valid: bool,
+    pub category: PluginCategory,
+    pub hints: u32,
+    pub audio_ins: u32,
+    pub audio_outs: u32,
+    pub parameter_ins: u32,
+    pub name: String,
+    pub label: String,
+    pub maker: String,
+    pub copyright: String,
+}
+
+pub fn get_cached_plugin_count(format: PluginFormat, plugin_path: Option<&std::path::Path>) -> u32 {
+    let ptype = format.to_plugin_type() as u32;
+    let path_c =
+        plugin_path.and_then(|p| std::ffi::CString::new(p.to_string_lossy().as_bytes()).ok());
+    let path_ptr = path_c
+        .as_ref()
+        .map(|c| c.as_ptr())
+        .unwrap_or(std::ptr::null());
+    unsafe { crate::ffi::carla_get_cached_plugin_count(ptype, path_ptr) }
+}
+
+pub fn get_cached_plugin_info(format: PluginFormat, index: u32) -> Option<CachedPluginInfo> {
+    let ptype = format.to_plugin_type() as u32;
+    let ptr = unsafe { crate::ffi::carla_get_cached_plugin_info(ptype, index) };
+    if ptr.is_null() {
+        return None;
+    }
+    let raw = unsafe { &*ptr };
+    if !raw.valid {
+        return None;
+    }
+    let to_string = |p: *const std::os::raw::c_char| {
+        if p.is_null() {
+            String::new()
+        } else {
+            unsafe { CStr::from_ptr(p).to_string_lossy().into_owned() }
+        }
+    };
+    Some(CachedPluginInfo {
+        valid: raw.valid,
+        category: PluginCategory::from(raw.category),
+        hints: raw.hints,
+        audio_ins: raw.audioIns,
+        audio_outs: raw.audioOuts,
+        parameter_ins: raw.parameterIns,
+        name: to_string(raw.name),
+        label: to_string(raw.label),
+        maker: to_string(raw.maker),
+        copyright: to_string(raw.copyright),
+    })
 }

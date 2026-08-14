@@ -465,9 +465,7 @@ impl EguiMainWindow {
             WindowKind::EffectAdd => {
                 if let Some(p) = self.slot.borrow().as_ref() {
                     native.redraw(&self.gpu, |ui, _| {
-                        p.properties
-                            .borrow_mut()
-                            .show_effect_add(ui.ctx(), &p.state);
+                        p.properties.borrow_mut().show_effect_add(ui, &p.state);
                     });
                 }
             }

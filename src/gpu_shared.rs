@@ -154,7 +154,7 @@ pub fn init_shared_gpu() -> Result<SharedGpu, Box<dyn std::error::Error>> {
 
         let device = Arc::new(device);
         let queue = Arc::new(queue);
-        neoutl_media_ffmpeg_decoder::set_shared_wgpu_device(device.clone(), queue.clone());
+        neo_media_ffmpeg::set_shared_wgpu_device(device.clone(), queue.clone());
 
         return Ok(SharedGpu {
             instance,

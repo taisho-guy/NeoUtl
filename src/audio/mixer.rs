@@ -3,13 +3,15 @@ use crate::ecs::audio_plugins::PluginInstanceRef;
 use crate::ecs::components::{AudioParams, MediaSource};
 use crate::ecs::systems::get_active_audio_system;
 use crate::media;
-use carla_host_sys::{BinaryType, CarlaHost, EngineOption, EngineProcessMode, EngineTransportMode};
+use carla_host_sys::{
+    BinaryType, CarlaHost, EngineOption, EngineProcessMode, EngineTransportMode, PluginFormat,
+};
 use neoutl_media_api::AudioBuffer;
 use rodio::Source;
 use rodio::stream::{DeviceSinkBuilder, MixerDeviceSink};
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::num::NonZero;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
@@ -60,6 +62,7 @@ impl AudioMixer {
                 );
                 let _ =
                     h.set_engine_option(EngineOption::AudioSampleRate, sample_rate as i32, None);
+                let _ = h.set_engine_option(EngineOption::AudioBufferSize, 4096, None);
                 if let Err(e) = h.init_engine("Dummy", "NeoUtlMixer") {
                     eprintln!(
                         "{}",
@@ -115,6 +118,9 @@ impl AudioMixer {
             return;
         }
         self.sample_rate = sample_rate;
+        if let Some(host) = self.carla_host.as_mut() {
+            let _ = host.set_engine_option(EngineOption::AudioSampleRate, sample_rate as i32, None);
+        }
         self.ring.lock().unwrap().clear();
         match build_output(sample_rate, self.channels, self.ring.clone()) {
             Ok(output) => self.output = Some(output),
@@ -139,6 +145,50 @@ impl AudioMixer {
 
     pub fn pause(&self) {
         self.ring.lock().unwrap().clear();
+    }
+
+    pub fn probe_plugin_param_info(
+        &mut self,
+        format: PluginFormat,
+        path: &Path,
+        plugin_id: &str,
+    ) -> Vec<carla_host_sys::PluginParamInfo> {
+        let Some(host) = self.carla_host.as_mut() else {
+            return Vec::new();
+        };
+        let name = path
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .unwrap_or("plugin");
+        let label = if !plugin_id.is_empty()
+            && (plugin_id.starts_with("http")
+                || plugin_id.contains(':')
+                || format == PluginFormat::Internal)
+        {
+            Some(plugin_id)
+        } else {
+            None
+        };
+        let filename = if path.as_os_str().is_empty() {
+            None
+        } else {
+            path.to_str()
+        };
+        if let Ok(pid) = host.add_plugin(
+            BinaryType::NATIVE,
+            format.to_plugin_type(),
+            filename,
+            Some(name),
+            label,
+            0,
+            0,
+        ) {
+            let list = host.full_param_info_list(pid);
+            let _ = host.remove_plugin(pid);
+            list
+        } else {
+            Vec::new()
+        }
     }
 
     pub fn play(&self) {}
@@ -295,6 +345,7 @@ impl AudioMixer {
         let Some(host) = self.carla_host.as_mut() else {
             return;
         };
+        host.idle();
         let frames = chan_l.len();
         for instance_ref in chain {
             if instance_ref.bypass {
@@ -321,12 +372,26 @@ impl AudioMixer {
                     .file_stem()
                     .and_then(|s| s.to_str())
                     .unwrap_or("plugin");
+                let label = if !instance_ref.plugin_id.is_empty()
+                    && (instance_ref.plugin_id.starts_with("http")
+                        || instance_ref.plugin_id.contains(':')
+                        || instance_ref.format == PluginFormat::Internal)
+                {
+                    Some(instance_ref.plugin_id.as_str())
+                } else {
+                    None
+                };
+                let filename = if instance_ref.path.as_os_str().is_empty() {
+                    None
+                } else {
+                    instance_ref.path.to_str()
+                };
                 let carla_id = match host.add_plugin(
                     BinaryType::NATIVE,
                     instance_ref.format.to_plugin_type(),
-                    instance_ref.path.to_str(),
+                    filename,
                     Some(name),
-                    None,
+                    label,
                     0,
                     0,
                 ) {
@@ -370,6 +435,7 @@ impl AudioMixer {
             chan_l.copy_from_slice(&out_l);
             chan_r.copy_from_slice(&out_r);
         }
+        host.idle();
     }
 }
 

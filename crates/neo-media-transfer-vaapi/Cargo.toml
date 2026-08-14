@@ -1,19 +1,14 @@
 [package]
-name = "neoutl-media-ffmpeg-decoder"
+name = "neo-media-transfer-vaapi"
 version = "0.0.0"
 edition = "2024"
 
 [dependencies]
-neoutl-media-api = { path = "../../neoutl-media-api" }
-neoutl-color = { path = "../../neoutl-color" }
-bytemuck = "1"
-ffmpeg-next = { version = "9", features = ["codec", "format", "software-resampling"] }
+neo-media-core = { path = "../neo-media-core" }
 ffmpeg-sys-next = { version = "9", features = ["swscale"] }
-libc = "0.2"
 wgpu = { version = "29", features = ["vulkan-portability"] }
 wgpu-hal = { version = "29", features = ["vulkan"] }
 ash = "0.38"
-libva = { package = "cros-libva-extended", version = "=0.0.13-extended.2" }
 
 [build-dependencies]
 neoutl-object-shader-build.workspace = true

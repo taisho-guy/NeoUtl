@@ -23,6 +23,7 @@ dependencies = [
  "gpu-video",
  "half",
  "libloading 0.9.0",
+ "neo-media-ffmpeg",
  "neoutl-color",
  "neoutl-easing-api",
  "neoutl-easing-standard",
@@ -30,7 +31,6 @@ dependencies = [
  "neoutl-effect-lua",
  "neoutl-lua-runtime",
  "neoutl-media-api",
- "neoutl-media-ffmpeg-decoder",
  "neoutl-media-gpuvideo-decoder",
  "neoutl-media-gpuvideo-encoder",
  "neoutl-media-gstreamer-encoder",
@@ -3233,6 +3233,52 @@ dependencies = [
 ]
 
 [[package]]
+name = "neo-media-cache"
+version = "0.0.0"
+dependencies = [
+ "neo-media-core",
+ "wgpu",
+]
+
+[[package]]
+name = "neo-media-core"
+version = "0.0.0"
+dependencies = [
+ "wgpu",
+]
+
+[[package]]
+name = "neo-media-ffmpeg"
+version = "0.0.0"
+dependencies = [
+ "bytemuck",
+ "cros-libva-extended",
+ "ffmpeg-next",
+ "ffmpeg-sys-next",
+ "libc",
+ "neo-media-cache",
+ "neo-media-core",
+ "neo-media-transfer-vaapi",
+ "neoutl-color",
+ "neoutl-media-api",
+ "wgpu",
+]
+
+[[package]]
+name = "neo-media-transfer-vaapi"
+version = "0.0.0"
+dependencies = [
+ "ash",
+ "cc",
+ "ffmpeg-sys-next",
+ "neo-media-core",
+ "neoutl-object-shader-build",
+ "pkg-config",
+ "wgpu",
+ "wgpu-hal",
+]
+
+[[package]]
 name = "neoutl-color"
 version = "0.1.0"
 dependencies = [
@@ -3441,25 +3487,6 @@ version = "0.0.0"
 dependencies = [
  "serde",
  "wgpu",
-]
-
-[[package]]
-name = "neoutl-media-ffmpeg-decoder"
-version = "0.0.0"
-dependencies = [
- "ash",
- "bytemuck",
- "cc",
- "cros-libva-extended",
- "ffmpeg-next",
- "ffmpeg-sys-next",
- "libc",
- "neoutl-color",
- "neoutl-media-api",
- "neoutl-object-shader-build",
- "pkg-config",
- "wgpu",
- "wgpu-hal",
 ]
 
 [[package]]

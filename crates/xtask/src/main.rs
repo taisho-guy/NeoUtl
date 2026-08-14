@@ -16,12 +16,8 @@ struct DiscoveredCrate {
     source_dir: PathBuf,
 }
 
-const WORKSPACE_EXCLUDED_DIRS: &[&str] = &[
-    "ffmpeg-decoder",
-    "gstreamer-encoder",
-    "gpuvideo-decoder",
-    "gpuvideo-encoder",
-];
+const WORKSPACE_EXCLUDED_DIRS: &[&str] =
+    &["gstreamer-encoder", "gpuvideo-decoder", "gpuvideo-encoder"];
 
 fn discover_crates(workspace_root: &Path, subdir: &str) -> Vec<DiscoveredCrate> {
     let scan_dir = workspace_root.join(subdir);
