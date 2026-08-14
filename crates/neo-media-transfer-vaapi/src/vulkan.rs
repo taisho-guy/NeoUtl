@@ -231,12 +231,21 @@ pub unsafe fn vk_image_of(frame: &DerivedVulkanFrame) -> VkImageHandle {
 pub struct CopyEngine {
     device: ash::Device,
     queue: ash::vk::Queue,
+    queue_family_index: u32,
     command_pool: ash::vk::CommandPool,
     command_buffer: ash::vk::CommandBuffer,
     fence: ash::vk::Fence,
 }
 
 impl CopyEngine {
+    pub unsafe fn device_wait_idle(&self) -> Result<(), String> {
+        unsafe {
+            self.device
+                .device_wait_idle()
+                .map_err(|e| format!("device_wait_idle失敗: {e}"))
+        }
+    }
+
     pub unsafe fn new(handles: &VulkanRawHandles, entry: &ash::Entry) -> Result<Self, String> {
         unsafe {
             let instance = ash::Instance::load(
@@ -271,6 +280,7 @@ impl CopyEngine {
             Ok(Self {
                 device,
                 queue: handles.queue,
+                queue_family_index: handles.queue_family_index,
                 command_pool,
                 command_buffer,
                 fence,
@@ -306,6 +316,15 @@ impl CopyEngine {
                 .base_array_layer(0)
                 .layer_count(1);
 
+            let src_barrier_acquire = ash::vk::ImageMemoryBarrier::default()
+                .old_layout(src.layout)
+                .new_layout(ash::vk::ImageLayout::TRANSFER_SRC_OPTIMAL)
+                .src_queue_family_index(ash::vk::QUEUE_FAMILY_FOREIGN_EXT)
+                .dst_queue_family_index(self.queue_family_index)
+                .image(src.image)
+                .subresource_range(subresource)
+                .dst_access_mask(ash::vk::AccessFlags::TRANSFER_READ);
+
             let dst_barrier_to_transfer = ash::vk::ImageMemoryBarrier::default()
                 .old_layout(ash::vk::ImageLayout::UNDEFINED)
                 .new_layout(ash::vk::ImageLayout::TRANSFER_DST_OPTIMAL)
@@ -322,7 +341,7 @@ impl CopyEngine {
                 ash::vk::DependencyFlags::empty(),
                 &[],
                 &[],
-                &[dst_barrier_to_transfer],
+                &[src_barrier_acquire, dst_barrier_to_transfer],
             );
 
             let subresource_layers = ash::vk::ImageSubresourceLayers::default()
@@ -361,14 +380,24 @@ impl CopyEngine {
                 .src_access_mask(ash::vk::AccessFlags::TRANSFER_WRITE)
                 .dst_access_mask(ash::vk::AccessFlags::SHADER_READ);
 
+            let src_barrier_release = ash::vk::ImageMemoryBarrier::default()
+                .old_layout(ash::vk::ImageLayout::TRANSFER_SRC_OPTIMAL)
+                .new_layout(src.layout)
+                .src_queue_family_index(self.queue_family_index)
+                .dst_queue_family_index(ash::vk::QUEUE_FAMILY_FOREIGN_EXT)
+                .image(src.image)
+                .subresource_range(subresource)
+                .src_access_mask(ash::vk::AccessFlags::TRANSFER_READ);
+
             self.device.cmd_pipeline_barrier(
                 self.command_buffer,
                 ash::vk::PipelineStageFlags::TRANSFER,
-                ash::vk::PipelineStageFlags::FRAGMENT_SHADER,
+                ash::vk::PipelineStageFlags::FRAGMENT_SHADER
+                    | ash::vk::PipelineStageFlags::BOTTOM_OF_PIPE,
                 ash::vk::DependencyFlags::empty(),
                 &[],
                 &[],
-                &[dst_barrier_to_shader],
+                &[dst_barrier_to_shader, src_barrier_release],
             );
 
             self.device
@@ -431,6 +460,7 @@ pub fn init_vulkan_context(
 pub struct SemiPlanarConvertEngine {
     device: ash::Device,
     queue: ash::vk::Queue,
+    queue_family_index: u32,
     command_pool: ash::vk::CommandPool,
     command_buffer: ash::vk::CommandBuffer,
     fence: ash::vk::Fence,
@@ -598,6 +628,7 @@ impl SemiPlanarConvertEngine {
             Ok(Self {
                 device,
                 queue: handles.queue,
+                queue_family_index: handles.queue_family_index,
                 command_pool,
                 command_buffer,
                 fence,
@@ -741,8 +772,8 @@ impl SemiPlanarConvertEngine {
             let src_barrier = ash::vk::ImageMemoryBarrier::default()
                 .old_layout(src_layout)
                 .new_layout(ash::vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
-                .src_queue_family_index(ash::vk::QUEUE_FAMILY_IGNORED)
-                .dst_queue_family_index(ash::vk::QUEUE_FAMILY_IGNORED)
+                .src_queue_family_index(ash::vk::QUEUE_FAMILY_FOREIGN_EXT)
+                .dst_queue_family_index(self.queue_family_index)
                 .image(src_image)
                 .subresource_range(src_subresource)
                 .dst_access_mask(ash::vk::AccessFlags::SHADER_READ);
@@ -801,14 +832,23 @@ impl SemiPlanarConvertEngine {
                 .subresource_range(dst_subresource)
                 .src_access_mask(ash::vk::AccessFlags::SHADER_WRITE)
                 .dst_access_mask(ash::vk::AccessFlags::SHADER_READ);
+            let src_barrier_release = ash::vk::ImageMemoryBarrier::default()
+                .old_layout(ash::vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
+                .new_layout(src_layout)
+                .src_queue_family_index(self.queue_family_index)
+                .dst_queue_family_index(ash::vk::QUEUE_FAMILY_FOREIGN_EXT)
+                .image(src_image)
+                .subresource_range(src_subresource)
+                .src_access_mask(ash::vk::AccessFlags::SHADER_READ);
             self.device.cmd_pipeline_barrier(
                 self.command_buffer,
                 ash::vk::PipelineStageFlags::COMPUTE_SHADER,
-                ash::vk::PipelineStageFlags::FRAGMENT_SHADER,
+                ash::vk::PipelineStageFlags::FRAGMENT_SHADER
+                    | ash::vk::PipelineStageFlags::BOTTOM_OF_PIPE,
                 ash::vk::DependencyFlags::empty(),
                 &[],
                 &[],
-                &[dst_barrier_to_shader_read],
+                &[dst_barrier_to_shader_read, src_barrier_release],
             );
 
             self.device

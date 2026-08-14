@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
 use ffmpeg_sys_next as sys;
+use neo_media_core::NeoFramePool;
 
 pub struct OwnedAvFrame {
     pub(crate) raw: *mut sys::AVFrame,
@@ -25,6 +26,7 @@ pub struct GpuFrame {
     pub width: u32,
     pub height: u32,
     _keep_alive: Option<Arc<OwnedAvFrame>>,
+    pool_release: Option<Arc<neo_media_cache::NeoMediaCache>>,
 }
 
 impl GpuFrame {
@@ -34,6 +36,30 @@ impl GpuFrame {
             width,
             height,
             _keep_alive: None,
+            pool_release: None,
+        }
+    }
+
+    pub fn new_pooled(
+        texture: wgpu::Texture,
+        width: u32,
+        height: u32,
+        cache: Arc<neo_media_cache::NeoMediaCache>,
+    ) -> Self {
+        Self {
+            texture,
+            width,
+            height,
+            _keep_alive: None,
+            pool_release: Some(cache),
+        }
+    }
+}
+
+impl Drop for GpuFrame {
+    fn drop(&mut self) {
+        if let Some(cache) = self.pool_release.take() {
+            cache.release(self.texture.clone());
         }
     }
 }

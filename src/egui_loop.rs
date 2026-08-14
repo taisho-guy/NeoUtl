@@ -51,6 +51,7 @@ pub fn set_preview(
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum WindowKind {
+    Splash,
     Launcher,
     Preview,
     Timeline,
@@ -67,6 +68,7 @@ enum WindowKind {
 impl WindowKind {
     fn title(self) -> &'static str {
         match self {
+            Self::Splash => "NeoUtl",
             Self::Launcher => "NeoUtl - プロジェクト",
             Self::Preview => "NeoUtl",
             Self::Timeline => "NeoUtl - 拡張編集",
@@ -83,6 +85,7 @@ impl WindowKind {
 
     fn size(self) -> (u32, u32) {
         match self {
+            Self::Splash => (0, 0),
             Self::Launcher => (640, 420),
             Self::Preview | Self::Timeline | Self::Properties => (720, 540),
             Self::SystemSettings => (720, 540),
@@ -123,19 +126,52 @@ struct NativeWindow {
 impl NativeWindow {
     fn create(event_loop: &ActiveEventLoop, gpu: &SharedGpu, kind: WindowKind) -> Self {
         let (width, height) = kind.size();
+        Self::create_sized(event_loop, gpu, kind, width, height)
+    }
+
+    fn create_sized(
+        event_loop: &ActiveEventLoop,
+        gpu: &SharedGpu,
+        kind: WindowKind,
+        width: u32,
+        height: u32,
+    ) -> Self {
+        let mut attrs = Window::default_attributes()
+            .with_title(kind.title())
+            .with_inner_size(winit::dpi::LogicalSize::new(width as f64, height as f64));
+        if kind == WindowKind::Splash {
+            attrs = attrs
+                .with_decorations(false)
+                .with_resizable(false)
+                .with_transparent(true);
+        }
         let window = Arc::new(
             event_loop
-                .create_window(
-                    Window::default_attributes()
-                        .with_title(kind.title())
-                        .with_inner_size(winit::dpi::LogicalSize::new(width as f64, height as f64)),
-                )
+                .create_window(attrs)
                 .expect("eguiウィンドウ生成失敗"),
         );
         let surface = gpu
             .instance
             .create_surface(window.clone())
             .expect("wgpu Surface生成失敗");
+        let caps = surface.get_capabilities(&gpu.adapter);
+        let alpha_mode = if kind == WindowKind::Splash {
+            if caps
+                .alpha_modes
+                .contains(&wgpu::CompositeAlphaMode::PreMultiplied)
+            {
+                wgpu::CompositeAlphaMode::PreMultiplied
+            } else if caps
+                .alpha_modes
+                .contains(&wgpu::CompositeAlphaMode::PostMultiplied)
+            {
+                wgpu::CompositeAlphaMode::PostMultiplied
+            } else {
+                wgpu::CompositeAlphaMode::Auto
+            }
+        } else {
+            wgpu::CompositeAlphaMode::Auto
+        };
         let size = window.inner_size();
         let config = wgpu::SurfaceConfiguration {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
@@ -143,13 +179,14 @@ impl NativeWindow {
             width: size.width.max(1),
             height: size.height.max(1),
             present_mode: wgpu::PresentMode::Fifo,
-            alpha_mode: wgpu::CompositeAlphaMode::Auto,
+            alpha_mode,
             view_formats: vec![],
             desired_maximum_frame_latency: 2,
         };
         surface.configure(&gpu.device, &config);
 
         let ctx = egui::Context::default();
+        egui_extras::install_image_loaders(&ctx);
         crate::theme::install(&ctx);
         install_locale_fonts(&ctx);
         let state = egui_winit::State::new(
@@ -215,12 +252,16 @@ impl NativeWindow {
         };
         self.renderer
             .update_buffers(&gpu.device, &gpu.queue, &mut encoder, &primitives, &screen);
-        let bg = self.ctx.style_of(self.ctx.theme()).visuals.panel_fill;
-        let clear_color = wgpu::Color {
-            r: (bg.r() as f64 / 255.0).powf(2.2),
-            g: (bg.g() as f64 / 255.0).powf(2.2),
-            b: (bg.b() as f64 / 255.0).powf(2.2),
-            a: 1.0,
+        let clear_color = if self.kind == WindowKind::Splash {
+            wgpu::Color::TRANSPARENT
+        } else {
+            let bg = self.ctx.style_of(self.ctx.theme()).visuals.panel_fill;
+            wgpu::Color {
+                r: bg.r() as f64 / 255.0,
+                g: bg.g() as f64 / 255.0,
+                b: bg.b() as f64 / 255.0,
+                a: 1.0,
+            }
         };
         {
             let mut pass = encoder
@@ -260,16 +301,20 @@ pub struct EguiMainWindow {
     launcher: LauncherPanel,
     windows: HashMap<WindowId, NativeWindow>,
     project_windows_created: bool,
+    init_rx: std::sync::mpsc::Receiver<()>,
+    init_done: bool,
 }
 
 impl EguiMainWindow {
-    fn new(gpu: Rc<SharedGpu>, slot: PreviewSlot) -> Self {
+    fn new(gpu: Rc<SharedGpu>, slot: PreviewSlot, init_rx: std::sync::mpsc::Receiver<()>) -> Self {
         Self {
             gpu,
             slot,
             launcher: LauncherPanel::new(),
             windows: HashMap::new(),
             project_windows_created: false,
+            init_rx,
+            init_done: false,
         }
     }
 
@@ -366,6 +411,17 @@ impl EguiMainWindow {
             return;
         };
         match native.kind {
+            WindowKind::Splash => {
+                native.redraw(&self.gpu, |ui, _| {
+                    egui::CentralPanel::default()
+                        .frame(egui::Frame::NONE)
+                        .show(ui, |ui| {
+                            ui.centered_and_justified(|ui| {
+                                ui.add(egui::Image::new(crate::splash::SOURCE.clone()));
+                            });
+                        });
+                });
+            }
             WindowKind::Launcher => {
                 let launcher = &mut self.launcher;
                 let gpu = self.gpu.clone();
@@ -489,7 +545,10 @@ impl EguiMainWindow {
 impl ApplicationHandler for EguiMainWindow {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         if self.windows.is_empty() {
-            self.add_window(event_loop, WindowKind::Launcher);
+            let (w, h) = crate::splash::WINDOW_SIZE;
+            let native =
+                NativeWindow::create_sized(event_loop, &self.gpu, WindowKind::Splash, w, h);
+            self.windows.insert(native.window.id(), native);
         }
     }
 
@@ -503,7 +562,9 @@ impl ApplicationHandler for EguiMainWindow {
         let kind = native.kind;
         match event {
             WindowEvent::CloseRequested => match kind {
-                WindowKind::Launcher | WindowKind::Preview => event_loop.exit(),
+                WindowKind::Splash | WindowKind::Launcher | WindowKind::Preview => {
+                    event_loop.exit()
+                }
                 WindowKind::Timeline | WindowKind::Properties => {
                     native.visible = false;
                     native.window.set_visible(false);
@@ -522,6 +583,24 @@ impl ApplicationHandler for EguiMainWindow {
     }
 
     fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
+        if !self.init_done {
+            match self.init_rx.try_recv() {
+                Ok(()) | Err(std::sync::mpsc::TryRecvError::Disconnected) => {
+                    self.init_done = true;
+                    let splash_ids: Vec<WindowId> = self
+                        .windows
+                        .iter()
+                        .filter(|(_, native)| native.kind == WindowKind::Splash)
+                        .map(|(id, _)| *id)
+                        .collect();
+                    for id in splash_ids {
+                        self.windows.remove(&id);
+                    }
+                    self.add_window(event_loop, WindowKind::Launcher);
+                }
+                Err(std::sync::mpsc::TryRecvError::Empty) => {}
+            }
+        }
         self.ensure_project_windows(event_loop);
         if let Some(p) = self.slot.borrow().as_ref() {
             p.dialogs
@@ -537,9 +616,13 @@ impl ApplicationHandler for EguiMainWindow {
     }
 }
 
-pub fn run(gpu: Rc<SharedGpu>, slot: PreviewSlot) -> Result<(), Box<dyn std::error::Error>> {
+pub fn run(
+    gpu: Rc<SharedGpu>,
+    slot: PreviewSlot,
+    init_rx: std::sync::mpsc::Receiver<()>,
+) -> Result<(), Box<dyn std::error::Error>> {
     let event_loop = EventLoop::new()?;
-    let mut app = EguiMainWindow::new(gpu, slot);
+    let mut app = EguiMainWindow::new(gpu, slot, init_rx);
     event_loop.run_app(&mut app)?;
     Ok(())
 }

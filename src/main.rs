@@ -30,6 +30,7 @@ mod objects;
 mod project;
 mod renderer;
 mod shortcuts;
+mod splash;
 mod theme;
 mod ui;
 mod update;
@@ -103,23 +104,30 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let _sentry_guard = crash_report::init(crash_reporting_enabled);
     let _ = project::begin_runtime_session();
 
-    configure_gst_plugin_path();
+    let (init_done_tx, init_done_rx) = std::sync::mpsc::channel();
+    std::thread::Builder::new()
+        .name("neoutl-init".into())
+        .spawn(move || {
+            configure_gst_plugin_path();
+            std::thread::spawn(neoutl_media_gstreamer_encoder::warm_up);
 
-    std::thread::spawn(neoutl_media_gstreamer_encoder::warm_up);
+            objects::load_all(&objects::default_objects_dir());
+            effects::load_all(
+                &effects::default_effects_dir(),
+                &effects::default_effects_lua_dir(),
+            );
+            media::loader::load_all(&media::loader::default_decoders_dir());
+            easings::loader::load_all(&easings::loader::default_easings_dir());
+            audio::plugin_registry::load_all(&audio::plugin_registry::default_plugins_dir());
 
-    objects::load_all(&objects::default_objects_dir());
-    effects::load_all(
-        &effects::default_effects_dir(),
-        &effects::default_effects_lua_dir(),
-    );
-    media::loader::load_all(&media::loader::default_decoders_dir());
-    easings::loader::load_all(&easings::loader::default_easings_dir());
-    audio::plugin_registry::load_all(&audio::plugin_registry::default_plugins_dir());
+            let _ = init_done_tx.send(());
+        })
+        .expect("初期化スレッド起動失敗");
 
     let shared_gpu = std::rc::Rc::new(gpu_shared::init_shared_gpu()?);
 
     let preview_slot = egui_loop::make_preview_slot();
-    egui_loop::run(shared_gpu, preview_slot)?;
+    egui_loop::run(shared_gpu, preview_slot, init_done_rx)?;
 
     project::finish_runtime_session();
     Ok(())

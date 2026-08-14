@@ -4,6 +4,7 @@ use std::sync::Arc;
 
 pub struct SharedGpu {
     pub instance: wgpu::Instance,
+    pub adapter: wgpu::Adapter,
     pub device: Arc<wgpu::Device>,
     pub queue: Arc<wgpu::Queue>,
 }
@@ -158,6 +159,7 @@ pub fn init_shared_gpu() -> Result<SharedGpu, Box<dyn std::error::Error>> {
 
         return Ok(SharedGpu {
             instance,
+            adapter: wgpu_adapter,
             device,
             queue,
         });
@@ -201,9 +203,9 @@ pub fn init_shared_gpu() -> Result<SharedGpu, Box<dyn std::error::Error>> {
 
         crate::renderer::pipeline::install_device_lost_watcher(&device);
 
-        let _ = adapter;
         Ok(SharedGpu {
             instance,
+            adapter,
             device: Arc::new(device),
             queue: Arc::new(queue),
         })
