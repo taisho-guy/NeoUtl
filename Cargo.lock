@@ -3258,10 +3258,21 @@ dependencies = [
  "libc",
  "neo-media-cache",
  "neo-media-core",
+ "neo-media-support",
  "neo-media-transfer-vaapi",
  "neoutl-color",
  "neoutl-media-api",
  "wgpu",
+]
+
+[[package]]
+name = "neo-media-support"
+version = "0.0.0"
+dependencies = [
+ "ffmpeg-sys-next",
+ "libc",
+ "neo-media-core",
+ "neo-media-transfer-vaapi",
 ]
 
 [[package]]

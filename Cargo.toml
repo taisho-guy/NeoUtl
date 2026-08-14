@@ -20,6 +20,7 @@ members = [
     "crates/neo-media-core",
     "crates/neo-media-cache",
     "crates/neo-media-transfer-vaapi",
+    "crates/neo-media-support",
     "crates/neo-media-ffmpeg",
     "crates/neoutl-effect-shader-build",
     "crates/neoutl-object-shader-build",

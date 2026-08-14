@@ -807,7 +807,16 @@ fn run_worker(
     let mut ctx = match open_input(&path, &gpu_device) {
         Ok(ctx) => ctx,
         Err(e) => {
-            eprintln!("[neoutl-video-decoder] open失敗: {e}");
+            match neo_media_support::probe(&path) {
+                Ok(_) => {
+                    eprintln!("[neoutl-video-decoder] open失敗: {e}");
+                }
+                Err(failure) => {
+                    eprintln!(
+                        "[neoutl-video-decoder][非対応] probe判定: {failure:?} open失敗: {e}"
+                    );
+                }
+            }
             return;
         }
     };

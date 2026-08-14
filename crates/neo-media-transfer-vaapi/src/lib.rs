@@ -16,18 +16,24 @@ pub use vulkan::{
     transfer_to_vulkan_frame, vk_image_of,
 };
 
-const AV_PIX_FMT_NV12: i32 = 23;
-const AV_PIX_FMT_P010LE: i32 = 161;
-const AV_PIX_FMT_P012LE: i32 = 172;
-const AV_PIX_FMT_P016LE: i32 = 163;
+pub fn is_sw_format_supported(sw_format_i32: i32, is_direct_rgba: bool) -> bool {
+    pixel_format_of_sw_format(sw_format_i32, is_direct_rgba).is_some()
+}
+
+fn av_pix_fmt_as_i32(fmt: sys::AVPixelFormat) -> i32 {
+    fmt as i32
+}
 
 fn semi_planar_view_formats(sw_format_i32: i32) -> Option<(ash::vk::Format, ash::vk::Format)> {
-    match sw_format_i32 {
-        AV_PIX_FMT_NV12 => Some((ash::vk::Format::R8_UNORM, ash::vk::Format::R8G8_UNORM)),
-        AV_PIX_FMT_P010LE | AV_PIX_FMT_P012LE | AV_PIX_FMT_P016LE => {
-            Some((ash::vk::Format::R16_UNORM, ash::vk::Format::R16G16_UNORM))
-        }
-        _ => None,
+    if sw_format_i32 == av_pix_fmt_as_i32(sys::AVPixelFormat::AV_PIX_FMT_NV12) {
+        Some((ash::vk::Format::R8_UNORM, ash::vk::Format::R8G8_UNORM))
+    } else if sw_format_i32 == av_pix_fmt_as_i32(sys::AVPixelFormat::AV_PIX_FMT_P010LE)
+        || sw_format_i32 == av_pix_fmt_as_i32(sys::AVPixelFormat::AV_PIX_FMT_P012LE)
+        || sw_format_i32 == av_pix_fmt_as_i32(sys::AVPixelFormat::AV_PIX_FMT_P016LE)
+    {
+        Some((ash::vk::Format::R16_UNORM, ash::vk::Format::R16G16_UNORM))
+    } else {
+        None
     }
 }
 
@@ -35,12 +41,16 @@ fn pixel_format_of_sw_format(sw_format_i32: i32, is_direct_rgba: bool) -> Option
     if is_direct_rgba {
         return Some(PixelFormat::Rgba8);
     }
-    match sw_format_i32 {
-        AV_PIX_FMT_NV12 => Some(PixelFormat::Nv12),
-        AV_PIX_FMT_P010LE => Some(PixelFormat::P010),
-        AV_PIX_FMT_P012LE => Some(PixelFormat::P012),
-        AV_PIX_FMT_P016LE => Some(PixelFormat::P016),
-        _ => None,
+    if sw_format_i32 == av_pix_fmt_as_i32(sys::AVPixelFormat::AV_PIX_FMT_NV12) {
+        Some(PixelFormat::Nv12)
+    } else if sw_format_i32 == av_pix_fmt_as_i32(sys::AVPixelFormat::AV_PIX_FMT_P010LE) {
+        Some(PixelFormat::P010)
+    } else if sw_format_i32 == av_pix_fmt_as_i32(sys::AVPixelFormat::AV_PIX_FMT_P012LE) {
+        Some(PixelFormat::P012)
+    } else if sw_format_i32 == av_pix_fmt_as_i32(sys::AVPixelFormat::AV_PIX_FMT_P016LE) {
+        Some(PixelFormat::P016)
+    } else {
+        None
     }
 }
 
