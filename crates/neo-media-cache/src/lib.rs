@@ -38,9 +38,21 @@ fn wgpu_texture_format(format: PixelFormat) -> Result<wgpu::TextureFormat, PoolE
     match format {
         PixelFormat::Nv12 => Ok(wgpu::TextureFormat::NV12),
         PixelFormat::P010 => Ok(wgpu::TextureFormat::P010),
+        PixelFormat::Rgba8 => Ok(wgpu::TextureFormat::Rgba8Unorm),
         PixelFormat::P012 | PixelFormat::P016 | PixelFormat::Yuv444 => {
             Err(PoolError::UnsupportedFormat(format))
         }
+    }
+}
+
+fn texture_usage(format: PixelFormat) -> wgpu::TextureUsages {
+    match format {
+        PixelFormat::Rgba8 => {
+            wgpu::TextureUsages::COPY_DST
+                | wgpu::TextureUsages::TEXTURE_BINDING
+                | wgpu::TextureUsages::STORAGE_BINDING
+        }
+        _ => wgpu::TextureUsages::COPY_DST | wgpu::TextureUsages::TEXTURE_BINDING,
     }
 }
 
@@ -62,14 +74,14 @@ fn create_texture(
         sample_count: 1,
         dimension: wgpu::TextureDimension::D2,
         format: texture_format,
-        usage: wgpu::TextureUsages::COPY_DST | wgpu::TextureUsages::TEXTURE_BINDING,
+        usage: texture_usage(format),
         view_formats: &[],
     }))
 }
 
 impl FormatPool {
     fn new(
-        device: &wgpu::Device,
+        _device: &wgpu::Device,
         format: PixelFormat,
         width: u32,
         height: u32,
@@ -100,10 +112,7 @@ impl FormatPool {
         }
     }
 
-    fn acquire_for_write(
-        &mut self,
-        device: &wgpu::Device,
-    ) -> Result<wgpu::Texture, PoolError> {
+    fn acquire_for_write(&mut self, device: &wgpu::Device) -> Result<wgpu::Texture, PoolError> {
         self.reclaim_completed(device);
         if let Some(slot) = self.slots.iter_mut().find(|s| s.state == SlotState::Free) {
             slot.state = SlotState::Writing;

@@ -19,6 +19,7 @@ pub enum PixelFormat {
     P012,
     P016,
     Yuv444,
+    Rgba8,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -116,8 +117,12 @@ pub trait HwDecoder: Send {
 }
 
 pub trait NeoFramePool: Send + Sync {
-    fn acquire(&self, format: PixelFormat, width: u32, height: u32)
-        -> Result<wgpu::Texture, PoolError>;
+    fn acquire(
+        &self,
+        format: PixelFormat,
+        width: u32,
+        height: u32,
+    ) -> Result<wgpu::Texture, PoolError>;
     fn release(&self, texture: wgpu::Texture);
 }
 

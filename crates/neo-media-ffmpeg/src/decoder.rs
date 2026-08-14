@@ -7,15 +7,27 @@ use std::thread::JoinHandle;
 
 use ffmpeg_sys_next as sys;
 
+use neo_media_cache::NeoMediaCache;
+use neo_media_core::{
+    ColorPrimaries, MatrixCoefficients, Rect, Size, TransferBackend, TransferCharacteristics,
+};
+use neo_media_transfer_vaapi::VaapiTransferBackend;
+
 use crate::cache::{FrameLruCache, GopCache, GopCacheBlock};
 use crate::frame::{GpuFrame, VideoFrame, VideoFrameStore};
 use crate::index::{FrameIndex, build_index};
 use crate::vaapi_probe::probe_vaapi_node;
-use crate::vulkan::{self, NeoutlVulkanContext};
+
+const CACHE_CAPACITY: usize = neo_media_cache::MAX_CAPACITY;
 
 static SHARED_WGPU: OnceLock<(Arc<wgpu::Device>, Arc<wgpu::Queue>)> = OnceLock::new();
+static SHARED_CACHE: OnceLock<Arc<NeoMediaCache>> = OnceLock::new();
 
 pub fn set_shared_wgpu_device(device: Arc<wgpu::Device>, queue: Arc<wgpu::Queue>) {
+    let _ = SHARED_CACHE.set(Arc::new(NeoMediaCache::new(
+        (*device).clone(),
+        CACHE_CAPACITY,
+    )));
     let _ = SHARED_WGPU.set((device, queue));
 }
 
@@ -25,6 +37,10 @@ pub fn shared_wgpu_device() -> Option<Arc<wgpu::Device>> {
 
 pub fn shared_wgpu_queue() -> Option<Arc<wgpu::Queue>> {
     SHARED_WGPU.get().map(|(_, queue)| queue.clone())
+}
+
+fn shared_media_cache() -> Option<Arc<NeoMediaCache>> {
+    SHARED_CACHE.get().cloned()
 }
 fn pf(fmt: sys::AVPixelFormat) -> i32 {
     fmt as i32
@@ -184,19 +200,6 @@ struct HwPixFmtBox {
     hw_device_ctx: *mut sys::AVBufferRef,
 }
 
-fn semi_planar_view_formats(sw_format_i32: i32) -> Option<(ash::vk::Format, ash::vk::Format)> {
-    if sw_format_i32 == av_pix_fmt_nv12() {
-        Some((ash::vk::Format::R8_UNORM, ash::vk::Format::R8G8_UNORM))
-    } else if sw_format_i32 == av_pix_fmt_p010le()
-        || sw_format_i32 == av_pix_fmt_p012le()
-        || sw_format_i32 == av_pix_fmt_p016le()
-    {
-        Some((ash::vk::Format::R16_UNORM, ash::vk::Format::R16G16_UNORM))
-    } else {
-        None
-    }
-}
-
 fn resolve_hw_sw_format(stream_sw_format: i32) -> Option<i32> {
     if stream_sw_format == av_pix_fmt_nv12() {
         Some(av_pix_fmt_nv12())
@@ -281,23 +284,12 @@ unsafe extern "C" fn hw_get_format(
 
 struct GpuPipeline {
     wgpu_device: Arc<wgpu::Device>,
-    vulkan_ctx: Arc<NeoutlVulkanContext>,
-    derived_frames_ctx: *mut sys::AVBufferRef,
-    semi_planar_engine: Option<vulkan::SemiPlanarConvertEngine>,
-    _entry: ash::Entry,
+    wgpu_queue: Arc<wgpu::Queue>,
+    cache: Arc<NeoMediaCache>,
+    backend: VaapiTransferBackend,
 }
 
 unsafe impl Send for GpuPipeline {}
-
-impl Drop for GpuPipeline {
-    fn drop(&mut self) {
-        unsafe {
-            if !self.derived_frames_ctx.is_null() {
-                sys::av_buffer_unref(&mut self.derived_frames_ctx);
-            }
-        }
-    }
-}
 
 struct OpenContext {
     fmt_ctx: *mut sys::AVFormatContext,
@@ -666,63 +658,24 @@ fn build_gpu_pipeline(
     gpu_device: &Option<Arc<wgpu::Device>>,
     hw_device_ctx: *mut sys::AVBufferRef,
 ) -> Option<GpuPipeline> {
-    eprintln!("[neoutl-video-decoder][diag][gpu-pipeline] 開始");
     let wgpu_device = gpu_device.clone()?;
-    eprintln!("[neoutl-video-decoder][diag][gpu-pipeline] wgpu_device取得済み");
+    let wgpu_queue = shared_wgpu_queue()?;
+    let cache = shared_media_cache()?;
     if hw_device_ctx.is_null() {
-        eprintln!("[neoutl-video-decoder][diag][gpu-pipeline] hw_device_ctx null、中断");
         return None;
     }
-
-    eprintln!("[neoutl-video-decoder][diag][gpu-pipeline] ash::Entry::load開始");
-    let entry = unsafe { ash::Entry::load().ok()? };
-    eprintln!("[neoutl-video-decoder][diag][gpu-pipeline] ash::Entry::load完了");
-
-    eprintln!("[neoutl-video-decoder][diag][gpu-pipeline] init_vulkan_context開始");
-    let vulkan_ctx = match vulkan::init_vulkan_context(&wgpu_device, &entry) {
-        Ok(ctx) => {
-            eprintln!("[neoutl-video-decoder][diag][gpu-pipeline] init_vulkan_context成功");
-            ctx
-        }
+    match VaapiTransferBackend::new(&wgpu_device) {
+        Ok(backend) => Some(GpuPipeline {
+            wgpu_device,
+            wgpu_queue,
+            cache,
+            backend,
+        }),
         Err(e) => {
-            eprintln!("[neoutl-video-decoder] Vulkan相互運用初期化失敗、CPU経路使用: {e}");
-            return None;
+            eprintln!("[neoutl-video-decoder] Vulkan相互運用初期化失敗、GPU経路無効: {e}");
+            None
         }
-    };
-
-    eprintln!(
-        "[neoutl-video-decoder][diag][gpu-pipeline] extract_vulkan_raw_handles開始(semi_planar用)"
-    );
-    let semi_planar_engine = unsafe {
-        vulkan::extract_vulkan_raw_handles(&wgpu_device).and_then(|handles| {
-            eprintln!("[neoutl-video-decoder][diag][gpu-pipeline] raw_handles取得済み、SemiPlanarConvertEngine::new開始");
-            static SEMI_PLANAR_SPIRV: &[u8] =
-                include_bytes!(concat!(env!("OUT_DIR"), "/semi_planar_to_rgba.spv"));
-            let result = vulkan::SemiPlanarConvertEngine::new(&handles, &entry, SEMI_PLANAR_SPIRV);
-            match &result {
-                Ok(_) => eprintln!(
-                    "[neoutl-video-decoder][diag][gpu-pipeline] SemiPlanarConvertEngine::new成功"
-                ),
-                Err(e) => eprintln!(
-                    "[neoutl-video-decoder][diag][gpu-pipeline] SemiPlanarConvertEngine::new失敗: {e}"
-                ),
-            }
-            result.ok()
-        })
-    };
-    eprintln!(
-        "[neoutl-video-decoder][diag][gpu-pipeline] semi_planar_engine確定 有効={}",
-        semi_planar_engine.is_some()
-    );
-
-    eprintln!("[neoutl-video-decoder][diag][gpu-pipeline] GpuPipeline構築完了");
-    Some(GpuPipeline {
-        wgpu_device,
-        vulkan_ctx,
-        derived_frames_ctx: ptr::null_mut(),
-        semi_planar_engine,
-        _entry: entry,
-    })
+    }
 }
 
 fn seek_to_keyframe(ctx: &mut OpenContext, keyframe_index: i64) {
@@ -775,94 +728,54 @@ fn try_convert_to_gpu(ctx: &mut OpenContext, av_frame: *mut sys::AVFrame) -> Con
     };
     let sw_format_i32 = unsafe { std::mem::transmute::<sys::AVPixelFormat, i32>(sw_format) };
     let is_direct_rgba = sw_format_i32 == av_pix_fmt_rgb0() || sw_format_i32 == av_pix_fmt_bgr0();
-    let semi_planar_view_formats = semi_planar_view_formats(sw_format_i32);
-    if !is_direct_rgba && semi_planar_view_formats.is_none() {
-        return ConvertOutcome::Unsupported("sw_pix_fmtがRGB0/BGR0/NV12/P010LE/P012LE/P016LE以外");
-    }
-    if semi_planar_view_formats.is_some() && gpu.semi_planar_engine.is_none() {
-        return ConvertOutcome::Unsupported("セミプラナー変換エンジン未初期化");
-    }
 
-    if gpu.derived_frames_ctx.is_null() {
-        let src_frames_ctx = unsafe { (*ctx.dec_ctx).hw_frames_ctx };
-        if src_frames_ctx.is_null() {
-            return ConvertOutcome::Unsupported("hw_frames_ctx未設定");
-        }
-        match vulkan::create_derived_vulkan_frames_ctx(src_frames_ctx, &gpu.vulkan_ctx.device_ctx) {
-            Ok(derived) => gpu.derived_frames_ctx = derived,
-            Err(e) => {
-                eprintln!("[neoutl-video-decoder] Vulkan導出フレームコンテキスト生成失敗: {e}");
-                ctx.gpu_pipeline = None;
-                return ConvertOutcome::Unsupported("Vulkan導出フレームコンテキスト生成失敗");
-            }
-        }
-    }
-
-    let derived = match vulkan::transfer_to_vulkan_frame(av_frame, gpu.derived_frames_ctx) {
-        Ok(d) => d,
-        Err(e) => {
-            eprintln!("[neoutl-video-decoder] Vulkanフレーム導出転送失敗: {e}");
-            return ConvertOutcome::Unsupported("Vulkanフレーム導出転送失敗");
+    let pts = unsafe {
+        if (*av_frame).pts != sys::AV_NOPTS_VALUE {
+            (*av_frame).pts
+        } else {
+            (*av_frame).pkt_dts
         }
     };
+    let progressive = unsafe { (*av_frame).flags & sys::AV_FRAME_FLAG_INTERLACED == 0 };
 
-    let src_image = unsafe { vulkan::vk_image_of(&derived) };
-
-    let target_desc = wgpu::TextureDescriptor {
-        label: Some("neoutl-video-gpu-frame"),
-        size: wgpu::Extent3d {
+    let input = neo_media_transfer_vaapi::VaapiDecodedFrame {
+        av_frame,
+        src_hw_frames_ctx: hw_frames_ctx_ref,
+        sw_format_i32,
+        is_direct_rgba,
+        coded_size: Size {
             width: ctx.width,
             height: ctx.height,
-            depth_or_array_layers: 1,
         },
-        mip_level_count: 1,
-        sample_count: 1,
-        dimension: wgpu::TextureDimension::D2,
-        format: wgpu::TextureFormat::Rgba8Unorm,
-        usage: wgpu::TextureUsages::TEXTURE_BINDING
-            | wgpu::TextureUsages::COPY_DST
-            | wgpu::TextureUsages::STORAGE_BINDING,
-        view_formats: &[],
-    };
-    let target_texture = gpu.wgpu_device.create_texture(&target_desc);
-
-    let dst_vk_image = unsafe {
-        target_texture
-            .as_hal::<wgpu_hal::api::Vulkan>()
-            .map(|hal_texture| hal_texture.raw_handle())
-    };
-    let Some(dst_vk_image) = dst_vk_image else {
-        return ConvertOutcome::Unsupported("wgpuテクスチャからVkImageハンドル取得失敗");
+        visible_rect: Rect {
+            x: 0,
+            y: 0,
+            width: ctx.width,
+            height: ctx.height,
+        },
+        color_primaries: ColorPrimaries::Unknown,
+        transfer_characteristics: TransferCharacteristics::Unknown,
+        matrix_coefficients: MatrixCoefficients::Unknown,
+        full_range: false,
+        pts,
+        duration: 0,
+        progressive,
     };
 
-    let convert_result = if let Some((y_format, uv_format)) = semi_planar_view_formats {
-        let Some(engine) = gpu.semi_planar_engine.as_ref() else {
-            return ConvertOutcome::Unsupported("セミプラナー変換エンジン未初期化");
+    let cache = gpu.cache.clone();
+    let neo_frame =
+        match gpu
+            .backend
+            .transfer(&input, &gpu.wgpu_device, &gpu.wgpu_queue, cache.as_ref())
+        {
+            Ok(f) => f,
+            Err(e) => {
+                eprintln!("[neoutl-video-decoder] GPUフレーム転送失敗: {e:?}");
+                return ConvertOutcome::Unsupported("GPUフレーム転送(TransferBackend)失敗");
+            }
         };
-        unsafe {
-            engine.convert(
-                src_image.image,
-                src_image.layout,
-                dst_vk_image,
-                ctx.width,
-                ctx.height,
-                y_format,
-                uv_format,
-            )
-        }
-    } else {
-        unsafe {
-            gpu.vulkan_ctx
-                .copy_engine
-                .copy_image(src_image, dst_vk_image, ctx.width, ctx.height)
-        }
-    };
-    if let Err(e) = convert_result {
-        eprintln!("[neoutl-video-decoder] GPUフレーム変換失敗: {e}");
-        return ConvertOutcome::Unsupported("GPUフレーム変換(VkImageコピー/コンピュート)失敗");
-    }
 
-    let gpu_frame = GpuFrame::new(target_texture, ctx.width, ctx.height);
+    let gpu_frame = GpuFrame::new(neo_frame.texture, ctx.width, ctx.height);
     ConvertOutcome::Gpu(VideoFrame(Arc::new(gpu_frame)))
 }
 

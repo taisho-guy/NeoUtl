@@ -28,41 +28,88 @@ fn toggle_group_open(object_id: usize, effect_index: i32, label: &str) {
 
 pub fn effects_sidebar(ui: &mut egui::Ui, world: &mut EcsWorld, id: usize) {
     let effects = world.get_effects(id);
-    if effects.is_empty() {
+    let plugins = world.get_plugin_chain(id).unwrap_or_default();
+    if effects.is_empty() && plugins.is_empty() {
         ui.weak(t!("エフェクトはありません"));
         return;
     }
     let card = elegance::Theme::current(ui.ctx()).palette.card;
-    let last = effects.len() - 1;
-    for (index, inst) in effects.into_iter().enumerate() {
-        ui.push_id(("effect_sidebar_row", id, index), |ui| {
-            egui::Frame::default()
-                .fill(card)
-                .corner_radius(3.0)
-                .inner_margin(4.0)
-                .show(ui, |ui| {
-                    ui.horizontal(|ui| {
-                        let mut enabled = inst.enabled;
-                        if ui.checkbox(&mut enabled, "").changed() {
-                            world.set_effect_enabled(id, index, enabled);
-                        }
-                        ui.add(egui::Label::new(&inst.effect_id).truncate());
-                        ui.add_enabled_ui(index > 0, |ui| {
-                            if ui.small_button("↑").clicked() {
-                                world.reorder_effect(id, index, index - 1);
+    if !effects.is_empty() {
+        let last = effects.len() - 1;
+        for (index, inst) in effects.into_iter().enumerate() {
+            ui.push_id(("effect_sidebar_row", id, index), |ui| {
+                egui::Frame::default()
+                    .fill(card)
+                    .corner_radius(3.0)
+                    .inner_margin(4.0)
+                    .show(ui, |ui| {
+                        ui.horizontal(|ui| {
+                            let mut enabled = inst.enabled;
+                            if ui.checkbox(&mut enabled, "").changed() {
+                                world.set_effect_enabled(id, index, enabled);
+                            }
+                            ui.add(egui::Label::new(&inst.effect_id).truncate());
+                            ui.add_enabled_ui(index > 0, |ui| {
+                                if ui.small_button("↑").clicked() {
+                                    world.reorder_effect(id, index, index - 1);
+                                }
+                            });
+                            ui.add_enabled_ui(index < last, |ui| {
+                                if ui.small_button("↓").clicked() {
+                                    world.reorder_effect(id, index, index + 1);
+                                }
+                            });
+                            if ui.small_button("✕").clicked() {
+                                world.remove_effect(id, index);
                             }
                         });
-                        ui.add_enabled_ui(index < last, |ui| {
-                            if ui.small_button("↓").clicked() {
-                                world.reorder_effect(id, index, index + 1);
-                            }
-                        });
-                        if ui.small_button("✕").clicked() {
-                            world.remove_effect(id, index);
-                        }
                     });
-                });
-        });
+            });
+        }
+    }
+
+    if !plugins.is_empty() {
+        ui.add_space(4.0);
+        ui.colored_label(
+            egui::Color32::from_rgb(0x8a, 0xab, 0xff),
+            t!("音声エフェクト"),
+        );
+        let last = plugins.len() - 1;
+        for (index, inst) in plugins.into_iter().enumerate() {
+            ui.push_id(("plugin_sidebar_row", id, index), |ui| {
+                egui::Frame::default()
+                    .fill(card)
+                    .corner_radius(3.0)
+                    .inner_margin(4.0)
+                    .show(ui, |ui| {
+                        ui.horizontal(|ui| {
+                            let mut active = !inst.bypass;
+                            if ui.checkbox(&mut active, "").changed() {
+                                world.set_audio_plugin_bypass(id, index, !active);
+                            }
+                            let name = inst
+                                .path
+                                .file_stem()
+                                .and_then(|s| s.to_str())
+                                .unwrap_or(&inst.plugin_id);
+                            ui.add(egui::Label::new(name).truncate());
+                            ui.add_enabled_ui(index > 0, |ui| {
+                                if ui.small_button("↑").clicked() {
+                                    world.reorder_audio_plugin(id, index, index - 1);
+                                }
+                            });
+                            ui.add_enabled_ui(index < last, |ui| {
+                                if ui.small_button("↓").clicked() {
+                                    world.reorder_audio_plugin(id, index, index + 1);
+                                }
+                            });
+                            if ui.small_button("✕").clicked() {
+                                world.remove_audio_plugin(id, index);
+                            }
+                        });
+                    });
+            });
+        }
     }
 }
 
@@ -73,118 +120,193 @@ pub fn effects_section(
     objects: &[TimelineData],
 ) {
     let effects = world.get_effects(id);
-    if effects.is_empty() {
+    let plugins = world.get_plugin_chain(id).unwrap_or_default();
+    if effects.is_empty() && plugins.is_empty() {
         ui.label(t!("エフェクトはありません"));
         return;
     }
     let (clip_start, clip_end) = clip_bounds(world, id);
     let current_frame = world.current_frame();
-    let last = effects.len() - 1;
 
-    for (index, inst) in effects.into_iter().enumerate() {
-        ui.push_id(("effect_row", id, index), |ui| {
-            ui.horizontal(|ui| {
-                let mut enabled = inst.enabled;
-                if ui.checkbox(&mut enabled, "").changed() {
-                    world.set_effect_enabled(id, index, enabled);
-                }
-                ui.label(&inst.effect_id);
-                ui.add_enabled_ui(index > 0, |ui| {
-                    if ui.small_button("↑").clicked() {
-                        world.reorder_effect(id, index, index - 1);
+    if !plugins.is_empty() {
+        ui.colored_label(
+            egui::Color32::from_rgb(0x8a, 0xab, 0xff),
+            t!("音声エフェクト (Carla)"),
+        );
+        let last = plugins.len() - 1;
+        for (index, inst) in plugins.into_iter().enumerate() {
+            ui.push_id(("audio_plugin_row", id, index), |ui| {
+                ui.horizontal(|ui| {
+                    let mut active = !inst.bypass;
+                    if ui.checkbox(&mut active, "").changed() {
+                        world.set_audio_plugin_bypass(id, index, !active);
+                    }
+                    let name = inst
+                        .path
+                        .file_stem()
+                        .and_then(|s| s.to_str())
+                        .unwrap_or(&inst.plugin_id);
+                    ui.strong(name);
+                    ui.colored_label(
+                        egui::Color32::from_rgb(0x88, 0x88, 0x90),
+                        format!("({:?})", inst.format),
+                    );
+                    ui.add_enabled_ui(index > 0, |ui| {
+                        if ui.small_button("↑").clicked() {
+                            world.reorder_audio_plugin(id, index, index - 1);
+                        }
+                    });
+                    ui.add_enabled_ui(index < last, |ui| {
+                        if ui.small_button("↓").clicked() {
+                            world.reorder_audio_plugin(id, index, index + 1);
+                        }
+                    });
+                    if ui.small_button("✕").clicked() {
+                        world.remove_audio_plugin(id, index);
                     }
                 });
-                ui.add_enabled_ui(index < last, |ui| {
-                    if ui.small_button("↓").clicked() {
-                        world.reorder_effect(id, index, index + 1);
+
+                ui.indent(("plugin_info", index), |ui| {
+                    if inst.param_info.is_empty() {
+                        ui.small(t!("(パラメータ情報がありません)"));
+                    } else {
+                        for info in &inst.param_info {
+                            let val = inst.params.get(&info.id).copied().unwrap_or(info.default);
+                            let segment = super::segment::Segment {
+                                start_frame: clip_start,
+                                end_frame: clip_end,
+                                start_value: val as f32,
+                                end_value: val as f32,
+                            };
+                            let outcome = super::row::property_row(
+                                ui,
+                                (id, "audio_plugin", index, info.id),
+                                &info.name,
+                                segment,
+                                info.min as f32,
+                                info.max as f32,
+                            );
+                            if let Some(v) = outcome.start_value {
+                                world.set_audio_plugin_param(id, index, info.id, v as f64);
+                            }
+                            if let Some(v) = outcome.end_value {
+                                world.set_audio_plugin_param(id, index, info.id, v as f64);
+                            }
+                        }
                     }
                 });
-                if ui.small_button("✕").clicked() {
-                    world.remove_effect(id, index);
-                }
+                ui.separator();
             });
+        }
+    }
 
-            let Some(source) = find_effect(&inst.effect_id) else {
-                ui.small(t!("(エフェクト定義が見つかりません)"));
-                return;
-            };
-            let schema = param_schema(&source);
-            let mut collapsed = false;
-
-            for s in &schema {
-                if s.kind == ParamKind::Group {
-                    let initial_open = s.default_float != 0.0;
-                    let open = is_group_open(id, index as i32, &s.label, initial_open);
-                    if ui
-                        .selectable_label(open, format!("▸ {}", effect_param_label(&s.label)))
-                        .clicked()
-                    {
-                        toggle_group_open(id, index as i32, &s.label);
+    if !effects.is_empty() {
+        let last = effects.len() - 1;
+        for (index, inst) in effects.into_iter().enumerate() {
+            ui.push_id(("effect_row", id, index), |ui| {
+                ui.horizontal(|ui| {
+                    let mut enabled = inst.enabled;
+                    if ui.checkbox(&mut enabled, "").changed() {
+                        world.set_effect_enabled(id, index, enabled);
                     }
-                    collapsed = !is_group_open(id, index as i32, &s.label, initial_open);
-                    continue;
-                }
-                if collapsed {
-                    continue;
-                }
-                if s.kind == ParamKind::Separator {
-                    ui.separator();
-                    continue;
-                }
-
-                let current = inst.params.get(&s.key).map(|p| &p.static_value);
-
-                match s.kind {
-                    ParamKind::Float | ParamKind::Color => {
-                        let base = match current {
-                            Some(Value::Number(v)) => *v,
-                            _ => s.default_float,
-                        };
-                        let min = if s.kind == ParamKind::Color {
-                            0.0
-                        } else {
-                            s.min
-                        };
-                        let max = if s.kind == ParamKind::Color {
-                            1.0
-                        } else {
-                            s.max
-                        };
-                        let track = world.get_effect_keyframes(id, index, &s.key);
-                        let key_set = s.key.clone();
-                        let key_rm = s.key.clone();
-                        float_row(
-                            ui,
-                            world,
-                            (id, index, &s.key),
-                            super::easing_editor::TrackTarget::Effect {
-                                object_id: id,
-                                effect_index: index,
-                                key: s.key.clone(),
-                            },
-                            &s.label,
-                            min,
-                            max,
-                            clip_start,
-                            clip_end,
-                            current_frame,
-                            base,
-                            &track,
-                            move |w, f, v, e, p| {
-                                w.set_effect_keyframe(id, index, &key_set, f, v, e, p)
-                            },
-                            move |w, f| w.remove_effect_keyframe(id, index, &key_rm, f),
-                        );
+                    ui.label(&inst.effect_id);
+                    ui.add_enabled_ui(index > 0, |ui| {
+                        if ui.small_button("↑").clicked() {
+                            world.reorder_effect(id, index, index - 1);
+                        }
+                    });
+                    ui.add_enabled_ui(index < last, |ui| {
+                        if ui.small_button("↓").clicked() {
+                            world.reorder_effect(id, index, index + 1);
+                        }
+                    });
+                    if ui.small_button("✕").clicked() {
+                        world.remove_effect(id, index);
                     }
-                    _ => {
-                        if let Some(v) = param_widget(ui, id, index, s, current, objects) {
-                            apply_effect_value(world, id, index, &s.key, v);
+                });
+
+                let Some(source) = find_effect(&inst.effect_id) else {
+                    ui.small(t!("(エフェクト定義が見つかりません)"));
+                    return;
+                };
+                let schema = param_schema(&source);
+                let mut collapsed = false;
+
+                for s in &schema {
+                    if s.kind == ParamKind::Group {
+                        let initial_open = s.default_float != 0.0;
+                        let open = is_group_open(id, index as i32, &s.label, initial_open);
+                        if ui
+                            .selectable_label(open, format!("▸ {}", effect_param_label(&s.label)))
+                            .clicked()
+                        {
+                            toggle_group_open(id, index as i32, &s.label);
+                        }
+                        collapsed = !is_group_open(id, index as i32, &s.label, initial_open);
+                        continue;
+                    }
+                    if collapsed {
+                        continue;
+                    }
+                    if s.kind == ParamKind::Separator {
+                        ui.separator();
+                        continue;
+                    }
+
+                    let current = inst.params.get(&s.key).map(|p| &p.static_value);
+
+                    match s.kind {
+                        ParamKind::Float | ParamKind::Color => {
+                            let base = match current {
+                                Some(Value::Number(v)) => *v,
+                                _ => s.default_float,
+                            };
+                            let min = if s.kind == ParamKind::Color {
+                                0.0
+                            } else {
+                                s.min
+                            };
+                            let max = if s.kind == ParamKind::Color {
+                                1.0
+                            } else {
+                                s.max
+                            };
+                            let track = world.get_effect_keyframes(id, index, &s.key);
+                            let key_set = s.key.clone();
+                            let key_rm = s.key.clone();
+                            float_row(
+                                ui,
+                                world,
+                                (id, index, &s.key),
+                                super::easing_editor::TrackTarget::Effect {
+                                    object_id: id,
+                                    effect_index: index,
+                                    key: s.key.clone(),
+                                },
+                                &s.label,
+                                min,
+                                max,
+                                clip_start,
+                                clip_end,
+                                current_frame,
+                                base,
+                                &track,
+                                move |w, f, v, e, p| {
+                                    w.set_effect_keyframe(id, index, &key_set, f, v, e, p)
+                                },
+                                move |w, f| w.remove_effect_keyframe(id, index, &key_rm, f),
+                            );
+                        }
+                        _ => {
+                            if let Some(v) = param_widget(ui, id, index, s, current, objects) {
+                                apply_effect_value(world, id, index, &s.key, v);
+                            }
                         }
                     }
                 }
-            }
-        });
-        ui.separator();
+            });
+            ui.separator();
+        }
     }
 }
 

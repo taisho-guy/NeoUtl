@@ -24,7 +24,7 @@ local EXCLUDE_FILES = {
 }
 
 local EXCLUDE_DIRS = {
-    "neoutl-wgpu"
+    "neoutl-wgpu", "Carla"
 }
 
 local function parse_path(path)

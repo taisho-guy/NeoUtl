@@ -41,7 +41,7 @@ fn from_vtable(vtable: MediaVTable, lib: Option<Library>) -> MediaPlugin {
 fn native_plugins() -> Vec<MediaPlugin> {
     vec![
         from_vtable(gpuvideo_native_vtable(), None),
-        from_vtable(neoutl_media_ffmpeg_decoder::native_vtable(), None),
+        from_vtable(neo_media_ffmpeg::native_vtable(), None),
     ]
 }
 
@@ -163,11 +163,6 @@ pub fn default_decoders_dir() -> PathBuf {
     }
 
     exe_dir.join("decoders")
-}
-
-#[cfg(target_os = "linux")]
-pub fn inject_gpuvideo_shared_device(device: Arc<gpu_video::VulkanDevice>) {
-    neoutl_media_gpuvideo_decoder::set_shared_device(device);
 }
 
 fn load_one(path: &Path) -> Result<MediaPlugin, Box<dyn std::error::Error>> {
