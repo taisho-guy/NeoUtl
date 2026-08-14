@@ -175,6 +175,12 @@ impl TransferBackend for VaapiTransferBackend {
 
         let derived = transfer_to_vulkan_frame(input.av_frame, self.derived_frames_ctx)
             .map_err(TransferError::SyncFailed)?;
+        unsafe {
+            self.vulkan_ctx
+                .copy_engine
+                .device_wait_idle()
+                .map_err(TransferError::SyncFailed)?;
+        }
         let src_image = unsafe { vk_image_of(&derived) };
 
         let width = input.visible_rect.width;

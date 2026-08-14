@@ -95,7 +95,7 @@ egui = "0.35"
 egui-wgpu = "0.35"
 egui-winit = "0.35"
 winit = "0.30"
-egui_extras = "0.35"
+egui_extras = { version = "0.35", features = ["svg"] }
 egui_material_icons = "0.7"
 egui_code_editor = "0.3"
 egui_plot = "0.36"

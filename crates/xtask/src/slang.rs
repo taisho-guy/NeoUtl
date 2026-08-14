@@ -235,7 +235,13 @@ pub fn ensure_installed(workspace_root: &Path, offline: bool) {
     };
 
     if installed_tag.as_deref() == Some(release.tag_name.as_str()) && slang_dir.is_dir() {
-        eprintln!("{}", t!("[xtask][slang] 最新版導入済み: %{arg0}"));
+        eprintln!(
+            "{}",
+            t!(
+                "[xtask][slang] 最新版導入済み: %{arg0}",
+                arg0 = release.tag_name.as_str()
+            )
+        );
         return;
     }
 
@@ -246,12 +252,25 @@ pub fn ensure_installed(workspace_root: &Path, offline: bool) {
         );
     };
 
-    eprintln!("{}", t!("[xtask][slang] 導入開始: %{arg0} (%{arg1})"));
+    eprintln!(
+        "{}",
+        t!(
+            "[xtask][slang] 導入開始: %{arg0} (%{arg1})",
+            arg0 = release.tag_name.as_str(),
+            arg1 = asset.browser_download_url.as_str()
+        )
+    );
     let bytes = download_asset_bytes(&asset.browser_download_url)
         .unwrap_or_else(|err| panic!("[xtask][slang] ダウンロード失敗: {err}"));
     extract_zip(&bytes, &slang_dir).unwrap_or_else(|err| panic!("[xtask][slang] 展開失敗: {err}"));
     write_installed_tag(&slang_dir, &release.tag_name);
-    eprintln!("{}", t!("[xtask][slang] 導入完了: %{arg0}"));
+    eprintln!(
+        "{}",
+        t!(
+            "[xtask][slang] 導入完了: %{arg0}",
+            arg0 = slang_dir.display()
+        )
+    );
 }
 
 pub fn apply_build_env(cmd: &mut Command, workspace_root: &Path) {

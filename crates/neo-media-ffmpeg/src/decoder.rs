@@ -706,6 +706,43 @@ enum ConvertOutcome {
     Unsupported(&'static str),
 }
 
+fn map_color_primaries(v: sys::AVColorPrimaries) -> ColorPrimaries {
+    match v {
+        sys::AVColorPrimaries::AVCOL_PRI_BT709 => ColorPrimaries::Bt709,
+        sys::AVColorPrimaries::AVCOL_PRI_BT2020 => ColorPrimaries::Bt2020,
+        sys::AVColorPrimaries::AVCOL_PRI_SMPTE170M | sys::AVColorPrimaries::AVCOL_PRI_SMPTE240M => {
+            ColorPrimaries::Smpte170m
+        }
+        _ => ColorPrimaries::Unknown,
+    }
+}
+
+fn map_transfer_characteristics(v: sys::AVColorTransferCharacteristic) -> TransferCharacteristics {
+    match v {
+        sys::AVColorTransferCharacteristic::AVCOL_TRC_BT709 => TransferCharacteristics::Bt709,
+        sys::AVColorTransferCharacteristic::AVCOL_TRC_SMPTE2084 => {
+            TransferCharacteristics::Smpte2084
+        }
+        sys::AVColorTransferCharacteristic::AVCOL_TRC_ARIB_STD_B67 => {
+            TransferCharacteristics::AribStdB67
+        }
+        _ => TransferCharacteristics::Unknown,
+    }
+}
+
+fn map_matrix_coefficients(v: sys::AVColorSpace) -> MatrixCoefficients {
+    match v {
+        sys::AVColorSpace::AVCOL_SPC_BT709 => MatrixCoefficients::Bt709,
+        sys::AVColorSpace::AVCOL_SPC_BT2020_NCL => MatrixCoefficients::Bt2020Ncl,
+        sys::AVColorSpace::AVCOL_SPC_SMPTE170M => MatrixCoefficients::Smpte170m,
+        _ => MatrixCoefficients::Unknown,
+    }
+}
+
+fn is_full_range(v: sys::AVColorRange) -> bool {
+    v == sys::AVColorRange::AVCOL_RANGE_JPEG
+}
+
 fn try_convert_to_gpu(ctx: &mut OpenContext, av_frame: *mut sys::AVFrame) -> ConvertOutcome {
     let Some(gpu) = ctx.gpu_pipeline.as_mut() else {
         return ConvertOutcome::Unsupported("GPUパイプライン未初期化(Vulkan相互運用不可)");
@@ -738,6 +775,15 @@ fn try_convert_to_gpu(ctx: &mut OpenContext, av_frame: *mut sys::AVFrame) -> Con
     };
     let progressive = unsafe { (*av_frame).flags & sys::AV_FRAME_FLAG_INTERLACED == 0 };
 
+    let (color_primaries, transfer_characteristics, matrix_coefficients, full_range) = unsafe {
+        (
+            map_color_primaries((*av_frame).color_primaries),
+            map_transfer_characteristics((*av_frame).color_trc),
+            map_matrix_coefficients((*av_frame).colorspace),
+            is_full_range((*av_frame).color_range),
+        )
+    };
+
     let input = neo_media_transfer_vaapi::VaapiDecodedFrame {
         av_frame,
         src_hw_frames_ctx: hw_frames_ctx_ref,
@@ -753,10 +799,10 @@ fn try_convert_to_gpu(ctx: &mut OpenContext, av_frame: *mut sys::AVFrame) -> Con
             width: ctx.width,
             height: ctx.height,
         },
-        color_primaries: ColorPrimaries::Unknown,
-        transfer_characteristics: TransferCharacteristics::Unknown,
-        matrix_coefficients: MatrixCoefficients::Unknown,
-        full_range: false,
+        color_primaries,
+        transfer_characteristics,
+        matrix_coefficients,
+        full_range,
         pts,
         duration: 0,
         progressive,
@@ -775,7 +821,7 @@ fn try_convert_to_gpu(ctx: &mut OpenContext, av_frame: *mut sys::AVFrame) -> Con
             }
         };
 
-    let gpu_frame = GpuFrame::new(neo_frame.texture, ctx.width, ctx.height);
+    let gpu_frame = GpuFrame::new_pooled(neo_frame.texture, ctx.width, ctx.height, cache);
     ConvertOutcome::Gpu(VideoFrame(Arc::new(gpu_frame)))
 }
 
