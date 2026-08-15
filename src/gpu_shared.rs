@@ -14,7 +14,12 @@ pub fn locked_submit(
     buffers: impl IntoIterator<Item = wgpu::CommandBuffer>,
 ) -> wgpu::SubmissionIndex {
     let lock = neo_media_ffmpeg::shared_wgpu_submit_lock();
+    let wait_start = std::time::Instant::now();
     let _guard = lock.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+    let waited = wait_start.elapsed();
+    if waited > std::time::Duration::from_millis(5) {
+        eprintln!("[gpu_shared][診断][submit_lock] egui描画側待機={waited:?}(競合)");
+    }
     queue.submit(buffers)
 }
 

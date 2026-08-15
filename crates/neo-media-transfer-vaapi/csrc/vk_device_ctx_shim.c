@@ -1,6 +1,7 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
 #include <libavutil/buffer.h>
 #include <libavutil/frame.h>
@@ -8,6 +9,7 @@
 #include <libavutil/hwcontext_vaapi.h>
 #include <libavutil/hwcontext_vulkan.h>
 #include <va/va.h>
+#include <va/va_drmcommon.h>
 
 static char **copy_extension_names(const char *const *names, int count) {
     if (count <= 0) {
@@ -143,6 +145,88 @@ int neoutl_vaapi_sync_surface(AVFrame *vaapi_frame)
     VAStatus status = vaSyncSurface(vaapi_dev_ctx->display, surface);
     if (status != VA_STATUS_SUCCESS) {
         return -4;
+    }
+
+    return 0;
+}
+
+// VASurfaceIDから物理DRM-PRIMEオブジェクト記述を一度だけ取得する。
+// 恒久対応の要: VASurfaceIDが指す物理バッファオブジェクト(GEM/dma-buf)は
+// VA-APIサーフェスプール生成時(initial_pool_size分)に固定確保され、
+// デコード内容の書き換えではオブジェクト自体は再確保されない。
+// 従って本関数はプロセス内で同一VASurfaceIDに対し1回のみ呼び出せばよく、
+// 返却したfdをVulkan側でインポート後は当該VASurfaceIDに対し
+// 再エクスポート・再インポートを行わない(dma-buf import/export往復の
+// 高頻度churnがGPUVMフォールトの温床であったため、これを構造的に排除する)。
+int neoutl_vaapi_export_surface_drm(
+    AVFrame *vaapi_frame,
+    uint32_t *out_fourcc,
+    uint32_t *out_width,
+    uint32_t *out_height,
+    int *out_fd,
+    uint64_t *out_drm_format_modifier,
+    uint32_t *out_plane_count,
+    uint32_t *out_plane_offset,
+    uint32_t *out_plane_pitch,
+    uint32_t *out_plane_format)
+{
+    if (!vaapi_frame || !vaapi_frame->hw_frames_ctx || !vaapi_frame->data[3] ||
+        !out_fourcc || !out_width || !out_height || !out_fd ||
+        !out_drm_format_modifier || !out_plane_count ||
+        !out_plane_offset || !out_plane_pitch || !out_plane_format) {
+        return -1;
+    }
+
+    AVHWFramesContext *frames_ctx = (AVHWFramesContext *)vaapi_frame->hw_frames_ctx->data;
+    if (!frames_ctx || !frames_ctx->device_ctx) {
+        return -2;
+    }
+
+    AVVAAPIDeviceContext *vaapi_dev_ctx =
+        (AVVAAPIDeviceContext *)frames_ctx->device_ctx->hwctx;
+    if (!vaapi_dev_ctx) {
+        return -3;
+    }
+
+    VASurfaceID surface = (VASurfaceID)(uintptr_t)vaapi_frame->data[3];
+
+    // COMPOSED_LAYERS: NV12/P010等セミプラナー形式を単一DRMオブジェクト・
+    // 複数プレーンの単一レイヤーとしてエクスポートする(AMD VCN出力と一致)。
+    // READ_ONLY: Vulkan側は読み取り専用アクセスのみ行うため要求フラグを絞る。
+    VADRMPRIMESurfaceDescriptor desc;
+    memset(&desc, 0, sizeof(desc));
+    VAStatus status = vaExportSurfaceHandle(
+        vaapi_dev_ctx->display,
+        surface,
+        VA_SURFACE_ATTRIB_MEM_TYPE_DRM_PRIME_2,
+        VA_EXPORT_SURFACE_COMPOSED_LAYERS | VA_EXPORT_SURFACE_READ_ONLY,
+        &desc);
+    if (status != VA_STATUS_SUCCESS) {
+        return -4;
+    }
+
+    if (desc.num_objects < 1 || desc.num_layers < 1 ||
+        desc.layers[0].num_planes < 1 || desc.layers[0].num_planes > 4) {
+        return -5;
+    }
+
+    *out_fourcc = desc.fourcc;
+    *out_width = desc.width;
+    *out_height = desc.height;
+    *out_fd = desc.objects[0].fd;
+    *out_drm_format_modifier = desc.objects[0].drm_format_modifier;
+    *out_plane_count = desc.layers[0].num_planes;
+    *out_plane_format = desc.layers[0].drm_format;
+    for (uint32_t i = 0; i < desc.layers[0].num_planes; i++) {
+        out_plane_offset[i] = desc.layers[0].offset[i];
+        out_plane_pitch[i] = desc.layers[0].pitch[i];
+    }
+
+    // objects[1..]のfdは本経路(単一オブジェクト前提)では未使用のためクローズする。
+    for (uint32_t i = 1; i < desc.num_objects; i++) {
+        if (desc.objects[i].fd >= 0) {
+            close(desc.objects[i].fd);
+        }
     }
 
     return 0;

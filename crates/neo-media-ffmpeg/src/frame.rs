@@ -27,6 +27,7 @@ pub struct GpuFrame {
     pub height: u32,
     _keep_alive: Option<Arc<OwnedAvFrame>>,
     pool_release: Option<Arc<neo_media_cache::NeoMediaCache>>,
+    _pool_owner_token: Option<Arc<neo_media_cache::SlotOwnerToken>>,
 }
 
 impl GpuFrame {
@@ -37,6 +38,7 @@ impl GpuFrame {
             height,
             _keep_alive: None,
             pool_release: None,
+            _pool_owner_token: None,
         }
     }
 
@@ -45,6 +47,7 @@ impl GpuFrame {
         width: u32,
         height: u32,
         cache: Arc<neo_media_cache::NeoMediaCache>,
+        pool_owner_token: Option<Arc<neo_media_cache::SlotOwnerToken>>,
     ) -> Self {
         Self {
             texture,
@@ -52,6 +55,7 @@ impl GpuFrame {
             height,
             _keep_alive: None,
             pool_release: Some(cache),
+            _pool_owner_token: pool_owner_token,
         }
     }
 }
@@ -68,10 +72,6 @@ impl Drop for GpuFrame {
 pub struct VideoFrame(pub Arc<GpuFrame>);
 
 impl VideoFrame {
-    pub fn byte_cost(&self) -> i64 {
-        0
-    }
-
     pub fn width(&self) -> u32 {
         self.0.width
     }

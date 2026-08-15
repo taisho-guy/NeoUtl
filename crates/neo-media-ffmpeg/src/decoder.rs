@@ -13,12 +13,10 @@ use neo_media_core::{
 };
 use neo_media_transfer_vaapi::VaapiTransferBackend;
 
-use crate::cache::{FrameLruCache, GopCache, GopCacheBlock};
+use crate::cache::{GopCache, GopCacheBlock, PooledFrameCache};
 use crate::frame::{GpuFrame, VideoFrame, VideoFrameStore};
 use crate::index::{FrameIndex, build_index};
 use crate::vaapi_probe::probe_vaapi_node;
-
-const CACHE_CAPACITY: usize = neo_media_cache::MAX_CAPACITY;
 
 static SHARED_WGPU: OnceLock<(Arc<wgpu::Device>, Arc<wgpu::Queue>)> = OnceLock::new();
 static SHARED_CACHE: OnceLock<Arc<NeoMediaCache>> = OnceLock::new();
@@ -30,11 +28,24 @@ pub fn shared_wgpu_submit_lock() -> Arc<Mutex<()>> {
         .clone()
 }
 
+fn rgba8_frame_bytes(width: u32, height: u32) -> u64 {
+    width as u64 * height as u64 * 4
+}
+
 pub fn set_shared_wgpu_device(device: Arc<wgpu::Device>, queue: Arc<wgpu::Queue>) {
+    let device_for_query = device.clone();
+    let budget_provider: Arc<neo_media_cache::VramBudgetProvider> = Arc::new(move || unsafe {
+        neo_media_transfer_vaapi::query_vram_budget_bytes(&device_for_query)
+    });
     let _ = SHARED_CACHE.set(Arc::new(NeoMediaCache::new(
         (*device).clone(),
-        CACHE_CAPACITY,
+        Some(budget_provider),
     )));
+    if let Some(cache) = SHARED_CACHE.get() {
+        cache.register_consumer(neo_media_cache::KIND_PLAYBACK, 3);
+        cache.register_consumer(neo_media_cache::KIND_THUMBNAIL, 1);
+        cache.register_consumer(neo_media_cache::KIND_LUA_SAMPLE, 1);
+    }
     let _ = SHARED_WGPU.set((device, queue));
 }
 
@@ -99,8 +110,16 @@ const FF_THREAD_SLICE: i32 = 2;
 
 const GOP_CACHE_CAPACITY: usize = 3;
 const FORWARD_DECODE_THRESHOLD: i64 = 120;
-const DEFAULT_FRAME_CACHE_BYTES: i64 = 512 * 1024 * 1024;
+const POOLED_FRAME_CACHE_MARGIN: usize = 2;
 const HW_DEVICE_TYPE_NAMES: &[&str] = &["cuda", "vaapi", "d3d11va", "dxva2", "videotoolbox"];
+
+fn pooled_frame_cache_capacity(width: u32, height: u32) -> usize {
+    shared_media_cache()
+        .map(|cache| cache.effective_capacity(rgba8_frame_bytes(width, height)))
+        .unwrap_or(neo_media_cache::MIN_CAPACITY)
+        .saturating_sub(POOLED_FRAME_CACHE_MARGIN)
+        .max(1)
+}
 
 pub struct VideoMeta {
     pub total_frames: i64,
@@ -750,7 +769,11 @@ fn is_full_range(v: sys::AVColorRange) -> bool {
     v == sys::AVColorRange::AVCOL_RANGE_JPEG
 }
 
-fn try_convert_to_gpu(ctx: &mut OpenContext, av_frame: *mut sys::AVFrame) -> ConvertOutcome {
+fn try_convert_to_gpu(
+    ctx: &mut OpenContext,
+    av_frame: *mut sys::AVFrame,
+    frame_cache: &mut PooledFrameCache,
+) -> ConvertOutcome {
     let Some(gpu) = ctx.gpu_pipeline.as_mut() else {
         return ConvertOutcome::Unsupported("GPUパイプライン未初期化(Vulkan相互運用不可)");
     };
@@ -822,18 +845,51 @@ fn try_convert_to_gpu(ctx: &mut OpenContext, av_frame: *mut sys::AVFrame) -> Con
             .transfer(&input, &gpu.wgpu_device, &gpu.wgpu_queue, cache.as_ref())
         {
             Ok(f) => f,
+            Err(neo_media_core::TransferError::PoolExhausted) => {
+                if !frame_cache.evict_oldest() {
+                    eprintln!(
+                        "[neoutl-video-decoder] GPUフレーム転送失敗: PoolExhausted(退避対象なし)"
+                    );
+                    return ConvertOutcome::Unsupported("GPUフレーム転送(TransferBackend)失敗");
+                }
+                match gpu.backend.transfer(
+                    &input,
+                    &gpu.wgpu_device,
+                    &gpu.wgpu_queue,
+                    cache.as_ref(),
+                ) {
+                    Ok(f) => f,
+                    Err(e) => {
+                        eprintln!(
+                            "[neoutl-video-decoder] GPUフレーム転送失敗(退避後再試行も失敗): {e:?}"
+                        );
+                        return ConvertOutcome::Unsupported("GPUフレーム転送(TransferBackend)失敗");
+                    }
+                }
+            }
             Err(e) => {
                 eprintln!("[neoutl-video-decoder] GPUフレーム転送失敗: {e:?}");
                 return ConvertOutcome::Unsupported("GPUフレーム転送(TransferBackend)失敗");
             }
         };
 
-    let gpu_frame = GpuFrame::new_pooled(neo_frame.texture, ctx.width, ctx.height, cache);
+    let owner_token = cache.owner_token_of(
+        neo_media_core::PixelFormat::Rgba8,
+        ctx.width,
+        ctx.height,
+        &neo_frame.texture,
+    );
+    let gpu_frame =
+        GpuFrame::new_pooled(neo_frame.texture, ctx.width, ctx.height, cache, owner_token);
     ConvertOutcome::Gpu(VideoFrame(Arc::new(gpu_frame)))
 }
 
-fn convert_frame(ctx: &mut OpenContext, av_frame: *mut sys::AVFrame) -> Option<VideoFrame> {
-    match try_convert_to_gpu(ctx, av_frame) {
+fn convert_frame(
+    ctx: &mut OpenContext,
+    av_frame: *mut sys::AVFrame,
+    frame_cache: &mut PooledFrameCache,
+) -> Option<VideoFrame> {
+    match try_convert_to_gpu(ctx, av_frame, frame_cache) {
         ConvertOutcome::Gpu(frame) => Some(frame),
         ConvertOutcome::Unsupported(reason) => {
             eprintln!(
@@ -883,7 +939,7 @@ fn run_worker(
         height: ctx.height,
     });
 
-    let mut frame_cache = FrameLruCache::new(DEFAULT_FRAME_CACHE_BYTES);
+    let mut frame_cache = PooledFrameCache::new(pooled_frame_cache_capacity(ctx.width, ctx.height));
     let mut gop_cache = GopCache::new(GOP_CACHE_CAPACITY);
     let mut last_decoded_frame: i64 = -1;
 
@@ -921,7 +977,7 @@ fn decode_task(
     requested_target: i64,
     clip_key: &str,
     store: &Arc<VideoFrameStore>,
-    frame_cache: &mut FrameLruCache,
+    frame_cache: &mut PooledFrameCache,
     gop_cache: &mut GopCache,
     last_decoded_frame: &mut i64,
     last_requested_frame: &AtomicI64,
@@ -931,7 +987,7 @@ fn decode_task(
     }
     let target = requested_target.clamp(0, ctx.index.len() - 1);
 
-    if let Some(frame) = gop_cache.get(target) {
+    if let Some(frame) = gop_cache.get(target, frame_cache) {
         store.set_frame(clip_key, frame.clone());
         ctx.last_good_frame = Some(frame);
         return;
@@ -960,7 +1016,7 @@ fn decode_task(
         keyframe_index: key_index,
         start: key_index,
         end: gop_end,
-        frames: std::collections::HashMap::new(),
+        frame_indices: Vec::new(),
     };
 
     let mut target_dispatched = false;
@@ -1014,15 +1070,18 @@ fn decode_task(
                 }
             };
             let Some(decoded_index) = ctx.index.index_of_pts(pts) else {
+                eprintln!(
+                    "[neoutl-video-decoder][診断] index_of_pts不一致 pts={pts} target={target} (このフレームは破棄される)"
+                );
                 continue;
             };
             *last_decoded_frame = decoded_index;
 
             if !frame_cache.contains(decoded_index) {
-                match convert_frame(ctx, av_frame) {
+                match convert_frame(ctx, av_frame, frame_cache) {
                     Some(frame) => {
                         frame_cache.insert(decoded_index, frame.clone());
-                        new_gop_block.frames.insert(decoded_index, frame.clone());
+                        new_gop_block.frame_indices.push(decoded_index);
                         ctx.last_good_frame = Some(frame.clone());
 
                         if decoded_index == target && !target_dispatched {
@@ -1068,8 +1127,30 @@ fn decode_task(
         sys::av_packet_free(&mut { pkt });
     }
 
-    if !new_gop_block.frames.is_empty() {
+    let decoded_count = new_gop_block.frame_indices.len();
+
+    if !new_gop_block.frame_indices.is_empty() {
         gop_cache.put(new_gop_block);
+    }
+
+    {
+        let boundary_lo = (target - 2).max(0);
+        let boundary_hi = (target + 2).min(ctx.index.len() - 1);
+        let mut boundary_dump = String::new();
+        for i in boundary_lo..=boundary_hi {
+            boundary_dump.push_str(&format!(
+                "[{i}:pts={},key={}] ",
+                ctx.index.pts_at(i),
+                ctx.index.is_key_at(i)
+            ));
+        }
+        eprintln!(
+            "[neoutl-video-decoder][診断][decode_task終了] requested_target={requested_target} \
+target={target} key_index={key_index} gop_end={gop_end} \
+last_decoded_frame={last_decoded_frame} target_dispatched={target_dispatched} \
+decoded_frame_count={decoded_count} boundary={boundary_dump}",
+            last_decoded_frame = *last_decoded_frame,
+        );
     }
 
     if !target_dispatched {
