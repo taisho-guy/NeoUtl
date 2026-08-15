@@ -31,8 +31,6 @@ dependencies = [
  "neoutl-effect-lua",
  "neoutl-lua-runtime",
  "neoutl-media-api",
- "neoutl-media-gpuvideo-decoder",
- "neoutl-media-gpuvideo-encoder",
  "neoutl-media-gstreamer-encoder",
  "neoutl-object-api",
  "neoutl-object-shader-build",
@@ -3528,26 +3526,6 @@ name = "neoutl-media-api"
 version = "0.0.0"
 dependencies = [
  "serde",
- "wgpu",
-]
-
-[[package]]
-name = "neoutl-media-gpuvideo-decoder"
-version = "0.0.0"
-dependencies = [
- "gpu-video",
- "neoutl-media-api",
- "rust-i18n",
- "symphonia 0.6.1",
- "wgpu",
-]
-
-[[package]]
-name = "neoutl-media-gpuvideo-encoder"
-version = "0.0.0"
-dependencies = [
- "gpu-video",
- "neoutl-media-api",
  "wgpu",
 ]
 

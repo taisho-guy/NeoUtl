@@ -39,20 +39,7 @@ fn from_vtable(vtable: MediaVTable, lib: Option<Library>) -> MediaPlugin {
 }
 
 fn native_plugins() -> Vec<MediaPlugin> {
-    vec![
-        from_vtable(gpuvideo_native_vtable(), None),
-        from_vtable(neo_media_ffmpeg::native_vtable(), None),
-    ]
-}
-
-#[cfg(target_os = "linux")]
-fn gpuvideo_native_vtable() -> MediaVTable {
-    neoutl_media_gpuvideo_decoder::native_vtable()
-}
-
-#[cfg(not(target_os = "linux"))]
-fn gpuvideo_native_vtable() -> MediaVTable {
-    neoutl_media_gpuvideo_decoder::macos_stub::native_vtable()
+    vec![from_vtable(neo_media_ffmpeg::native_vtable(), None)]
 }
 
 pub fn load_all(decoders_dir: &Path) {
