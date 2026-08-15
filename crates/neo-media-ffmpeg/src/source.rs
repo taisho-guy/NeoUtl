@@ -85,14 +85,16 @@ impl VideoSource for FfmpegVideoSource {
         self.store.invalidate_frame(CLIP_KEY);
         self.decoder.seek_to_frame(frame_index);
 
-        let deadline = Instant::now() + FRAME_WAIT_TIMEOUT;
+        let started = Instant::now();
+        let deadline = started + FRAME_WAIT_TIMEOUT;
         let frame = loop {
-            if let Some(frame) = self.store.frame(CLIP_KEY) {
+            if let Some(frame) = self.store.frame(CLIP_KEY, frame_index) {
                 break frame;
             }
             if Instant::now() >= deadline {
                 return Err(format!(
-                    "フレーム取得タイムアウト frame_index={frame_index}"
+                    "フレーム取得タイムアウト frame_index={frame_index} elapsed_ms={}",
+                    started.elapsed().as_millis()
                 ));
             }
             std::thread::sleep(FRAME_WAIT_POLL);

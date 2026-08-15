@@ -82,7 +82,7 @@ impl VideoFrame {
 }
 
 pub struct VideoFrameStore {
-    frames: Mutex<HashMap<String, VideoFrame>>,
+    frames: Mutex<HashMap<String, (i64, VideoFrame)>>,
     listeners: Mutex<Vec<Box<dyn Fn(&str) + Send + Sync>>>,
 }
 
@@ -101,11 +101,11 @@ impl VideoFrameStore {
             .push(Box::new(listener));
     }
 
-    pub fn set_frame(&self, key: &str, frame: VideoFrame) {
+    pub fn set_frame(&self, key: &str, frame_index: i64, frame: VideoFrame) {
         self.frames
             .lock()
             .expect("frames mutex poisoned")
-            .insert(key.to_owned(), frame);
+            .insert(key.to_owned(), (frame_index, frame));
         for listener in self
             .listeners
             .lock()
@@ -116,19 +116,26 @@ impl VideoFrameStore {
         }
     }
 
-    pub fn frame(&self, key: &str) -> Option<VideoFrame> {
+    pub fn frame(&self, key: &str, expected_index: i64) -> Option<VideoFrame> {
         self.frames
             .lock()
             .expect("frames mutex poisoned")
             .get(key)
-            .cloned()
+            .and_then(|(index, frame)| {
+                if *index == expected_index {
+                    Some(frame.clone())
+                } else {
+                    None
+                }
+            })
     }
 
-    pub fn has_frame(&self, key: &str) -> bool {
+    pub fn has_frame(&self, key: &str, expected_index: i64) -> bool {
         self.frames
             .lock()
             .expect("frames mutex poisoned")
-            .contains_key(key)
+            .get(key)
+            .is_some_and(|(index, _)| *index == expected_index)
     }
 
     pub fn invalidate_frame(&self, key: &str) {

@@ -4,6 +4,7 @@ use std::ptr;
 use std::sync::atomic::{AtomicBool, AtomicI64, Ordering};
 use std::sync::{Arc, Condvar, Mutex, OnceLock};
 use std::thread::JoinHandle;
+use std::time::Duration;
 
 use ffmpeg_sys_next as sys;
 
@@ -196,7 +197,13 @@ impl VideoDecoder {
         self.last_requested_frame.store(frame, Ordering::Release);
         let (lock, cvar) = &*self.shared;
         let mut mailbox = lock.lock().expect("mailbox mutex poisoned");
-        mailbox.target_frame = Some(frame);
+        if let Some(overwritten) = mailbox.target_frame.replace(frame) {
+            if overwritten != frame {
+                eprintln!(
+                    "[neoutl-video-decoder][診断][seek上書き] overwritten={overwritten} new={frame}"
+                );
+            }
+        }
         cvar.notify_one();
     }
 
@@ -943,19 +950,35 @@ fn run_worker(
     let mut gop_cache = GopCache::new(GOP_CACHE_CAPACITY);
     let mut last_decoded_frame: i64 = -1;
 
+    const DEBOUNCE_WINDOW: Duration = Duration::from_millis(16);
+
     let (lock, cvar) = &*shared;
     loop {
         let target = {
             let mut guard = lock.lock().expect("mailbox mutex poisoned");
             loop {
-                if let Some(target) = guard.target_frame.take() {
-                    break target;
+                if guard.target_frame.is_some() {
+                    break;
                 }
                 if guard.stopped {
                     return;
                 }
                 guard = cvar.wait(guard).expect("mailbox condvar poisoned");
             }
+            loop {
+                let before = guard.target_frame;
+                let (g, timeout) = cvar
+                    .wait_timeout(guard, DEBOUNCE_WINDOW)
+                    .expect("mailbox condvar poisoned");
+                guard = g;
+                if guard.stopped {
+                    return;
+                }
+                if timeout.timed_out() || guard.target_frame == before {
+                    break;
+                }
+            }
+            guard.target_frame.take().expect("target_frame must be set")
         };
 
         decode_task(
@@ -968,6 +991,18 @@ fn run_worker(
             &mut last_decoded_frame,
             &last_requested_frame,
         );
+
+        let latest_requested = last_requested_frame.load(Ordering::Acquire);
+        if latest_requested >= 0 && latest_requested != target {
+            let mut guard = lock.lock().expect("mailbox mutex poisoned");
+            if guard.target_frame.is_none() && !guard.stopped {
+                eprintln!(
+                    "[neoutl-video-decoder][診断][収束再投入] dispatched={target} latest_requested={latest_requested}"
+                );
+                guard.target_frame = Some(latest_requested);
+                cvar.notify_one();
+            }
+        }
     }
 }
 
@@ -988,13 +1023,19 @@ fn decode_task(
     let target = requested_target.clamp(0, ctx.index.len() - 1);
 
     if let Some(frame) = gop_cache.get(target, frame_cache) {
-        store.set_frame(clip_key, frame.clone());
+        store.set_frame(clip_key, target, frame.clone());
         ctx.last_good_frame = Some(frame);
+        eprintln!(
+            "[neoutl-video-decoder][診断][decode_task終了][gop_cache即応] requested_target={requested_target} target={target}"
+        );
         return;
     }
     if let Some(frame) = frame_cache.get(target) {
-        store.set_frame(clip_key, frame.clone());
+        store.set_frame(clip_key, target, frame.clone());
         ctx.last_good_frame = Some(frame);
+        eprintln!(
+            "[neoutl-video-decoder][診断][decode_task終了][frame_cache即応] requested_target={requested_target} target={target}"
+        );
         return;
     }
 
@@ -1085,7 +1126,7 @@ fn decode_task(
                         ctx.last_good_frame = Some(frame.clone());
 
                         if decoded_index == target && !target_dispatched {
-                            store.set_frame(clip_key, frame);
+                            store.set_frame(clip_key, decoded_index, frame);
                             target_dispatched = true;
                         }
                     }
@@ -1093,13 +1134,24 @@ fn decode_task(
                 }
             } else if decoded_index == target && !target_dispatched {
                 if let Some(frame) = frame_cache.get(decoded_index) {
-                    store.set_frame(clip_key, frame.clone());
+                    store.set_frame(clip_key, decoded_index, frame.clone());
                     ctx.last_good_frame = Some(frame);
                 }
                 target_dispatched = true;
             }
 
             if last_requested_frame.load(Ordering::Acquire) != requested_target {
+                let superseded_by = last_requested_frame.load(Ordering::Acquire);
+                eprintln!(
+                    "[neoutl-video-decoder][診断][decode_task中断] requested_target={requested_target} \
+target={target} last_decoded_frame={last_decoded_frame} superseded_by={superseded_by} \
+decoded_frame_count={}",
+                    new_gop_block.frame_indices.len(),
+                    last_decoded_frame = *last_decoded_frame,
+                );
+                if !new_gop_block.frame_indices.is_empty() {
+                    gop_cache.put(new_gop_block);
+                }
                 unsafe {
                     sys::av_packet_unref(pkt);
                     sys::av_frame_free(&mut { av_frame });
@@ -1155,7 +1207,10 @@ decoded_frame_count={decoded_count} boundary={boundary_dump}",
 
     if !target_dispatched {
         if let Some(frame) = ctx.last_good_frame.clone() {
-            store.set_frame(clip_key, frame);
+            eprintln!(
+                "[neoutl-video-decoder][診断][近似フレーム配信] requested_target={requested_target} target={target}"
+            );
+            store.set_frame(clip_key, requested_target, frame);
         }
     }
 }
