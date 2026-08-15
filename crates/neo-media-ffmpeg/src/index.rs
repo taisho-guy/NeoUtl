@@ -30,10 +30,36 @@ impl FrameIndex {
     }
 
     pub fn index_of_pts(&self, pts: i64) -> Option<i64> {
-        self.entries
-            .binary_search_by_key(&pts, |e| e.pts)
-            .ok()
-            .map(|i| i as i64)
+        if self.entries.is_empty() {
+            return None;
+        }
+        if let Ok(i) = self.entries.binary_search_by_key(&pts, |e| e.pts) {
+            return Some(i as i64);
+        }
+
+        let idx = self.entries.partition_point(|e| e.pts < pts);
+        let mut best: Option<(usize, i64)> = None;
+        for cand in [idx.checked_sub(1), Some(idx)] {
+            let Some(i) = cand else { continue };
+            if i >= self.entries.len() {
+                continue;
+            }
+            let diff = (self.entries[i].pts - pts).abs();
+            if best.is_none_or(|(_, d)| diff < d) {
+                best = Some((i, diff));
+            }
+        }
+
+        best.and_then(|(i, diff)| {
+            let neighbor_gap = if i + 1 < self.entries.len() {
+                (self.entries[i + 1].pts - self.entries[i].pts).abs()
+            } else if i > 0 {
+                (self.entries[i].pts - self.entries[i - 1].pts).abs()
+            } else {
+                i64::MAX
+            };
+            (diff.saturating_mul(2) <= neighbor_gap).then_some(i as i64)
+        })
     }
 
     pub fn preceding_keyframe(&self, target: i64) -> i64 {
@@ -115,6 +141,33 @@ pub unsafe fn build_index(fmt_ctx: *mut sys::AVFormatContext, stream_index: i32)
         gop_end[i] = end;
         if i > 0 && entries[i].is_key {
             end = i as i64 - 1;
+        }
+    }
+
+    if entries.len() >= 2 {
+        let typical_delta = {
+            let mut deltas: Vec<i64> = entries
+                .windows(2)
+                .map(|w| w[1].pts - w[0].pts)
+                .filter(|d| *d > 0)
+                .collect();
+            deltas.sort_unstable();
+            deltas.get(deltas.len() / 2).copied().unwrap_or(1)
+        };
+        for i in 1..entries.len() {
+            let delta = entries[i].pts - entries[i - 1].pts;
+            if delta <= 0 || delta > typical_delta.saturating_mul(3) {
+                eprintln!(
+                    "[neoutl-video-decoder][診断][index] PTS不連続検出 index={i} \
+prev_index={prev} prev_pts={prev_pts} prev_is_key={prev_key} \
+curr_pts={curr_pts} curr_is_key={curr_key} delta={delta} typical_delta={typical_delta}",
+                    prev = i - 1,
+                    prev_pts = entries[i - 1].pts,
+                    prev_key = entries[i - 1].is_key,
+                    curr_pts = entries[i].pts,
+                    curr_key = entries[i].is_key,
+                );
+            }
         }
     }
 

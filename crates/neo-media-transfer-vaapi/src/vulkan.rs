@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::os::raw::{c_int, c_uint, c_void};
 use std::ptr;
 use std::sync::{Arc, Mutex};
@@ -5,7 +6,6 @@ use std::sync::{Arc, Mutex};
 use ffmpeg_sys_next as sys;
 
 const AV_HWDEVICE_TYPE_VULKAN: sys::AVHWDeviceType = sys::AVHWDeviceType::AV_HWDEVICE_TYPE_VULKAN;
-const AV_PIX_FMT_VULKAN: i32 = 152;
 
 unsafe extern "C" {
     fn neoutl_vk_configure_device_ctx(
@@ -21,21 +21,24 @@ unsafe extern "C" {
         nb_enabled_dev_extensions: c_int,
     ) -> c_int;
 
-    fn neoutl_vk_frame_query_image0(
-        av_vk_frame: *mut c_void,
-        out_image0: *mut u64,
-        out_layout0: *mut c_int,
-    ) -> c_int;
-
-    fn neoutl_vk_frame_query_sync0(
-        av_vk_frame: *mut c_void,
-        out_semaphore: *mut u64,
-        out_wait_value: *mut u64,
-    ) -> c_int;
-
-    fn neoutl_vk_frame_signal_sync0(av_vk_frame: *mut c_void, new_value: u64) -> c_int;
-
     fn neoutl_vaapi_sync_surface(vaapi_frame: *mut sys::AVFrame) -> c_int;
+
+    fn neoutl_vaapi_export_surface_drm(
+        vaapi_frame: *mut sys::AVFrame,
+        out_fourcc: *mut u32,
+        out_width: *mut u32,
+        out_height: *mut u32,
+        out_fd: *mut c_int,
+        out_drm_format_modifier: *mut u64,
+        out_plane_count: *mut u32,
+        out_plane_offset: *mut u32,
+        out_plane_pitch: *mut u32,
+        out_plane_format: *mut u32,
+    ) -> c_int;
+}
+
+pub unsafe fn neoutl_vaapi_sync_surface_safe(vaapi_frame: *mut sys::AVFrame) -> c_int {
+    unsafe { neoutl_vaapi_sync_surface(vaapi_frame) }
 }
 
 pub struct VulkanRawHandles {
@@ -154,124 +157,277 @@ unsafe fn log_enabled_vulkan_extensions(av_hw_device_ctx: *mut sys::AVBufferRef)
     }
 }
 
-pub struct DerivedVulkanFrame {
-    av_frame: *mut sys::AVFrame,
+pub struct CachedVkSurface {
+    device: ash::Device,
+    pub image: ash::vk::Image,
+    memory: ash::vk::DeviceMemory,
+    pub layout: ash::vk::ImageLayout,
 }
 
-unsafe impl Send for DerivedVulkanFrame {}
-
-impl Drop for DerivedVulkanFrame {
+impl Drop for CachedVkSurface {
     fn drop(&mut self) {
         unsafe {
-            if !self.av_frame.is_null() {
-                sys::av_frame_free(&mut self.av_frame);
+            self.device.destroy_image(self.image, None);
+            self.device.free_memory(self.memory, None);
+        }
+    }
+}
+
+fn vk_format_for_surface(
+    sw_format_i32: i32,
+    is_direct_rgba: bool,
+) -> Result<ash::vk::Format, String> {
+    use ash::vk::Format;
+
+    fn as_i32(fmt: sys::AVPixelFormat) -> i32 {
+        fmt as i32
+    }
+
+    if is_direct_rgba {
+        return Ok(Format::B8G8R8A8_UNORM);
+    }
+    if sw_format_i32 == as_i32(sys::AVPixelFormat::AV_PIX_FMT_NV12) {
+        Ok(Format::G8_B8R8_2PLANE_420_UNORM)
+    } else if sw_format_i32 == as_i32(sys::AVPixelFormat::AV_PIX_FMT_P010LE)
+        || sw_format_i32 == as_i32(sys::AVPixelFormat::AV_PIX_FMT_P012LE)
+        || sw_format_i32 == as_i32(sys::AVPixelFormat::AV_PIX_FMT_P016LE)
+    {
+        Ok(Format::G10X6_B10X6R10X6_2PLANE_420_UNORM_3PACK16)
+    } else {
+        Err(format!("未対応sw_format: {sw_format_i32}"))
+    }
+}
+
+unsafe fn find_dma_buf_memory_type(
+    instance: &ash::Instance,
+    physical_device: ash::vk::PhysicalDevice,
+    memory_type_bits: u32,
+) -> Result<u32, String> {
+    unsafe {
+        let props = instance.get_physical_device_memory_properties(physical_device);
+        for i in 0..props.memory_type_count {
+            if memory_type_bits & (1 << i) != 0 {
+                return Ok(i);
             }
         }
+        Err("dma-buf importに適合するVkMemoryTypeが見つからない".to_owned())
     }
 }
 
-pub fn create_derived_vulkan_frames_ctx(
-    src_hw_frames_ctx: *mut sys::AVBufferRef,
-    vulkan_device_ctx: &NeoutlVulkanDeviceCtx,
-) -> Result<*mut sys::AVBufferRef, String> {
-    unsafe {
-        let mut derived: *mut sys::AVBufferRef = ptr::null_mut();
-        let ret = sys::av_hwframe_ctx_create_derived(
-            &mut derived,
-            std::mem::transmute::<i32, sys::AVPixelFormat>(AV_PIX_FMT_VULKAN),
-            vulkan_device_ctx.av_hw_device_ctx,
-            src_hw_frames_ctx,
-            0,
-        );
-        if ret < 0 {
-            return Err(format!("av_hwframe_ctx_create_derived失敗: {ret}"));
-        }
-        Ok(derived)
-    }
-}
-
-pub fn transfer_to_vulkan_frame(
+pub unsafe fn import_surface_once(
+    handles: &VulkanRawHandles,
+    instance: &ash::Instance,
+    device: &ash::Device,
     src_frame: *mut sys::AVFrame,
-    derived_frames_ctx: *mut sys::AVBufferRef,
-) -> Result<DerivedVulkanFrame, String> {
+    sw_format_i32: i32,
+    is_direct_rgba: bool,
+) -> Result<CachedVkSurface, String> {
     unsafe {
-        let sync_ret = neoutl_vaapi_sync_surface(src_frame);
-        if sync_ret != 0 {
-            return Err(format!("neoutl_vaapi_sync_surface失敗 ret={sync_ret}"));
-        }
+        let mut fourcc: u32 = 0;
+        let mut width: u32 = 0;
+        let mut height: u32 = 0;
+        let mut fd: c_int = -1;
+        let mut modifier: u64 = 0;
+        let mut plane_count: u32 = 0;
+        let mut plane_offset = [0u32; 4];
+        let mut plane_pitch = [0u32; 4];
+        let mut plane_format: u32 = 0;
 
-        let dst_frame = sys::av_frame_alloc();
-        if dst_frame.is_null() {
-            return Err("av_frame_alloc失敗".to_owned());
-        }
-        (*dst_frame).format = AV_PIX_FMT_VULKAN;
-        (*dst_frame).hw_frames_ctx = sys::av_buffer_ref(derived_frames_ctx);
-        if (*dst_frame).hw_frames_ctx.is_null() {
-            sys::av_frame_free(&mut { dst_frame });
-            return Err("hw_frames_ctx参照確保失敗".to_owned());
-        }
-        let map_flags = sys::AV_HWFRAME_MAP_READ as i32 as c_int;
-        let map_ret = sys::av_hwframe_map(dst_frame, src_frame, map_flags);
-        if map_ret < 0 {
-            sys::av_frame_free(&mut { dst_frame });
+        let export_ret = neoutl_vaapi_export_surface_drm(
+            src_frame,
+            &mut fourcc,
+            &mut width,
+            &mut height,
+            &mut fd,
+            &mut modifier,
+            &mut plane_count,
+            plane_offset.as_mut_ptr(),
+            plane_pitch.as_mut_ptr(),
+            &mut plane_format,
+        );
+        if export_ret != 0 {
             return Err(format!(
-                "av_hwframe_map失敗(VAAPI→Vulkanゼロコピー導出) ret={map_ret}"
+                "neoutl_vaapi_export_surface_drm失敗 ret={export_ret}"
             ));
         }
-        Ok(DerivedVulkanFrame {
-            av_frame: dst_frame,
+        let _ = fourcc;
+        let _ = plane_format;
+
+        let format = vk_format_for_surface(sw_format_i32, is_direct_rgba).map_err(|e| {
+            if fd >= 0 {
+                libc_close(fd);
+            }
+            e
+        })?;
+
+        let mut plane_layouts = Vec::with_capacity(plane_count as usize);
+        for i in 0..plane_count as usize {
+            plane_layouts.push(
+                ash::vk::SubresourceLayout::default()
+                    .offset(plane_offset[i] as u64)
+                    .row_pitch(plane_pitch[i] as u64),
+            );
+        }
+
+        let mut modifier_info = ash::vk::ImageDrmFormatModifierExplicitCreateInfoEXT::default()
+            .drm_format_modifier(modifier)
+            .plane_layouts(&plane_layouts);
+
+        let mut external_memory_info = ash::vk::ExternalMemoryImageCreateInfo::default()
+            .handle_types(ash::vk::ExternalMemoryHandleTypeFlags::DMA_BUF_EXT);
+
+        let image_info = ash::vk::ImageCreateInfo::default()
+            .image_type(ash::vk::ImageType::TYPE_2D)
+            .format(format)
+            .extent(ash::vk::Extent3D {
+                width,
+                height,
+                depth: 1,
+            })
+            .mip_levels(1)
+            .array_layers(1)
+            .samples(ash::vk::SampleCountFlags::TYPE_1)
+            .tiling(ash::vk::ImageTiling::DRM_FORMAT_MODIFIER_EXT)
+            .usage(ash::vk::ImageUsageFlags::TRANSFER_SRC | ash::vk::ImageUsageFlags::SAMPLED)
+            .sharing_mode(ash::vk::SharingMode::EXCLUSIVE)
+            .initial_layout(ash::vk::ImageLayout::UNDEFINED)
+            .push_next(&mut modifier_info)
+            .push_next(&mut external_memory_info);
+
+        let image = device.create_image(&image_info, None).map_err(|e| {
+            libc_close(fd);
+            format!("create_image(DRM import)失敗: {e}")
+        })?;
+
+        let mem_req = device.get_image_memory_requirements(image);
+
+        let mut fd_props = ash::vk::MemoryFdPropertiesKHR::default();
+        let ext_fd_fn = ash::khr::external_memory_fd::Device::new(instance, device);
+        ext_fd_fn
+            .get_memory_fd_properties(
+                ash::vk::ExternalMemoryHandleTypeFlags::DMA_BUF_EXT,
+                fd,
+                &mut fd_props,
+            )
+            .map_err(|e| {
+                device.destroy_image(image, None);
+                libc_close(fd);
+                format!("vkGetMemoryFdPropertiesKHR失敗: {e}")
+            })?;
+
+        let memory_type_index = find_dma_buf_memory_type(
+            instance,
+            handles.physical_device,
+            mem_req.memory_type_bits & fd_props.memory_type_bits,
+        )
+        .map_err(|e| {
+            device.destroy_image(image, None);
+            libc_close(fd);
+            e
+        })?;
+
+        let mut import_info = ash::vk::ImportMemoryFdInfoKHR::default()
+            .handle_type(ash::vk::ExternalMemoryHandleTypeFlags::DMA_BUF_EXT)
+            .fd(fd);
+        let mut dedicated_info = ash::vk::MemoryDedicatedAllocateInfo::default().image(image);
+        let alloc_info = ash::vk::MemoryAllocateInfo::default()
+            .allocation_size(mem_req.size)
+            .memory_type_index(memory_type_index)
+            .push_next(&mut dedicated_info)
+            .push_next(&mut import_info);
+
+        let memory = device.allocate_memory(&alloc_info, None).map_err(|e| {
+            device.destroy_image(image, None);
+            libc_close(fd);
+            format!("dma-buf importのallocate_memory失敗: {e}")
+        })?;
+
+        device.bind_image_memory(image, memory, 0).map_err(|e| {
+            device.destroy_image(image, None);
+            device.free_memory(memory, None);
+            format!("bind_image_memory失敗: {e}")
+        })?;
+
+        Ok(CachedVkSurface {
+            device: device.clone(),
+            image,
+            memory,
+            layout: ash::vk::ImageLayout::UNDEFINED,
         })
     }
 }
 
-pub struct VkImageHandle {
-    pub image: ash::vk::Image,
-    pub layout: ash::vk::ImageLayout,
-    pub semaphore: ash::vk::Semaphore,
-    pub wait_value: u64,
-}
-
-pub unsafe fn vk_image_of(frame: &DerivedVulkanFrame) -> VkImageHandle {
-    unsafe {
-        let vk_frame_ptr = (*frame.av_frame).data[0] as *mut c_void;
-        let mut image0: u64 = 0;
-        let mut layout0: c_int = 0;
-        let ret = neoutl_vk_frame_query_image0(vk_frame_ptr, &mut image0, &mut layout0);
-        assert_eq!(ret, 0, "neoutl_vk_frame_query_image0失敗 ret={ret}");
-        let mut semaphore0: u64 = 0;
-        let mut wait_value0: u64 = 0;
-        let sync_ret = neoutl_vk_frame_query_sync0(vk_frame_ptr, &mut semaphore0, &mut wait_value0);
-        assert_eq!(
-            sync_ret, 0,
-            "neoutl_vk_frame_query_sync0失敗 ret={sync_ret}"
-        );
-        VkImageHandle {
-            image: ash::vk::Image::from_raw(image0),
-            layout: ash::vk::ImageLayout::from_raw(layout0),
-            semaphore: ash::vk::Semaphore::from_raw(semaphore0),
-            wait_value: wait_value0,
+unsafe fn libc_close(fd: c_int) {
+    unsafe extern "C" {
+        fn close(fd: c_int) -> c_int;
+    }
+    if fd >= 0 {
+        unsafe {
+            close(fd);
         }
     }
 }
 
-pub unsafe fn signal_vk_frame_sync0(
-    frame: &DerivedVulkanFrame,
-    new_value: u64,
-) -> Result<(), String> {
-    unsafe {
-        let vk_frame_ptr = (*frame.av_frame).data[0] as *mut c_void;
-        let ret = neoutl_vk_frame_signal_sync0(vk_frame_ptr, new_value);
-        if ret != 0 {
-            return Err(format!("neoutl_vk_frame_signal_sync0失敗 ret={ret}"));
+pub struct VkSurfaceCache {
+    entries: HashMap<u32, CachedVkSurface>,
+}
+
+impl VkSurfaceCache {
+    pub fn new() -> Self {
+        Self {
+            entries: HashMap::new(),
         }
-        Ok(())
+    }
+
+    pub unsafe fn get_or_import(
+        &mut self,
+        handles: &VulkanRawHandles,
+        instance: &ash::Instance,
+        device: &ash::Device,
+        src_frame: *mut sys::AVFrame,
+        sw_format_i32: i32,
+        is_direct_rgba: bool,
+    ) -> Result<(ash::vk::Image, ash::vk::ImageLayout), String> {
+        unsafe {
+            let surface_id = (*src_frame).data[3] as usize as u32;
+            if let Some(cached) = self.entries.get(&surface_id) {
+                return Ok((cached.image, cached.layout));
+            }
+            let cached = import_surface_once(
+                handles,
+                instance,
+                device,
+                src_frame,
+                sw_format_i32,
+                is_direct_rgba,
+            )?;
+            let handle = (cached.image, cached.layout);
+            self.entries.insert(surface_id, cached);
+            Ok(handle)
+        }
+    }
+
+    pub fn update_layout(
+        &mut self,
+        src_frame: *mut sys::AVFrame,
+        new_layout: ash::vk::ImageLayout,
+    ) {
+        let surface_id = unsafe { (*src_frame).data[3] as usize as u32 };
+        if let Some(cached) = self.entries.get_mut(&surface_id) {
+            cached.layout = new_layout;
+        }
+    }
+}
+
+impl Default for VkSurfaceCache {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
 pub struct CopyEngine {
     device: ash::Device,
     queue: ash::vk::Queue,
-    queue_family_index: u32,
     command_pool: ash::vk::CommandPool,
     command_buffer: ash::vk::CommandBuffer,
     fence: ash::vk::Fence,
@@ -317,7 +473,6 @@ impl CopyEngine {
             Ok(Self {
                 device,
                 queue: handles.queue,
-                queue_family_index: handles.queue_family_index,
                 command_pool,
                 command_buffer,
                 fence,
@@ -328,12 +483,12 @@ impl CopyEngine {
 
     pub unsafe fn copy_image(
         &self,
-        src: VkImageHandle,
+        src_image: ash::vk::Image,
+        src_layout: ash::vk::ImageLayout,
         dst: ash::vk::Image,
         width: u32,
         height: u32,
-        signal_value: u64,
-    ) -> Result<(), String> {
+    ) -> Result<ash::vk::ImageLayout, String> {
         unsafe {
             self.device
                 .reset_command_buffer(
@@ -356,11 +511,11 @@ impl CopyEngine {
                 .layer_count(1);
 
             let src_barrier_acquire = ash::vk::ImageMemoryBarrier::default()
-                .old_layout(src.layout)
+                .old_layout(src_layout)
                 .new_layout(ash::vk::ImageLayout::TRANSFER_SRC_OPTIMAL)
-                .src_queue_family_index(ash::vk::QUEUE_FAMILY_FOREIGN_EXT)
-                .dst_queue_family_index(self.queue_family_index)
-                .image(src.image)
+                .src_queue_family_index(ash::vk::QUEUE_FAMILY_IGNORED)
+                .dst_queue_family_index(ash::vk::QUEUE_FAMILY_IGNORED)
+                .image(src_image)
                 .subresource_range(subresource)
                 .dst_access_mask(ash::vk::AccessFlags::TRANSFER_READ);
 
@@ -402,8 +557,8 @@ impl CopyEngine {
 
             self.device.cmd_copy_image(
                 self.command_buffer,
-                src.image,
-                src.layout,
+                src_image,
+                ash::vk::ImageLayout::TRANSFER_SRC_OPTIMAL,
                 dst,
                 ash::vk::ImageLayout::TRANSFER_DST_OPTIMAL,
                 &[region],
@@ -419,12 +574,13 @@ impl CopyEngine {
                 .src_access_mask(ash::vk::AccessFlags::TRANSFER_WRITE)
                 .dst_access_mask(ash::vk::AccessFlags::SHADER_READ);
 
-            let src_barrier_release = ash::vk::ImageMemoryBarrier::default()
+            let new_src_layout = ash::vk::ImageLayout::TRANSFER_SRC_OPTIMAL;
+            let src_barrier_keep = ash::vk::ImageMemoryBarrier::default()
                 .old_layout(ash::vk::ImageLayout::TRANSFER_SRC_OPTIMAL)
-                .new_layout(src.layout)
-                .src_queue_family_index(self.queue_family_index)
-                .dst_queue_family_index(ash::vk::QUEUE_FAMILY_FOREIGN_EXT)
-                .image(src.image)
+                .new_layout(new_src_layout)
+                .src_queue_family_index(ash::vk::QUEUE_FAMILY_IGNORED)
+                .dst_queue_family_index(ash::vk::QUEUE_FAMILY_IGNORED)
+                .image(src_image)
                 .subresource_range(subresource)
                 .src_access_mask(ash::vk::AccessFlags::TRANSFER_READ);
 
@@ -436,7 +592,7 @@ impl CopyEngine {
                 ash::vk::DependencyFlags::empty(),
                 &[],
                 &[],
-                &[dst_barrier_to_shader, src_barrier_release],
+                &[dst_barrier_to_shader, src_barrier_keep],
             );
 
             self.device
@@ -447,26 +603,20 @@ impl CopyEngine {
                 .reset_fences(&[self.fence])
                 .map_err(|e| format!("reset_fences失敗: {e}"))?;
 
-            let wait_semaphores = [src.semaphore];
-            let wait_values = [src.wait_value];
-            let wait_stages = [ash::vk::PipelineStageFlags::TRANSFER];
-            let signal_semaphores = [src.semaphore];
-            let signal_values = [signal_value];
-            let mut timeline_info = ash::vk::TimelineSemaphoreSubmitInfo::default()
-                .wait_semaphore_values(&wait_values)
-                .signal_semaphore_values(&signal_values);
             let command_buffers = [self.command_buffer];
-            let submit_info = ash::vk::SubmitInfo::default()
-                .wait_semaphores(&wait_semaphores)
-                .wait_dst_stage_mask(&wait_stages)
-                .command_buffers(&command_buffers)
-                .signal_semaphores(&signal_semaphores)
-                .push_next(&mut timeline_info);
+            let submit_info = ash::vk::SubmitInfo::default().command_buffers(&command_buffers);
             {
+                let wait_start = std::time::Instant::now();
                 let _guard = self
                     .submit_lock
                     .lock()
                     .unwrap_or_else(|poisoned| poisoned.into_inner());
+                let waited = wait_start.elapsed();
+                if waited > std::time::Duration::from_millis(5) {
+                    eprintln!(
+                        "[neoutl-video-decoder][診断][submit_lock] CopyEngine待機={waited:?}(競合)"
+                    );
+                }
                 self.device
                     .queue_submit(self.queue, &[submit_info], self.fence)
                     .map_err(|e| format!("queue_submit失敗: {e}"))?;
@@ -476,7 +626,7 @@ impl CopyEngine {
                 .wait_for_fences(&[self.fence], true, u64::MAX)
                 .map_err(|e| format!("wait_for_fences失敗: {e}"))?;
 
-            Ok(())
+            Ok(new_src_layout)
         }
     }
 }
@@ -493,15 +643,17 @@ impl Drop for CopyEngine {
 pub struct NeoutlVulkanContext {
     pub device_ctx: NeoutlVulkanDeviceCtx,
     pub copy_engine: CopyEngine,
+    pub instance: ash::Instance,
+    pub device: ash::Device,
 }
 
 pub fn init_vulkan_context(
-    device: &wgpu::Device,
+    device_wgpu: &wgpu::Device,
     entry: &ash::Entry,
     submit_lock: Arc<Mutex<()>>,
 ) -> Result<Arc<NeoutlVulkanContext>, String> {
     eprintln!("[neoutl-video-decoder][diag][vulkan] extract_vulkan_raw_handles開始");
-    let handles = unsafe { extract_vulkan_raw_handles(device) }
+    let handles = unsafe { extract_vulkan_raw_handles(device_wgpu) }
         .ok_or_else(|| "Vulkan生ハンドル取得失敗(バックエンド非Vulkan)".to_owned())?;
     eprintln!("[neoutl-video-decoder][diag][vulkan] raw_handles取得済み");
     eprintln!("[neoutl-video-decoder][diag][vulkan] create_av_vulkan_device_ctx開始");
@@ -510,9 +662,22 @@ pub fn init_vulkan_context(
     eprintln!("[neoutl-video-decoder][diag][vulkan] CopyEngine::new開始");
     let copy_engine = unsafe { CopyEngine::new(&handles, entry, submit_lock)? };
     eprintln!("[neoutl-video-decoder][diag][vulkan] CopyEngine::new成功");
+
+    let instance = unsafe {
+        ash::Instance::load(
+            &ash::StaticFn {
+                get_instance_proc_addr: handles.get_instance_proc_addr,
+            },
+            handles.instance,
+        )
+    };
+    let device = unsafe { ash::Device::load(instance.fp_v1_0(), handles.device) };
+
     Ok(Arc::new(NeoutlVulkanContext {
         device_ctx,
         copy_engine,
+        instance,
+        device,
     }))
 }
 
@@ -540,43 +705,32 @@ impl SemiPlanarConvertEngine {
         submit_lock: Arc<Mutex<()>>,
     ) -> Result<Self, String> {
         unsafe {
-            eprintln!("[neoutl-video-decoder][diag][semi-planar] Instance::load開始");
             let instance = ash::Instance::load(
                 &ash::StaticFn {
                     get_instance_proc_addr: handles.get_instance_proc_addr,
                 },
                 handles.instance,
             );
-            eprintln!(
-                "[neoutl-video-decoder][diag][semi-planar] Instance::load完了、Device::load開始"
-            );
             let device = ash::Device::load(instance.fp_v1_0(), handles.device);
-            eprintln!("[neoutl-video-decoder][diag][semi-planar] Device::load完了");
 
             let pool_info = ash::vk::CommandPoolCreateInfo::default()
                 .queue_family_index(handles.queue_family_index)
                 .flags(ash::vk::CommandPoolCreateFlags::TRANSIENT);
-            eprintln!("[neoutl-video-decoder][diag][semi-planar] create_command_pool開始");
             let command_pool = device
                 .create_command_pool(&pool_info, None)
                 .map_err(|e| format!("create_command_pool失敗: {e}"))?;
-            eprintln!("[neoutl-video-decoder][diag][semi-planar] create_command_pool完了");
 
             let alloc_info = ash::vk::CommandBufferAllocateInfo::default()
                 .command_pool(command_pool)
                 .level(ash::vk::CommandBufferLevel::PRIMARY)
                 .command_buffer_count(1);
-            eprintln!("[neoutl-video-decoder][diag][semi-planar] allocate_command_buffers開始");
             let command_buffer = device
                 .allocate_command_buffers(&alloc_info)
                 .map_err(|e| format!("allocate_command_buffers失敗: {e}"))?[0];
-            eprintln!("[neoutl-video-decoder][diag][semi-planar] allocate_command_buffers完了");
 
-            eprintln!("[neoutl-video-decoder][diag][semi-planar] create_fence開始");
             let fence = device
                 .create_fence(&ash::vk::FenceCreateInfo::default(), None)
                 .map_err(|e| format!("create_fence失敗: {e}"))?;
-            eprintln!("[neoutl-video-decoder][diag][semi-planar] create_fence完了");
 
             let sampler_info = ash::vk::SamplerCreateInfo::default()
                 .mag_filter(ash::vk::Filter::LINEAR)
@@ -585,11 +739,9 @@ impl SemiPlanarConvertEngine {
                 .address_mode_v(ash::vk::SamplerAddressMode::CLAMP_TO_EDGE)
                 .address_mode_w(ash::vk::SamplerAddressMode::CLAMP_TO_EDGE)
                 .mipmap_mode(ash::vk::SamplerMipmapMode::NEAREST);
-            eprintln!("[neoutl-video-decoder][diag][semi-planar] create_sampler開始");
             let sampler = device
                 .create_sampler(&sampler_info, None)
                 .map_err(|e| format!("create_sampler失敗: {e}"))?;
-            eprintln!("[neoutl-video-decoder][diag][semi-planar] create_sampler完了");
 
             let bindings = [
                 ash::vk::DescriptorSetLayoutBinding::default()
@@ -614,20 +766,16 @@ impl SemiPlanarConvertEngine {
                     .stage_flags(ash::vk::ShaderStageFlags::COMPUTE),
             ];
             let layout_info = ash::vk::DescriptorSetLayoutCreateInfo::default().bindings(&bindings);
-            eprintln!("[neoutl-video-decoder][diag][semi-planar] create_descriptor_set_layout開始");
             let descriptor_set_layout = device
                 .create_descriptor_set_layout(&layout_info, None)
                 .map_err(|e| format!("create_descriptor_set_layout失敗: {e}"))?;
-            eprintln!("[neoutl-video-decoder][diag][semi-planar] create_descriptor_set_layout完了");
 
             let set_layouts = [descriptor_set_layout];
             let pipeline_layout_info =
                 ash::vk::PipelineLayoutCreateInfo::default().set_layouts(&set_layouts);
-            eprintln!("[neoutl-video-decoder][diag][semi-planar] create_pipeline_layout開始");
             let pipeline_layout = device
                 .create_pipeline_layout(&pipeline_layout_info, None)
                 .map_err(|e| format!("create_pipeline_layout失敗: {e}"))?;
-            eprintln!("[neoutl-video-decoder][diag][semi-planar] create_pipeline_layout完了");
 
             if spirv_code.len() % 4 != 0 {
                 return Err("SPIR-Vバイト列長が4の倍数でない".to_owned());
@@ -636,17 +784,10 @@ impl SemiPlanarConvertEngine {
                 .chunks_exact(4)
                 .map(|c| u32::from_ne_bytes([c[0], c[1], c[2], c[3]]))
                 .collect();
-            eprintln!(
-                "[neoutl-video-decoder][diag][semi-planar] SPIR-Vワード数={} 先頭magic={:#010x}",
-                spirv_words.len(),
-                spirv_words.first().copied().unwrap_or(0)
-            );
             let shader_info = ash::vk::ShaderModuleCreateInfo::default().code(&spirv_words);
-            eprintln!("[neoutl-video-decoder][diag][semi-planar] create_shader_module開始");
             let shader_module = device
                 .create_shader_module(&shader_info, None)
                 .map_err(|e| format!("create_shader_module失敗: {e}"))?;
-            eprintln!("[neoutl-video-decoder][diag][semi-planar] create_shader_module完了");
 
             let entry_name = c"main";
             let stage_info = ash::vk::PipelineShaderStageCreateInfo::default()
@@ -656,13 +797,9 @@ impl SemiPlanarConvertEngine {
             let pipeline_info = ash::vk::ComputePipelineCreateInfo::default()
                 .stage(stage_info)
                 .layout(pipeline_layout);
-            eprintln!(
-                "[neoutl-video-decoder][diag][semi-planar] create_compute_pipelines開始 pipeline_layout={pipeline_layout:?} shader_module={shader_module:?}"
-            );
             let pipeline = device
                 .create_compute_pipelines(ash::vk::PipelineCache::null(), &[pipeline_info], None)
                 .map_err(|(_, e)| format!("create_compute_pipelines失敗: {e}"))?[0];
-            eprintln!("[neoutl-video-decoder][diag][semi-planar] create_compute_pipelines完了");
 
             let pool_sizes = [
                 ash::vk::DescriptorPoolSize::default()
@@ -677,14 +814,11 @@ impl SemiPlanarConvertEngine {
             ];
             let descriptor_pool_info = ash::vk::DescriptorPoolCreateInfo::default()
                 .max_sets(1)
+                .flags(ash::vk::DescriptorPoolCreateFlags::FREE_DESCRIPTOR_SET)
                 .pool_sizes(&pool_sizes);
-            eprintln!("[neoutl-video-decoder][diag][semi-planar] create_descriptor_pool開始");
             let descriptor_pool = device
                 .create_descriptor_pool(&descriptor_pool_info, None)
                 .map_err(|e| format!("create_descriptor_pool失敗: {e}"))?;
-            eprintln!(
-                "[neoutl-video-decoder][diag][semi-planar] create_descriptor_pool完了、Self構築"
-            );
 
             Ok(Self {
                 device,
@@ -707,17 +841,15 @@ impl SemiPlanarConvertEngine {
     #[allow(clippy::too_many_arguments)]
     pub unsafe fn convert(
         &self,
-        src: VkImageHandle,
+        src_image: ash::vk::Image,
+        src_layout: ash::vk::ImageLayout,
         dst_image: ash::vk::Image,
         width: u32,
         height: u32,
         y_plane_format: ash::vk::Format,
         uv_plane_format: ash::vk::Format,
-        signal_value: u64,
-    ) -> Result<(), String> {
+    ) -> Result<ash::vk::ImageLayout, String> {
         unsafe {
-            let src_image = src.image;
-            let src_layout = src.layout;
             let y_view_info = ash::vk::ImageViewCreateInfo::default()
                 .image(src_image)
                 .view_type(ash::vk::ImageViewType::TYPE_2D)
@@ -836,8 +968,8 @@ impl SemiPlanarConvertEngine {
             let src_barrier = ash::vk::ImageMemoryBarrier::default()
                 .old_layout(src_layout)
                 .new_layout(ash::vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
-                .src_queue_family_index(ash::vk::QUEUE_FAMILY_FOREIGN_EXT)
-                .dst_queue_family_index(self.queue_family_index)
+                .src_queue_family_index(ash::vk::QUEUE_FAMILY_IGNORED)
+                .dst_queue_family_index(ash::vk::QUEUE_FAMILY_IGNORED)
                 .image(src_image)
                 .subresource_range(src_subresource)
                 .dst_access_mask(ash::vk::AccessFlags::SHADER_READ);
@@ -896,11 +1028,12 @@ impl SemiPlanarConvertEngine {
                 .subresource_range(dst_subresource)
                 .src_access_mask(ash::vk::AccessFlags::SHADER_WRITE)
                 .dst_access_mask(ash::vk::AccessFlags::SHADER_READ);
-            let src_barrier_release = ash::vk::ImageMemoryBarrier::default()
+            let new_src_layout = ash::vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL;
+            let src_barrier_keep = ash::vk::ImageMemoryBarrier::default()
                 .old_layout(ash::vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
-                .new_layout(src_layout)
-                .src_queue_family_index(self.queue_family_index)
-                .dst_queue_family_index(ash::vk::QUEUE_FAMILY_FOREIGN_EXT)
+                .new_layout(new_src_layout)
+                .src_queue_family_index(ash::vk::QUEUE_FAMILY_IGNORED)
+                .dst_queue_family_index(ash::vk::QUEUE_FAMILY_IGNORED)
                 .image(src_image)
                 .subresource_range(src_subresource)
                 .src_access_mask(ash::vk::AccessFlags::SHADER_READ);
@@ -912,7 +1045,7 @@ impl SemiPlanarConvertEngine {
                 ash::vk::DependencyFlags::empty(),
                 &[],
                 &[],
-                &[dst_barrier_to_shader_read, src_barrier_release],
+                &[dst_barrier_to_shader_read, src_barrier_keep],
             );
 
             self.device
@@ -921,26 +1054,21 @@ impl SemiPlanarConvertEngine {
             self.device
                 .reset_fences(&[self.fence])
                 .map_err(|e| format!("reset_fences失敗: {e}"))?;
-            let wait_semaphores = [src.semaphore];
-            let wait_values = [src.wait_value];
-            let wait_stages = [ash::vk::PipelineStageFlags::COMPUTE_SHADER];
-            let signal_semaphores = [src.semaphore];
-            let signal_values = [signal_value];
-            let mut timeline_info = ash::vk::TimelineSemaphoreSubmitInfo::default()
-                .wait_semaphore_values(&wait_values)
-                .signal_semaphore_values(&signal_values);
+
             let command_buffers = [self.command_buffer];
-            let submit_info = ash::vk::SubmitInfo::default()
-                .wait_semaphores(&wait_semaphores)
-                .wait_dst_stage_mask(&wait_stages)
-                .command_buffers(&command_buffers)
-                .signal_semaphores(&signal_semaphores)
-                .push_next(&mut timeline_info);
+            let submit_info = ash::vk::SubmitInfo::default().command_buffers(&command_buffers);
             {
+                let wait_start = std::time::Instant::now();
                 let _guard = self
                     .submit_lock
                     .lock()
                     .unwrap_or_else(|poisoned| poisoned.into_inner());
+                let waited = wait_start.elapsed();
+                if waited > std::time::Duration::from_millis(5) {
+                    eprintln!(
+                        "[neoutl-video-decoder][診断][submit_lock] SemiPlanarConvertEngine待機={waited:?}(競合)"
+                    );
+                }
                 self.device
                     .queue_submit(self.queue, &[submit_info], self.fence)
                     .map_err(|e| format!("queue_submit失敗: {e}"))?;
@@ -956,7 +1084,8 @@ impl SemiPlanarConvertEngine {
                 .free_descriptor_sets(self.descriptor_pool, &[descriptor_set])
                 .map_err(|e| format!("free_descriptor_sets失敗: {e}"))?;
 
-            Ok(())
+            let _ = self.queue_family_index;
+            Ok(new_src_layout)
         }
     }
 }
@@ -979,3 +1108,70 @@ impl Drop for SemiPlanarConvertEngine {
 }
 
 use ash::vk::Handle;
+
+const VRAM_BUDGET_SAFETY_HEAP_INDEX_LIMIT: u32 = 16;
+
+unsafe fn sum_device_local_heaps(
+    instance: &ash::Instance,
+    physical_device: ash::vk::PhysicalDevice,
+) -> u64 {
+    unsafe {
+        let props = instance.get_physical_device_memory_properties(physical_device);
+        props
+            .memory_heaps
+            .iter()
+            .take(
+                props
+                    .memory_heap_count
+                    .min(VRAM_BUDGET_SAFETY_HEAP_INDEX_LIMIT) as usize,
+            )
+            .filter(|heap| heap.flags.contains(ash::vk::MemoryHeapFlags::DEVICE_LOCAL))
+            .map(|heap| heap.size)
+            .sum()
+    }
+}
+
+unsafe fn sum_device_local_heap_budgets(
+    instance: &ash::Instance,
+    physical_device: ash::vk::PhysicalDevice,
+) -> u64 {
+    unsafe {
+        let mem_props = instance.get_physical_device_memory_properties(physical_device);
+        let mut budget_props = ash::vk::PhysicalDeviceMemoryBudgetPropertiesEXT::default();
+        let mut mem_props2 =
+            ash::vk::PhysicalDeviceMemoryProperties2::default().push_next(&mut budget_props);
+        instance.get_physical_device_memory_properties2(physical_device, &mut mem_props2);
+        (0..mem_props
+            .memory_heap_count
+            .min(VRAM_BUDGET_SAFETY_HEAP_INDEX_LIMIT) as usize)
+            .filter(|&i| {
+                mem_props.memory_heaps[i]
+                    .flags
+                    .contains(ash::vk::MemoryHeapFlags::DEVICE_LOCAL)
+            })
+            .map(|i| budget_props.heap_budget[i])
+            .sum()
+    }
+}
+
+pub unsafe fn query_vram_budget_bytes(device: &wgpu::Device) -> Option<u64> {
+    unsafe {
+        let handles = extract_vulkan_raw_handles(device)?;
+        let instance = ash::Instance::load(
+            &ash::StaticFn {
+                get_instance_proc_addr: handles.get_instance_proc_addr,
+            },
+            handles.instance,
+        );
+        let budget_ext_enabled = handles
+            .device_extensions
+            .iter()
+            .any(|ext| ext.to_bytes() == ash::ext::memory_budget::NAME.to_bytes());
+        let bytes = if budget_ext_enabled {
+            sum_device_local_heap_budgets(&instance, handles.physical_device)
+        } else {
+            sum_device_local_heaps(&instance, handles.physical_device)
+        };
+        Some(bytes)
+    }
+}

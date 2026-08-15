@@ -1,20 +1,25 @@
 mod vulkan;
 
-use std::ptr;
 use std::sync::{Arc, Mutex};
 
 use ffmpeg_sys_next as sys;
 use neo_media_core::{
-    ColorPrimaries, DecodedHwFrame, MatrixCoefficients, NeoFrame, NeoFramePool, PixelFormat, Rect,
-    Size, SourceBackend, TransferBackend, TransferCharacteristics, TransferError,
+    ColorPrimaries, DecodedHwFrame, MatrixCoefficients, NeoFrame, NeoFramePool, PixelFormat,
+    PoolError, Rect, Size, SourceBackend, TransferBackend, TransferCharacteristics, TransferError,
 };
 
 pub use vulkan::{
-    CopyEngine, DerivedVulkanFrame, NeoutlVulkanContext, NeoutlVulkanDeviceCtx,
-    SemiPlanarConvertEngine, VkImageHandle, VulkanRawHandles, create_av_vulkan_device_ctx,
-    create_derived_vulkan_frames_ctx, extract_vulkan_raw_handles, init_vulkan_context,
-    signal_vk_frame_sync0, transfer_to_vulkan_frame, vk_image_of,
+    CopyEngine, NeoutlVulkanContext, NeoutlVulkanDeviceCtx, SemiPlanarConvertEngine,
+    VkSurfaceCache, VulkanRawHandles, create_av_vulkan_device_ctx, extract_vulkan_raw_handles,
+    init_vulkan_context, neoutl_vaapi_sync_surface_safe, query_vram_budget_bytes,
 };
+
+fn map_pool_error(err: PoolError) -> TransferError {
+    match err {
+        PoolError::Exhausted => TransferError::PoolExhausted,
+        PoolError::UnsupportedFormat(format) => TransferError::UnsupportedFormat(format),
+    }
+}
 
 pub fn is_sw_format_supported(sw_format_i32: i32, is_direct_rgba: bool) -> bool {
     pixel_format_of_sw_format(sw_format_i32, is_direct_rgba).is_some()
@@ -104,22 +109,13 @@ static SEMI_PLANAR_SPIRV: &[u8] =
 
 pub struct VaapiTransferBackend {
     entry: ash::Entry,
+    handles: VulkanRawHandles,
     vulkan_ctx: Arc<NeoutlVulkanContext>,
     semi_planar_engine: Option<SemiPlanarConvertEngine>,
-    derived_frames_ctx: *mut sys::AVBufferRef,
+    surface_cache: VkSurfaceCache,
 }
 
 unsafe impl Send for VaapiTransferBackend {}
-
-impl Drop for VaapiTransferBackend {
-    fn drop(&mut self) {
-        unsafe {
-            if !self.derived_frames_ctx.is_null() {
-                sys::av_buffer_unref(&mut self.derived_frames_ctx);
-            }
-        }
-    }
-}
 
 impl VaapiTransferBackend {
     pub fn new(wgpu_device: &wgpu::Device, submit_lock: Arc<Mutex<()>>) -> Result<Self, String> {
@@ -134,9 +130,10 @@ impl VaapiTransferBackend {
         .ok();
         Ok(Self {
             entry,
+            handles,
             vulkan_ctx,
             semi_planar_engine,
-            derived_frames_ctx: ptr::null_mut(),
+            surface_cache: VkSurfaceCache::new(),
         })
     }
 }
@@ -167,25 +164,38 @@ impl TransferBackend for VaapiTransferBackend {
             ));
         }
 
-        if self.derived_frames_ctx.is_null() {
-            self.derived_frames_ctx = create_derived_vulkan_frames_ctx(
-                input.src_hw_frames_ctx,
-                &self.vulkan_ctx.device_ctx,
-            )
-            .map_err(TransferError::SyncFailed)?;
+        let sync_ret = unsafe { neoutl_vaapi_sync_surface_safe(input.av_frame) };
+        if sync_ret != 0 {
+            return Err(TransferError::SyncFailed(format!(
+                "neoutl_vaapi_sync_surface失敗 ret={sync_ret}"
+            )));
         }
 
-        let derived = transfer_to_vulkan_frame(input.av_frame, self.derived_frames_ctx)
-            .map_err(TransferError::SyncFailed)?;
-        let src_image = unsafe { vk_image_of(&derived) };
-        let signal_value = src_image.wait_value + 1;
+        let (src_image, src_layout) = unsafe {
+            self.surface_cache.get_or_import(
+                &self.handles,
+                &self.vulkan_ctx.instance,
+                &self.vulkan_ctx.device,
+                input.av_frame,
+                input.sw_format_i32,
+                input.is_direct_rgba,
+            )
+        }
+        .map_err(TransferError::SyncFailed)?;
 
         let width = input.visible_rect.width;
         let height = input.visible_rect.height;
 
         let target_texture = pool
             .acquire(PixelFormat::Rgba8, width, height)
-            .map_err(|_| TransferError::PoolExhausted)?;
+            .map_err(map_pool_error)?;
+
+        macro_rules! release_and_return {
+            ($err:expr) => {{
+                pool.release(target_texture);
+                return Err($err);
+            }};
+        }
 
         let dst_vk_image = unsafe {
             target_texture
@@ -193,41 +203,45 @@ impl TransferBackend for VaapiTransferBackend {
                 .map(|hal_texture| hal_texture.raw_handle())
         };
         let Some(dst_vk_image) = dst_vk_image else {
-            return Err(TransferError::CopyFailed(
+            release_and_return!(TransferError::CopyFailed(
                 "wgpuテクスチャからVkImageハンドル取得失敗".to_owned(),
             ));
         };
 
-        let convert_result = if let Some((y_format, uv_format)) = view_formats {
-            let engine = self.semi_planar_engine.as_ref().ok_or_else(|| {
-                TransferError::SyncFailed("セミプラナー変換エンジン未初期化".to_owned())
-            })?;
+        let new_layout_result = if let Some((y_format, uv_format)) = view_formats {
+            let engine = match self.semi_planar_engine.as_ref() {
+                Some(engine) => engine,
+                None => release_and_return!(TransferError::SyncFailed(
+                    "セミプラナー変換エンジン未初期化".to_owned()
+                )),
+            };
             unsafe {
                 engine.convert(
                     src_image,
+                    src_layout,
                     dst_vk_image,
                     width,
                     height,
                     y_format,
                     uv_format,
-                    signal_value,
                 )
             }
         } else {
             unsafe {
                 self.vulkan_ctx.copy_engine.copy_image(
                     src_image,
+                    src_layout,
                     dst_vk_image,
                     width,
                     height,
-                    signal_value,
                 )
             }
         };
-        convert_result.map_err(TransferError::CopyFailed)?;
-        unsafe {
-            signal_vk_frame_sync0(&derived, signal_value).map_err(TransferError::SyncFailed)?;
-        }
+        let new_layout = match new_layout_result {
+            Ok(layout) => layout,
+            Err(e) => release_and_return!(TransferError::CopyFailed(e)),
+        };
+        self.surface_cache.update_layout(input.av_frame, new_layout);
         let _ = &self.entry;
 
         Ok(NeoFrame {

@@ -1,10 +1,32 @@
 use std::collections::HashMap;
-use std::sync::Mutex;
+use std::sync::atomic::{AtomicU32, AtomicU64, AtomicUsize, Ordering};
+use std::sync::{Arc, Mutex, Weak};
+use std::time::Instant;
 
 use neo_media_core::{NeoFramePool, PixelFormat, PoolError};
 
+pub const KIND_PLAYBACK: u8 = 0;
+pub const KIND_THUMBNAIL: u8 = 1;
+pub const KIND_LUA_SAMPLE: u8 = 2;
+
 pub const MIN_CAPACITY: usize = 3;
-pub const MAX_CAPACITY: usize = 6;
+const FALLBACK_CAPACITY_NO_BUDGET: usize = 6;
+const HARD_CEILING_CAPACITY: usize = 64;
+const REQUERY_INTERVAL_ACQUIRES: u64 = 120;
+const RECENT_DURATION_SAMPLES: usize = 16;
+const STALL_MEDIAN_MULTIPLIER: u32 = 3;
+const SAFETY_RATIO_PERMILLE_INITIAL: u32 = 500;
+const SAFETY_RATIO_PERMILLE_FLOOR: u32 = 300;
+const SAFETY_RATIO_PERMILLE_CEIL: u32 = 700;
+const SAFETY_RATIO_TIGHTEN_STEP: u32 = 50;
+const SAFETY_RATIO_RELAX_STEP: u32 = 10;
+const BUDGET_PRESSURE_DROP_PERMILLE: u64 = 900;
+
+pub struct SlotOwnerToken(());
+
+fn new_owner_token() -> Arc<SlotOwnerToken> {
+    Arc::new(SlotOwnerToken(()))
+}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum SlotState {
@@ -18,11 +40,61 @@ struct Slot {
     texture: wgpu::Texture,
     state: SlotState,
     fence: Option<wgpu::SubmissionIndex>,
+    owner: Weak<SlotOwnerToken>,
+    pending_strong: Option<Arc<SlotOwnerToken>>,
+    kind_id: u8,
+    last_used: u64,
+    write_started_at: Option<Instant>,
 }
 
 impl Slot {
     fn matches(&self, texture: &wgpu::Texture) -> bool {
         &self.texture == texture
+    }
+
+    fn is_dead(&self) -> bool {
+        self.owner.strong_count() == 0
+    }
+}
+
+pub struct ConsumerQuota {
+    pub kind_id: u8,
+    pub priority: u8,
+    min_reserved: AtomicUsize,
+}
+
+impl ConsumerQuota {
+    fn new(kind_id: u8, priority: u8) -> Self {
+        Self {
+            kind_id,
+            priority,
+            min_reserved: AtomicUsize::new(0),
+        }
+    }
+}
+
+fn distribute_min_reserved(quotas: &[ConsumerQuota], total_capacity: usize) {
+    let priority_sum: u32 = quotas.iter().map(|q| q.priority as u32).sum();
+    if priority_sum == 0 || quotas.is_empty() {
+        return;
+    }
+    let mut remaining = total_capacity;
+    for quota in quotas {
+        let share =
+            ((quota.priority as u64 * total_capacity as u64) / priority_sum as u64) as usize;
+        let share = share.min(remaining).max(if remaining > 0 { 1 } else { 0 });
+        quota.min_reserved.store(share, Ordering::Relaxed);
+        remaining = remaining.saturating_sub(share);
+    }
+}
+
+fn bytes_per_frame(format: PixelFormat, width: u32, height: u32) -> u64 {
+    let pixels = width as u64 * height as u64;
+    match format {
+        PixelFormat::Nv12 => pixels + pixels / 2,
+        PixelFormat::P010 | PixelFormat::P012 | PixelFormat::P016 => (pixels + pixels / 2) * 2,
+        PixelFormat::Rgba8 => pixels * 4,
+        PixelFormat::Yuv444 => pixels * 3,
     }
 }
 
@@ -31,7 +103,7 @@ struct FormatPool {
     width: u32,
     height: u32,
     slots: Vec<Slot>,
-    capacity: usize,
+    recent_write_durations_micros: Vec<u64>,
 }
 
 fn wgpu_texture_format(format: PixelFormat) -> Result<wgpu::TextureFormat, PoolError> {
@@ -80,19 +152,13 @@ fn create_texture(
 }
 
 impl FormatPool {
-    fn new(
-        _device: &wgpu::Device,
-        format: PixelFormat,
-        width: u32,
-        height: u32,
-        capacity: usize,
-    ) -> Self {
+    fn new(format: PixelFormat, width: u32, height: u32) -> Self {
         Self {
             format,
             width,
             height,
-            slots: Vec::with_capacity(capacity),
-            capacity,
+            slots: Vec::new(),
+            recent_write_durations_micros: Vec::with_capacity(RECENT_DURATION_SAMPLES),
         }
     }
 
@@ -112,21 +178,147 @@ impl FormatPool {
         }
     }
 
-    fn acquire_for_write(&mut self, device: &wgpu::Device) -> Result<wgpu::Texture, PoolError> {
+    fn record_write_duration(&mut self, micros: u64) {
+        if self.recent_write_durations_micros.len() >= RECENT_DURATION_SAMPLES {
+            self.recent_write_durations_micros.remove(0);
+        }
+        self.recent_write_durations_micros.push(micros);
+    }
+
+    fn median_write_duration_micros(&self) -> Option<u64> {
+        if self.recent_write_durations_micros.is_empty() {
+            return None;
+        }
+        let mut sorted = self.recent_write_durations_micros.clone();
+        sorted.sort_unstable();
+        Some(sorted[sorted.len() / 2])
+    }
+
+    fn detect_stalled_writers(&self, clip_key_hint: &str) {
+        let Some(median) = self.median_write_duration_micros() else {
+            return;
+        };
+        let threshold = median.saturating_mul(STALL_MEDIAN_MULTIPLIER as u64);
+        for slot in self.slots.iter() {
+            if slot.state != SlotState::Writing {
+                continue;
+            }
+            let Some(started) = slot.write_started_at else {
+                continue;
+            };
+            let elapsed_micros = started.elapsed().as_micros() as u64;
+            if elapsed_micros > threshold && threshold > 0 {
+                eprintln!(
+                    "[neo-media-cache][異常検知] {clip_key_hint} writing状態滞留 経過={elapsed_micros}us 閾値={threshold}us(中央値{median}us x{STALL_MEDIAN_MULTIPLIER})"
+                );
+            }
+        }
+    }
+
+    fn kind_usage_count(&self, kind_id: u8) -> usize {
+        self.slots
+            .iter()
+            .filter(|s| s.kind_id == kind_id && s.state != SlotState::Free)
+            .count()
+    }
+
+    fn find_dead_owner_victim(&self) -> Option<usize> {
+        self.slots.iter().position(|s| s.is_dead())
+    }
+
+    fn find_over_quota_victim(
+        &self,
+        requesting_kind: u8,
+        quotas: &[ConsumerQuota],
+    ) -> Option<usize> {
+        self.slots
+            .iter()
+            .enumerate()
+            .filter(|(_, s)| {
+                s.kind_id != requesting_kind
+                    && matches!(s.state, SlotState::Free | SlotState::Ready)
+            })
+            .filter(|(_, s)| {
+                let reserved = quotas
+                    .iter()
+                    .find(|q| q.kind_id == s.kind_id)
+                    .map(|q| q.min_reserved.load(Ordering::Relaxed))
+                    .unwrap_or(0);
+                self.kind_usage_count(s.kind_id) > reserved
+            })
+            .min_by_key(|(_, s)| s.last_used)
+            .map(|(i, _)| i)
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn acquire_for_write(
+        &mut self,
+        device: &wgpu::Device,
+        capacity: usize,
+        kind_id: u8,
+        quotas: &[ConsumerQuota],
+        acquire_seq: u64,
+        clip_key_hint: &str,
+    ) -> Result<(wgpu::Texture, Arc<SlotOwnerToken>), PoolError> {
         self.reclaim_completed(device);
+        let write_started = Instant::now();
+        let token = new_owner_token();
+
         if let Some(slot) = self.slots.iter_mut().find(|s| s.state == SlotState::Free) {
             slot.state = SlotState::Writing;
-            return Ok(slot.texture.clone());
+            slot.owner = Arc::downgrade(&token);
+            slot.pending_strong = Some(token.clone());
+            slot.kind_id = kind_id;
+            slot.last_used = acquire_seq;
+            slot.write_started_at = Some(write_started);
+            return Ok((slot.texture.clone(), token));
         }
-        if self.slots.len() < self.capacity {
+
+        if self.slots.len() < capacity {
             let texture = create_texture(device, self.format, self.width, self.height)?;
             self.slots.push(Slot {
                 texture: texture.clone(),
                 state: SlotState::Writing,
                 fence: None,
+                owner: Arc::downgrade(&token),
+                pending_strong: Some(token.clone()),
+                kind_id,
+                last_used: acquire_seq,
+                write_started_at: Some(write_started),
             });
-            return Ok(texture);
+            return Ok((texture, token));
         }
+
+        if let Some(idx) = self.find_dead_owner_victim() {
+            let slot = &mut self.slots[idx];
+            slot.state = SlotState::Writing;
+            slot.owner = Arc::downgrade(&token);
+            slot.pending_strong = Some(token.clone());
+            slot.kind_id = kind_id;
+            slot.last_used = acquire_seq;
+            slot.write_started_at = Some(write_started);
+            return Ok((slot.texture.clone(), token));
+        }
+
+        let reserved_for_kind = quotas
+            .iter()
+            .find(|q| q.kind_id == kind_id)
+            .map(|q| q.min_reserved.load(Ordering::Relaxed))
+            .unwrap_or(0);
+        if self.kind_usage_count(kind_id) < reserved_for_kind {
+            if let Some(idx) = self.find_over_quota_victim(kind_id, quotas) {
+                let slot = &mut self.slots[idx];
+                slot.state = SlotState::Writing;
+                slot.owner = Arc::downgrade(&token);
+                slot.pending_strong = Some(token.clone());
+                slot.kind_id = kind_id;
+                slot.last_used = acquire_seq;
+                slot.write_started_at = Some(write_started);
+                return Ok((slot.texture.clone(), token));
+            }
+        }
+
+        self.detect_stalled_writers(clip_key_hint);
         Err(PoolError::Exhausted)
     }
 
@@ -134,10 +326,17 @@ impl FormatPool {
         if let Some(slot) = self.slots.iter_mut().find(|s| s.matches(texture)) {
             slot.state = SlotState::Ready;
             slot.fence = Some(submission_index);
+            if let Some(started) = slot.write_started_at.take() {
+                self.record_write_duration(started.elapsed().as_micros() as u64);
+            }
         }
     }
 
-    fn acquire_for_read(&mut self, device: &wgpu::Device) -> Option<wgpu::Texture> {
+    fn acquire_for_read(
+        &mut self,
+        device: &wgpu::Device,
+        acquire_seq: u64,
+    ) -> Option<wgpu::Texture> {
         if let Some(slot) = self.slots.iter_mut().find(|s| s.state == SlotState::Ready) {
             if let Some(index) = slot.fence.clone() {
                 let _ = device.poll(wgpu::PollType::Wait {
@@ -147,6 +346,7 @@ impl FormatPool {
             }
             slot.state = SlotState::Reading;
             slot.fence = None;
+            slot.last_used = acquire_seq;
             return Some(slot.texture.clone());
         }
         None
@@ -167,19 +367,94 @@ impl FormatPool {
     }
 }
 
+pub type VramBudgetProvider = dyn Fn() -> Option<u64> + Send + Sync;
+
 pub struct NeoMediaCache {
     device: wgpu::Device,
-    capacity: usize,
     pools: Mutex<HashMap<(PixelFormat, u32, u32), FormatPool>>,
+    quotas: Mutex<Vec<ConsumerQuota>>,
+    vram_budget_bytes: AtomicU64,
+    prev_vram_budget_bytes: AtomicU64,
+    safety_ratio_permille: AtomicU32,
+    acquire_counter: AtomicU64,
+    budget_provider: Option<Arc<VramBudgetProvider>>,
 }
 
 impl NeoMediaCache {
-    pub fn new(device: wgpu::Device, capacity: usize) -> Self {
+    pub fn new(device: wgpu::Device, budget_provider: Option<Arc<VramBudgetProvider>>) -> Self {
+        let initial_budget = budget_provider.as_ref().and_then(|p| p()).unwrap_or(0);
+        if initial_budget == 0 {
+            eprintln!(
+                "[neo-media-cache][診断] 初期VRAM予算取得失敗 フォールバック容量={FALLBACK_CAPACITY_NO_BUDGET}適用中"
+            );
+        }
         Self {
             device,
-            capacity: capacity.clamp(MIN_CAPACITY, MAX_CAPACITY),
             pools: Mutex::new(HashMap::new()),
+            quotas: Mutex::new(Vec::new()),
+            vram_budget_bytes: AtomicU64::new(initial_budget),
+            prev_vram_budget_bytes: AtomicU64::new(initial_budget),
+            safety_ratio_permille: AtomicU32::new(SAFETY_RATIO_PERMILLE_INITIAL),
+            acquire_counter: AtomicU64::new(0),
+            budget_provider,
         }
+    }
+
+    pub fn register_consumer(&self, kind_id: u8, priority: u8) {
+        let mut quotas = self.quotas.lock().expect("quotas mutex poisoned");
+        if quotas.iter().any(|q| q.kind_id == kind_id) {
+            return;
+        }
+        quotas.push(ConsumerQuota::new(kind_id, priority));
+    }
+
+    fn maybe_requery_budget(&self) {
+        let seq = self.acquire_counter.fetch_add(1, Ordering::Relaxed);
+        if seq % REQUERY_INTERVAL_ACQUIRES != 0 {
+            return;
+        }
+        let Some(provider) = self.budget_provider.as_ref() else {
+            return;
+        };
+        let Some(fresh) = provider() else {
+            eprintln!(
+                "[neo-media-cache][診断] VRAM予算取得失敗 acquire_seq={seq} フォールバック容量={FALLBACK_CAPACITY_NO_BUDGET}適用中"
+            );
+            return;
+        };
+        if fresh == 0 {
+            eprintln!(
+                "[neo-media-cache][診断] VRAM予算取得結果0バイト acquire_seq={seq} フォールバック容量={FALLBACK_CAPACITY_NO_BUDGET}適用中"
+            );
+        }
+        let prev = self.vram_budget_bytes.swap(fresh, Ordering::Relaxed);
+        self.prev_vram_budget_bytes.store(prev, Ordering::Relaxed);
+        if prev > 0 {
+            let ratio_permille = fresh.saturating_mul(1000) / prev.max(1);
+            let current = self.safety_ratio_permille.load(Ordering::Relaxed);
+            let adjusted = if ratio_permille < BUDGET_PRESSURE_DROP_PERMILLE {
+                current
+                    .saturating_sub(SAFETY_RATIO_TIGHTEN_STEP)
+                    .max(SAFETY_RATIO_PERMILLE_FLOOR)
+            } else {
+                current
+                    .saturating_add(SAFETY_RATIO_RELAX_STEP)
+                    .min(SAFETY_RATIO_PERMILLE_CEIL)
+            };
+            self.safety_ratio_permille
+                .store(adjusted, Ordering::Relaxed);
+        }
+    }
+
+    pub fn effective_capacity(&self, frame_bytes: u64) -> usize {
+        let budget = self.vram_budget_bytes.load(Ordering::Relaxed);
+        if budget == 0 || frame_bytes == 0 {
+            return FALLBACK_CAPACITY_NO_BUDGET;
+        }
+        let ratio_permille = self.safety_ratio_permille.load(Ordering::Relaxed) as u64;
+        let usable_bytes = budget.saturating_mul(ratio_permille) / 1000;
+        let raw_capacity = (usable_bytes / frame_bytes) as usize;
+        raw_capacity.clamp(MIN_CAPACITY, HARD_CEILING_CAPACITY)
     }
 
     pub fn acquire_for_write(
@@ -188,11 +463,51 @@ impl NeoMediaCache {
         width: u32,
         height: u32,
     ) -> Result<wgpu::Texture, PoolError> {
+        self.acquire_for_write_as(KIND_PLAYBACK, format, width, height)
+            .map(|(texture, _token)| texture)
+    }
+
+    pub fn acquire_for_write_as(
+        &self,
+        kind_id: u8,
+        format: PixelFormat,
+        width: u32,
+        height: u32,
+    ) -> Result<(wgpu::Texture, Arc<SlotOwnerToken>), PoolError> {
+        self.maybe_requery_budget();
+        let frame_bytes = bytes_per_frame(format, width, height);
+        let capacity = self.effective_capacity(frame_bytes);
+        let quotas_guard = self.quotas.lock().expect("quotas mutex poisoned");
+        distribute_min_reserved(&quotas_guard, capacity);
+
         let mut pools = self.pools.lock().expect("pools mutex poisoned");
         let pool = pools
             .entry((format, width, height))
-            .or_insert_with(|| FormatPool::new(&self.device, format, width, height, self.capacity));
-        pool.acquire_for_write(&self.device)
+            .or_insert_with(|| FormatPool::new(format, width, height));
+        let acquire_seq = self.acquire_counter.load(Ordering::Relaxed);
+        pool.acquire_for_write(
+            &self.device,
+            capacity,
+            kind_id,
+            &quotas_guard,
+            acquire_seq,
+            "cache",
+        )
+    }
+
+    pub fn owner_token_of(
+        &self,
+        format: PixelFormat,
+        width: u32,
+        height: u32,
+        texture: &wgpu::Texture,
+    ) -> Option<Arc<SlotOwnerToken>> {
+        let mut pools = self.pools.lock().expect("pools mutex poisoned");
+        let pool = pools.get_mut(&(format, width, height))?;
+        pool.slots
+            .iter_mut()
+            .find(|s| s.matches(texture))
+            .and_then(|s| s.pending_strong.take())
     }
 
     pub fn mark_ready(
@@ -215,9 +530,10 @@ impl NeoMediaCache {
         width: u32,
         height: u32,
     ) -> Option<wgpu::Texture> {
+        let acquire_seq = self.acquire_counter.load(Ordering::Relaxed);
         let mut pools = self.pools.lock().expect("pools mutex poisoned");
         let pool = pools.get_mut(&(format, width, height))?;
-        pool.acquire_for_read(&self.device)
+        pool.acquire_for_read(&self.device, acquire_seq)
     }
 
     pub fn release_read(
