@@ -3,8 +3,11 @@
 #include <string.h>
 
 #include <libavutil/buffer.h>
+#include <libavutil/frame.h>
 #include <libavutil/hwcontext.h>
+#include <libavutil/hwcontext_vaapi.h>
 #include <libavutil/hwcontext_vulkan.h>
+#include <va/va.h>
 
 static char **copy_extension_names(const char *const *names, int count) {
     if (count <= 0) {
@@ -83,5 +86,64 @@ int neoutl_vk_frame_query_image0(
     AVVkFrame *vk_frame = (AVVkFrame *)av_vk_frame;
     *out_image0 = (uint64_t)(uintptr_t)vk_frame->img[0];
     *out_layout0 = (int)vk_frame->layout[0];
+    return 0;
+}
+
+int neoutl_vk_frame_query_sync0(
+    void *av_vk_frame,
+    uint64_t *out_semaphore,
+    uint64_t *out_wait_value)
+{
+    if (!av_vk_frame || !out_semaphore || !out_wait_value) {
+        return -1;
+    }
+
+    AVVkFrame *vk_frame = (AVVkFrame *)av_vk_frame;
+    *out_semaphore = (uint64_t)(uintptr_t)vk_frame->sem[0];
+    *out_wait_value = vk_frame->sem_value[0];
+    return 0;
+}
+
+int neoutl_vk_frame_signal_sync0(
+    void *av_vk_frame,
+    uint64_t new_value)
+{
+    if (!av_vk_frame) {
+        return -1;
+    }
+
+    AVVkFrame *vk_frame = (AVVkFrame *)av_vk_frame;
+    vk_frame->sem_value[0] = new_value;
+    return 0;
+}
+
+// AVVkFrame.semはVAAPI由来フレームのVulkanゼロコピー導出(vulkan_map_from_vaapi)経路で
+// VA-APIデコード完了と結線されない(sem_valueが初期値のまま更新されない実装のため、
+// Vulkan側のタイムラインセマフォ待機は実質的に即時充足され同期効果を持たない)。
+// dma-buf経由の暗黙同期もradeonsi/RADVスタックではVA-API側の明示同期なしには
+// 保証されないため、Vulkan導出(av_hwframe_map)前にVA-API層で直接完了を保証する。
+int neoutl_vaapi_sync_surface(AVFrame *vaapi_frame)
+{
+    if (!vaapi_frame || !vaapi_frame->hw_frames_ctx || !vaapi_frame->data[3]) {
+        return -1;
+    }
+
+    AVHWFramesContext *frames_ctx = (AVHWFramesContext *)vaapi_frame->hw_frames_ctx->data;
+    if (!frames_ctx || !frames_ctx->device_ctx) {
+        return -2;
+    }
+
+    AVVAAPIDeviceContext *vaapi_dev_ctx =
+        (AVVAAPIDeviceContext *)frames_ctx->device_ctx->hwctx;
+    if (!vaapi_dev_ctx) {
+        return -3;
+    }
+
+    VASurfaceID surface = (VASurfaceID)(uintptr_t)vaapi_frame->data[3];
+    VAStatus status = vaSyncSurface(vaapi_dev_ctx->display, surface);
+    if (status != VA_STATUS_SUCCESS) {
+        return -4;
+    }
+
     return 0;
 }

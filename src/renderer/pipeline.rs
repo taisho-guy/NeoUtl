@@ -963,7 +963,7 @@ impl RenderEngine {
             0,
             20,
         );
-        self.queue.submit([encoder.finish()]);
+        crate::gpu_shared::locked_submit(&self.queue, [encoder.finish()]);
 
         let slice = self.reduce_mean_readback_buffer.slice(..);
         let (tx, rx) = std::sync::mpsc::channel();
@@ -1119,7 +1119,7 @@ impl RenderEngine {
                     label: Some("Effect Passthrough Copy Encoder"),
                 });
             encoder.copy_texture_to_texture(src.as_image_copy(), dst.as_image_copy(), extent);
-            self.queue.submit([encoder.finish()]);
+            crate::gpu_shared::locked_submit(&self.queue, [encoder.finish()]);
             return;
         }
 
@@ -1133,7 +1133,7 @@ impl RenderEngine {
             self.effect_ping.as_image_copy(),
             extent,
         );
-        self.queue.submit([encoder.finish()]);
+        crate::gpu_shared::locked_submit(&self.queue, [encoder.finish()]);
 
         let mut src_is_ping = true;
         for (effect_id, params) in chain {
@@ -1225,7 +1225,7 @@ impl RenderEngine {
                 rpass.set_bind_group(0, &bind_group, &[]);
                 rpass.draw(0..3, 0..1);
             }
-            self.queue.submit([encoder.finish()]);
+            crate::gpu_shared::locked_submit(&self.queue, [encoder.finish()]);
             src_is_ping = !src_is_ping;
         }
 
@@ -1240,7 +1240,7 @@ impl RenderEngine {
                 label: Some("Effect Finalize Encoder"),
             });
         encoder.copy_texture_to_texture(final_src.as_image_copy(), dst.as_image_copy(), extent);
-        self.queue.submit([encoder.finish()]);
+        crate::gpu_shared::locked_submit(&self.queue, [encoder.finish()]);
     }
 
     fn draw_standard_pass(&self, rpass: &mut wgpu::RenderPass, obj: &ActiveObject, offset: u32) {
@@ -1408,7 +1408,7 @@ impl RenderEngine {
                 }
             }
         }
-        self.queue.submit([encoder.finish()]);
+        crate::gpu_shared::locked_submit(&self.queue, [encoder.finish()]);
     }
 
     fn composite_effect_object(&self, pool_tex: &wgpu::Texture) {
@@ -1456,7 +1456,7 @@ impl RenderEngine {
             rpass.set_bind_group(0, &bind_group, &[]);
             rpass.draw(0..3, 0..1);
         }
-        self.queue.submit([encoder.finish()]);
+        crate::gpu_shared::locked_submit(&self.queue, [encoder.finish()]);
     }
 
     pub fn render(
@@ -1735,7 +1735,7 @@ impl RenderEngine {
                             });
                         target.brush.draw(&mut glyph_pass);
                     }
-                    self.queue.submit([encoder.finish()]);
+                    crate::gpu_shared::locked_submit(&self.queue, [encoder.finish()]);
                 }
 
                 let ratio_w = tex_w as f32 / UNIT_SIZE_PX;
@@ -1827,7 +1827,7 @@ impl RenderEngine {
             }
         }
 
-        self.queue.submit([encoder.finish()]);
+        crate::gpu_shared::locked_submit(&self.queue, [encoder.finish()]);
 
         let text_draw_by_index: HashMap<usize, (u64, u32)> = text_draws
             .iter()
@@ -1928,7 +1928,7 @@ mod tests {
                 depth_or_array_layers: 1,
             },
         );
-        queue.submit([encoder.finish()]);
+        crate::gpu_shared::locked_submit(queue, [encoder.finish()]);
 
         let slice = output_buffer.slice(..);
         let (tx, rx) = std::sync::mpsc::channel();

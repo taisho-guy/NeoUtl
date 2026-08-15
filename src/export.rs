@@ -313,37 +313,6 @@ fn to_rgba8_texture(
     dst
 }
 
-#[cfg(target_os = "linux")]
-fn try_create_gpuvideo_encoder(
-    codec: ExportCodec,
-    params: EncodeParameters,
-) -> Option<Box<dyn VideoEncoder>> {
-    let vtables = neoutl_media_gpuvideo_encoder::native_vtables();
-    let target = match codec {
-        ExportCodec::H264 => VideoCodec::H264,
-        ExportCodec::H265 => VideoCodec::H265,
-    };
-    for vt in vtables {
-        if (vt.meta)().codec == target {
-            match (vt.create)(params) {
-                Ok(enc) => return Some(enc),
-                Err(e) => {
-                    eprintln!(
-                        "{}",
-                        t!(
-                            "[NeoUtl][export] gpuvideo-encoder初期化失敗、gstreamer-encoderへ縮退: %{arg0}",
-                            arg0 = format!("{}", e)
-                        )
-                    );
-                    return None;
-                }
-            }
-        }
-    }
-    None
-}
-
-#[cfg(not(target_os = "linux"))]
 fn try_create_gpuvideo_encoder(
     _codec: ExportCodec,
     _params: EncodeParameters,
@@ -387,7 +356,12 @@ pub fn run(state: &SharedAppState, mut job: ExportJob) -> Result<(), String> {
         EncoderBackend::Auto => try_create_gpuvideo_encoder(job.codec, params),
         EncoderBackend::GpuVideo => match try_create_gpuvideo_encoder(job.codec, params) {
             Some(enc) => Some(enc),
-            None => return Err("gpuvideo-encoder(GPU HW)の初期化に失敗しました".to_owned()),
+            None => {
+                return Err(
+                    "gpuvideo-encoderは現在ビルドから除外されています(gstreamer-encoderをご利用下さい)"
+                        .to_owned(),
+                );
+            }
         },
     };
     let total_frames = job.end_frame - job.start_frame;

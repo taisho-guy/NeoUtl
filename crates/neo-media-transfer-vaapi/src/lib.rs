@@ -1,7 +1,7 @@
 mod vulkan;
 
 use std::ptr;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use ffmpeg_sys_next as sys;
 use neo_media_core::{
@@ -13,7 +13,7 @@ pub use vulkan::{
     CopyEngine, DerivedVulkanFrame, NeoutlVulkanContext, NeoutlVulkanDeviceCtx,
     SemiPlanarConvertEngine, VkImageHandle, VulkanRawHandles, create_av_vulkan_device_ctx,
     create_derived_vulkan_frames_ctx, extract_vulkan_raw_handles, init_vulkan_context,
-    transfer_to_vulkan_frame, vk_image_of,
+    signal_vk_frame_sync0, transfer_to_vulkan_frame, vk_image_of,
 };
 
 pub fn is_sw_format_supported(sw_format_i32: i32, is_direct_rgba: bool) -> bool {
@@ -122,14 +122,16 @@ impl Drop for VaapiTransferBackend {
 }
 
 impl VaapiTransferBackend {
-    pub fn new(wgpu_device: &wgpu::Device) -> Result<Self, String> {
+    pub fn new(wgpu_device: &wgpu::Device, submit_lock: Arc<Mutex<()>>) -> Result<Self, String> {
         let entry =
             unsafe { ash::Entry::load() }.map_err(|e| format!("ash::Entry::load失敗: {e}"))?;
-        let vulkan_ctx = init_vulkan_context(wgpu_device, &entry)?;
+        let vulkan_ctx = init_vulkan_context(wgpu_device, &entry, submit_lock.clone())?;
         let handles = unsafe { extract_vulkan_raw_handles(wgpu_device) }
             .ok_or_else(|| "Vulkan生ハンドル取得失敗(semi_planar用)".to_owned())?;
-        let semi_planar_engine =
-            unsafe { SemiPlanarConvertEngine::new(&handles, &entry, SEMI_PLANAR_SPIRV) }.ok();
+        let semi_planar_engine = unsafe {
+            SemiPlanarConvertEngine::new(&handles, &entry, SEMI_PLANAR_SPIRV, submit_lock)
+        }
+        .ok();
         Ok(Self {
             entry,
             vulkan_ctx,
@@ -175,13 +177,8 @@ impl TransferBackend for VaapiTransferBackend {
 
         let derived = transfer_to_vulkan_frame(input.av_frame, self.derived_frames_ctx)
             .map_err(TransferError::SyncFailed)?;
-        unsafe {
-            self.vulkan_ctx
-                .copy_engine
-                .device_wait_idle()
-                .map_err(TransferError::SyncFailed)?;
-        }
         let src_image = unsafe { vk_image_of(&derived) };
+        let signal_value = src_image.wait_value + 1;
 
         let width = input.visible_rect.width;
         let height = input.visible_rect.height;
@@ -207,23 +204,30 @@ impl TransferBackend for VaapiTransferBackend {
             })?;
             unsafe {
                 engine.convert(
-                    src_image.image,
-                    src_image.layout,
+                    src_image,
                     dst_vk_image,
                     width,
                     height,
                     y_format,
                     uv_format,
+                    signal_value,
                 )
             }
         } else {
             unsafe {
-                self.vulkan_ctx
-                    .copy_engine
-                    .copy_image(src_image, dst_vk_image, width, height)
+                self.vulkan_ctx.copy_engine.copy_image(
+                    src_image,
+                    dst_vk_image,
+                    width,
+                    height,
+                    signal_value,
+                )
             }
         };
         convert_result.map_err(TransferError::CopyFailed)?;
+        unsafe {
+            signal_vk_frame_sync0(&derived, signal_value).map_err(TransferError::SyncFailed)?;
+        }
         let _ = &self.entry;
 
         Ok(NeoFrame {

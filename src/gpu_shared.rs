@@ -9,6 +9,15 @@ pub struct SharedGpu {
     pub queue: Arc<wgpu::Queue>,
 }
 
+pub fn locked_submit(
+    queue: &wgpu::Queue,
+    buffers: impl IntoIterator<Item = wgpu::CommandBuffer>,
+) -> wgpu::SubmissionIndex {
+    let lock = neo_media_ffmpeg::shared_wgpu_submit_lock();
+    let _guard = lock.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+    queue.submit(buffers)
+}
+
 const EXTRA_DEVICE_EXTENSIONS: &[&CStr] = &[
     c"VK_EXT_queue_family_foreign",
     c"VK_KHR_external_semaphore",

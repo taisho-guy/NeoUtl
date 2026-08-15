@@ -13,9 +13,7 @@ members = [
     "crates/effects/*",
     "crates/neoutl-media-api",
     "crates/media/symphonia-decoder",
-    "crates/media/gpuvideo-decoder",
     "crates/media/image-decoder",
-    "crates/media/gpuvideo-encoder",
     "crates/media/gstreamer-encoder",
     "crates/neo-media-core",
     "crates/neo-media-cache",
@@ -74,9 +72,7 @@ libloading = "0.9"
 arc-swap = "1"
 notify = "8"
 rodio = { version = "0.22", default-features = false, features = ["playback", "symphonia-wav", "symphonia-mp3", "symphonia-vorbis", "symphonia-flac", "symphonia-aac", "symphonia-isomp4"] }
-neoutl-media-gpuvideo-decoder = { path = "crates/media/gpuvideo-decoder" }
 neo-media-ffmpeg = { path = "crates/neo-media-ffmpeg" }
-neoutl-media-gpuvideo-encoder = { path = "crates/media/gpuvideo-encoder" }
 neoutl-media-gstreamer-encoder = { path = "crates/media/gstreamer-encoder" }
 carla-host-sys.workspace = true
 self-replace = "1"

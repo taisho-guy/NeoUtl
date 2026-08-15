@@ -14,6 +14,21 @@ pub enum ProbeFailure {
     NeoFrameConversionUnsupported,
 }
 
+impl ProbeFailure {
+    pub fn message(self) -> &'static str {
+        match self {
+            Self::ContainerOpenFailed => "ファイルを開けません(コンテナ形式非対応または破損)",
+            Self::NoVideoTrack => "映像トラックが見つかりません",
+            Self::CodecUnsupported => "非対応のコーデックです",
+            Self::DeviceUnavailable => "GPUデコードデバイスが利用できません",
+            Self::HwFramesCtxUnsupported => {
+                "この映像形式はGPUデコード非対応です(色形式/ビット深度)"
+            }
+            Self::NeoFrameConversionUnsupported => "GPUフレーム変換が非対応の形式です",
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct ProbeReport {
     pub width: u32,

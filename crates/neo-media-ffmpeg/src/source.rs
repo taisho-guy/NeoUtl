@@ -23,6 +23,13 @@ pub struct FfmpegVideoSource {
 
 impl FfmpegVideoSource {
     fn open(path: &Path) -> Result<Self, String> {
+        if let Err(failure) = neo_media_support::probe(path) {
+            return Err(format!(
+                "動画を開けません: {} ({failure:?})",
+                failure.message()
+            ));
+        }
+
         let store = VideoFrameStore::new();
         let (tx, rx) = mpsc::channel::<VideoMeta>();
         let store_thread = store.clone();

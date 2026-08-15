@@ -22,6 +22,13 @@ const CACHE_CAPACITY: usize = neo_media_cache::MAX_CAPACITY;
 
 static SHARED_WGPU: OnceLock<(Arc<wgpu::Device>, Arc<wgpu::Queue>)> = OnceLock::new();
 static SHARED_CACHE: OnceLock<Arc<NeoMediaCache>> = OnceLock::new();
+static SHARED_QUEUE_SUBMIT_LOCK: OnceLock<Arc<Mutex<()>>> = OnceLock::new();
+
+pub fn shared_wgpu_submit_lock() -> Arc<Mutex<()>> {
+    SHARED_QUEUE_SUBMIT_LOCK
+        .get_or_init(|| Arc::new(Mutex::new(())))
+        .clone()
+}
 
 pub fn set_shared_wgpu_device(device: Arc<wgpu::Device>, queue: Arc<wgpu::Queue>) {
     let _ = SHARED_CACHE.set(Arc::new(NeoMediaCache::new(
@@ -664,7 +671,7 @@ fn build_gpu_pipeline(
     if hw_device_ctx.is_null() {
         return None;
     }
-    match VaapiTransferBackend::new(&wgpu_device) {
+    match VaapiTransferBackend::new(&wgpu_device, shared_wgpu_submit_lock()) {
         Ok(backend) => Some(GpuPipeline {
             wgpu_device,
             wgpu_queue,
@@ -859,7 +866,8 @@ fn run_worker(
                 }
                 Err(failure) => {
                     eprintln!(
-                        "[neoutl-video-decoder][非対応] probe判定: {failure:?} open失敗: {e}"
+                        "[neoutl-video-decoder][非対応] probe判定: {} ({failure:?}) open失敗: {e}",
+                        failure.message()
                     );
                 }
             }

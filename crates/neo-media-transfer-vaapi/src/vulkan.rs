@@ -1,6 +1,6 @@
 use std::os::raw::{c_int, c_uint, c_void};
 use std::ptr;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use ffmpeg_sys_next as sys;
 
@@ -26,6 +26,16 @@ unsafe extern "C" {
         out_image0: *mut u64,
         out_layout0: *mut c_int,
     ) -> c_int;
+
+    fn neoutl_vk_frame_query_sync0(
+        av_vk_frame: *mut c_void,
+        out_semaphore: *mut u64,
+        out_wait_value: *mut u64,
+    ) -> c_int;
+
+    fn neoutl_vk_frame_signal_sync0(av_vk_frame: *mut c_void, new_value: u64) -> c_int;
+
+    fn neoutl_vaapi_sync_surface(vaapi_frame: *mut sys::AVFrame) -> c_int;
 }
 
 pub struct VulkanRawHandles {
@@ -185,6 +195,11 @@ pub fn transfer_to_vulkan_frame(
     derived_frames_ctx: *mut sys::AVBufferRef,
 ) -> Result<DerivedVulkanFrame, String> {
     unsafe {
+        let sync_ret = neoutl_vaapi_sync_surface(src_frame);
+        if sync_ret != 0 {
+            return Err(format!("neoutl_vaapi_sync_surface失敗 ret={sync_ret}"));
+        }
+
         let dst_frame = sys::av_frame_alloc();
         if dst_frame.is_null() {
             return Err("av_frame_alloc失敗".to_owned());
@@ -212,6 +227,8 @@ pub fn transfer_to_vulkan_frame(
 pub struct VkImageHandle {
     pub image: ash::vk::Image,
     pub layout: ash::vk::ImageLayout,
+    pub semaphore: ash::vk::Semaphore,
+    pub wait_value: u64,
 }
 
 pub unsafe fn vk_image_of(frame: &DerivedVulkanFrame) -> VkImageHandle {
@@ -221,10 +238,33 @@ pub unsafe fn vk_image_of(frame: &DerivedVulkanFrame) -> VkImageHandle {
         let mut layout0: c_int = 0;
         let ret = neoutl_vk_frame_query_image0(vk_frame_ptr, &mut image0, &mut layout0);
         assert_eq!(ret, 0, "neoutl_vk_frame_query_image0失敗 ret={ret}");
+        let mut semaphore0: u64 = 0;
+        let mut wait_value0: u64 = 0;
+        let sync_ret = neoutl_vk_frame_query_sync0(vk_frame_ptr, &mut semaphore0, &mut wait_value0);
+        assert_eq!(
+            sync_ret, 0,
+            "neoutl_vk_frame_query_sync0失敗 ret={sync_ret}"
+        );
         VkImageHandle {
             image: ash::vk::Image::from_raw(image0),
             layout: ash::vk::ImageLayout::from_raw(layout0),
+            semaphore: ash::vk::Semaphore::from_raw(semaphore0),
+            wait_value: wait_value0,
         }
+    }
+}
+
+pub unsafe fn signal_vk_frame_sync0(
+    frame: &DerivedVulkanFrame,
+    new_value: u64,
+) -> Result<(), String> {
+    unsafe {
+        let vk_frame_ptr = (*frame.av_frame).data[0] as *mut c_void;
+        let ret = neoutl_vk_frame_signal_sync0(vk_frame_ptr, new_value);
+        if ret != 0 {
+            return Err(format!("neoutl_vk_frame_signal_sync0失敗 ret={ret}"));
+        }
+        Ok(())
     }
 }
 
@@ -235,18 +275,15 @@ pub struct CopyEngine {
     command_pool: ash::vk::CommandPool,
     command_buffer: ash::vk::CommandBuffer,
     fence: ash::vk::Fence,
+    submit_lock: Arc<Mutex<()>>,
 }
 
 impl CopyEngine {
-    pub unsafe fn device_wait_idle(&self) -> Result<(), String> {
-        unsafe {
-            self.device
-                .device_wait_idle()
-                .map_err(|e| format!("device_wait_idle失敗: {e}"))
-        }
-    }
-
-    pub unsafe fn new(handles: &VulkanRawHandles, entry: &ash::Entry) -> Result<Self, String> {
+    pub unsafe fn new(
+        handles: &VulkanRawHandles,
+        entry: &ash::Entry,
+        submit_lock: Arc<Mutex<()>>,
+    ) -> Result<Self, String> {
         unsafe {
             let instance = ash::Instance::load(
                 &ash::StaticFn {
@@ -284,6 +321,7 @@ impl CopyEngine {
                 command_pool,
                 command_buffer,
                 fence,
+                submit_lock,
             })
         }
     }
@@ -294,6 +332,7 @@ impl CopyEngine {
         dst: ash::vk::Image,
         width: u32,
         height: u32,
+        signal_value: u64,
     ) -> Result<(), String> {
         unsafe {
             self.device
@@ -408,11 +447,30 @@ impl CopyEngine {
                 .reset_fences(&[self.fence])
                 .map_err(|e| format!("reset_fences失敗: {e}"))?;
 
+            let wait_semaphores = [src.semaphore];
+            let wait_values = [src.wait_value];
+            let wait_stages = [ash::vk::PipelineStageFlags::TRANSFER];
+            let signal_semaphores = [src.semaphore];
+            let signal_values = [signal_value];
+            let mut timeline_info = ash::vk::TimelineSemaphoreSubmitInfo::default()
+                .wait_semaphore_values(&wait_values)
+                .signal_semaphore_values(&signal_values);
             let command_buffers = [self.command_buffer];
-            let submit_info = ash::vk::SubmitInfo::default().command_buffers(&command_buffers);
-            self.device
-                .queue_submit(self.queue, &[submit_info], self.fence)
-                .map_err(|e| format!("queue_submit失敗: {e}"))?;
+            let submit_info = ash::vk::SubmitInfo::default()
+                .wait_semaphores(&wait_semaphores)
+                .wait_dst_stage_mask(&wait_stages)
+                .command_buffers(&command_buffers)
+                .signal_semaphores(&signal_semaphores)
+                .push_next(&mut timeline_info);
+            {
+                let _guard = self
+                    .submit_lock
+                    .lock()
+                    .unwrap_or_else(|poisoned| poisoned.into_inner());
+                self.device
+                    .queue_submit(self.queue, &[submit_info], self.fence)
+                    .map_err(|e| format!("queue_submit失敗: {e}"))?;
+            }
 
             self.device
                 .wait_for_fences(&[self.fence], true, u64::MAX)
@@ -440,6 +498,7 @@ pub struct NeoutlVulkanContext {
 pub fn init_vulkan_context(
     device: &wgpu::Device,
     entry: &ash::Entry,
+    submit_lock: Arc<Mutex<()>>,
 ) -> Result<Arc<NeoutlVulkanContext>, String> {
     eprintln!("[neoutl-video-decoder][diag][vulkan] extract_vulkan_raw_handles開始");
     let handles = unsafe { extract_vulkan_raw_handles(device) }
@@ -449,7 +508,7 @@ pub fn init_vulkan_context(
     let device_ctx = create_av_vulkan_device_ctx(&handles)?;
     eprintln!("[neoutl-video-decoder][diag][vulkan] create_av_vulkan_device_ctx成功");
     eprintln!("[neoutl-video-decoder][diag][vulkan] CopyEngine::new開始");
-    let copy_engine = unsafe { CopyEngine::new(&handles, entry)? };
+    let copy_engine = unsafe { CopyEngine::new(&handles, entry, submit_lock)? };
     eprintln!("[neoutl-video-decoder][diag][vulkan] CopyEngine::new成功");
     Ok(Arc::new(NeoutlVulkanContext {
         device_ctx,
@@ -470,6 +529,7 @@ pub struct SemiPlanarConvertEngine {
     shader_module: ash::vk::ShaderModule,
     descriptor_pool: ash::vk::DescriptorPool,
     sampler: ash::vk::Sampler,
+    submit_lock: Arc<Mutex<()>>,
 }
 
 impl SemiPlanarConvertEngine {
@@ -477,6 +537,7 @@ impl SemiPlanarConvertEngine {
         handles: &VulkanRawHandles,
         _entry: &ash::Entry,
         spirv_code: &[u8],
+        submit_lock: Arc<Mutex<()>>,
     ) -> Result<Self, String> {
         unsafe {
             eprintln!("[neoutl-video-decoder][diag][semi-planar] Instance::load開始");
@@ -638,6 +699,7 @@ impl SemiPlanarConvertEngine {
                 shader_module,
                 descriptor_pool,
                 sampler,
+                submit_lock,
             })
         }
     }
@@ -645,15 +707,17 @@ impl SemiPlanarConvertEngine {
     #[allow(clippy::too_many_arguments)]
     pub unsafe fn convert(
         &self,
-        src_image: ash::vk::Image,
-        src_layout: ash::vk::ImageLayout,
+        src: VkImageHandle,
         dst_image: ash::vk::Image,
         width: u32,
         height: u32,
         y_plane_format: ash::vk::Format,
         uv_plane_format: ash::vk::Format,
+        signal_value: u64,
     ) -> Result<(), String> {
         unsafe {
+            let src_image = src.image;
+            let src_layout = src.layout;
             let y_view_info = ash::vk::ImageViewCreateInfo::default()
                 .image(src_image)
                 .view_type(ash::vk::ImageViewType::TYPE_2D)
@@ -857,11 +921,30 @@ impl SemiPlanarConvertEngine {
             self.device
                 .reset_fences(&[self.fence])
                 .map_err(|e| format!("reset_fences失敗: {e}"))?;
+            let wait_semaphores = [src.semaphore];
+            let wait_values = [src.wait_value];
+            let wait_stages = [ash::vk::PipelineStageFlags::COMPUTE_SHADER];
+            let signal_semaphores = [src.semaphore];
+            let signal_values = [signal_value];
+            let mut timeline_info = ash::vk::TimelineSemaphoreSubmitInfo::default()
+                .wait_semaphore_values(&wait_values)
+                .signal_semaphore_values(&signal_values);
             let command_buffers = [self.command_buffer];
-            let submit_info = ash::vk::SubmitInfo::default().command_buffers(&command_buffers);
-            self.device
-                .queue_submit(self.queue, &[submit_info], self.fence)
-                .map_err(|e| format!("queue_submit失敗: {e}"))?;
+            let submit_info = ash::vk::SubmitInfo::default()
+                .wait_semaphores(&wait_semaphores)
+                .wait_dst_stage_mask(&wait_stages)
+                .command_buffers(&command_buffers)
+                .signal_semaphores(&signal_semaphores)
+                .push_next(&mut timeline_info);
+            {
+                let _guard = self
+                    .submit_lock
+                    .lock()
+                    .unwrap_or_else(|poisoned| poisoned.into_inner());
+                self.device
+                    .queue_submit(self.queue, &[submit_info], self.fence)
+                    .map_err(|e| format!("queue_submit失敗: {e}"))?;
+            }
             self.device
                 .wait_for_fences(&[self.fence], true, u64::MAX)
                 .map_err(|e| format!("wait_for_fences失敗: {e}"))?;
