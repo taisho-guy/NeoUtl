@@ -1593,11 +1593,12 @@ impl RenderEngine {
                                 eprintln!(
                                     "{}",
                                     t!(
-                                        "[NeoUtl] フレーム取得失敗 kind_id=%{arg0} path=%{arg1} frame=%{arg2}: %{arg3}",
+                                        "[NeoUtl] フレーム取得失敗 kind_id=%{arg0} clip_instance=%{arg4} path=%{arg1} frame=%{arg2}: %{arg3}",
                                         arg0 = format!("{}", obj.kind_id),
                                         arg1 = format!("{}", src.path.display()),
                                         arg2 = format!("{}", obj.source_frame),
-                                        arg3 = format!("{err}")
+                                        arg3 = format!("{err}"),
+                                        arg4 = format!("{}", obj.clip_instance)
                                     )
                                 );
                                 None
