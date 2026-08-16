@@ -588,6 +588,14 @@ python3 BUILD.py</code></pre>実行可能ファイルは <code>build</code>
     </div>
   </footer>
   <script>
+  (() => {
+    const KEY = "neoutl_disclaimer_ack";
+    if (!localStorage.getItem(KEY)) {
+      alert("NeoUtlはAviUtl（http://spring-fragrance.mints.ne.jp/aviutl/）ではありません。");
+      localStorage.setItem(KEY, "1");
+    }
+  })();
+
   const PATTERNS = {
     linux: ["linux"],
     windows: ["win", "msys2", "ucrt"],
