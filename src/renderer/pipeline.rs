@@ -1252,8 +1252,11 @@ impl RenderEngine {
     }
 
     fn draw_media_pass(&self, rpass: &mut wgpu::RenderPass, texture: &wgpu::Texture, offset: u32) {
-        let is_planar_nv12 = texture.format() == wgpu::TextureFormat::NV12;
-        if is_planar_nv12 {
+        let is_planar = matches!(
+            texture.format(),
+            wgpu::TextureFormat::NV12 | wgpu::TextureFormat::P010
+        );
+        if is_planar {
             let plane_y = texture.create_view(&wgpu::TextureViewDescriptor {
                 aspect: wgpu::TextureAspect::Plane0,
                 ..Default::default()

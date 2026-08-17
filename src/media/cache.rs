@@ -344,18 +344,23 @@ impl MediaCache {
                 return;
             };
 
+            let is_watchdog_timeout = reason.contains("watchdog timeout");
+
             eprintln!(
                 "{}",
                 t!(
-                    "[media-cache] prefetch failure path=%{arg0} plugin=%{arg1} gen=%{arg2} -> gen+1 旧worker/pending無効化 reason=%{arg3}",
+                    "[media-cache] prefetch failure path=%{arg0} plugin=%{arg1} gen=%{arg2} -> gen+1 旧worker/pending無効化 watchdog由来=%{arg3} reason=%{arg4}",
                     arg0 = format!("{}", path.display()),
                     arg1 = format!("{}", video.plugin_id),
                     arg2 = format!("{}", video.generation),
-                    arg3 = format!("{}", reason)
+                    arg3 = format!("{}", is_watchdog_timeout),
+                    arg4 = format!("{}", reason)
                 )
             );
 
-            video.failed_plugins.insert(video.plugin_id.clone());
+            if !is_watchdog_timeout {
+                video.failed_plugins.insert(video.plugin_id.clone());
+            }
             video.generation = video.generation.wrapping_add(1);
 
             let old_workers: Vec<DecodeWorker> = video

@@ -234,11 +234,11 @@ struct HwPixFmtBox {
 }
 
 fn resolve_hw_sw_format(stream_sw_format: i32) -> Option<i32> {
-    if stream_sw_format == av_pix_fmt_nv12() {
-        Some(av_pix_fmt_nv12())
-    } else if stream_sw_format == av_pix_fmt_yuv420p() || stream_sw_format == av_pix_fmt_yuvj420p()
+    if stream_sw_format == av_pix_fmt_nv12()
+        || stream_sw_format == av_pix_fmt_yuv420p()
+        || stream_sw_format == av_pix_fmt_yuvj420p()
     {
-        Some(av_pix_fmt_nv12())
+        Some(av_pix_fmt_p010le())
     } else if stream_sw_format == av_pix_fmt_yuv420p10le() {
         Some(av_pix_fmt_p010le())
     } else if stream_sw_format == av_pix_fmt_yuv420p12le() {
