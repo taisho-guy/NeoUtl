@@ -1,15 +1,15 @@
 use std::path::Path;
 use std::sync::Arc;
 use std::sync::mpsc;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use neoutl_media_api::{MediaKind, MediaMeta, MediaVTable, VideoSource};
 
 use crate::decoder::{VideoDecoder, VideoMeta};
 use crate::frame::VideoFrameStore;
 
-const FRAME_WAIT_TIMEOUT: Duration = Duration::from_secs(5);
 const FRAME_WAIT_POLL: Duration = Duration::from_millis(2);
+const OPEN_META_TIMEOUT: Duration = Duration::from_secs(5);
 const CLIP_KEY: &str = "ffmpeg_decoder_source";
 
 pub struct FfmpegVideoSource {
@@ -44,7 +44,7 @@ impl FfmpegVideoSource {
             },
         );
         let meta = rx
-            .recv_timeout(FRAME_WAIT_TIMEOUT)
+            .recv_timeout(OPEN_META_TIMEOUT)
             .map_err(|e| format!("動画メタ情報取得タイムアウト: {e}"))?;
         Ok(Self {
             decoder,
@@ -85,22 +85,12 @@ impl VideoSource for FfmpegVideoSource {
         self.store.invalidate_frame(CLIP_KEY);
         self.decoder.seek_to_frame(frame_index);
 
-        let started = Instant::now();
-        let deadline = started + FRAME_WAIT_TIMEOUT;
-        let frame = loop {
+        loop {
             if let Some(frame) = self.store.frame(CLIP_KEY, frame_index) {
-                break frame;
-            }
-            if Instant::now() >= deadline {
-                return Err(format!(
-                    "フレーム取得タイムアウト frame_index={frame_index} elapsed_ms={}",
-                    started.elapsed().as_millis()
-                ));
+                return Ok(frame.0.texture.clone());
             }
             std::thread::sleep(FRAME_WAIT_POLL);
-        };
-
-        Ok(frame.0.texture.clone())
+        }
     }
 }
 

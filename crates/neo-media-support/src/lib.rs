@@ -53,10 +53,8 @@ fn resolve_hw_sw_format(stream_sw_format: i32) -> Option<i32> {
     let rgb0 = pf(sys::AVPixelFormat::AV_PIX_FMT_RGB0);
     let bgr0 = pf(sys::AVPixelFormat::AV_PIX_FMT_BGR0);
 
-    if stream_sw_format == nv12 {
-        Some(nv12)
-    } else if stream_sw_format == yuv420p || stream_sw_format == yuvj420p {
-        Some(nv12)
+    if stream_sw_format == nv12 || stream_sw_format == yuv420p || stream_sw_format == yuvj420p {
+        Some(p010le)
     } else if stream_sw_format == yuv420p10le {
         Some(p010le)
     } else if stream_sw_format == yuv420p12le {
