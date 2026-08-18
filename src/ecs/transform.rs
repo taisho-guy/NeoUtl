@@ -125,6 +125,29 @@ pub fn compute_global_matrix(t: &Transform) -> GlobalMatrix {
     GlobalMatrix(mat4_mul(&translation, &mat4_mul(&rotation, &scale)))
 }
 
+pub fn compute_relative_matrix(t: &Transform) -> GlobalMatrix {
+    let translation: [f32; 16] = [
+        1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, t.x, t.y, t.z, 1.0,
+    ];
+    let (sx, cx) = t.rot_x.to_radians().sin_cos();
+    let (sy, cy) = t.rot_y.to_radians().sin_cos();
+    let (sz, cz) = t.rot_z.to_radians().sin_cos();
+    let rot_x: [f32; 16] = [
+        1.0, 0.0, 0.0, 0.0, 0.0, cx, sx, 0.0, 0.0, -sx, cx, 0.0, 0.0, 0.0, 0.0, 1.0,
+    ];
+    let rot_y: [f32; 16] = [
+        cy, 0.0, -sy, 0.0, 0.0, 1.0, 0.0, 0.0, sy, 0.0, cy, 0.0, 0.0, 0.0, 0.0, 1.0,
+    ];
+    let rot_z: [f32; 16] = [
+        cz, sz, 0.0, 0.0, -sz, cz, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0,
+    ];
+    let scale: [f32; 16] = [
+        t.scale_x, 0.0, 0.0, 0.0, 0.0, t.scale_y, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0,
+    ];
+    let rotation = mat4_mul(&rot_z, &mat4_mul(&rot_y, &rot_x));
+    GlobalMatrix(mat4_mul(&translation, &mat4_mul(&rotation, &scale)))
+}
+
 pub fn compute_chained_matrix(curtains: &[GlobalMatrix], leaf: &GlobalMatrix) -> GlobalMatrix {
     curtains.iter().rev().fold(*leaf, |acc, curtain| {
         GlobalMatrix(mat4_mul(&curtain.0, &acc.0))

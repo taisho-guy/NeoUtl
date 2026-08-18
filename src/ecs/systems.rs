@@ -9,7 +9,7 @@ use crate::ecs::resources::{
 };
 use crate::ecs::transform::{
     Camera, DEFAULT_FOV_DEG, GlobalMatrix, Projection, Transform, compute_chained_matrix,
-    compute_global_matrix, compute_mvp, rescale_for_source,
+    compute_global_matrix, compute_mvp, compute_relative_matrix, rescale_for_source,
 };
 use crate::ecs::types::Value;
 use crate::media::MediaKind;
@@ -176,7 +176,7 @@ pub fn get_active_objects_system_at(
                     entity: id,
                     layer: layer.0,
                     gc: *gc,
-                    matrix: compute_global_matrix(&transform),
+                    matrix: compute_relative_matrix(&transform),
                     effects,
                     opacity: transform.opacity,
                 });
