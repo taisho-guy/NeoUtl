@@ -54,24 +54,6 @@ impl EffectCatalogState {
         Self { all, categories }
     }
 
-    pub fn build_video_and_audio() -> Self {
-        let mut all = Self::build_video().all;
-        for p in crate::audio::plugin_registry::get_all() {
-            all.push(CatalogRow {
-                id: p.plugin_id.clone(),
-                name: p.name.clone(),
-                category: format!("Audio / {:?}", p.format),
-            });
-        }
-        all.sort_by(|a, b| a.category.cmp(&b.category).then(a.name.cmp(&b.name)));
-
-        let mut categories: Vec<String> = all.iter().map(|r| r.category.clone()).collect();
-        categories.sort();
-        categories.dedup();
-
-        Self { all, categories }
-    }
-
     pub fn categories_inner(&self) -> &[String] {
         &self.categories
     }
