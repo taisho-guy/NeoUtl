@@ -1401,6 +1401,7 @@ impl RenderEngine {
                     self.draw_standard_pass(&mut rpass, obj, offset);
                 }
                 EffectObjectDrawKind::Media { texture, offset } => {
+                    eprintln!("[diag][draw_media_pass呼出][effect経由] offset={offset}");
                     self.draw_media_pass(&mut rpass, texture, offset);
                 }
                 EffectObjectDrawKind::Text {
@@ -1630,6 +1631,12 @@ impl RenderEngine {
                 media_frames.push(tex);
             }
         }
+        eprintln!(
+            "[diag][render_at] active_objects={} video_tex_some={} depth={}",
+            active_objects.len(),
+            media_frames.iter().filter(|t| t.is_some()).count(),
+            depth
+        );
 
         let mut media_offsets: Vec<Option<u32>> = Vec::with_capacity(active_objects.len());
         let mut media_next_index = 0u64;
@@ -1820,6 +1827,7 @@ impl RenderEngine {
                 let (Some(texture), Some(offset)) = (texture, offset) else {
                     continue;
                 };
+                eprintln!("[diag][draw_media_pass呼出] i={i} offset={offset}");
                 self.draw_media_pass(&mut rpass, texture, *offset);
             }
 

@@ -46,3 +46,5 @@ pub const IMAGE_STABLE_ID: &str = "neoutl.object.image";
 pub const AUDIO_STABLE_ID: &str = "neoutl.object.audio";
 
 pub const SCENE_STABLE_ID: &str = "neoutl.object.scene";
+
+pub const GROUP_CONTROL_STABLE_ID: &str = "neoutl.object.group_control";

@@ -94,6 +94,7 @@ fn bytes_per_frame(format: PixelFormat, width: u32, height: u32) -> u64 {
         PixelFormat::Nv12 => pixels + pixels / 2,
         PixelFormat::P010 | PixelFormat::P012 | PixelFormat::P016 => (pixels + pixels / 2) * 2,
         PixelFormat::Rgba8 => pixels * 4,
+        PixelFormat::Rgba16Float => pixels * 8,
         PixelFormat::Yuv444 => pixels * 3,
     }
 }
@@ -111,6 +112,7 @@ fn wgpu_texture_format(format: PixelFormat) -> Result<wgpu::TextureFormat, PoolE
         PixelFormat::Nv12 => Ok(wgpu::TextureFormat::NV12),
         PixelFormat::P010 => Ok(wgpu::TextureFormat::P010),
         PixelFormat::Rgba8 => Ok(wgpu::TextureFormat::Rgba8Unorm),
+        PixelFormat::Rgba16Float => Ok(wgpu::TextureFormat::Rgba16Float),
         PixelFormat::P012 | PixelFormat::P016 | PixelFormat::Yuv444 => {
             Err(PoolError::UnsupportedFormat(format))
         }
@@ -119,7 +121,7 @@ fn wgpu_texture_format(format: PixelFormat) -> Result<wgpu::TextureFormat, PoolE
 
 fn texture_usage(format: PixelFormat) -> wgpu::TextureUsages {
     match format {
-        PixelFormat::Rgba8 => {
+        PixelFormat::Rgba8 | PixelFormat::Rgba16Float => {
             wgpu::TextureUsages::COPY_DST
                 | wgpu::TextureUsages::TEXTURE_BINDING
                 | wgpu::TextureUsages::STORAGE_BINDING

@@ -1,0 +1,11 @@
+[package]
+name    = "neoutl-object-group-control"
+version = "0.0.0"
+edition = "2024"
+
+[lib]
+name       = "neoutl_object_group_control"
+crate-type = ["cdylib"]
+
+[dependencies]
+neoutl-object-api = { path = "../../neoutl-object-api" }

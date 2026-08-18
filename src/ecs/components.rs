@@ -31,6 +31,39 @@ pub struct SceneObject {
 }
 
 #[derive(Clone, Copy, Debug, Component, Serialize, Deserialize)]
+pub struct GroupControl {
+    pub layer_count_down: u32,
+    pub layer_count_up: u32,
+}
+
+impl Default for GroupControl {
+    fn default() -> Self {
+        Self {
+            layer_count_down: 1,
+            layer_count_up: 0,
+        }
+    }
+}
+
+impl ParamAccess for GroupControl {
+    fn get_param(&self, key: &str) -> Option<f32> {
+        Some(match key {
+            "layer_count_down" => self.layer_count_down as f32,
+            "layer_count_up" => self.layer_count_up as f32,
+            _ => return None,
+        })
+    }
+    fn set_param(&mut self, key: &str, value: f32) -> bool {
+        match key {
+            "layer_count_down" => self.layer_count_down = value.max(0.0) as u32,
+            "layer_count_up" => self.layer_count_up = value.max(0.0) as u32,
+            _ => return false,
+        }
+        true
+    }
+}
+
+#[derive(Clone, Copy, Debug, Component, Serialize, Deserialize)]
 pub struct AudioParams {
     pub volume: f32,
     pub pan: f32,

@@ -129,6 +129,7 @@ impl PropertiesPanel {
                     sections::text_section(ui, &mut world, id);
                     sections::shape_section(ui, &mut world, id);
                     sections::audio_section(ui, &mut world, id);
+                    sections::group_control_section(ui, &mut world, id);
 
                     ui.separator();
                     ui.colored_label(palette.focus, t!("エフェクト詳細"));

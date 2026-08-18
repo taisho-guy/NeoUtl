@@ -29,6 +29,7 @@ pub const SYSTEM_DEFAULT_EXPORT_CONTAINER: i32 = 0;
 pub const SYSTEM_DEFAULT_EXPORT_CODEC: i32 = 0;
 pub const SYSTEM_DEFAULT_CHECK_UPDATE_ON_STARTUP: bool = false;
 pub const SYSTEM_DEFAULT_CRASH_REPORTING_ENABLED: bool = false;
+pub const SYSTEM_DEFAULT_MAX_GROUP_CHAIN_DEPTH: i32 = 32;
 pub const SENTRY_DSN: &str = "https://a5c5db74531842109880e0e97e054915@app.glitchtip.com/26533";
 pub const SYSTEM_DEFAULT_HOT_RELOAD_ENABLED: bool = cfg!(debug_assertions);
 

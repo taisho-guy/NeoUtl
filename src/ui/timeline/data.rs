@@ -48,6 +48,8 @@ impl TimelineWindow {
             has_waveform: waveform_duration_frames > 0,
             waveform_origin_frame: -data.media_trim_in_frame as i32,
             waveform_duration_frames,
+            group_layer_count_down: data.group_layer_count_down,
+            group_layer_count_up: data.group_layer_count_up,
         }
     }
 

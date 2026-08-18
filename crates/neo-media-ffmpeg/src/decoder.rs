@@ -881,7 +881,7 @@ fn try_convert_to_gpu(
         };
 
     let owner_token = cache.owner_token_of(
-        neo_media_core::PixelFormat::Rgba8,
+        neo_media_transfer_vaapi::dst_pixel_format_for(sw_format_i32),
         ctx.width,
         ctx.height,
         &neo_frame.texture,

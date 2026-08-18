@@ -125,6 +125,12 @@ pub fn compute_global_matrix(t: &Transform) -> GlobalMatrix {
     GlobalMatrix(mat4_mul(&translation, &mat4_mul(&rotation, &scale)))
 }
 
+pub fn compute_chained_matrix(curtains: &[GlobalMatrix], leaf: &GlobalMatrix) -> GlobalMatrix {
+    curtains.iter().rev().fold(*leaf, |acc, curtain| {
+        GlobalMatrix(mat4_mul(&curtain.0, &acc.0))
+    })
+}
+
 pub fn rescale_for_source(global: &GlobalMatrix, source_w: f32, source_h: f32) -> GlobalMatrix {
     let mut m = global.0;
     let ratio_w = source_w / UNIT_SIZE_PX;

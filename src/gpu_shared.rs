@@ -88,15 +88,20 @@ pub fn init_shared_gpu() -> Result<SharedGpu, Box<dyn std::error::Error>> {
             }))
             .map_err(|_| "Vulkanアダプタ取得失敗")?;
 
-        let dma_buf_supported = wgpu_adapter
-            .features()
-            .contains(wgpu::Features::VULKAN_EXTERNAL_MEMORY_DMA_BUF);
+        let adapter_features = wgpu_adapter.features();
+        let dma_buf_supported =
+            adapter_features.contains(wgpu::Features::VULKAN_EXTERNAL_MEMORY_DMA_BUF);
+        let planar_video_format_supported =
+            adapter_features.contains(wgpu::Features::TEXTURE_FORMAT_NV12);
         eprintln!("[gpu_shared] VULKAN_EXTERNAL_MEMORY_DMA_BUFサポート={dma_buf_supported}");
-        let wgpu_features = if dma_buf_supported {
-            wgpu::Features::VULKAN_EXTERNAL_MEMORY_DMA_BUF
-        } else {
-            wgpu::Features::empty()
-        };
+        eprintln!("[gpu_shared] TEXTURE_FORMAT_NV12サポート={planar_video_format_supported}");
+        let mut wgpu_features = wgpu::Features::empty();
+        if dma_buf_supported {
+            wgpu_features |= wgpu::Features::VULKAN_EXTERNAL_MEMORY_DMA_BUF;
+        }
+        if planar_video_format_supported {
+            wgpu_features |= wgpu::Features::TEXTURE_FORMAT_NV12;
+        }
 
         let (device, queue) = unsafe {
             let hal_adapter = wgpu_adapter

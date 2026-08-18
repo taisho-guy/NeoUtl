@@ -1,0 +1,5 @@
+"Group Control": "Group Control"
+"方向(0=下 1=上)": "Direction (0=Down 1=Up)"
+"対象レイヤー数(0=全域)": "Target Layer Span (0=All)"
+"上位グループ制御の影響を受ける": "Inherit Upper Group Control"
+"同じグループのオブジェクトを対象にする": "Include Grouped Objects"
