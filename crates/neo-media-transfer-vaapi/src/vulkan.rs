@@ -5,6 +5,8 @@ use std::sync::{Arc, Mutex};
 
 use ffmpeg_sys_next as sys;
 
+use crate::semi_planar_view_formats;
+
 const AV_HWDEVICE_TYPE_VULKAN: sys::AVHWDeviceType = sys::AVHWDeviceType::AV_HWDEVICE_TYPE_VULKAN;
 
 unsafe extern "C" {
@@ -260,6 +262,22 @@ pub unsafe fn import_surface_once(
             e
         })?;
 
+        let plane_view_formats: Vec<ash::vk::Format> = if is_direct_rgba {
+            Vec::new()
+        } else {
+            match semi_planar_view_formats(sw_format_i32) {
+                Some((y_format, uv_format)) => vec![y_format, uv_format],
+                None => {
+                    if fd >= 0 {
+                        libc_close(fd);
+                    }
+                    return Err(format!(
+                        "semi_planar_view_formats未対応sw_format: {sw_format_i32}"
+                    ));
+                }
+            }
+        };
+
         let mut plane_layouts = Vec::with_capacity(plane_count as usize);
         for i in 0..plane_count as usize {
             plane_layouts.push(
@@ -276,7 +294,17 @@ pub unsafe fn import_surface_once(
         let mut external_memory_info = ash::vk::ExternalMemoryImageCreateInfo::default()
             .handle_types(ash::vk::ExternalMemoryHandleTypeFlags::DMA_BUF_EXT);
 
-        let image_info = ash::vk::ImageCreateInfo::default()
+        let mut format_list_info =
+            ash::vk::ImageFormatListCreateInfo::default().view_formats(&plane_view_formats);
+
+        let image_create_flags = if plane_view_formats.is_empty() {
+            ash::vk::ImageCreateFlags::empty()
+        } else {
+            ash::vk::ImageCreateFlags::MUTABLE_FORMAT | ash::vk::ImageCreateFlags::EXTENDED_USAGE
+        };
+
+        let mut image_info = ash::vk::ImageCreateInfo::default()
+            .flags(image_create_flags)
             .image_type(ash::vk::ImageType::TYPE_2D)
             .format(format)
             .extent(ash::vk::Extent3D {
@@ -293,6 +321,10 @@ pub unsafe fn import_surface_once(
             .initial_layout(ash::vk::ImageLayout::UNDEFINED)
             .push_next(&mut modifier_info)
             .push_next(&mut external_memory_info);
+
+        if !plane_view_formats.is_empty() {
+            image_info = image_info.push_next(&mut format_list_info);
+        }
 
         let image = device.create_image(&image_info, None).map_err(|e| {
             libc_close(fd);
@@ -695,6 +727,7 @@ pub struct SemiPlanarConvertEngine {
     descriptor_pool: ash::vk::DescriptorPool,
     sampler: ash::vk::Sampler,
     submit_lock: Arc<Mutex<()>>,
+    last_dst_layout: std::cell::Cell<ash::vk::ImageLayout>,
 }
 
 impl SemiPlanarConvertEngine {
@@ -834,6 +867,7 @@ impl SemiPlanarConvertEngine {
                 descriptor_pool,
                 sampler,
                 submit_lock,
+                last_dst_layout: std::cell::Cell::new(ash::vk::ImageLayout::UNDEFINED),
             })
         }
     }
@@ -848,6 +882,7 @@ impl SemiPlanarConvertEngine {
         height: u32,
         y_plane_format: ash::vk::Format,
         uv_plane_format: ash::vk::Format,
+        dst_format: ash::vk::Format,
     ) -> Result<ash::vk::ImageLayout, String> {
         unsafe {
             let y_view_info = ash::vk::ImageViewCreateInfo::default()
@@ -887,7 +922,7 @@ impl SemiPlanarConvertEngine {
             let dst_view_info = ash::vk::ImageViewCreateInfo::default()
                 .image(dst_image)
                 .view_type(ash::vk::ImageViewType::TYPE_2D)
-                .format(ash::vk::Format::R8G8B8A8_UNORM)
+                .format(dst_format)
                 .subresource_range(
                     ash::vk::ImageSubresourceRange::default()
                         .aspect_mask(ash::vk::ImageAspectFlags::COLOR)
@@ -980,18 +1015,21 @@ impl SemiPlanarConvertEngine {
                 .level_count(1)
                 .base_array_layer(0)
                 .layer_count(1);
+            let prev_dst_layout = self.last_dst_layout.get();
             let dst_barrier_to_general = ash::vk::ImageMemoryBarrier::default()
-                .old_layout(ash::vk::ImageLayout::UNDEFINED)
+                .old_layout(prev_dst_layout)
                 .new_layout(ash::vk::ImageLayout::GENERAL)
                 .src_queue_family_index(ash::vk::QUEUE_FAMILY_IGNORED)
                 .dst_queue_family_index(ash::vk::QUEUE_FAMILY_IGNORED)
                 .image(dst_image)
                 .subresource_range(dst_subresource)
+                .src_access_mask(ash::vk::AccessFlags::SHADER_READ)
                 .dst_access_mask(ash::vk::AccessFlags::SHADER_WRITE);
 
             self.device.cmd_pipeline_barrier(
                 self.command_buffer,
-                ash::vk::PipelineStageFlags::TOP_OF_PIPE,
+                ash::vk::PipelineStageFlags::FRAGMENT_SHADER
+                    | ash::vk::PipelineStageFlags::TOP_OF_PIPE,
                 ash::vk::PipelineStageFlags::COMPUTE_SHADER,
                 ash::vk::DependencyFlags::empty(),
                 &[],
@@ -1076,6 +1114,9 @@ impl SemiPlanarConvertEngine {
             self.device
                 .wait_for_fences(&[self.fence], true, u64::MAX)
                 .map_err(|e| format!("wait_for_fences失敗: {e}"))?;
+
+            self.last_dst_layout
+                .set(ash::vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL);
 
             self.device.destroy_image_view(y_view, None);
             self.device.destroy_image_view(uv_view, None);

@@ -2,7 +2,7 @@
 [[vk::binding(0, 0)]] Texture2D<float> plane_y;
 [[vk::binding(1, 0)]] Texture2D<float2> plane_uv;
 [[vk::binding(2, 0)]] SamplerState chroma_sampler;
-[[vk::binding(3, 0)]] [format("rgba8")] RWTexture2D<float4> output;
+[[vk::binding(3, 0)]] [format("rgba16f")] RWTexture2D<float4> output;
 
 [shader("compute")]
 [numthreads(8, 8, 1)]
@@ -27,5 +27,5 @@ void cs_main(uint3 id : SV_DispatchThreadID)
     float g = y_full - 0.1873 * u - 0.4681 * v;
     float b = y_full + 1.8556 * u;
 
-    output[id.xy] = float4(clamp(float3(r, g, b), float3(0.0, 0.0, 0.0), float3(1.0, 1.0, 1.0)), 1.0);
+    output[id.xy] = float4(max(float3(r, g, b), float3(0.0, 0.0, 0.0)), 1.0);
 }

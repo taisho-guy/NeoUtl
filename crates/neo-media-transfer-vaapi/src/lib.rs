@@ -29,7 +29,17 @@ fn av_pix_fmt_as_i32(fmt: sys::AVPixelFormat) -> i32 {
     fmt as i32
 }
 
-fn semi_planar_view_formats(sw_format_i32: i32) -> Option<(ash::vk::Format, ash::vk::Format)> {
+pub fn dst_pixel_format_for(sw_format_i32: i32) -> PixelFormat {
+    if semi_planar_view_formats(sw_format_i32).is_some() {
+        PixelFormat::Rgba16Float
+    } else {
+        PixelFormat::Rgba8
+    }
+}
+
+pub(crate) fn semi_planar_view_formats(
+    sw_format_i32: i32,
+) -> Option<(ash::vk::Format, ash::vk::Format)> {
     if sw_format_i32 == av_pix_fmt_as_i32(sys::AVPixelFormat::AV_PIX_FMT_NV12) {
         Some((ash::vk::Format::R8_UNORM, ash::vk::Format::R8G8_UNORM))
     } else if sw_format_i32 == av_pix_fmt_as_i32(sys::AVPixelFormat::AV_PIX_FMT_P010LE)
@@ -186,8 +196,14 @@ impl TransferBackend for VaapiTransferBackend {
         let width = input.visible_rect.width;
         let height = input.visible_rect.height;
 
+        let dst_pixel_format = dst_pixel_format_for(input.sw_format_i32);
+        let dst_vk_format = match dst_pixel_format {
+            PixelFormat::Rgba16Float => ash::vk::Format::R16G16B16A16_SFLOAT,
+            _ => ash::vk::Format::R8G8B8A8_UNORM,
+        };
+
         let target_texture = pool
-            .acquire(PixelFormat::Rgba8, width, height)
+            .acquire(dst_pixel_format, width, height)
             .map_err(map_pool_error)?;
 
         macro_rules! release_and_return {
@@ -224,6 +240,7 @@ impl TransferBackend for VaapiTransferBackend {
                     height,
                     y_format,
                     uv_format,
+                    dst_vk_format,
                 )
             }
         } else {

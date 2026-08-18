@@ -15,6 +15,8 @@ pub struct TimelineObject {
     pub has_waveform: bool,
     pub waveform_origin_frame: i32,
     pub waveform_duration_frames: i32,
+    pub group_layer_count_down: i32,
+    pub group_layer_count_up: i32,
 }
 
 #[derive(Clone, Debug, Default)]

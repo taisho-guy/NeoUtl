@@ -489,10 +489,18 @@ impl MediaCache {
                 worker.request(frame_index);
 
                 if let Some(tex) = instance.texture_cache.get(frame_index) {
+                    let _ = device.poll(wgpu::PollType::Wait {
+                        submission_index: None,
+                        timeout: None,
+                    });
                     return Ok(tex);
                 }
 
                 if let Some(tex) = worker.poll_texture(frame_index) {
+                    let _ = device.poll(wgpu::PollType::Wait {
+                        submission_index: None,
+                        timeout: None,
+                    });
                     instance.texture_cache.put(frame_index, tex.clone());
                     instance.last_index = Some(frame_index);
                     return Ok(tex);
@@ -500,9 +508,17 @@ impl MediaCache {
 
                 if let Some(last) = instance.last_index {
                     if let Some(tex) = instance.texture_cache.get(last) {
+                        let _ = device.poll(wgpu::PollType::Wait {
+                            submission_index: None,
+                            timeout: None,
+                        });
                         return Ok(tex);
                     }
                     if let Some(tex) = worker.poll_texture(last) {
+                        let _ = device.poll(wgpu::PollType::Wait {
+                            submission_index: None,
+                            timeout: None,
+                        });
                         instance.texture_cache.put(last, tex.clone());
                         return Ok(tex);
                     }

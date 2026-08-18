@@ -11,8 +11,8 @@ use crate::document::{DocumentModel, MediaSourceDoc, ObjectDoc, ObjectPayload};
 use crate::ecs::types::EffectInstance;
 use audio_plugins::PluginChain;
 use components::{
-    AudioParams, KeyframeTracks, KindId, Layer, MediaSource, ObjectId, ParamAccess, PluginParams,
-    SceneId, SceneObject, ShapeParams, TextContent, TimeRange,
+    AudioParams, GroupControl, KeyframeTracks, KindId, Layer, MediaSource, ObjectId, ParamAccess,
+    PluginParams, SceneId, SceneObject, ShapeParams, TextContent, TimeRange,
 };
 use effects::EffectStack;
 use resources::{
@@ -55,6 +55,8 @@ pub struct TimelineData {
     pub layer: i32,
     pub media_path: Option<std::path::PathBuf>,
     pub media_trim_in_frame: i64,
+    pub group_layer_count_down: i32,
+    pub group_layer_count_up: i32,
 }
 
 #[derive(Clone, Debug)]
@@ -203,6 +205,75 @@ impl EcsWorld {
         id
     }
 
+    pub fn add_group_control_object(
+        &mut self,
+        start: i32,
+        duration: i32,
+        kind_id: u32,
+        layer: i32,
+        gc: GroupControl,
+    ) -> usize {
+        let id = self.add_object(start, duration, kind_id, layer, None);
+        if let Some(entity) = self.find_entity(id) {
+            self.world.add_component(entity, gc);
+        }
+        id
+    }
+
+    pub fn set_group_control(&mut self, object_id: usize, gc: GroupControl) {
+        let Some(entity) = self.find_entity(object_id) else {
+            return;
+        };
+        self.world.run(|mut controls: ViewMut<GroupControl>| {
+            if let Ok(mut slot) = (&mut controls).get(entity) {
+                *slot = gc;
+            }
+        });
+    }
+
+    #[allow(dead_code)]
+    pub fn set_layer(&mut self, object_id: usize, layer: i32) {
+        let Some(entity) = self.find_entity(object_id) else {
+            return;
+        };
+        self.world.run(|mut layers: ViewMut<Layer>| {
+            if let Ok(mut slot) = (&mut layers).get(entity) {
+                *slot = Layer(layer);
+            }
+        });
+    }
+
+    #[allow(dead_code)]
+    pub fn set_transform_param(&mut self, object_id: usize, key: &str, value: f32) {
+        let Some(entity) = self.find_entity(object_id) else {
+            return;
+        };
+        self.world.run(
+            |mut transforms: ViewMut<Transform>, mut matrices: ViewMut<GlobalMatrix>| {
+                if let Ok(mut slot) = (&mut transforms).get(entity) {
+                    slot.set_param(key, value);
+                    if let Ok(mut matrix) = (&mut matrices).get(entity) {
+                        *matrix = compute_global_matrix(&slot);
+                    }
+                }
+            },
+        );
+    }
+
+    #[allow(dead_code)]
+    pub fn max_group_chain_depth(&self) -> i32 {
+        self.world
+            .run(|s: UniqueView<SystemSettingsResource>| s.max_group_chain_depth)
+    }
+
+    #[allow(dead_code)]
+    pub fn set_max_group_chain_depth(&mut self, depth: i32) {
+        self.world
+            .run(|mut s: UniqueViewMut<SystemSettingsResource>| {
+                s.max_group_chain_depth = depth.max(1);
+            });
+    }
+
     pub fn delete_object(&mut self, id: usize) {
         let mut target_entity = None;
         self.world.run(|object_ids: View<ObjectId>| {
@@ -347,7 +418,8 @@ impl EcsWorld {
              kind_ids: View<KindId>,
              layers: View<Layer>,
              scene_ids: View<SceneId>,
-             media: View<MediaSource>| {
+             media: View<MediaSource>,
+             group_controls: View<GroupControl>| {
                 let active = scenes.active_scene;
                 let mut objs = Vec::new();
                 for (_entity, (id, range, kind, layer, scene)) in
@@ -366,6 +438,12 @@ impl EcsWorld {
                         layer: layer.0,
                         media_path: media.get(_entity).ok().map(|m| m.path.clone()),
                         media_trim_in_frame: media.get(_entity).ok().map_or(0, |m| m.trim_in_frame),
+                        group_layer_count_down: group_controls
+                            .get(_entity)
+                            .map_or(0, |gc| gc.layer_count_down as i32),
+                        group_layer_count_up: group_controls
+                            .get(_entity)
+                            .map_or(0, |gc| gc.layer_count_up as i32),
                     });
                 }
                 objs
@@ -1201,6 +1279,12 @@ impl EcsWorld {
         let entity = self.find_entity(object_id)?;
         self.world
             .run(|audio: View<AudioParams>| audio.get(entity).ok().copied())
+    }
+
+    pub fn get_group_control(&self, object_id: usize) -> Option<GroupControl> {
+        let entity = self.find_entity(object_id)?;
+        self.world
+            .run(|controls: View<GroupControl>| controls.get(entity).ok().copied())
     }
 
     pub fn set_keyframe(

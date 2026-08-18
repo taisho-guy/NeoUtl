@@ -20,6 +20,7 @@ pub enum PixelFormat {
     P016,
     Yuv444,
     Rgba8,
+    Rgba16Float,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

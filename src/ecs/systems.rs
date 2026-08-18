@@ -1,17 +1,19 @@
 use super::EcsWorld;
 use crate::ecs::components::{
-    AudioParams, KeyframeTracks, KindId, MediaSource, ObjectId, SceneId, SceneObject, ShapeParams,
-    TextContent, TimeRange,
+    AudioParams, GroupControl, KeyframeTracks, KindId, Layer, MediaSource, ObjectId, SceneId,
+    SceneObject, ShapeParams, TextContent, TimeRange,
 };
 use crate::ecs::effects::{EffectStack, compute_effect_params_at};
-use crate::ecs::resources::{ProjectResource, SceneResource, TimelineResource};
+use crate::ecs::resources::{
+    ProjectResource, SceneResource, SystemSettingsResource, TimelineResource,
+};
 use crate::ecs::transform::{
-    Camera, DEFAULT_FOV_DEG, Projection, Transform, compute_global_matrix, compute_mvp,
-    rescale_for_source,
+    Camera, DEFAULT_FOV_DEG, GlobalMatrix, Projection, Transform, compute_chained_matrix,
+    compute_global_matrix, compute_mvp, rescale_for_source,
 };
 use crate::ecs::types::Value;
 use crate::media::MediaKind;
-use shipyard::{Get, IntoIter, UniqueView, View};
+use shipyard::{EntityId, Get, IntoIter, UniqueView, View};
 use std::collections::HashMap;
 
 pub struct ActiveObject {
@@ -33,16 +35,70 @@ fn projection_for(_kind_id: u32) -> Projection {
     }
 }
 
+struct GroupControllerInfo {
+    entity: EntityId,
+    layer: i32,
+    gc: GroupControl,
+    matrix: GlobalMatrix,
+    effects: Vec<(String, HashMap<String, Value>)>,
+    opacity: f32,
+}
+
+fn group_covers_layer(gc_layer: i32, gc: &GroupControl, target_layer: i32) -> bool {
+    if target_layer > gc_layer {
+        target_layer <= gc_layer + gc.layer_count_down as i32
+    } else if target_layer < gc_layer {
+        target_layer >= gc_layer - gc.layer_count_up as i32
+    } else {
+        false
+    }
+}
+
+fn resolve_group_chain(
+    obj_layer: i32,
+    controllers: &[GroupControllerInfo],
+    max_depth: i32,
+) -> Vec<usize> {
+    let mut chain = Vec::new();
+    let mut cursor_layer = obj_layer;
+    loop {
+        if chain.len() as i32 >= max_depth.max(0) {
+            break;
+        }
+        let mut nearest: Option<(usize, i32)> = None;
+        for (idx, c) in controllers.iter().enumerate() {
+            if chain.contains(&idx) {
+                continue;
+            }
+            if !group_covers_layer(c.layer, &c.gc, cursor_layer) {
+                continue;
+            }
+            let dist = (cursor_layer - c.layer).abs();
+            if nearest.is_none_or(|(_, d)| dist < d) {
+                nearest = Some((idx, dist));
+            }
+        }
+        let Some((idx, _)) = nearest else {
+            break;
+        };
+        chain.push(idx);
+        cursor_layer = controllers[idx].layer;
+    }
+    chain
+}
+
 type UniqueGroupViews<'v> = (
     UniqueView<'v, TimelineResource>,
     UniqueView<'v, SceneResource>,
     UniqueView<'v, ProjectResource>,
     UniqueView<'v, Camera>,
+    UniqueView<'v, SystemSettingsResource>,
 );
 type SelectorGroupViews<'v> = (
     View<'v, TimeRange>,
     View<'v, KindId>,
     View<'v, SceneId>,
+    View<'v, Layer>,
     View<'v, TextContent>,
     View<'v, ShapeParams>,
     View<'v, MediaSource>,
@@ -54,6 +110,7 @@ type PayloadGroupViews<'v> = (
     View<'v, KeyframeTracks>,
     View<'v, AudioParams>,
     View<'v, EffectStack>,
+    View<'v, GroupControl>,
 );
 
 fn is_active_at(range: &TimeRange, scene: &SceneId, active_scene: i32, frame: i32) -> bool {
@@ -72,25 +129,67 @@ pub fn get_active_objects_system_at(
     current: i32,
 ) -> Vec<ActiveObject> {
     world.world.run(
-        |(_timeline, scenes, project, camera): UniqueGroupViews,
+        |(_timeline, scenes, project, camera, system_settings): UniqueGroupViews,
          (
             time_ranges,
             kind_ids,
             scene_ids,
+            layers,
             text_contents,
             shape_params,
             media_sources,
             object_ids,
             scene_objects,
         ): SelectorGroupViews,
-         (transforms, keyframe_tracks, _audio_params, effect_stacks): PayloadGroupViews| {
+         (
+            transforms,
+            keyframe_tracks,
+            _audio_params,
+            effect_stacks,
+            group_controls,
+        ): PayloadGroupViews| {
             let project_width = project.width.max(1) as f32;
             let project_height = project.height.max(1) as f32;
+            let max_depth = system_settings.max_group_chain_depth;
+
+            let mut controllers: Vec<GroupControllerInfo> = Vec::new();
+            for (id, (range, scene, layer, gc)) in
+                (&time_ranges, &scene_ids, &layers, &group_controls)
+                    .iter()
+                    .with_id()
+            {
+                if scene.0 != active_scene
+                    || current < range.start_frame
+                    || current >= range.end_frame
+                {
+                    continue;
+                }
+                let mut transform = transforms.get(id).copied().unwrap_or_default();
+                if let Ok(kt) = keyframe_tracks.get(id) {
+                    kt.apply(&mut transform, current);
+                }
+                let effects = effect_stacks
+                    .get(id)
+                    .map(|stack| compute_effect_params_at(stack, current))
+                    .unwrap_or_default();
+                controllers.push(GroupControllerInfo {
+                    entity: id,
+                    layer: layer.0,
+                    gc: *gc,
+                    matrix: compute_global_matrix(&transform),
+                    effects,
+                    opacity: transform.opacity,
+                });
+            }
+
             let mut active = Vec::new();
 
             for (id, (range, kind, scene)) in (&time_ranges, &kind_ids, &scene_ids).iter().with_id()
             {
                 if !is_active_at(range, scene, active_scene, current) {
+                    continue;
+                }
+                if group_controls.get(id).is_ok() {
                     continue;
                 }
                 let keyframes = keyframe_tracks.get(id).ok();
@@ -145,6 +244,13 @@ pub fn get_active_objects_system_at(
                         None => matrix,
                     },
                 };
+
+                let obj_layer = layers.get(id).map_or(0, |l| l.0);
+                let chain_idx = resolve_group_chain(obj_layer, &controllers, max_depth);
+                let chain_matrices: Vec<GlobalMatrix> =
+                    chain_idx.iter().map(|&i| controllers[i].matrix).collect();
+                let matrix = compute_chained_matrix(&chain_matrices, &matrix);
+
                 let mvp = compute_mvp(
                     &matrix,
                     &camera,
@@ -152,12 +258,19 @@ pub fn get_active_objects_system_at(
                     project_height,
                     projection_for(kind.0),
                 );
-                let opacity = transform.opacity;
-                let effects = effect_stacks
+                let mut opacity = transform.opacity;
+                for &i in &chain_idx {
+                    opacity *= controllers[i].opacity;
+                }
+                let mut effects = effect_stacks
                     .get(id)
                     .map(|stack| compute_effect_params_at(stack, current))
                     .unwrap_or_default();
-
+                for &i in chain_idx.iter().rev() {
+                    let mut prefixed = controllers[i].effects.clone();
+                    prefixed.append(&mut effects);
+                    effects = prefixed;
+                }
                 active.push(ActiveObject {
                     kind_id: kind.0,
                     clip_instance: object_ids.get(id).map_or(0, |o| o.0 as u64),
@@ -171,6 +284,7 @@ pub fn get_active_objects_system_at(
                     nested_scene,
                 });
             }
+            let _ = controllers.iter().map(|c| c.entity).count();
             active
         },
     )
@@ -247,6 +361,7 @@ mod tests {
 
     const KIND_TEXT: u32 = 100;
     const KIND_SHAPE: u32 = 200;
+    const KIND_GROUP_CONTROL: u32 = 900;
 
     fn world_with_object(start: i32, end: i32) -> (EcsWorld, usize) {
         let mut world = EcsWorld::new();
@@ -365,5 +480,79 @@ mod tests {
             active[0].effects[0].1.get("amount"),
             Some(&Value::Number(0.5))
         );
+    }
+
+    #[test]
+    fn group_control_chain_moves_child_down() {
+        let mut world = EcsWorld::new();
+        let gc_id =
+            world.add_group_control_object(0, 30, KIND_GROUP_CONTROL, 0, GroupControl::default());
+        world.set_layer(gc_id, 0);
+        world.set_transform_param(gc_id, "x", 100.0);
+        let child_id = world.add_object(0, 30, KIND_TEXT, 1, Some(TextContent::default()));
+        world.set_layer(child_id, 1);
+        world.set_current_frame(0);
+        let active = get_active_objects_system(&world);
+        let child = active
+            .iter()
+            .find(|a| a.clip_instance == child_id as u64)
+            .unwrap();
+        assert_ne!(child.mvp[12], 0.0);
+    }
+
+    #[test]
+    fn group_control_layer_count_excludes_out_of_range_layer() {
+        let mut world = EcsWorld::new();
+        let gc = GroupControl {
+            layer_count_down: 1,
+            layer_count_up: 0,
+        };
+        let gc_id = world.add_group_control_object(0, 30, KIND_GROUP_CONTROL, 0, gc);
+        world.set_layer(gc_id, 0);
+        world.set_transform_param(gc_id, "x", 100.0);
+        let in_range = world.add_object(0, 30, KIND_TEXT, 1, Some(TextContent::default()));
+        world.set_layer(in_range, 1);
+        let out_of_range = world.add_object(0, 30, KIND_TEXT, 2, Some(TextContent::default()));
+        world.set_layer(out_of_range, 2);
+        world.set_current_frame(0);
+        let active = get_active_objects_system(&world);
+        let in_obj = active
+            .iter()
+            .find(|a| a.clip_instance == in_range as u64)
+            .unwrap();
+        let out_obj = active
+            .iter()
+            .find(|a| a.clip_instance == out_of_range as u64)
+            .unwrap();
+        assert_ne!(in_obj.mvp[12], 0.0);
+        assert_eq!(out_obj.mvp[12], 0.0);
+    }
+
+    #[test]
+    fn group_control_upward_range_affects_layer_above() {
+        let mut world = EcsWorld::new();
+        let gc = GroupControl {
+            layer_count_down: 0,
+            layer_count_up: 1,
+        };
+        let gc_id = world.add_group_control_object(0, 30, KIND_GROUP_CONTROL, 0, gc);
+        world.set_layer(gc_id, 5);
+        world.set_transform_param(gc_id, "x", 100.0);
+        let above = world.add_object(0, 30, KIND_TEXT, 1, Some(TextContent::default()));
+        world.set_layer(above, 4);
+        let out_of_range = world.add_object(0, 30, KIND_TEXT, 2, Some(TextContent::default()));
+        world.set_layer(out_of_range, 3);
+        world.set_current_frame(0);
+        let active = get_active_objects_system(&world);
+        let above_obj = active
+            .iter()
+            .find(|a| a.clip_instance == above as u64)
+            .unwrap();
+        let out_obj = active
+            .iter()
+            .find(|a| a.clip_instance == out_of_range as u64)
+            .unwrap();
+        assert_ne!(above_obj.mvp[12], 0.0);
+        assert_eq!(out_obj.mvp[12], 0.0);
     }
 }

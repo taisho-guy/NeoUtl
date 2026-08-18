@@ -197,6 +197,12 @@ pub struct SystemSettingsResource {
     pub check_update_on_startup: bool,
     #[serde(default)]
     pub crash_reporting_enabled: bool,
+    #[serde(default = "default_max_group_chain_depth")]
+    pub max_group_chain_depth: i32,
+}
+
+fn default_max_group_chain_depth() -> i32 {
+    config::SYSTEM_DEFAULT_MAX_GROUP_CHAIN_DEPTH
 }
 
 impl Default for SystemSettingsResource {
@@ -223,6 +229,7 @@ impl SystemSettingsResource {
             export_codec: config::SYSTEM_DEFAULT_EXPORT_CODEC,
             check_update_on_startup: config::SYSTEM_DEFAULT_CHECK_UPDATE_ON_STARTUP,
             crash_reporting_enabled: config::SYSTEM_DEFAULT_CRASH_REPORTING_ENABLED,
+            max_group_chain_depth: config::SYSTEM_DEFAULT_MAX_GROUP_CHAIN_DEPTH,
         }
     }
 }

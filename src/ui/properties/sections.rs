@@ -4,7 +4,8 @@ use super::track::keyframe_track;
 use crate::ecs::EcsWorld;
 use crate::ecs::components::ParamAccess;
 use crate::ecs::object_schema::{
-    AUDIO_SCHEMA, SHAPE_SCHEMA, TEXT_SCHEMA, TRANSFORM_SCHEMA, is_visible, resolve_range,
+    AUDIO_SCHEMA, GROUP_CONTROL_SCHEMA, SHAPE_SCHEMA, TEXT_SCHEMA, TRANSFORM_SCHEMA, is_visible,
+    resolve_range,
 };
 use crate::localization::effect_param_label;
 use neoutl_shared_abi::ParamKind;
@@ -242,6 +243,47 @@ pub fn audio_section(ui: &mut egui::Ui, world: &mut EcsWorld, id: usize) {
                     {
                         audio.set_param(schema.key, value);
                         world.set_audio_params(id, audio.volume, audio.pan, audio.mute);
+                    }
+                }
+                _ => {}
+            }
+        });
+    }
+}
+
+pub fn group_control_section(ui: &mut egui::Ui, world: &mut EcsWorld, id: usize) {
+    let Some(mut gc) = world.get_group_control(id) else {
+        return;
+    };
+    ui.separator();
+    ui.colored_label(
+        egui::Color32::from_rgb(0x8a, 0xab, 0xff),
+        t!("グループ制御"),
+    );
+    for schema in GROUP_CONTROL_SCHEMA {
+        ui.horizontal(|ui| {
+            ui.label(effect_param_label(schema.label));
+            match schema.kind {
+                ParamKind::Bool => {
+                    let mut b = gc.get_param(schema.key).unwrap_or(0.0) > 0.5;
+                    if ui.checkbox(&mut b, "").changed() {
+                        gc.set_param(schema.key, if b { 1.0 } else { 0.0 });
+                        world.set_group_control(id, gc);
+                    }
+                }
+                ParamKind::Float => {
+                    let (min, max) = resolve_range(schema.range, 1920.0, 1080.0);
+                    let mut value = gc.get_param(schema.key).unwrap_or(0.0);
+                    if ui
+                        .add(
+                            egui::DragValue::new(&mut value)
+                                .range(min..=max)
+                                .speed((max - min).max(0.001) / 1000.0),
+                        )
+                        .changed()
+                    {
+                        gc.set_param(schema.key, value.round());
+                        world.set_group_control(id, gc);
                     }
                 }
                 _ => {}
