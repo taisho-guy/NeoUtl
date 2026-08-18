@@ -147,9 +147,14 @@ impl EcsWorld {
             SceneId(scene_id),
             Transform::default(),
             GlobalMatrix::default(),
-            AudioParams::default(),
             EffectStack::default(),
         ));
+
+        let is_audio_kind = crate::objects::loader::by_kind_id(kind_id)
+            .is_some_and(|p| p.stable_id == neoutl_object_api::AUDIO_STABLE_ID);
+        if is_audio_kind {
+            self.world.add_component(entity, AudioParams::default());
+        }
 
         if let Some(t) = text {
             self.world.add_component(entity, t);

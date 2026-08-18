@@ -37,7 +37,7 @@ impl PropertiesPanel {
         let catalog = if is_audio {
             EffectCatalogState::build_audio()
         } else {
-            EffectCatalogState::build_video_and_audio()
+            EffectCatalogState::build_video()
         };
 
         if let Some(selected_id) = self.effect_add.show(ui, &catalog) {
