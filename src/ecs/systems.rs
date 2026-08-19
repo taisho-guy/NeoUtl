@@ -18,8 +18,14 @@ use std::collections::HashMap;
 
 #[derive(Clone, Copy, Debug)]
 pub enum ComposeSource {
-    NestedScene { target_scene: i32, local_frame: i32 },
-    FrameBuffer { controller: EntityId },
+    NestedScene {
+        target_scene: i32,
+        local_frame: i32,
+    },
+    FrameBuffer {
+        controller: EntityId,
+        clear_below: bool,
+    },
 }
 
 #[derive(Clone)]
@@ -34,6 +40,7 @@ pub struct ActiveObject {
     pub opacity: f32,
     pub effects: Vec<(String, HashMap<String, Value>)>,
     pub compose_source: Option<ComposeSource>,
+    pub layer: i32,
 }
 
 pub type CapturedObjects = HashMap<EntityId, Vec<ActiveObject>>;
@@ -47,7 +54,7 @@ fn projection_for(_kind_id: u32) -> Projection {
 #[derive(Clone, Copy)]
 enum CurtainEffect {
     Group,
-    FrameBuffer { clear: bool },
+    FrameBuffer,
 }
 
 struct CurtainInfo {
@@ -58,16 +65,27 @@ struct CurtainInfo {
     effects: Vec<(String, HashMap<String, Value>)>,
     opacity: f32,
     kind: CurtainEffect,
+    clear_below: bool,
 }
 
-fn curtain_covers_layer(curtain_layer: i32, span: (u32, u32), target_layer: i32) -> bool {
-    let (down, up) = span;
-    if target_layer > curtain_layer {
-        target_layer <= curtain_layer + down as i32
-    } else if target_layer < curtain_layer {
-        target_layer >= curtain_layer - up as i32
-    } else {
-        false
+fn curtain_covers_layer(
+    kind: CurtainEffect,
+    curtain_layer: i32,
+    span: (u32, u32),
+    target_layer: i32,
+) -> bool {
+    match kind {
+        CurtainEffect::Group => {
+            let (down, up) = span;
+            if target_layer > curtain_layer {
+                target_layer <= curtain_layer + down as i32
+            } else if target_layer < curtain_layer {
+                target_layer >= curtain_layer - up as i32
+            } else {
+                false
+            }
+        }
+        CurtainEffect::FrameBuffer => target_layer < curtain_layer,
     }
 }
 
@@ -83,7 +101,7 @@ fn resolve_group_chain(obj_layer: i32, controllers: &[CurtainInfo], max_depth: i
             if chain.contains(&idx) {
                 continue;
             }
-            if !curtain_covers_layer(c.layer, c.span, cursor_layer) {
+            if !curtain_covers_layer(c.kind, c.layer, c.span, cursor_layer) {
                 continue;
             }
             let dist = (cursor_layer - c.layer).abs();
@@ -195,6 +213,7 @@ pub fn get_active_objects_system_at(
                     effects,
                     opacity: transform.opacity,
                     kind: CurtainEffect::Group,
+                    clear_below: false,
                 });
             }
             for (id, (range, scene, layer, fbc)) in
@@ -219,11 +238,12 @@ pub fn get_active_objects_system_at(
                 controllers.push(CurtainInfo {
                     entity: id,
                     layer: layer.0,
-                    span: (fbc.layer_count_down, fbc.layer_count_up),
+                    span: (0, 0),
                     matrix: compute_relative_matrix(&transform),
                     effects,
                     opacity: transform.opacity,
-                    kind: CurtainEffect::FrameBuffer { clear: fbc.clear },
+                    kind: CurtainEffect::FrameBuffer,
+                    clear_below: fbc.clear_below,
                 });
             }
 
@@ -337,20 +357,15 @@ pub fn get_active_objects_system_at(
                     opacity,
                     effects,
                     compose_source,
+                    layer: obj_layer,
                 };
 
                 let fb_pos = chain_idx.iter().position(|&i| {
                     matches!(controllers[i].kind, CurtainEffect::FrameBuffer { .. })
                 });
 
-                match fb_pos.map(|pos| {
-                    let CurtainEffect::FrameBuffer { clear } = controllers[chain_idx[pos]].kind
-                    else {
-                        unreachable!()
-                    };
-                    (controllers[chain_idx[pos]].entity, clear, pos)
-                }) {
-                    Some((controller, clear, pos)) => {
+                match fb_pos.map(|pos| (controllers[chain_idx[pos]].entity, pos)) {
+                    Some((controller, pos)) => {
                         let inner_chain = &chain_idx[..pos];
                         let inner_matrices: Vec<GlobalMatrix> =
                             inner_chain.iter().map(|&i| controllers[i].matrix).collect();
@@ -385,16 +400,13 @@ pub fn get_active_objects_system_at(
                             .entry(controller)
                             .or_default()
                             .push(captured_object);
-                        if !clear {
-                            active.push(active_object);
-                        }
                     }
                     None => active.push(active_object),
                 }
             }
 
             for c in controllers.iter() {
-                let CurtainEffect::FrameBuffer { .. } = c.kind else {
+                let CurtainEffect::FrameBuffer = c.kind else {
                     continue;
                 };
                 let Ok(kind) = kind_ids.get(c.entity) else {
@@ -403,7 +415,8 @@ pub fn get_active_objects_system_at(
                 let chain_idx = resolve_group_chain(c.layer, &controllers, max_depth);
                 let chain_matrices: Vec<GlobalMatrix> =
                     chain_idx.iter().map(|&i| controllers[i].matrix).collect();
-                let matrix = compute_chained_matrix(&chain_matrices, &c.matrix);
+                let own_matrix = rescale_for_source(&c.matrix, project_width, project_height);
+                let matrix = compute_chained_matrix(&chain_matrices, &own_matrix);
                 let mvp = compute_mvp(
                     &matrix,
                     &camera,
@@ -433,9 +446,13 @@ pub fn get_active_objects_system_at(
                     effects,
                     compose_source: Some(ComposeSource::FrameBuffer {
                         controller: c.entity,
+                        clear_below: c.clear_below,
                     }),
+                    layer: c.layer,
                 });
             }
+
+            active.sort_by_key(|o| o.layer);
 
             (active, captured)
         },

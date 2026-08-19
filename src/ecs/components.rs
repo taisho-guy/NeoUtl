@@ -65,28 +65,20 @@ impl ParamAccess for GroupControl {
 
 #[derive(Clone, Copy, Debug, Component, Serialize, Deserialize)]
 pub struct FrameBufferControl {
-    pub layer_count_down: u32,
-    pub layer_count_up: u32,
-    pub clear: bool,
+    pub clear_below: bool,
 }
 
 impl Default for FrameBufferControl {
     fn default() -> Self {
-        Self {
-            layer_count_down: 0,
-            layer_count_up: 1,
-            clear: false,
-        }
+        Self { clear_below: false }
     }
 }
 
 impl ParamAccess for FrameBufferControl {
     fn get_param(&self, key: &str) -> Option<f32> {
         Some(match key {
-            "layer_count_down" => self.layer_count_down as f32,
-            "layer_count_up" => self.layer_count_up as f32,
-            "clear" => {
-                if self.clear {
+            "clear_below" => {
+                if self.clear_below {
                     1.0
                 } else {
                     0.0
@@ -97,9 +89,7 @@ impl ParamAccess for FrameBufferControl {
     }
     fn set_param(&mut self, key: &str, value: f32) -> bool {
         match key {
-            "layer_count_down" => self.layer_count_down = value.max(0.0) as u32,
-            "layer_count_up" => self.layer_count_up = value.max(0.0) as u32,
-            "clear" => self.clear = value > 0.5,
+            "clear_below" => self.clear_below = value > 0.5,
             _ => return false,
         }
         true

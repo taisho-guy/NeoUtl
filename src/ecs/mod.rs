@@ -450,8 +450,7 @@ impl EcsWorld {
              layers: View<Layer>,
              scene_ids: View<SceneId>,
              media: View<MediaSource>,
-             group_controls: View<GroupControl>,
-             frame_buffer_controls: View<FrameBufferControl>| {
+             group_controls: View<GroupControl>| {
                 let active = scenes.active_scene;
                 let mut objs = Vec::new();
                 for (_entity, (id, range, kind, layer, scene)) in
@@ -466,12 +465,6 @@ impl EcsWorld {
                         .get(_entity)
                         .ok()
                         .map(|gc| (gc.layer_count_down as i32, gc.layer_count_up as i32))
-                        .or_else(|| {
-                            frame_buffer_controls
-                                .get(_entity)
-                                .ok()
-                                .map(|fbc| (fbc.layer_count_down as i32, fbc.layer_count_up as i32))
-                        })
                         .unwrap_or((0, 0));
                     objs.push(TimelineData {
                         id: id.0 as i32,
