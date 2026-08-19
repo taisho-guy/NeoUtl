@@ -103,6 +103,7 @@ pub const TEXT_GROUP: &str = "テキスト";
 pub const SHAPE_GROUP: &str = "図形";
 pub const AUDIO_GROUP: &str = "オーディオ";
 pub const GROUP_CONTROL_GROUP: &str = "グループ制御";
+pub const FRAMEBUFFER_GROUP: &str = "フレームバッファ";
 
 pub const TRANSFORM_SCHEMA: &[ParamSchema] = &[
     float_stage(TRANSFORM_GROUP, "x", "X", Range::StageWidth),
@@ -156,6 +157,24 @@ pub const GROUP_CONTROL_SCHEMA: &[ParamSchema] = &[
         0.0,
         100.0,
     ),
+];
+
+pub const FRAMEBUFFER_SCHEMA: &[ParamSchema] = &[
+    float_fixed(
+        FRAMEBUFFER_GROUP,
+        "layer_count_down",
+        "対象レイヤー数(下)",
+        0.0,
+        100.0,
+    ),
+    float_fixed(
+        FRAMEBUFFER_GROUP,
+        "layer_count_up",
+        "対象レイヤー数(上)",
+        0.0,
+        100.0,
+    ),
+    bool_field(FRAMEBUFFER_GROUP, "clear", "フレームバッファをクリア"),
 ];
 
 pub fn resolve_range(range: Range, stage_width: f32, stage_height: f32) -> (f32, f32) {

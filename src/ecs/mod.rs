@@ -11,8 +11,8 @@ use crate::document::{DocumentModel, MediaSourceDoc, ObjectDoc, ObjectPayload};
 use crate::ecs::types::EffectInstance;
 use audio_plugins::PluginChain;
 use components::{
-    AudioParams, GroupControl, KeyframeTracks, KindId, Layer, MediaSource, ObjectId, ParamAccess,
-    PluginParams, SceneId, SceneObject, ShapeParams, TextContent, TimeRange,
+    AudioParams, FrameBufferControl, GroupControl, KeyframeTracks, KindId, Layer, MediaSource,
+    ObjectId, ParamAccess, PluginParams, SceneId, SceneObject, ShapeParams, TextContent, TimeRange,
 };
 use effects::EffectStack;
 use resources::{
@@ -236,6 +236,32 @@ impl EcsWorld {
         });
     }
 
+    pub fn add_frame_buffer_object(
+        &mut self,
+        start: i32,
+        duration: i32,
+        kind_id: u32,
+        layer: i32,
+        fbc: FrameBufferControl,
+    ) -> usize {
+        let id = self.add_object(start, duration, kind_id, layer, None);
+        if let Some(entity) = self.find_entity(id) {
+            self.world.add_component(entity, fbc);
+        }
+        id
+    }
+
+    pub fn set_frame_buffer_control(&mut self, object_id: usize, fbc: FrameBufferControl) {
+        let Some(entity) = self.find_entity(object_id) else {
+            return;
+        };
+        self.world.run(|mut controls: ViewMut<FrameBufferControl>| {
+            if let Ok(mut slot) = (&mut controls).get(entity) {
+                *slot = fbc;
+            }
+        });
+    }
+
     #[allow(dead_code)]
     pub fn set_layer(&mut self, object_id: usize, layer: i32) {
         let Some(entity) = self.find_entity(object_id) else {
@@ -424,7 +450,8 @@ impl EcsWorld {
              layers: View<Layer>,
              scene_ids: View<SceneId>,
              media: View<MediaSource>,
-             group_controls: View<GroupControl>| {
+             group_controls: View<GroupControl>,
+             frame_buffer_controls: View<FrameBufferControl>| {
                 let active = scenes.active_scene;
                 let mut objs = Vec::new();
                 for (_entity, (id, range, kind, layer, scene)) in
@@ -435,6 +462,17 @@ impl EcsWorld {
                     if scene.0 != active {
                         continue;
                     }
+                    let (curtain_down, curtain_up) = group_controls
+                        .get(_entity)
+                        .ok()
+                        .map(|gc| (gc.layer_count_down as i32, gc.layer_count_up as i32))
+                        .or_else(|| {
+                            frame_buffer_controls
+                                .get(_entity)
+                                .ok()
+                                .map(|fbc| (fbc.layer_count_down as i32, fbc.layer_count_up as i32))
+                        })
+                        .unwrap_or((0, 0));
                     objs.push(TimelineData {
                         id: id.0 as i32,
                         start_frame: range.start_frame,
@@ -443,12 +481,8 @@ impl EcsWorld {
                         layer: layer.0,
                         media_path: media.get(_entity).ok().map(|m| m.path.clone()),
                         media_trim_in_frame: media.get(_entity).ok().map_or(0, |m| m.trim_in_frame),
-                        group_layer_count_down: group_controls
-                            .get(_entity)
-                            .map_or(0, |gc| gc.layer_count_down as i32),
-                        group_layer_count_up: group_controls
-                            .get(_entity)
-                            .map_or(0, |gc| gc.layer_count_up as i32),
+                        group_layer_count_down: curtain_down,
+                        group_layer_count_up: curtain_up,
                     });
                 }
                 objs
@@ -1284,6 +1318,12 @@ impl EcsWorld {
         let entity = self.find_entity(object_id)?;
         self.world
             .run(|audio: View<AudioParams>| audio.get(entity).ok().copied())
+    }
+
+    pub fn get_frame_buffer_control(&self, object_id: usize) -> Option<FrameBufferControl> {
+        let entity = self.find_entity(object_id)?;
+        self.world
+            .run(|controls: View<FrameBufferControl>| controls.get(entity).ok().copied())
     }
 
     pub fn get_group_control(&self, object_id: usize) -> Option<GroupControl> {

@@ -199,7 +199,7 @@ impl PreviewPanel {
         let engine_holder = app_state::active_engine(state);
         let world = world_holder.lock().unwrap();
         let proj = world.get_project();
-        let active = get_active_objects_system(&world);
+        let (active, captured) = get_active_objects_system(&world);
 
         let mut engine_lock = engine_holder.lock().unwrap();
         if engine_lock.is_none() {
@@ -221,7 +221,7 @@ impl PreviewPanel {
             }
         }
 
-        engine.render(&world, &active, &proj);
+        engine.render(&world, &active, &captured, &proj);
 
         if self.texture_id.is_none() {
             let view = engine

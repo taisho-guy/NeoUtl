@@ -727,7 +727,6 @@ pub struct SemiPlanarConvertEngine {
     descriptor_pool: ash::vk::DescriptorPool,
     sampler: ash::vk::Sampler,
     submit_lock: Arc<Mutex<()>>,
-    last_dst_layout: std::cell::Cell<ash::vk::ImageLayout>,
 }
 
 impl SemiPlanarConvertEngine {
@@ -867,7 +866,6 @@ impl SemiPlanarConvertEngine {
                 descriptor_pool,
                 sampler,
                 submit_lock,
-                last_dst_layout: std::cell::Cell::new(ash::vk::ImageLayout::UNDEFINED),
             })
         }
     }
@@ -1015,21 +1013,18 @@ impl SemiPlanarConvertEngine {
                 .level_count(1)
                 .base_array_layer(0)
                 .layer_count(1);
-            let prev_dst_layout = self.last_dst_layout.get();
             let dst_barrier_to_general = ash::vk::ImageMemoryBarrier::default()
-                .old_layout(prev_dst_layout)
+                .old_layout(ash::vk::ImageLayout::UNDEFINED)
                 .new_layout(ash::vk::ImageLayout::GENERAL)
                 .src_queue_family_index(ash::vk::QUEUE_FAMILY_IGNORED)
                 .dst_queue_family_index(ash::vk::QUEUE_FAMILY_IGNORED)
                 .image(dst_image)
                 .subresource_range(dst_subresource)
-                .src_access_mask(ash::vk::AccessFlags::SHADER_READ)
                 .dst_access_mask(ash::vk::AccessFlags::SHADER_WRITE);
 
             self.device.cmd_pipeline_barrier(
                 self.command_buffer,
-                ash::vk::PipelineStageFlags::FRAGMENT_SHADER
-                    | ash::vk::PipelineStageFlags::TOP_OF_PIPE,
+                ash::vk::PipelineStageFlags::TOP_OF_PIPE,
                 ash::vk::PipelineStageFlags::COMPUTE_SHADER,
                 ash::vk::DependencyFlags::empty(),
                 &[],
@@ -1114,9 +1109,6 @@ impl SemiPlanarConvertEngine {
             self.device
                 .wait_for_fences(&[self.fence], true, u64::MAX)
                 .map_err(|e| format!("wait_for_fences失敗: {e}"))?;
-
-            self.last_dst_layout
-                .set(ash::vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL);
 
             self.device.destroy_image_view(y_view, None);
             self.device.destroy_image_view(uv_view, None);
