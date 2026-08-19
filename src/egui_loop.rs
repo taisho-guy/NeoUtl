@@ -101,6 +101,8 @@ impl WindowKind {
     fn min_size(self) -> Option<(u32, u32)> {
         match self {
             Self::EffectAdd => Some((400, 240)),
+            Self::SceneSettings => Some((600, 240)),
+            Self::SystemSettings => Some((680, 240)),
             _ => None,
         }
     }
