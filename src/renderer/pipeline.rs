@@ -1,12 +1,19 @@
 use crate::config;
 use crate::ecs::resources::ProjectResource;
-use crate::ecs::systems::ActiveObject;
+use crate::ecs::systems::{ActiveObject, CapturedObjects};
 use crate::ecs::types::Value;
 use crate::effects;
 use crate::hot_reload::{self, ReloadEvent};
 use crate::objects::{by_kind_id, registry};
 use egui_wgpu::wgpu;
-use neoutl_object_api::{IMAGE_STABLE_ID, SCENE_STABLE_ID, UNIT_SIZE_PX, VIDEO_STABLE_ID};
+use neoutl_object_api::{IMAGE_STABLE_ID, UNIT_SIZE_PX, VIDEO_STABLE_ID};
+use shipyard::EntityId;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+enum ComposeCacheKey {
+    Scene(i32),
+    FrameBuffer(EntityId),
+}
 use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
@@ -80,7 +87,7 @@ pub struct RenderEngine {
     reduce_mean_bind_group_layout: wgpu::BindGroupLayout,
     reduce_mean_buffer: wgpu::Buffer,
     reduce_mean_readback_buffer: wgpu::Buffer,
-    scene_texture_cache: HashMap<i32, wgpu::Texture>,
+    scene_texture_cache: HashMap<ComposeCacheKey, wgpu::Texture>,
     object_pipeline_layout: wgpu::PipelineLayout,
     effect_pipeline_layout: wgpu::PipelineLayout,
     hot_reload_rx: Option<std::sync::mpsc::Receiver<ReloadEvent>>,
@@ -999,41 +1006,61 @@ impl RenderEngine {
         }
     }
 
-    fn render_scene_texture(
+    fn render_composed_texture(
         &mut self,
         world: &crate::ecs::EcsWorld,
-        target_scene: i32,
-        local_frame: i32,
+        objects: &[ActiveObject],
+        captured: &CapturedObjects,
+        width: u32,
+        height: u32,
+        cache_key: ComposeCacheKey,
         depth: u32,
     ) -> Option<wgpu::Texture> {
         if depth >= config::MAX_SCENE_NESTING_DEPTH {
             eprintln!(
                 "{}",
                 t!(
-                    "[NeoUtl] シーンネスト深度上限(%{arg0})到達 target_scene=%{arg1}: 非描画",
-                    arg0 = format!("{}", config::MAX_SCENE_NESTING_DEPTH),
-                    arg1 = format!("{target_scene}")
+                    "[NeoUtl] 合成ネスト深度上限(%{arg0})到達: 非描画",
+                    arg0 = format!("{}", config::MAX_SCENE_NESTING_DEPTH)
                 )
             );
             return None;
         }
-        if let Some(cached) = self.scene_texture_cache.get(&target_scene) {
+        if let Some(cached) = self.scene_texture_cache.get(&cache_key) {
             return Some(cached.clone());
         }
-        let scene = world.get_scene(target_scene)?;
         let saved_width = self.render_width;
         let saved_height = self.render_height;
-        self.resize_render_target(scene.width, scene.height);
+        let saved_texture = self.texture.clone();
+        let saved_depth_texture = self.depth_texture.clone();
+        let saved_effect_ping = self.effect_ping.clone();
+        let saved_effect_pong = self.effect_pong.clone();
+        let saved_effect_object_pool = std::mem::take(&mut self.effect_object_pool);
+        let saved_effect_object_depth = self.effect_object_depth.clone();
 
-        let active =
-            crate::ecs::systems::get_active_objects_system_at(world, target_scene, local_frame);
+        self.render_width = width;
+        self.render_height = height;
+        self.texture = create_texture(&self.device, width, height);
+        self.depth_texture = create_depth_texture(&self.device, width, height);
+        self.effect_ping = create_effect_texture(&self.device, width, height);
+        self.effect_pong = create_effect_texture(&self.device, width, height);
+        self.effect_object_pool.clear();
+        self.effect_object_depth = create_depth_texture(&self.device, width, height);
+
         let project = world.get_project();
-        self.render_at(world, &active, &project, depth);
+        self.render_at(world, objects, captured, &project, depth);
         let texture = self.texture.clone();
 
-        self.resize_render_target(saved_width, saved_height);
-        self.scene_texture_cache
-            .insert(target_scene, texture.clone());
+        self.render_width = saved_width;
+        self.render_height = saved_height;
+        self.texture = saved_texture;
+        self.depth_texture = saved_depth_texture;
+        self.effect_ping = saved_effect_ping;
+        self.effect_pong = saved_effect_pong;
+        self.effect_object_pool = saved_effect_object_pool;
+        self.effect_object_depth = saved_effect_object_depth;
+
+        self.scene_texture_cache.insert(cache_key, texture.clone());
         Some(texture)
     }
 
@@ -1467,6 +1494,7 @@ impl RenderEngine {
         &mut self,
         world: &crate::ecs::EcsWorld,
         active_objects: &[ActiveObject],
+        captured: &CapturedObjects,
         project: &ProjectResource,
     ) {
         self.scene_texture_cache.clear();
@@ -1482,7 +1510,7 @@ impl RenderEngine {
                 )
             );
         }
-        self.render_at(world, active_objects, project, 0);
+        self.render_at(world, active_objects, captured, project, 0);
         self.run_lua_reduce_hooks();
     }
 
@@ -1571,6 +1599,7 @@ impl RenderEngine {
         &mut self,
         world: &crate::ecs::EcsWorld,
         active_objects: &[ActiveObject],
+        captured: &CapturedObjects,
         _project: &ProjectResource,
         depth: u32,
     ) {
@@ -1618,15 +1647,43 @@ impl RenderEngine {
                         );
                         None
                     }
-                } else if stable_id == Some(SCENE_STABLE_ID) {
-                    match obj.nested_scene {
-                        Some((target_scene, local_frame)) => {
-                            self.render_scene_texture(world, target_scene, local_frame, depth + 1)
+                } else {
+                    match obj.compose_source {
+                        Some(crate::ecs::systems::ComposeSource::NestedScene {
+                            target_scene,
+                            local_frame,
+                        }) => world.get_scene(target_scene).and_then(|scene| {
+                            let (nested, nested_captured) =
+                                crate::ecs::systems::get_active_objects_system_at(
+                                    world,
+                                    target_scene,
+                                    local_frame,
+                                );
+                            self.render_composed_texture(
+                                world,
+                                &nested,
+                                &nested_captured,
+                                scene.width,
+                                scene.height,
+                                ComposeCacheKey::Scene(target_scene),
+                                depth + 1,
+                            )
+                        }),
+                        Some(crate::ecs::systems::ComposeSource::FrameBuffer { controller }) => {
+                            let empty = Vec::new();
+                            let objects = captured.get(&controller).unwrap_or(&empty);
+                            self.render_composed_texture(
+                                world,
+                                objects,
+                                captured,
+                                self.render_width,
+                                self.render_height,
+                                ComposeCacheKey::FrameBuffer(controller),
+                                depth + 1,
+                            )
                         }
                         None => None,
                     }
-                } else {
-                    None
                 };
                 media_frames.push(tex);
             }
@@ -1981,7 +2038,7 @@ mod tests {
         };
         let mut engine = RenderEngine::new(device, queue, 32, 32);
         let project = ProjectResource::new();
-        engine.render(&[], &project);
+        engine.render(&[], &Default::default(), &project);
 
         let pixels = read_texture_rgba16f(
             &engine.device,
@@ -2009,7 +2066,7 @@ mod tests {
             mvp: [0.0; 16],
             opacity: 1.0,
             effects,
-            nested_scene: None,
+            compose_source: None,
         }
     }
 
@@ -2027,7 +2084,7 @@ mod tests {
             u32::MAX,
             vec![("nonexistent-effect-id".to_string(), HashMap::new())],
         );
-        engine.render(&[plain, with_effect], &project);
+        engine.render(&[plain, with_effect], &Default::default(), &project);
 
         let pixels = read_texture_rgba16f(
             &engine.device,
@@ -2050,7 +2107,7 @@ mod tests {
 
         let obj_a = make_active_object(u32::MAX, vec![("effect-a".to_string(), HashMap::new())]);
         let obj_b = make_active_object(u32::MAX, vec![("effect-b".to_string(), HashMap::new())]);
-        engine.render(&[obj_a, obj_b], &project);
+        engine.render(&[obj_a, obj_b], &Default::default(), &project);
 
         let pixels = read_texture_rgba16f(
             &engine.device,
@@ -2074,7 +2131,7 @@ mod tests {
         assert_eq!(engine.render_height, 72);
 
         let project = ProjectResource::new();
-        engine.render(&[], &project);
+        engine.render(&[], &Default::default(), &project);
         let pixels = read_texture_rgba16f(
             &engine.device,
             &engine.queue,

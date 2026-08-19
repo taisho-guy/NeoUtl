@@ -1,7 +1,7 @@
 use super::EcsWorld;
 use crate::ecs::components::{
-    AudioParams, GroupControl, KeyframeTracks, KindId, Layer, MediaSource, ObjectId, SceneId,
-    SceneObject, ShapeParams, TextContent, TimeRange,
+    AudioParams, FrameBufferControl, GroupControl, KeyframeTracks, KindId, Layer, MediaSource,
+    ObjectId, SceneId, SceneObject, ShapeParams, TextContent, TimeRange,
 };
 use crate::ecs::effects::{EffectStack, compute_effect_params_at};
 use crate::ecs::resources::{
@@ -16,6 +16,13 @@ use crate::media::MediaKind;
 use shipyard::{EntityId, Get, IntoIter, UniqueView, View};
 use std::collections::HashMap;
 
+#[derive(Clone, Copy, Debug)]
+pub enum ComposeSource {
+    NestedScene { target_scene: i32, local_frame: i32 },
+    FrameBuffer { controller: EntityId },
+}
+
+#[derive(Clone)]
 pub struct ActiveObject {
     pub kind_id: u32,
     pub source_frame: i64,
@@ -26,8 +33,10 @@ pub struct ActiveObject {
     pub mvp: [f32; 16],
     pub opacity: f32,
     pub effects: Vec<(String, HashMap<String, Value>)>,
-    pub nested_scene: Option<(i32, i32)>,
+    pub compose_source: Option<ComposeSource>,
 }
+
+pub type CapturedObjects = HashMap<EntityId, Vec<ActiveObject>>;
 
 fn projection_for(_kind_id: u32) -> Projection {
     Projection::Perspective {
@@ -35,30 +44,34 @@ fn projection_for(_kind_id: u32) -> Projection {
     }
 }
 
-struct GroupControllerInfo {
+#[derive(Clone, Copy)]
+enum CurtainEffect {
+    Group,
+    FrameBuffer { clear: bool },
+}
+
+struct CurtainInfo {
     entity: EntityId,
     layer: i32,
-    gc: GroupControl,
+    span: (u32, u32),
     matrix: GlobalMatrix,
     effects: Vec<(String, HashMap<String, Value>)>,
     opacity: f32,
+    kind: CurtainEffect,
 }
 
-fn group_covers_layer(gc_layer: i32, gc: &GroupControl, target_layer: i32) -> bool {
-    if target_layer > gc_layer {
-        target_layer <= gc_layer + gc.layer_count_down as i32
-    } else if target_layer < gc_layer {
-        target_layer >= gc_layer - gc.layer_count_up as i32
+fn curtain_covers_layer(curtain_layer: i32, span: (u32, u32), target_layer: i32) -> bool {
+    let (down, up) = span;
+    if target_layer > curtain_layer {
+        target_layer <= curtain_layer + down as i32
+    } else if target_layer < curtain_layer {
+        target_layer >= curtain_layer - up as i32
     } else {
         false
     }
 }
 
-fn resolve_group_chain(
-    obj_layer: i32,
-    controllers: &[GroupControllerInfo],
-    max_depth: i32,
-) -> Vec<usize> {
+fn resolve_group_chain(obj_layer: i32, controllers: &[CurtainInfo], max_depth: i32) -> Vec<usize> {
     let mut chain = Vec::new();
     let mut cursor_layer = obj_layer;
     loop {
@@ -70,7 +83,7 @@ fn resolve_group_chain(
             if chain.contains(&idx) {
                 continue;
             }
-            if !group_covers_layer(c.layer, &c.gc, cursor_layer) {
+            if !curtain_covers_layer(c.layer, c.span, cursor_layer) {
                 continue;
             }
             let dist = (cursor_layer - c.layer).abs();
@@ -111,13 +124,14 @@ type PayloadGroupViews<'v> = (
     View<'v, AudioParams>,
     View<'v, EffectStack>,
     View<'v, GroupControl>,
+    View<'v, FrameBufferControl>,
 );
 
 fn is_active_at(range: &TimeRange, scene: &SceneId, active_scene: i32, frame: i32) -> bool {
     scene.0 == active_scene && frame >= range.start_frame && frame < range.end_frame
 }
 
-pub fn get_active_objects_system(world: &EcsWorld) -> Vec<ActiveObject> {
+pub fn get_active_objects_system(world: &EcsWorld) -> (Vec<ActiveObject>, CapturedObjects) {
     let active_scene = world.active_scene();
     let current = world.current_frame();
     get_active_objects_system_at(world, active_scene, current)
@@ -127,7 +141,7 @@ pub fn get_active_objects_system_at(
     world: &EcsWorld,
     active_scene: i32,
     current: i32,
-) -> Vec<ActiveObject> {
+) -> (Vec<ActiveObject>, CapturedObjects) {
     world.world.run(
         |(_timeline, scenes, project, camera, system_settings): UniqueGroupViews,
          (
@@ -147,12 +161,13 @@ pub fn get_active_objects_system_at(
             _audio_params,
             effect_stacks,
             group_controls,
+            frame_buffer_controls,
         ): PayloadGroupViews| {
             let project_width = project.width.max(1) as f32;
             let project_height = project.height.max(1) as f32;
             let max_depth = system_settings.max_group_chain_depth;
 
-            let mut controllers: Vec<GroupControllerInfo> = Vec::new();
+            let mut controllers: Vec<CurtainInfo> = Vec::new();
             for (id, (range, scene, layer, gc)) in
                 (&time_ranges, &scene_ids, &layers, &group_controls)
                     .iter()
@@ -172,24 +187,55 @@ pub fn get_active_objects_system_at(
                     .get(id)
                     .map(|stack| compute_effect_params_at(stack, current))
                     .unwrap_or_default();
-                controllers.push(GroupControllerInfo {
+                controllers.push(CurtainInfo {
                     entity: id,
                     layer: layer.0,
-                    gc: *gc,
+                    span: (gc.layer_count_down, gc.layer_count_up),
                     matrix: compute_relative_matrix(&transform),
                     effects,
                     opacity: transform.opacity,
+                    kind: CurtainEffect::Group,
+                });
+            }
+            for (id, (range, scene, layer, fbc)) in
+                (&time_ranges, &scene_ids, &layers, &frame_buffer_controls)
+                    .iter()
+                    .with_id()
+            {
+                if scene.0 != active_scene
+                    || current < range.start_frame
+                    || current >= range.end_frame
+                {
+                    continue;
+                }
+                let mut transform = transforms.get(id).copied().unwrap_or_default();
+                if let Ok(kt) = keyframe_tracks.get(id) {
+                    kt.apply(&mut transform, current);
+                }
+                let effects = effect_stacks
+                    .get(id)
+                    .map(|stack| compute_effect_params_at(stack, current))
+                    .unwrap_or_default();
+                controllers.push(CurtainInfo {
+                    entity: id,
+                    layer: layer.0,
+                    span: (fbc.layer_count_down, fbc.layer_count_up),
+                    matrix: compute_relative_matrix(&transform),
+                    effects,
+                    opacity: transform.opacity,
+                    kind: CurtainEffect::FrameBuffer { clear: fbc.clear },
                 });
             }
 
             let mut active = Vec::new();
+            let mut captured: CapturedObjects = HashMap::new();
 
             for (id, (range, kind, scene)) in (&time_ranges, &kind_ids, &scene_ids).iter().with_id()
             {
                 if !is_active_at(range, scene, active_scene, current) {
                     continue;
                 }
-                if group_controls.get(id).is_ok() {
+                if group_controls.get(id).is_ok() || frame_buffer_controls.get(id).is_ok() {
                     continue;
                 }
                 let keyframes = keyframe_tracks.get(id).ok();
@@ -221,27 +267,35 @@ pub fn get_active_objects_system_at(
                     };
                     m.trim_in_frame + (base * ratio).round() as i64
                 });
-                let nested_scene = scene_objects
-                    .get(id)
-                    .ok()
-                    .map(|s| (s.target_scene, current - range.start_frame));
+                let compose_source =
+                    scene_objects
+                        .get(id)
+                        .ok()
+                        .map(|s| ComposeSource::NestedScene {
+                            target_scene: s.target_scene,
+                            local_frame: current - range.start_frame,
+                        });
 
                 let matrix = compute_global_matrix(&transform);
-                let matrix = match &media_source {
+                let local_matrix = match &media_source {
                     Some(src) if matches!(src.kind, MediaKind::Video | MediaKind::Image) => {
                         match crate::media::cache::global().dimensions(&src.path) {
                             Ok((w, h)) => rescale_for_source(&matrix, w as f32, h as f32),
                             Err(_) => matrix,
                         }
                     }
-                    _ => match nested_scene {
-                        Some((target_scene, _)) => match scenes.find(target_scene) {
-                            Some(scene) => {
-                                rescale_for_source(&matrix, scene.width as f32, scene.height as f32)
+                    _ => match compose_source {
+                        Some(ComposeSource::NestedScene { target_scene, .. }) => {
+                            match scenes.find(target_scene) {
+                                Some(scene) => rescale_for_source(
+                                    &matrix,
+                                    scene.width as f32,
+                                    scene.height as f32,
+                                ),
+                                None => matrix,
                             }
-                            None => matrix,
-                        },
-                        None => matrix,
+                        }
+                        _ => matrix,
                     },
                 };
 
@@ -249,7 +303,7 @@ pub fn get_active_objects_system_at(
                 let chain_idx = resolve_group_chain(obj_layer, &controllers, max_depth);
                 let chain_matrices: Vec<GlobalMatrix> =
                     chain_idx.iter().map(|&i| controllers[i].matrix).collect();
-                let matrix = compute_chained_matrix(&chain_matrices, &matrix);
+                let matrix = compute_chained_matrix(&chain_matrices, &local_matrix);
 
                 let mvp = compute_mvp(
                     &matrix,
@@ -271,7 +325,8 @@ pub fn get_active_objects_system_at(
                     prefixed.append(&mut effects);
                     effects = prefixed;
                 }
-                active.push(ActiveObject {
+
+                let active_object = ActiveObject {
                     kind_id: kind.0,
                     clip_instance: object_ids.get(id).map_or(0, |o| o.0 as u64),
                     source_frame,
@@ -281,11 +336,108 @@ pub fn get_active_objects_system_at(
                     mvp,
                     opacity,
                     effects,
-                    nested_scene,
+                    compose_source,
+                };
+
+                let fb_pos = chain_idx.iter().position(|&i| {
+                    matches!(controllers[i].kind, CurtainEffect::FrameBuffer { .. })
+                });
+
+                match fb_pos.map(|pos| {
+                    let CurtainEffect::FrameBuffer { clear } = controllers[chain_idx[pos]].kind
+                    else {
+                        unreachable!()
+                    };
+                    (controllers[chain_idx[pos]].entity, clear, pos)
+                }) {
+                    Some((controller, clear, pos)) => {
+                        let inner_chain = &chain_idx[..pos];
+                        let inner_matrices: Vec<GlobalMatrix> =
+                            inner_chain.iter().map(|&i| controllers[i].matrix).collect();
+                        let inner_matrix = compute_chained_matrix(&inner_matrices, &local_matrix);
+                        let inner_mvp = compute_mvp(
+                            &inner_matrix,
+                            &camera,
+                            project_width,
+                            project_height,
+                            projection_for(kind.0),
+                        );
+                        let mut inner_opacity = transform.opacity;
+                        for &i in inner_chain {
+                            inner_opacity *= controllers[i].opacity;
+                        }
+                        let mut inner_effects = effect_stacks
+                            .get(id)
+                            .map(|stack| compute_effect_params_at(stack, current))
+                            .unwrap_or_default();
+                        for &i in inner_chain.iter().rev() {
+                            let mut prefixed = controllers[i].effects.clone();
+                            prefixed.append(&mut inner_effects);
+                            inner_effects = prefixed;
+                        }
+                        let captured_object = ActiveObject {
+                            mvp: inner_mvp,
+                            opacity: inner_opacity,
+                            effects: inner_effects,
+                            ..active_object.clone()
+                        };
+                        captured
+                            .entry(controller)
+                            .or_default()
+                            .push(captured_object);
+                        if !clear {
+                            active.push(active_object);
+                        }
+                    }
+                    None => active.push(active_object),
+                }
+            }
+
+            for c in controllers.iter() {
+                let CurtainEffect::FrameBuffer { .. } = c.kind else {
+                    continue;
+                };
+                let Ok(kind) = kind_ids.get(c.entity) else {
+                    continue;
+                };
+                let chain_idx = resolve_group_chain(c.layer, &controllers, max_depth);
+                let chain_matrices: Vec<GlobalMatrix> =
+                    chain_idx.iter().map(|&i| controllers[i].matrix).collect();
+                let matrix = compute_chained_matrix(&chain_matrices, &c.matrix);
+                let mvp = compute_mvp(
+                    &matrix,
+                    &camera,
+                    project_width,
+                    project_height,
+                    projection_for(kind.0),
+                );
+                let mut opacity = c.opacity;
+                for &i in &chain_idx {
+                    opacity *= controllers[i].opacity;
+                }
+                let mut effects = c.effects.clone();
+                for &i in chain_idx.iter().rev() {
+                    let mut prefixed = controllers[i].effects.clone();
+                    prefixed.append(&mut effects);
+                    effects = prefixed;
+                }
+                active.push(ActiveObject {
+                    kind_id: kind.0,
+                    clip_instance: object_ids.get(c.entity).map_or(0, |o| o.0 as u64),
+                    source_frame: 0,
+                    text_content: None,
+                    shape_params: None,
+                    media_source: None,
+                    mvp,
+                    opacity,
+                    effects,
+                    compose_source: Some(ComposeSource::FrameBuffer {
+                        controller: c.entity,
+                    }),
                 });
             }
-            let _ = controllers.iter().map(|c| c.entity).count();
-            active
+
+            (active, captured)
         },
     )
 }
@@ -380,16 +532,16 @@ mod tests {
         let (mut world, _id) = world_with_object(10, 20);
 
         world.set_current_frame(9);
-        assert_eq!(get_active_objects_system(&world).len(), 0);
+        assert_eq!(get_active_objects_system(&world).0.len(), 0);
 
         world.set_current_frame(10);
-        assert_eq!(get_active_objects_system(&world).len(), 1);
+        assert_eq!(get_active_objects_system(&world).0.len(), 1);
 
         world.set_current_frame(19);
-        assert_eq!(get_active_objects_system(&world).len(), 1);
+        assert_eq!(get_active_objects_system(&world).0.len(), 1);
 
         world.set_current_frame(20);
-        assert_eq!(get_active_objects_system(&world).len(), 0);
+        assert_eq!(get_active_objects_system(&world).0.len(), 0);
     }
 
     #[test]
@@ -403,13 +555,13 @@ mod tests {
 
         world.switch_scene(scene_a);
         world.set_current_frame(0);
-        let active_a = get_active_objects_system(&world);
+        let (active_a, _captured) = get_active_objects_system(&world);
         assert_eq!(active_a.len(), 1);
         assert_eq!(active_a[0].clip_instance, id_a as u64);
 
         world.switch_scene(scene_b);
         world.set_current_frame(0);
-        let active_b = get_active_objects_system(&world);
+        let (active_b, _captured) = get_active_objects_system(&world);
         assert_eq!(active_b.len(), 1);
         assert_eq!(active_b[0].clip_instance, id_b as u64);
     }
@@ -418,7 +570,7 @@ mod tests {
     fn all_kinds_use_perspective_projection() {
         let (mut world, _id) = world_with_object(0, 30);
         world.set_current_frame(0);
-        let active = get_active_objects_system(&world);
+        let (active, _captured) = get_active_objects_system(&world);
         assert_eq!(active.len(), 1);
         assert_ne!(active[0].mvp[15], 0.0);
     }
@@ -432,7 +584,7 @@ mod tests {
         };
         let id = world.add_shape_object(0, 30, KIND_SHAPE, 0, shape);
         world.set_current_frame(0);
-        let active = get_active_objects_system(&world);
+        let (active, _captured) = get_active_objects_system(&world);
         assert_eq!(active.len(), 1);
         assert_eq!(active[0].clip_instance, id as u64);
         assert_eq!(active[0].shape_params.map(|s| s.sides), Some(6));
@@ -450,7 +602,7 @@ mod tests {
         let id1 = world.add_media_object(0, 30, KIND_SHAPE, 0, media.clone());
         let id2 = world.add_media_object(0, 30, KIND_SHAPE, 1, media);
         world.set_current_frame(0);
-        let active = get_active_objects_system(&world);
+        let (active, _captured) = get_active_objects_system(&world);
         assert_eq!(active.len(), 2);
         let instances: Vec<u64> = active.iter().map(|a| a.clip_instance).collect();
         assert_ne!(instances[0], instances[1]);
@@ -472,7 +624,7 @@ mod tests {
             }
         });
         world.set_current_frame(0);
-        let active = get_active_objects_system(&world);
+        let (active, _captured) = get_active_objects_system(&world);
         assert_eq!(active.len(), 1);
         assert_eq!(active[0].effects.len(), 1);
         assert_eq!(active[0].effects[0].0, "test_effect");
@@ -492,7 +644,7 @@ mod tests {
         let child_id = world.add_object(0, 30, KIND_TEXT, 1, Some(TextContent::default()));
         world.set_layer(child_id, 1);
         world.set_current_frame(0);
-        let active = get_active_objects_system(&world);
+        let (active, _captured) = get_active_objects_system(&world);
         let child = active
             .iter()
             .find(|a| a.clip_instance == child_id as u64)
@@ -515,7 +667,7 @@ mod tests {
         let out_of_range = world.add_object(0, 30, KIND_TEXT, 2, Some(TextContent::default()));
         world.set_layer(out_of_range, 2);
         world.set_current_frame(0);
-        let active = get_active_objects_system(&world);
+        let (active, _captured) = get_active_objects_system(&world);
         let in_obj = active
             .iter()
             .find(|a| a.clip_instance == in_range as u64)
@@ -543,7 +695,7 @@ mod tests {
         let out_of_range = world.add_object(0, 30, KIND_TEXT, 2, Some(TextContent::default()));
         world.set_layer(out_of_range, 3);
         world.set_current_frame(0);
-        let active = get_active_objects_system(&world);
+        let (active, _captured) = get_active_objects_system(&world);
         let above_obj = active
             .iter()
             .find(|a| a.clip_instance == above as u64)
