@@ -4,20 +4,25 @@ use crate::ecs::{EcsWorld, resources::SystemSettingsResource};
 use crate::localization::tr;
 use crate::update::{self, UpdateStatus};
 use egui::{Context, Ui};
+use egui_material_icons::{MaterialIcon, icons};
 use elegance::{BuiltInTheme, ThemeSwitcher};
 use fields::{choice_field, int_field, toggle_field};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
-const CATEGORIES: [(&str, &str); 7] = [
-    ("一般", ""),
-    ("外観", ""),
-    ("パフォーマンス", ""),
-    ("デコード", ""),
-    ("タイムライン", ""),
-    ("エクスポート", ""),
-    ("アップデート", ""),
+const CATEGORIES: [(&str, MaterialIcon); 7] = [
+    ("一般", icons::ICON_SETTINGS),
+    ("外観", icons::ICON_PALETTE),
+    ("パフォーマンス", icons::ICON_SPEED),
+    ("デコード", icons::ICON_MOVIE),
+    ("タイムライン", icons::ICON_VIEW_TIMELINE),
+    ("エクスポート", icons::ICON_UPLOAD),
+    ("アップデート", icons::ICON_SYSTEM_UPDATE),
 ];
+
+fn category_label(index: usize) -> &'static str {
+    CATEGORIES[index].0
+}
 
 fn settings_path() -> PathBuf {
     std::env::current_exe()
@@ -173,58 +178,90 @@ impl SystemSettingsWindow {
         if !self.open {
             return;
         }
-        egui::CentralPanel::default().show(ui, |ui| {
-            ui.horizontal(|ui| {
-                ui.vertical(|ui| {
-                    ui.set_width(160.0);
-                    for (i, (label, icon)) in CATEGORIES.iter().enumerate() {
-                        let i = i as i32;
-                        let active = i == self.selected_category;
-                        let is_update_category = i as usize == CATEGORIES.len() - 1;
-                        let has_update = is_update_category
-                            && matches!(
-                                *self.update_status.lock().unwrap(),
-                                UpdateStatus::Available(_)
-                            );
-                        let mark = if has_update { " ●" } else { "" };
-                        let text = format!("{icon}  {}{mark}", tr(label));
-                        if ui.selectable_label(active, text).clicked() {
-                            self.selected_category = i;
-                        }
-                    }
-                });
-                ui.separator();
-                ui.vertical(|ui| {
-                    egui::Grid::new("system_settings_page")
-                        .num_columns(2)
-                        .spacing([10.0, 10.0])
-                        .show(ui, |ui| match self.selected_category {
-                            0 => self.page_general(ui, world_holder),
-                            1 => self.page_appearance(ui, world_holder),
-                            2 => self.page_performance(ui, world_holder),
-                            3 => self.page_decode(ui, world_holder),
-                            4 => self.page_timeline_defaults(ui, world_holder),
-                            5 => self.page_export(ui, world_holder),
-                            _ => self.page_update(ui, world_holder),
+
+        egui::Panel::bottom("system_setting_footer")
+            .frame(egui::Frame::default().inner_margin(4.0))
+            .show(ui, |ui| {
+                ui.allocate_ui_with_layout(
+                    egui::vec2(ui.available_width(), fields::field_height(ui)),
+                    egui::Layout::left_to_right(egui::Align::Center),
+                    |ui| {
+                        ui.label(&self.save_status);
+                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                            if ui.button(t!("保存")).clicked() {
+                                let s = world_holder.lock().unwrap().get_system_settings();
+                                self.save_status = match save_to_disk(&s) {
+                                    Ok(()) => t!("保存完了"),
+                                    Err(_) => t!("保存失敗"),
+                                };
+                            }
+                            if ui.button(t!("再読込")).clicked() {
+                                self.reload(world_holder);
+                            }
                         });
-                });
+                    },
+                )
             });
 
-            ui.separator();
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                if ui.button(t!("保存")).clicked() {
-                    let s = world_holder.lock().unwrap().get_system_settings();
-                    self.save_status = match save_to_disk(&s) {
-                        Ok(()) => t!("保存完了"),
-                        Err(_) => t!("保存失敗"),
-                    };
-                }
-                if ui.button(t!("再読込")).clicked() {
-                    self.reload(world_holder);
-                }
-                ui.label(&self.save_status);
+        egui::Panel::left("system_settings_categories")
+            .frame(
+                egui::Frame::default()
+                    .fill(ui.visuals().faint_bg_color)
+                    .inner_margin(egui::Margin::symmetric(8,12)),
+            )
+            .show(ui, |ui| {
+                ui.set_width(150.0);
+
+                ui.with_layout(egui::Layout::top_down_justified(egui::Align::LEFT), |ui| {
+                    let widgets = &mut ui.style_mut().visuals.widgets;
+                    widgets.inactive.bg_stroke = egui::Stroke::NONE;
+                    widgets.hovered.bg_stroke = egui::Stroke::NONE;
+                    widgets.active.bg_stroke = egui::Stroke::NONE;
+                    widgets.hovered.expansion = 0.0;
+                    widgets.active.expansion = 0.0;
+
+                    for (i, (label, icon)) in CATEGORIES.iter().enumerate() {
+                        self.category_item(ui, i as i32, label, icon);
+                    }
+                })
             });
-        });
+        egui::Panel::top("system_setting_header")
+            .frame(egui::Frame::default().inner_margin(egui::Margin::symmetric(16, 12)))
+            .show(ui, |ui| {
+                ui.heading(tr(category_label(self.selected_category as usize)));
+            });
+        egui::CentralPanel::default()
+            .frame(egui::Frame::default().inner_margin(egui::Margin::same(16)))
+            .show(ui, |ui| {
+                egui::Grid::new("system_settings_page")
+                    .num_columns(2)
+                    .spacing([10.0, 10.0])
+                    .show(ui, |ui| match self.selected_category {
+                        0 => self.page_general(ui, world_holder),
+                        1 => self.page_appearance(ui, world_holder),
+                        2 => self.page_performance(ui, world_holder),
+                        3 => self.page_decode(ui, world_holder),
+                        4 => self.page_timeline_defaults(ui, world_holder),
+                        5 => self.page_export(ui, world_holder),
+                        _ => self.page_update(ui, world_holder),
+                    });
+            });
+    }
+
+    fn category_item(&mut self, ui: &mut Ui, index: i32, label: &str, icon: &MaterialIcon) {
+        let active = index == self.selected_category;
+        let is_update_category = index as usize == CATEGORIES.len() - 1;
+        let has_update = is_update_category
+            && matches!(
+                *self.update_status.lock().unwrap(),
+                UpdateStatus::Available(_)
+            );
+        let mark = if has_update { " ●" } else { "" };
+        let text = format!("{}  {}{mark}", icon.codepoint, tr(label));
+
+        if ui.selectable_label(active, text).clicked() {
+            self.selected_category = index;
+        }
     }
 
     fn page_general(&mut self, ui: &mut egui::Ui, world_holder: &Arc<Mutex<EcsWorld>>) {

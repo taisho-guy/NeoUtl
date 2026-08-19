@@ -1,7 +1,7 @@
 use crate::localization::tr;
 use egui::{Color32, Ui};
 
-fn field_height(ui: &Ui) -> f32 {
+pub fn field_height(ui: &Ui) -> f32 {
     ui.text_style_height(&egui::TextStyle::Body) + 2.0 * ui.spacing().button_padding.y
 }
 

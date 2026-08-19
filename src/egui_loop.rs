@@ -199,6 +199,7 @@ impl NativeWindow {
         surface.configure(&gpu.device, &config);
 
         let ctx = egui::Context::default();
+        egui_material_icons::initialize(&ctx);
         egui_extras::install_image_loaders(&ctx);
         crate::theme::install(&ctx);
         install_locale_fonts(&ctx);
