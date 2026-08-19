@@ -144,10 +144,24 @@ impl SceneSettingsWindow {
             t!("シーン設定")
         };
         let section_color = egui::Color32::from_rgb(0x8a, 0xab, 0xff);
-
-        ctx.send_viewport_cmd(egui::ViewportCommand::Title(title));
         let mut confirmed = false;
         let mut close_requested = false;
+
+        ctx.send_viewport_cmd(egui::ViewportCommand::Title(title));
+
+        egui::Panel::bottom("add_scene_footer")
+            .frame(egui::Frame::default().inner_margin(4.0))
+            .show(ui, |ui| {
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    if ui.button(t!("OK")).clicked() {
+                        confirmed = true;
+                    }
+                    if ui.button(t!("キャンセル")).clicked() {
+                        close_requested = true;
+                    }
+                });
+            });
+
         egui::CentralPanel::default().show(ui, |ui| {
             ui.group(|ui| {
                 ui.colored_label(section_color, t!("基本設定"));
@@ -163,6 +177,7 @@ impl SceneSettingsWindow {
 
             ui.group(|ui| {
                 ui.colored_label(section_color, t!("編集とスナップ"));
+                ui.set_width(ui.available_width());
                 egui::Grid::new("scene_settings_snap")
                     .num_columns(2)
                     .show(ui, |ui| {
@@ -191,6 +206,7 @@ impl SceneSettingsWindow {
             if self.grid_mode == 1 {
                 ui.group(|ui| {
                     ui.colored_label(section_color, t!("BPM設定"));
+                    ui.set_width(ui.available_width());
                     egui::Grid::new("scene_settings_bpm")
                         .num_columns(2)
                         .show(ui, |ui| {
@@ -204,6 +220,7 @@ impl SceneSettingsWindow {
             if self.grid_mode == 2 {
                 ui.group(|ui| {
                     ui.colored_label(section_color, t!("フレーム設定"));
+                    ui.set_width(ui.available_width());
                     egui::Grid::new("scene_settings_frame")
                         .num_columns(2)
                         .show(ui, |ui| {
@@ -211,16 +228,6 @@ impl SceneSettingsWindow {
                         });
                 });
             }
-
-            ui.add_space(ui.available_height() - 32.0);
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                if ui.button(t!("OK")).clicked() {
-                    confirmed = true;
-                }
-                if ui.button(t!("キャンセル")).clicked() {
-                    close_requested = true;
-                }
-            });
         });
 
         if confirmed {
