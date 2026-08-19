@@ -98,6 +98,13 @@ impl WindowKind {
         }
     }
 
+    fn min_size(self) -> Option<(u32, u32)> {
+        match self {
+            Self::EffectAdd => Some((400, 240)),
+            _ => None,
+        }
+    }
+
     fn is_lazy_dialog(self) -> bool {
         matches!(
             self,
@@ -145,11 +152,17 @@ impl NativeWindow {
                 .with_resizable(false)
                 .with_transparent(true);
         }
+        if let Some((min_w, min_h)) = kind.min_size() {
+            attrs =
+                attrs.with_min_inner_size(winit::dpi::LogicalSize::new(min_w as f64, min_h as f64));
+        }
+
         let window = Arc::new(
             event_loop
                 .create_window(attrs)
                 .expect("eguiウィンドウ生成失敗"),
         );
+
         let surface = gpu
             .instance
             .create_surface(window.clone())
