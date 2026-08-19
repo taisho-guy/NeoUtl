@@ -68,6 +68,20 @@ impl ProjectSettingsWindow {
         }
         let mut confirmed = false;
         let mut close_requested = false;
+
+        egui::Panel::bottom("project_setting_footer")
+            .frame(egui::Frame::default().inner_margin(4.0))
+            .show(ui, |ui| {
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    if ui.button(t!("OK")).clicked() {
+                        confirmed = true;
+                    }
+                    if ui.button(t!("キャンセル")).clicked() {
+                        close_requested = true;
+                    }
+                })
+            });
+
         egui::CentralPanel::default().show(ui, |ui| {
             ui.group(|ui| {
                 ui.colored_label(egui::Color32::from_rgb(0x8a, 0xab, 0xff), t!("基本設定"));
@@ -79,6 +93,7 @@ impl ProjectSettingsWindow {
             });
 
             ui.group(|ui| {
+                ui.set_width(ui.available_width());
                 ui.colored_label(
                     egui::Color32::from_rgb(0x8a, 0xab, 0xff),
                     t!("音声フォーマット"),
@@ -117,16 +132,6 @@ impl ProjectSettingsWindow {
                             self.audio_channels = if channel_index == 0 { 1 } else { 2 };
                         }
                     });
-            });
-
-            ui.add_space(ui.available_height() - 32.0);
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                if ui.button(t!("OK")).clicked() {
-                    confirmed = true;
-                }
-                if ui.button(t!("キャンセル")).clicked() {
-                    close_requested = true;
-                }
             });
         });
 
