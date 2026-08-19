@@ -1015,6 +1015,7 @@ impl RenderEngine {
         height: u32,
         cache_key: ComposeCacheKey,
         depth: u32,
+        clear_override: Option<wgpu::Color>,
     ) -> Option<wgpu::Texture> {
         if depth >= config::MAX_SCENE_NESTING_DEPTH {
             eprintln!(
@@ -1048,7 +1049,7 @@ impl RenderEngine {
         self.effect_object_depth = create_depth_texture(&self.device, width, height);
 
         let project = world.get_project();
-        self.render_at(world, objects, captured, &project, depth);
+        self.render_at(world, objects, captured, &project, depth, clear_override);
         let texture = self.texture.clone();
 
         self.render_width = saved_width;
@@ -1428,7 +1429,6 @@ impl RenderEngine {
                     self.draw_standard_pass(&mut rpass, obj, offset);
                 }
                 EffectObjectDrawKind::Media { texture, offset } => {
-                    eprintln!("[diag][draw_media_pass呼出][effect経由] offset={offset}");
                     self.draw_media_pass(&mut rpass, texture, offset);
                 }
                 EffectObjectDrawKind::Text {
@@ -1442,7 +1442,7 @@ impl RenderEngine {
         crate::gpu_shared::locked_submit(&self.queue, [encoder.finish()]);
     }
 
-    fn composite_effect_object(&self, pool_tex: &wgpu::Texture) {
+    fn composite_effect_object(&self, pool_tex: &wgpu::Texture, clear_color: Option<wgpu::Color>) {
         let src_view = pool_tex.create_view(&wgpu::TextureViewDescriptor::default());
         let dst_view = self
             .texture
@@ -1473,7 +1473,10 @@ impl RenderEngine {
                     view: &dst_view,
                     resolve_target: None,
                     ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Load,
+                        load: match clear_color {
+                            Some(c) => wgpu::LoadOp::Clear(c),
+                            None => wgpu::LoadOp::Load,
+                        },
                         store: wgpu::StoreOp::Store,
                     },
                     depth_slice: None,
@@ -1510,7 +1513,7 @@ impl RenderEngine {
                 )
             );
         }
-        self.render_at(world, active_objects, captured, project, 0);
+        self.render_at(world, active_objects, captured, project, 0, None);
         self.run_lua_reduce_hooks();
     }
 
@@ -1602,6 +1605,7 @@ impl RenderEngine {
         captured: &CapturedObjects,
         _project: &ProjectResource,
         depth: u32,
+        clear_override: Option<wgpu::Color>,
     ) {
         if is_device_lost() {
             return;
@@ -1667,11 +1671,20 @@ impl RenderEngine {
                                 scene.height,
                                 ComposeCacheKey::Scene(target_scene),
                                 depth + 1,
+                                None,
                             )
                         }),
-                        Some(crate::ecs::systems::ComposeSource::FrameBuffer { controller }) => {
+                        Some(crate::ecs::systems::ComposeSource::FrameBuffer {
+                            controller,
+                            clear_below,
+                        }) => {
                             let empty = Vec::new();
                             let objects = captured.get(&controller).unwrap_or(&empty);
+                            let clear_override = Some(if clear_below {
+                                wgpu::Color::BLACK
+                            } else {
+                                wgpu::Color::TRANSPARENT
+                            });
                             self.render_composed_texture(
                                 world,
                                 objects,
@@ -1680,6 +1693,7 @@ impl RenderEngine {
                                 self.render_height,
                                 ComposeCacheKey::FrameBuffer(controller),
                                 depth + 1,
+                                clear_override,
                             )
                         }
                         None => None,
@@ -1814,114 +1828,162 @@ impl RenderEngine {
             self.text_targets.retain(|k, _| seen.contains(k));
         }
 
-        let mut encoder = self
-            .device
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("Render Encoder"),
-            });
-        let view = self
-            .texture
-            .create_view(&wgpu::TextureViewDescriptor::default());
-        let depth_view = self
-            .depth_texture
-            .create_view(&wgpu::TextureViewDescriptor::default());
-
-        {
-            let clear_color = if depth == 0 {
-                wgpu::Color {
-                    r: 0.05,
-                    g: 0.05,
-                    b: 0.07,
-                    a: 1.0,
-                }
-            } else {
-                wgpu::Color::TRANSPARENT
-            };
-            let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: Some("Render Pass"),
-                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: &view,
-                    resolve_target: None,
-                    ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(clear_color),
-                        store: wgpu::StoreOp::Store,
-                    },
-                    depth_slice: None,
-                })],
-                depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
-                    view: &depth_view,
-                    depth_ops: Some(wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(1.0),
-                        store: wgpu::StoreOp::Discard,
-                    }),
-                    stencil_ops: None,
-                }),
-                timestamp_writes: None,
-                occlusion_query_set: None,
-                multiview_mask: None,
-            });
-
-            for (i, (obj, offset)) in active_objects.iter().zip(offsets.iter()).enumerate() {
-                if effect_pool_index[i].is_some() {
-                    continue;
-                }
-                let Some(offset) = offset else { continue };
-                self.draw_standard_pass(&mut rpass, obj, *offset);
-            }
-
-            for (i, (texture, offset)) in media_frames.iter().zip(media_offsets.iter()).enumerate()
-            {
-                if effect_pool_index[i].is_some() {
-                    continue;
-                }
-                let (Some(texture), Some(offset)) = (texture, offset) else {
-                    continue;
-                };
-                eprintln!("[diag][draw_media_pass呼出] i={i} offset={offset}");
-                self.draw_media_pass(&mut rpass, texture, *offset);
-            }
-
-            for (clip_instance, offset, obj_index) in &text_draws {
-                if effect_pool_index[*obj_index].is_some() {
-                    continue;
-                }
-                self.draw_text_pass(&mut rpass, *clip_instance, *offset);
-            }
-        }
-
-        crate::gpu_shared::locked_submit(&self.queue, [encoder.finish()]);
-
         let text_draw_by_index: HashMap<usize, (u64, u32)> = text_draws
             .iter()
             .map(|(clip_instance, offset, obj_index)| (*obj_index, (*clip_instance, *offset)))
             .collect();
 
-        for (i, obj) in active_objects.iter().enumerate() {
-            let Some(pool_idx) = effect_pool_index[i] else {
+        let clear_color = clear_override.unwrap_or(if depth == 0 {
+            wgpu::Color {
+                r: 0.05,
+                g: 0.05,
+                b: 0.07,
+                a: 1.0,
+            }
+        } else {
+            wgpu::Color::TRANSPARENT
+        });
+
+        let object_count = active_objects.len();
+        let mut drawn_any = false;
+        let mut idx = 0usize;
+        while idx < object_count {
+            if let Some(pool_idx) = effect_pool_index[idx] {
+                let obj = &active_objects[idx];
+                let draw_kind = if let Some(offset) = offsets[idx] {
+                    EffectObjectDrawKind::Standard { obj, offset }
+                } else if let (Some(texture), Some(offset)) =
+                    (&media_frames[idx], media_offsets[idx])
+                {
+                    EffectObjectDrawKind::Media { texture, offset }
+                } else if let Some((clip_instance, offset)) = text_draw_by_index.get(&idx) {
+                    EffectObjectDrawKind::Text {
+                        clip_instance: *clip_instance,
+                        offset: *offset,
+                    }
+                } else {
+                    idx += 1;
+                    continue;
+                };
+
+                let pool_tex = self.ensure_effect_object_target(pool_idx).clone();
+                self.render_effect_object_offscreen(&pool_tex, draw_kind);
+                self.apply_effect_chain(&pool_tex, &pool_tex, &obj.effects);
+                self.composite_effect_object(
+                    &pool_tex,
+                    if drawn_any { None } else { Some(clear_color) },
+                );
+                drawn_any = true;
+                idx += 1;
                 continue;
-            };
-            let draw_kind = if let Some(offset) = offsets[i] {
-                EffectObjectDrawKind::Standard { obj, offset }
-            } else if let (Some(Some(texture)), Some(Some(offset))) =
-                (media_frames.get(i), media_offsets.get(i))
-            {
-                EffectObjectDrawKind::Media {
-                    texture,
-                    offset: *offset,
-                }
-            } else if let Some((clip_instance, offset)) = text_draw_by_index.get(&i) {
-                EffectObjectDrawKind::Text {
-                    clip_instance: *clip_instance,
-                    offset: *offset,
-                }
+            }
+
+            let start = idx;
+            while idx < object_count && effect_pool_index[idx].is_none() {
+                idx += 1;
+            }
+
+            let color_load = if drawn_any {
+                wgpu::LoadOp::Load
             } else {
-                continue;
+                wgpu::LoadOp::Clear(clear_color)
+            };
+            let depth_load = if drawn_any {
+                wgpu::LoadOp::Load
+            } else {
+                wgpu::LoadOp::Clear(1.0)
             };
 
-            let pool_tex = self.ensure_effect_object_target(pool_idx).clone();
-            self.render_effect_object_offscreen(&pool_tex, draw_kind);
-            self.apply_effect_chain(&pool_tex, &pool_tex, &obj.effects);
-            self.composite_effect_object(&pool_tex);
+            let mut encoder = self
+                .device
+                .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                    label: Some("Render Segment Encoder"),
+                });
+            {
+                let view = self
+                    .texture
+                    .create_view(&wgpu::TextureViewDescriptor::default());
+                let depth_view = self
+                    .depth_texture
+                    .create_view(&wgpu::TextureViewDescriptor::default());
+                let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                    label: Some("Render Pass Segment"),
+                    color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                        view: &view,
+                        resolve_target: None,
+                        ops: wgpu::Operations {
+                            load: color_load,
+                            store: wgpu::StoreOp::Store,
+                        },
+                        depth_slice: None,
+                    })],
+                    depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                        view: &depth_view,
+                        depth_ops: Some(wgpu::Operations {
+                            load: depth_load,
+                            store: wgpu::StoreOp::Discard,
+                        }),
+                        stencil_ops: None,
+                    }),
+                    timestamp_writes: None,
+                    occlusion_query_set: None,
+                    multiview_mask: None,
+                });
+
+                for i in start..idx {
+                    if let Some(offset) = offsets[i] {
+                        self.draw_standard_pass(&mut rpass, &active_objects[i], offset);
+                    }
+                    if let (Some(texture), Some(offset)) = (&media_frames[i], media_offsets[i]) {
+                        self.draw_media_pass(&mut rpass, texture, offset);
+                    }
+                    if let Some((clip_instance, offset)) = text_draw_by_index.get(&i) {
+                        self.draw_text_pass(&mut rpass, *clip_instance, *offset);
+                    }
+                }
+            }
+            crate::gpu_shared::locked_submit(&self.queue, [encoder.finish()]);
+            drawn_any = true;
+        }
+
+        if !drawn_any {
+            let mut encoder = self
+                .device
+                .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                    label: Some("Clear Encoder"),
+                });
+            {
+                let view = self
+                    .texture
+                    .create_view(&wgpu::TextureViewDescriptor::default());
+                let depth_view = self
+                    .depth_texture
+                    .create_view(&wgpu::TextureViewDescriptor::default());
+                encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                    label: Some("Clear Pass"),
+                    color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                        view: &view,
+                        resolve_target: None,
+                        ops: wgpu::Operations {
+                            load: wgpu::LoadOp::Clear(clear_color),
+                            store: wgpu::StoreOp::Store,
+                        },
+                        depth_slice: None,
+                    })],
+                    depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                        view: &depth_view,
+                        depth_ops: Some(wgpu::Operations {
+                            load: wgpu::LoadOp::Clear(1.0),
+                            store: wgpu::StoreOp::Discard,
+                        }),
+                        stencil_ops: None,
+                    }),
+                    timestamp_writes: None,
+                    occlusion_query_set: None,
+                    multiview_mask: None,
+                });
+            }
+            crate::gpu_shared::locked_submit(&self.queue, [encoder.finish()]);
         }
     }
 }
@@ -2067,6 +2129,7 @@ mod tests {
             opacity: 1.0,
             effects,
             compose_source: None,
+            layer: 0,
         }
     }
 

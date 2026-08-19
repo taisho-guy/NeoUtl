@@ -207,7 +207,7 @@ impl SystemSettingsWindow {
             .frame(
                 egui::Frame::default()
                     .fill(ui.visuals().faint_bg_color)
-                    .inner_margin(egui::Margin::symmetric(8,12)),
+                    .inner_margin(egui::Margin::symmetric(8, 12)),
             )
             .show(ui, |ui| {
                 ui.set_width(150.0);
