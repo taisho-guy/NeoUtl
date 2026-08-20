@@ -4,7 +4,7 @@ version = 4
 
 [[package]]
 name = "NeoUtl"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "arc-swap",
  "ash",
@@ -3406,6 +3406,51 @@ dependencies = [
 
 [[package]]
 name = "neoutl-effect-directional-blur"
+version = "0.0.0"
+dependencies = [
+ "neoutl-effect-api",
+ "neoutl-effect-shader-build",
+ "rust-i18n",
+]
+
+[[package]]
+name = "neoutl-effect-displacement-map-image"
+version = "0.0.0"
+dependencies = [
+ "neoutl-effect-api",
+ "neoutl-effect-shader-build",
+ "rust-i18n",
+]
+
+[[package]]
+name = "neoutl-effect-displacement-map-rotate"
+version = "0.0.0"
+dependencies = [
+ "neoutl-effect-api",
+ "neoutl-effect-shader-build",
+ "rust-i18n",
+]
+
+[[package]]
+name = "neoutl-effect-displacement-map-scale"
+version = "0.0.0"
+dependencies = [
+ "neoutl-effect-api",
+ "neoutl-effect-shader-build",
+ "rust-i18n",
+]
+
+[[package]]
+name = "neoutl-effect-displacement-map-scene"
+version = "0.0.0"
+dependencies = [
+ "neoutl-effect-api",
+ "neoutl-effect-shader-build",
+ "rust-i18n",
+]
+
+[[package]]
+name = "neoutl-effect-displacement-map-translate"
 version = "0.0.0"
 dependencies = [
  "neoutl-effect-api",

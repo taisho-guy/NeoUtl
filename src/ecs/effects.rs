@@ -146,7 +146,9 @@ impl EffectStack {
 pub fn compute_effect_params_at(
     stack: &EffectStack,
     frame: i32,
+    world: &crate::ecs::EcsWorld,
 ) -> Vec<(String, std::collections::HashMap<String, Value>)> {
+    let _ = world;
     stack
         .0
         .iter()

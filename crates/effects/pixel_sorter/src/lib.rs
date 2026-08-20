@@ -62,6 +62,7 @@ pub unsafe extern "C" fn neoutl_effect_entry() -> *const EffectVTable {
         wgsl,
         uniform_size,
         pack_uniform,
+        requires_texture_param: None,
     })
 }
 

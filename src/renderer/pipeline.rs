@@ -13,6 +13,7 @@ use shipyard::EntityId;
 enum ComposeCacheKey {
     Scene(i32),
     FrameBuffer(EntityId),
+    EffectMapScene(i32),
 }
 use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
@@ -88,6 +89,8 @@ pub struct RenderEngine {
     reduce_mean_buffer: wgpu::Buffer,
     reduce_mean_readback_buffer: wgpu::Buffer,
     scene_texture_cache: HashMap<ComposeCacheKey, wgpu::Texture>,
+    map_texture_cache: HashMap<std::path::PathBuf, wgpu::Texture>,
+    dummy_map_texture_view: wgpu::TextureView,
     object_pipeline_layout: wgpu::PipelineLayout,
     effect_pipeline_layout: wgpu::PipelineLayout,
     hot_reload_rx: Option<std::sync::mpsc::Receiver<ReloadEvent>>,
@@ -487,8 +490,56 @@ fn create_effect_bind_group_layout(device: &wgpu::Device) -> wgpu::BindGroupLayo
                 },
                 count: None,
             },
+            wgpu::BindGroupLayoutEntry {
+                binding: 3,
+                visibility: wgpu::ShaderStages::FRAGMENT,
+                ty: wgpu::BindingType::Texture {
+                    sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                    view_dimension: wgpu::TextureViewDimension::D2,
+                    multisampled: false,
+                },
+                count: None,
+            },
+            wgpu::BindGroupLayoutEntry {
+                binding: 4,
+                visibility: wgpu::ShaderStages::FRAGMENT,
+                ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                count: None,
+            },
         ],
     })
+}
+
+fn create_dummy_map_texture_view(device: &wgpu::Device, queue: &wgpu::Queue) -> wgpu::TextureView {
+    let texture = device.create_texture(&wgpu::TextureDescriptor {
+        label: Some("Displacement Map Dummy Texture"),
+        size: wgpu::Extent3d {
+            width: 1,
+            height: 1,
+            depth_or_array_layers: 1,
+        },
+        mip_level_count: 1,
+        sample_count: 1,
+        dimension: wgpu::TextureDimension::D2,
+        format: wgpu::TextureFormat::Rgba16Float,
+        usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+        view_formats: &[],
+    });
+    queue.write_texture(
+        texture.as_image_copy(),
+        &[0u8; 8],
+        wgpu::TexelCopyBufferLayout {
+            offset: 0,
+            bytes_per_row: Some(8),
+            rows_per_image: Some(1),
+        },
+        wgpu::Extent3d {
+            width: 1,
+            height: 1,
+            depth_or_array_layers: 1,
+        },
+    );
+    texture.create_view(&wgpu::TextureViewDescriptor::default())
 }
 
 fn stable_id_of(kind_id: u32) -> Option<&'static str> {
@@ -880,6 +931,8 @@ impl RenderEngine {
             .map(|sys| build_lua_compute_pipelines(&device, &sys.drain_computes()))
             .unwrap_or_default();
 
+        let dummy_map_texture_view = create_dummy_map_texture_view(&device, &queue);
+
         Self {
             device,
             queue,
@@ -909,6 +962,8 @@ impl RenderEngine {
             video_pipeline,
             video_bind_group_layout,
             scene_texture_cache: HashMap::new(),
+            map_texture_cache: HashMap::new(),
+            dummy_map_texture_view,
             lua_system,
             lua_compute_pipelines,
             reduce_mean_pipeline,
@@ -1129,7 +1184,11 @@ impl RenderEngine {
     }
 
     fn apply_effect_chain(
-        &self,
+        &mut self,
+        world: &crate::ecs::EcsWorld,
+        objects: &[ActiveObject],
+        captured: &CapturedObjects,
+        depth: u32,
         src: &wgpu::Texture,
         dst: &wgpu::Texture,
         chain: &[(String, HashMap<String, Value>)],
@@ -1168,7 +1227,7 @@ impl RenderEngine {
             let Some(source) = effects::loader::by_id(effect_id) else {
                 continue;
             };
-            let Some(pipeline) = self.effect_pipelines.get(effect_id) else {
+            let Some(pipeline) = self.effect_pipelines.get(effect_id).cloned() else {
                 continue;
             };
             let schema = source.param_schema();
@@ -1208,6 +1267,52 @@ impl RenderEngine {
             let src_view = src_tex.create_view(&wgpu::TextureViewDescriptor::default());
             let dst_view = dst_tex.create_view(&wgpu::TextureViewDescriptor::default());
 
+            let requires_tex_idx = source.requires_texture_param_index();
+            let resolved_scene_tex: Option<wgpu::Texture> = if let Some(idx) = requires_tex_idx {
+                let scene_ref = schema.get(idx as usize).and_then(|s| {
+                    params.get(s.key.as_str()).and_then(|v| match v {
+                        Value::TrackRef(id) => Some(*id),
+                        _ => None,
+                    })
+                });
+                if let Some(scene_id) = scene_ref {
+                    self.render_composed_texture(
+                        world,
+                        objects,
+                        captured,
+                        self.render_width,
+                        self.render_height,
+                        ComposeCacheKey::EffectMapScene(scene_id),
+                        depth + 1,
+                        None,
+                    )
+                } else {
+                    None
+                }
+            } else {
+                None
+            };
+            let map_view: wgpu::TextureView = if let Some(t) = &resolved_scene_tex {
+                t.create_view(&wgpu::TextureViewDescriptor::default())
+            } else if let Some(idx) = requires_tex_idx {
+                let path = schema.get(idx as usize).and_then(|s| {
+                    params.get(s.key.as_str()).and_then(|v| match v {
+                        Value::FilePath(p) => Some(p.clone()),
+                        _ => None,
+                    })
+                });
+                match path.and_then(|p| {
+                    self.map_texture_cache
+                        .get(std::path::Path::new(&p))
+                        .cloned()
+                }) {
+                    Some(t) => t.create_view(&wgpu::TextureViewDescriptor::default()),
+                    None => self.dummy_map_texture_view.clone(),
+                }
+            } else {
+                self.dummy_map_texture_view.clone()
+            };
+
             let bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
                 label: Some("Effect Pass BG"),
                 layout: &self.effect_bind_group_layout,
@@ -1223,6 +1328,14 @@ impl RenderEngine {
                     wgpu::BindGroupEntry {
                         binding: 2,
                         resource: self.effect_uniform_buffer.as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 3,
+                        resource: wgpu::BindingResource::TextureView(&map_view),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 4,
+                        resource: wgpu::BindingResource::Sampler(&self.effect_sampler),
                     },
                 ],
             });
@@ -1249,7 +1362,7 @@ impl RenderEngine {
                     occlusion_query_set: None,
                     multiview_mask: None,
                 });
-                rpass.set_pipeline(pipeline);
+                rpass.set_pipeline(&pipeline);
                 rpass.set_bind_group(0, &bind_group, &[]);
                 rpass.draw(0..3, 0..1);
             }
@@ -1860,7 +1973,15 @@ impl RenderEngine {
 
                 let pool_tex = self.ensure_effect_object_target(pool_idx).clone();
                 self.render_effect_object_offscreen(&pool_tex, draw_kind);
-                self.apply_effect_chain(&pool_tex, &pool_tex, &obj.effects);
+                self.apply_effect_chain(
+                    world,
+                    active_objects,
+                    captured,
+                    depth,
+                    &pool_tex,
+                    &pool_tex,
+                    &obj.effects,
+                );
                 self.composite_effect_object(
                     &pool_tex,
                     if drawn_any { None } else { Some(clear_color) },
