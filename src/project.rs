@@ -287,7 +287,7 @@ mod tests {
         ObjectDoc {
             id,
             scene_id,
-            kind_id: 1,
+            kind_stable_id: "neoutl.object.text".to_string(),
             layer: 0,
             start_frame: 0,
             end_frame: 30,
@@ -308,7 +308,7 @@ mod tests {
         ObjectDoc {
             id,
             scene_id,
-            kind_id: 2,
+            kind_stable_id: "neoutl.object.shape".to_string(),
             layer: 1,
             start_frame: 30,
             end_frame: 90,
@@ -369,10 +369,10 @@ mod tests {
         let loaded = load_document(dir.path()).unwrap();
         assert_eq!(loaded.objects.len(), 2);
         assert_eq!(loaded.objects[0].id, 1);
-        assert_eq!(loaded.objects[0].kind_id, 1);
+        assert_eq!(loaded.objects[0].kind_stable_id, "neoutl.object.text");
         assert!(loaded.objects[0].payload.text.is_some());
         assert_eq!(loaded.objects[1].id, 2);
-        assert_eq!(loaded.objects[1].kind_id, 2);
+        assert_eq!(loaded.objects[1].kind_stable_id, "neoutl.object.shape");
         assert!(loaded.objects[1].payload.shape.is_some());
         assert!(loaded.objects[1].payload.media.is_some());
         assert_eq!(

@@ -30,9 +30,7 @@ impl PropertiesPanel {
     pub fn show_effect_add(&mut self, ui: &mut egui::Ui, state: &SharedAppState) {
         let holder = app_state::active_world(state);
         let mut world = holder.lock().unwrap();
-        let is_audio = self
-            .selected
-            .map_or(false, |id| world.get_audio_params(id).is_some());
+        let is_audio = self.selected.is_some_and(|id| world.is_audio_object(id));
 
         let catalog = if is_audio {
             EffectCatalogState::build_audio()

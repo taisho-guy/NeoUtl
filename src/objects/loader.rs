@@ -101,6 +101,15 @@ pub fn by_kind_id(kind_id: u32) -> Option<Arc<ObjectPlugin>> {
     registry().iter().find(|p| p.kind_id == kind_id).cloned()
 }
 
+pub fn by_stable_id(stable_id: &str) -> Option<Arc<ObjectPlugin>> {
+    registry()
+        .iter()
+        .find(|p| p.stable_id == stable_id)
+        .cloned()
+}
+
+pub const UNRESOLVED_KIND_ID: u32 = u32::MAX;
+
 pub fn reload_one(path: &Path) -> Result<(), String> {
     let new_plugin = load_one(path).map_err(|e| e.to_string())?;
     let current = registry_swap().load_full();
