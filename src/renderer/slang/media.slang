@@ -35,5 +35,10 @@ VertexOutput vs_main(uint vertex_index : SV_VertexID)
 float4 fs_main(VertexOutput in) : SV_Target
 {
     float4 sampled = media_texture.Sample(media_sampler, in.uv);
-    return float4(sampled.rgb, sampled.a * uniforms.opacity);
+    float alpha = sampled.a * uniforms.opacity;
+    if (alpha <= 0.0001)
+    {
+        discard;
+    }
+    return float4(sampled.rgb, alpha);
 }
