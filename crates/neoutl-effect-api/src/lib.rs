@@ -20,6 +20,7 @@ pub struct EffectVTable {
     pub wgsl: unsafe extern "C" fn() -> WgslSource,
     pub uniform_size: unsafe extern "C" fn() -> u32,
     pub pack_uniform: unsafe extern "C" fn(params_ptr: *const f32, count: u32, out_ptr: *mut u8),
+    pub requires_texture_param: Option<unsafe extern "C" fn() -> u32>,
 }
 
 pub const ENTRY_SYMBOL: &[u8] = b"neoutl_effect_entry\0";

@@ -74,6 +74,13 @@ impl EffectSource {
         }
     }
 
+    pub fn requires_texture_param_index(&self) -> Option<u32> {
+        match self {
+            Self::Native(p) => p.vtable.requires_texture_param.map(|f| unsafe { f() }),
+            Self::Lua(_) => None,
+        }
+    }
+
     pub fn uniform_size(&self) -> u32 {
         match self {
             Self::Native(p) => unsafe { (p.vtable.uniform_size)() },

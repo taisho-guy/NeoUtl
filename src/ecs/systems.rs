@@ -180,7 +180,7 @@ pub fn get_active_objects_system_at(
                 }
                 let effects = effect_stacks
                     .get(id)
-                    .map(|stack| compute_effect_params_at(stack, current))
+                    .map(|stack| compute_effect_params_at(stack, current, world))
                     .unwrap_or_default();
                 controllers.push(CurtainInfo {
                     entity: id,
@@ -285,7 +285,7 @@ pub fn get_active_objects_system_at(
                 }
                 let mut effects = effect_stacks
                     .get(id)
-                    .map(|stack| compute_effect_params_at(stack, current))
+                    .map(|stack| compute_effect_params_at(stack, current, world))
                     .unwrap_or_default();
                 for &i in chain_idx.iter().rev() {
                     let mut prefixed = controllers[i].effects.clone();
@@ -331,7 +331,7 @@ pub fn get_active_objects_system_at(
                     }
                     let mut inner_effects = effect_stacks
                         .get(id)
-                        .map(|stack| compute_effect_params_at(stack, current))
+                        .map(|stack| compute_effect_params_at(stack, current, world))
                         .unwrap_or_default();
                     for &i in inner_chain.iter().rev() {
                         let mut prefixed = controllers[i].effects.clone();
@@ -375,7 +375,7 @@ pub fn get_active_objects_system_at(
                         }
                         let mut stationary_effects = effect_stacks
                             .get(id)
-                            .map(|stack| compute_effect_params_at(stack, current))
+                            .map(|stack| compute_effect_params_at(stack, current, world))
                             .unwrap_or_default();
                         for &i in stationary_chain.iter().rev() {
                             let mut prefixed = controllers[i].effects.clone();

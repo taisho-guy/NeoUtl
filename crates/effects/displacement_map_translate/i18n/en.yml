@@ -1,0 +1,5 @@
+en:
+  effect_category:
+    Distortion: Distortion
+  effect_name:
+    displacement_map_translate: DisplacementMap(Translate)
