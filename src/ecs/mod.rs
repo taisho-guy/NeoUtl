@@ -11,8 +11,8 @@ use crate::document::{DocumentModel, MediaSourceDoc, ObjectDoc, ObjectPayload};
 use crate::ecs::types::EffectInstance;
 use audio_plugins::PluginChain;
 use components::{
-    AudioParams, FrameBufferControl, GroupControl, KeyframeTracks, KindId, Layer, MediaSource,
-    ObjectId, ParamAccess, PluginParams, SceneId, SceneObject, ShapeParams, TextContent, TimeRange,
+    AudioParams, GroupControl, KeyframeTracks, KindId, Layer, MediaSource, ObjectId, ParamAccess,
+    PluginParams, SceneId, SceneObject, ShapeParams, TextContent, TimeRange,
 };
 use effects::EffectStack;
 use resources::{
@@ -44,6 +44,7 @@ struct ObjectQueryViews<'v> {
     keyframes: View<'v, KeyframeTracks>,
     plugin_chains: View<'v, PluginChain>,
     scene_objects: View<'v, SceneObject>,
+    group_controls: View<'v, GroupControl>,
 }
 
 #[derive(Clone, Debug)]
@@ -232,32 +233,6 @@ impl EcsWorld {
         self.world.run(|mut controls: ViewMut<GroupControl>| {
             if let Ok(mut slot) = (&mut controls).get(entity) {
                 *slot = gc;
-            }
-        });
-    }
-
-    pub fn add_frame_buffer_object(
-        &mut self,
-        start: i32,
-        duration: i32,
-        kind_id: u32,
-        layer: i32,
-        fbc: FrameBufferControl,
-    ) -> usize {
-        let id = self.add_object(start, duration, kind_id, layer, None);
-        if let Some(entity) = self.find_entity(id) {
-            self.world.add_component(entity, fbc);
-        }
-        id
-    }
-
-    pub fn set_frame_buffer_control(&mut self, object_id: usize, fbc: FrameBufferControl) {
-        let Some(entity) = self.find_entity(object_id) else {
-            return;
-        };
-        self.world.run(|mut controls: ViewMut<FrameBufferControl>| {
-            if let Ok(mut slot) = (&mut controls).get(entity) {
-                *slot = fbc;
             }
         });
     }
@@ -735,6 +710,9 @@ impl EcsWorld {
             self.world
                 .add_component(entity, SceneObject { target_scene });
         }
+        if let Some(gc) = o.payload.group_control {
+            self.world.add_component(entity, gc);
+        }
         if !o.keyframes.is_empty() {
             self.world
                 .add_component(entity, KeyframeTracks(o.keyframes.clone()));
@@ -793,6 +771,7 @@ impl EcsWorld {
                         plugin_chain: views.plugin_chains.get(entity).ok().map(|c| c.0.clone()),
                         media: views.media.get(entity).ok().map(MediaSourceDoc::from),
                         scene: views.scene_objects.get(entity).ok().map(|s| s.target_scene),
+                        group_control: views.group_controls.get(entity).ok().copied(),
                     },
                 });
             }
@@ -1313,12 +1292,6 @@ impl EcsWorld {
             .run(|audio: View<AudioParams>| audio.get(entity).ok().copied())
     }
 
-    pub fn get_frame_buffer_control(&self, object_id: usize) -> Option<FrameBufferControl> {
-        let entity = self.find_entity(object_id)?;
-        self.world
-            .run(|controls: View<FrameBufferControl>| controls.get(entity).ok().copied())
-    }
-
     pub fn get_group_control(&self, object_id: usize) -> Option<GroupControl> {
         let entity = self.find_entity(object_id)?;
         self.world
@@ -1703,6 +1676,7 @@ impl EcsWorld {
                         plugin_chain: views.plugin_chains.get(entity).ok().map(|c| c.0.clone()),
                         media: views.media.get(entity).ok().map(MediaSourceDoc::from),
                         scene: views.scene_objects.get(entity).ok().map(|s| s.target_scene),
+                        group_control: views.group_controls.get(entity).ok().copied(),
                     },
                 });
             }

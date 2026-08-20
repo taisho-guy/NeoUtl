@@ -103,7 +103,6 @@ pub const TEXT_GROUP: &str = "テキスト";
 pub const SHAPE_GROUP: &str = "図形";
 pub const AUDIO_GROUP: &str = "オーディオ";
 pub const GROUP_CONTROL_GROUP: &str = "グループ制御";
-pub const FRAMEBUFFER_GROUP: &str = "フレームバッファ";
 
 pub const TRANSFORM_SCHEMA: &[ParamSchema] = &[
     float_stage(TRANSFORM_GROUP, "x", "X", Range::StageWidth),
@@ -157,13 +156,21 @@ pub const GROUP_CONTROL_SCHEMA: &[ParamSchema] = &[
         0.0,
         100.0,
     ),
+    bool_field(
+        GROUP_CONTROL_GROUP,
+        "generate_framebuffer",
+        "フレームバッファを生成",
+    ),
+    dep(
+        bool_field(
+            GROUP_CONTROL_GROUP,
+            "hide_captured",
+            "補足オブジェクトを描画しない",
+        ),
+        "generate_framebuffer",
+        1.0,
+    ),
 ];
-
-pub const FRAMEBUFFER_SCHEMA: &[ParamSchema] = &[bool_field(
-    FRAMEBUFFER_GROUP,
-    "clear_below",
-    "下位レイヤーをクリア",
-)];
 
 pub fn resolve_range(range: Range, stage_width: f32, stage_height: f32) -> (f32, f32) {
     match range {

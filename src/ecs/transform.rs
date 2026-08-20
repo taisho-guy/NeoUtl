@@ -165,6 +165,15 @@ pub fn rescale_for_source(global: &GlobalMatrix, source_w: f32, source_h: f32) -
     GlobalMatrix(m)
 }
 
+pub fn scale_to_pixels(global: &GlobalMatrix, width_px: f32, height_px: f32) -> GlobalMatrix {
+    let mut m = global.0;
+    for i in 0..4 {
+        m[i] *= width_px;
+        m[4 + i] *= height_px;
+    }
+    GlobalMatrix(m)
+}
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Projection {
     Perspective { fov_deg: f32 },
