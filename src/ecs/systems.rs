@@ -415,7 +415,11 @@ pub fn get_active_objects_system_at(
                 let chain_idx = resolve_group_chain(c.layer, &controllers, max_depth);
                 let chain_matrices: Vec<GlobalMatrix> =
                     chain_idx.iter().map(|&i| controllers[i].matrix).collect();
-                let own_matrix = rescale_for_source(&c.matrix, project_width, project_height);
+                let own_matrix = rescale_for_source(
+                    &c.matrix,
+                    project_width * neoutl_object_api::UNIT_SIZE_PX,
+                    project_height * neoutl_object_api::UNIT_SIZE_PX,
+                );
                 let matrix = compute_chained_matrix(&chain_matrices, &own_matrix);
                 let mvp = compute_mvp(
                     &matrix,
