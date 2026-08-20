@@ -1,7 +1,7 @@
 use super::EcsWorld;
 use crate::ecs::components::{
-    AudioParams, FrameBufferControl, GroupControl, KeyframeTracks, KindId, Layer, MediaSource,
-    ObjectId, SceneId, SceneObject, ShapeParams, TextContent, TimeRange,
+    AudioParams, GroupControl, KeyframeTracks, KindId, Layer, MediaSource, ObjectId, SceneId,
+    SceneObject, ShapeParams, TextContent, TimeRange,
 };
 use crate::ecs::effects::{EffectStack, compute_effect_params_at};
 use crate::ecs::resources::{
@@ -10,6 +10,7 @@ use crate::ecs::resources::{
 use crate::ecs::transform::{
     Camera, DEFAULT_FOV_DEG, GlobalMatrix, Projection, Transform, compute_chained_matrix,
     compute_global_matrix, compute_mvp, compute_relative_matrix, rescale_for_source,
+    scale_to_pixels,
 };
 use crate::ecs::types::Value;
 use crate::media::MediaKind;
@@ -18,14 +19,8 @@ use std::collections::HashMap;
 
 #[derive(Clone, Copy, Debug)]
 pub enum ComposeSource {
-    NestedScene {
-        target_scene: i32,
-        local_frame: i32,
-    },
-    FrameBuffer {
-        controller: EntityId,
-        clear_below: bool,
-    },
+    NestedScene { target_scene: i32, local_frame: i32 },
+    FrameBuffer { controller: EntityId },
 }
 
 #[derive(Clone)]
@@ -51,12 +46,6 @@ fn projection_for(_kind_id: u32) -> Projection {
     }
 }
 
-#[derive(Clone, Copy)]
-enum CurtainEffect {
-    Group,
-    FrameBuffer,
-}
-
 struct CurtainInfo {
     entity: EntityId,
     layer: i32,
@@ -64,28 +53,18 @@ struct CurtainInfo {
     matrix: GlobalMatrix,
     effects: Vec<(String, HashMap<String, Value>)>,
     opacity: f32,
-    kind: CurtainEffect,
-    clear_below: bool,
+    generate_framebuffer: bool,
+    hide_captured: bool,
 }
 
-fn curtain_covers_layer(
-    kind: CurtainEffect,
-    curtain_layer: i32,
-    span: (u32, u32),
-    target_layer: i32,
-) -> bool {
-    match kind {
-        CurtainEffect::Group => {
-            let (down, up) = span;
-            if target_layer > curtain_layer {
-                target_layer <= curtain_layer + down as i32
-            } else if target_layer < curtain_layer {
-                target_layer >= curtain_layer - up as i32
-            } else {
-                false
-            }
-        }
-        CurtainEffect::FrameBuffer => target_layer < curtain_layer,
+fn curtain_covers_layer(curtain_layer: i32, span: (u32, u32), target_layer: i32) -> bool {
+    let (down, up) = span;
+    if target_layer > curtain_layer {
+        target_layer <= curtain_layer + down as i32
+    } else if target_layer < curtain_layer {
+        target_layer >= curtain_layer - up as i32
+    } else {
+        false
     }
 }
 
@@ -101,7 +80,7 @@ fn resolve_group_chain(obj_layer: i32, controllers: &[CurtainInfo], max_depth: i
             if chain.contains(&idx) {
                 continue;
             }
-            if !curtain_covers_layer(c.kind, c.layer, c.span, cursor_layer) {
+            if !curtain_covers_layer(c.layer, c.span, cursor_layer) {
                 continue;
             }
             let dist = (cursor_layer - c.layer).abs();
@@ -142,7 +121,6 @@ type PayloadGroupViews<'v> = (
     View<'v, AudioParams>,
     View<'v, EffectStack>,
     View<'v, GroupControl>,
-    View<'v, FrameBufferControl>,
 );
 
 fn is_active_at(range: &TimeRange, scene: &SceneId, active_scene: i32, frame: i32) -> bool {
@@ -179,7 +157,6 @@ pub fn get_active_objects_system_at(
             _audio_params,
             effect_stacks,
             group_controls,
-            frame_buffer_controls,
         ): PayloadGroupViews| {
             let project_width = project.width.max(1) as f32;
             let project_height = project.height.max(1) as f32;
@@ -212,38 +189,8 @@ pub fn get_active_objects_system_at(
                     matrix: compute_relative_matrix(&transform),
                     effects,
                     opacity: transform.opacity,
-                    kind: CurtainEffect::Group,
-                    clear_below: false,
-                });
-            }
-            for (id, (range, scene, layer, fbc)) in
-                (&time_ranges, &scene_ids, &layers, &frame_buffer_controls)
-                    .iter()
-                    .with_id()
-            {
-                if scene.0 != active_scene
-                    || current < range.start_frame
-                    || current >= range.end_frame
-                {
-                    continue;
-                }
-                let mut transform = transforms.get(id).copied().unwrap_or_default();
-                if let Ok(kt) = keyframe_tracks.get(id) {
-                    kt.apply(&mut transform, current);
-                }
-                let effects = effect_stacks
-                    .get(id)
-                    .map(|stack| compute_effect_params_at(stack, current))
-                    .unwrap_or_default();
-                controllers.push(CurtainInfo {
-                    entity: id,
-                    layer: layer.0,
-                    span: (0, 0),
-                    matrix: compute_relative_matrix(&transform),
-                    effects,
-                    opacity: transform.opacity,
-                    kind: CurtainEffect::FrameBuffer,
-                    clear_below: fbc.clear_below,
+                    generate_framebuffer: gc.generate_framebuffer,
+                    hide_captured: gc.hide_captured,
                 });
             }
 
@@ -255,7 +202,7 @@ pub fn get_active_objects_system_at(
                 if !is_active_at(range, scene, active_scene, current) {
                     continue;
                 }
-                if group_controls.get(id).is_ok() || frame_buffer_controls.get(id).is_ok() {
+                if group_controls.get(id).is_ok() {
                     continue;
                 }
                 let keyframes = keyframe_tracks.get(id).ok();
@@ -360,66 +307,66 @@ pub fn get_active_objects_system_at(
                     layer: obj_layer,
                 };
 
-                let fb_pos = chain_idx.iter().position(|&i| {
-                    matches!(controllers[i].kind, CurtainEffect::FrameBuffer { .. })
-                });
+                let fb_pos = chain_idx
+                    .iter()
+                    .position(|&i| controllers[i].generate_framebuffer);
 
-                match fb_pos.map(|pos| (controllers[chain_idx[pos]].entity, pos)) {
-                    Some((controller, pos)) => {
-                        let inner_chain = &chain_idx[..pos];
-                        let inner_matrices: Vec<GlobalMatrix> =
-                            inner_chain.iter().map(|&i| controllers[i].matrix).collect();
-                        let inner_matrix = compute_chained_matrix(&inner_matrices, &local_matrix);
-                        let inner_mvp = compute_mvp(
-                            &inner_matrix,
-                            &camera,
-                            project_width,
-                            project_height,
-                            projection_for(kind.0),
-                        );
-                        let mut inner_opacity = transform.opacity;
-                        for &i in inner_chain {
-                            inner_opacity *= controllers[i].opacity;
-                        }
-                        let mut inner_effects = effect_stacks
-                            .get(id)
-                            .map(|stack| compute_effect_params_at(stack, current))
-                            .unwrap_or_default();
-                        for &i in inner_chain.iter().rev() {
-                            let mut prefixed = controllers[i].effects.clone();
-                            prefixed.append(&mut inner_effects);
-                            inner_effects = prefixed;
-                        }
-                        let captured_object = ActiveObject {
-                            mvp: inner_mvp,
-                            opacity: inner_opacity,
-                            effects: inner_effects,
-                            ..active_object.clone()
-                        };
-                        captured
-                            .entry(controller)
-                            .or_default()
-                            .push(captured_object);
+                if let Some(pos) = fb_pos {
+                    let controller = controllers[chain_idx[pos]].entity;
+                    let hide_captured = controllers[chain_idx[pos]].hide_captured;
+                    let inner_chain = &chain_idx[..pos];
+                    let inner_matrices: Vec<GlobalMatrix> =
+                        inner_chain.iter().map(|&i| controllers[i].matrix).collect();
+                    let inner_matrix = compute_chained_matrix(&inner_matrices, &local_matrix);
+                    let inner_mvp = compute_mvp(
+                        &inner_matrix,
+                        &camera,
+                        project_width,
+                        project_height,
+                        projection_for(kind.0),
+                    );
+                    let mut inner_opacity = transform.opacity;
+                    for &i in inner_chain {
+                        inner_opacity *= controllers[i].opacity;
                     }
-                    None => active.push(active_object),
+                    let mut inner_effects = effect_stacks
+                        .get(id)
+                        .map(|stack| compute_effect_params_at(stack, current))
+                        .unwrap_or_default();
+                    for &i in inner_chain.iter().rev() {
+                        let mut prefixed = controllers[i].effects.clone();
+                        prefixed.append(&mut inner_effects);
+                        inner_effects = prefixed;
+                    }
+                    let captured_object = ActiveObject {
+                        mvp: inner_mvp,
+                        opacity: inner_opacity,
+                        effects: inner_effects,
+                        ..active_object.clone()
+                    };
+                    captured
+                        .entry(controller)
+                        .or_default()
+                        .push(captured_object);
+                    if !hide_captured {
+                        active.push(active_object);
+                    }
+                } else {
+                    active.push(active_object);
                 }
             }
 
             for c in controllers.iter() {
-                let CurtainEffect::FrameBuffer = c.kind else {
+                if !c.generate_framebuffer {
                     continue;
-                };
+                }
                 let Ok(kind) = kind_ids.get(c.entity) else {
                     continue;
                 };
                 let chain_idx = resolve_group_chain(c.layer, &controllers, max_depth);
                 let chain_matrices: Vec<GlobalMatrix> =
                     chain_idx.iter().map(|&i| controllers[i].matrix).collect();
-                let own_matrix = rescale_for_source(
-                    &c.matrix,
-                    project_width * neoutl_object_api::UNIT_SIZE_PX,
-                    project_height * neoutl_object_api::UNIT_SIZE_PX,
-                );
+                let own_matrix = scale_to_pixels(&c.matrix, project_width, project_height);
                 let matrix = compute_chained_matrix(&chain_matrices, &own_matrix);
                 let mvp = compute_mvp(
                     &matrix,
@@ -450,7 +397,6 @@ pub fn get_active_objects_system_at(
                     effects,
                     compose_source: Some(ComposeSource::FrameBuffer {
                         controller: c.entity,
-                        clear_below: c.clear_below,
                     }),
                     layer: c.layer,
                 });
@@ -679,6 +625,8 @@ mod tests {
         let gc = GroupControl {
             layer_count_down: 1,
             layer_count_up: 0,
+            generate_framebuffer: false,
+            hide_captured: false,
         };
         let gc_id = world.add_group_control_object(0, 30, KIND_GROUP_CONTROL, 0, gc);
         world.set_layer(gc_id, 0);
@@ -707,6 +655,8 @@ mod tests {
         let gc = GroupControl {
             layer_count_down: 0,
             layer_count_up: 1,
+            generate_framebuffer: false,
+            hide_captured: false,
         };
         let gc_id = world.add_group_control_object(0, 30, KIND_GROUP_CONTROL, 0, gc);
         world.set_layer(gc_id, 5);
@@ -727,5 +677,86 @@ mod tests {
             .unwrap();
         assert_ne!(above_obj.mvp[12], 0.0);
         assert_eq!(out_obj.mvp[12], 0.0);
+    }
+
+    #[test]
+    fn framebuffer_capture_respects_span_and_keeps_visible_by_default() {
+        let mut world = EcsWorld::new();
+        let gc = GroupControl {
+            layer_count_down: 1,
+            layer_count_up: 0,
+            generate_framebuffer: true,
+            hide_captured: false,
+        };
+        let gc_id = world.add_group_control_object(0, 30, KIND_GROUP_CONTROL, 0, gc);
+        world.set_layer(gc_id, 1);
+        let captured_child = world.add_object(0, 30, KIND_TEXT, 0, Some(TextContent::default()));
+        world.set_layer(captured_child, 0);
+        let out_of_span = world.add_object(0, 30, KIND_TEXT, -1, Some(TextContent::default()));
+        world.set_layer(out_of_span, -1);
+        world.set_current_frame(0);
+        let (active, captured) = get_active_objects_system(&world);
+
+        let entity = world.find_entity(gc_id).expect("entity存在前提");
+        let captured_list = captured.get(&entity).expect("捕捉対象存在前提");
+        assert_eq!(captured_list.len(), 1);
+        assert_eq!(captured_list[0].clip_instance, captured_child as u64);
+
+        assert!(
+            active
+                .iter()
+                .any(|a| a.clip_instance == captured_child as u64),
+            "hide_captured=false時は通常経路にも残存"
+        );
+        assert!(
+            active.iter().any(|a| a.clip_instance == out_of_span as u64),
+            "span範囲外オブジェクトは非捕捉かつ通常描画継続"
+        );
+    }
+
+    #[test]
+    fn framebuffer_hide_captured_removes_from_active() {
+        let mut world = EcsWorld::new();
+        let gc = GroupControl {
+            layer_count_down: 1,
+            layer_count_up: 0,
+            generate_framebuffer: true,
+            hide_captured: true,
+        };
+        let gc_id = world.add_group_control_object(0, 30, KIND_GROUP_CONTROL, 0, gc);
+        world.set_layer(gc_id, 1);
+        let captured_child = world.add_object(0, 30, KIND_TEXT, 0, Some(TextContent::default()));
+        world.set_layer(captured_child, 0);
+        world.set_current_frame(0);
+        let (active, captured) = get_active_objects_system(&world);
+
+        let entity = world.find_entity(gc_id).expect("entity存在前提");
+        assert_eq!(captured.get(&entity).map(Vec::len), Some(1));
+        assert!(
+            !active
+                .iter()
+                .any(|a| a.clip_instance == captured_child as u64),
+            "hide_captured=true時は通常経路から除外"
+        );
+    }
+
+    #[test]
+    fn plain_group_control_never_captures() {
+        let mut world = EcsWorld::new();
+        let gc = GroupControl {
+            layer_count_down: 1,
+            layer_count_up: 0,
+            generate_framebuffer: false,
+            hide_captured: false,
+        };
+        let gc_id = world.add_group_control_object(0, 30, KIND_GROUP_CONTROL, 0, gc);
+        world.set_layer(gc_id, 1);
+        let child = world.add_object(0, 30, KIND_TEXT, 0, Some(TextContent::default()));
+        world.set_layer(child, 0);
+        world.set_current_frame(0);
+        let (active, captured) = get_active_objects_system(&world);
+
+        assert!(captured.is_empty(), "非FBOグループは捕捉対象を生成しない");
+        assert!(active.iter().any(|a| a.clip_instance == child as u64));
     }
 }

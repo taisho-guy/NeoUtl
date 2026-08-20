@@ -34,6 +34,8 @@ pub struct SceneObject {
 pub struct GroupControl {
     pub layer_count_down: u32,
     pub layer_count_up: u32,
+    pub generate_framebuffer: bool,
+    pub hide_captured: bool,
 }
 
 impl Default for GroupControl {
@@ -41,6 +43,8 @@ impl Default for GroupControl {
         Self {
             layer_count_down: 1,
             layer_count_up: 0,
+            generate_framebuffer: false,
+            hide_captured: false,
         }
     }
 }
@@ -50,35 +54,15 @@ impl ParamAccess for GroupControl {
         Some(match key {
             "layer_count_down" => self.layer_count_down as f32,
             "layer_count_up" => self.layer_count_up as f32,
-            _ => return None,
-        })
-    }
-    fn set_param(&mut self, key: &str, value: f32) -> bool {
-        match key {
-            "layer_count_down" => self.layer_count_down = value.max(0.0) as u32,
-            "layer_count_up" => self.layer_count_up = value.max(0.0) as u32,
-            _ => return false,
-        }
-        true
-    }
-}
-
-#[derive(Clone, Copy, Debug, Component, Serialize, Deserialize)]
-pub struct FrameBufferControl {
-    pub clear_below: bool,
-}
-
-impl Default for FrameBufferControl {
-    fn default() -> Self {
-        Self { clear_below: false }
-    }
-}
-
-impl ParamAccess for FrameBufferControl {
-    fn get_param(&self, key: &str) -> Option<f32> {
-        Some(match key {
-            "clear_below" => {
-                if self.clear_below {
+            "generate_framebuffer" => {
+                if self.generate_framebuffer {
+                    1.0
+                } else {
+                    0.0
+                }
+            }
+            "hide_captured" => {
+                if self.hide_captured {
                     1.0
                 } else {
                     0.0
@@ -89,7 +73,10 @@ impl ParamAccess for FrameBufferControl {
     }
     fn set_param(&mut self, key: &str, value: f32) -> bool {
         match key {
-            "clear_below" => self.clear_below = value > 0.5,
+            "layer_count_down" => self.layer_count_down = value.max(0.0) as u32,
+            "layer_count_up" => self.layer_count_up = value.max(0.0) as u32,
+            "generate_framebuffer" => self.generate_framebuffer = value > 0.5,
+            "hide_captured" => self.hide_captured = value > 0.5,
             _ => return false,
         }
         true

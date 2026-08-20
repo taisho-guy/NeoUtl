@@ -1,8 +1,6 @@
 use super::TimelineWindow;
 use crate::app_state::{self, SharedAppState};
-use crate::ecs::components::{
-    FrameBufferControl, GroupControl, MediaSource, ShapeParams, TextContent,
-};
+use crate::ecs::components::{GroupControl, MediaSource, ShapeParams, TextContent};
 use crate::localization::tr;
 use crate::objects::registry;
 use crate::ui::preview::PreviewPanel;
@@ -118,18 +116,6 @@ impl TimelineWindow {
                 let world_holder = app_state::active_world(state);
                 let mut world = world_holder.lock().unwrap();
                 world.add_group_control_object(start, 90, kind_id, layer, GroupControl::default());
-            }
-            "Frame Buffer" => {
-                app_state::snapshot_before_edit(state);
-                let world_holder = app_state::active_world(state);
-                let mut world = world_holder.lock().unwrap();
-                world.add_frame_buffer_object(
-                    start,
-                    90,
-                    kind_id,
-                    layer,
-                    FrameBufferControl::default(),
-                );
             }
             _ => {
                 app_state::snapshot_before_edit(state);

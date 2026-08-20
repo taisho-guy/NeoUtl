@@ -1674,17 +1674,9 @@ impl RenderEngine {
                                 None,
                             )
                         }),
-                        Some(crate::ecs::systems::ComposeSource::FrameBuffer {
-                            controller,
-                            clear_below,
-                        }) => {
+                        Some(crate::ecs::systems::ComposeSource::FrameBuffer { controller }) => {
                             let empty = Vec::new();
                             let objects = captured.get(&controller).unwrap_or(&empty);
-                            let clear_override = Some(if clear_below {
-                                wgpu::Color::BLACK
-                            } else {
-                                wgpu::Color::TRANSPARENT
-                            });
                             self.render_composed_texture(
                                 world,
                                 objects,
@@ -1693,7 +1685,7 @@ impl RenderEngine {
                                 self.render_height,
                                 ComposeCacheKey::FrameBuffer(controller),
                                 depth + 1,
-                                clear_override,
+                                None,
                             )
                         }
                         None => None,
