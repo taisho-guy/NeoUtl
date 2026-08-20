@@ -349,7 +349,45 @@ pub fn get_active_objects_system_at(
                         .or_default()
                         .push(captured_object);
                     if !hide_captured {
-                        active.push(active_object);
+                        let stationary_chain: Vec<usize> = chain_idx
+                            .iter()
+                            .copied()
+                            .enumerate()
+                            .filter(|&(i, _)| i != pos)
+                            .map(|(_, v)| v)
+                            .collect();
+                        let stationary_matrices: Vec<GlobalMatrix> = stationary_chain
+                            .iter()
+                            .map(|&i| controllers[i].matrix)
+                            .collect();
+                        let stationary_matrix =
+                            compute_chained_matrix(&stationary_matrices, &local_matrix);
+                        let stationary_mvp = compute_mvp(
+                            &stationary_matrix,
+                            &camera,
+                            project_width,
+                            project_height,
+                            projection_for(kind.0),
+                        );
+                        let mut stationary_opacity = transform.opacity;
+                        for &i in &stationary_chain {
+                            stationary_opacity *= controllers[i].opacity;
+                        }
+                        let mut stationary_effects = effect_stacks
+                            .get(id)
+                            .map(|stack| compute_effect_params_at(stack, current))
+                            .unwrap_or_default();
+                        for &i in stationary_chain.iter().rev() {
+                            let mut prefixed = controllers[i].effects.clone();
+                            prefixed.append(&mut stationary_effects);
+                            stationary_effects = prefixed;
+                        }
+                        active.push(ActiveObject {
+                            mvp: stationary_mvp,
+                            opacity: stationary_opacity,
+                            effects: stationary_effects,
+                            ..active_object
+                        });
                     }
                 } else {
                     active.push(active_object);
