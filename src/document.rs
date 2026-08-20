@@ -52,7 +52,7 @@ pub struct ObjectPayload {
 pub struct ObjectDoc {
     pub id: usize,
     pub scene_id: i32,
-    pub kind_id: u32,
+    pub kind_stable_id: String,
     pub layer: i32,
     pub start_frame: i32,
     pub end_frame: i32,

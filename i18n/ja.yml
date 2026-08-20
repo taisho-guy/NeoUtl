@@ -84,6 +84,8 @@
 "[NeoUtl] エフェクト再ロード完了: %{arg0}": "[NeoUtl] エフェクト再ロード完了: %{arg0}"
 "[NeoUtl] エフェクト登録: %{arg0} (%{arg1}) [%{arg2}]": "[NeoUtl] エフェクト登録: %{arg0} (%{arg1}) [%{arg2}]"
 "[NeoUtl] エフェクト読み込み失敗 %{arg0}: %{arg1}": "[NeoUtl] エフェクト読み込み失敗 %{arg0}: %{arg1}"
+"[NeoUtl] オブジェクト %{arg0} の kind_id=%{arg1} を stable_id へ解決不能、空値で保存": "[NeoUtl] オブジェクト %{arg0} の kind_id=%{arg1} を stable_id へ解決不能、空値で保存"
+"[NeoUtl] オブジェクト %{arg0} のプラグイン未検出、無描画で保持: stable_id=%{arg1}": "[NeoUtl] オブジェクト %{arg0} のプラグイン未検出、無描画で保持: stable_id=%{arg1}"
 "[NeoUtl] オブジェクトプラグインのシェーダコンパイル失敗、除外して継続: kind_id=%{arg0} name=%{arg1} 理由=%{arg2}": "[NeoUtl] オブジェクトプラグインのシェーダコンパイル失敗、除外して継続: kind_id=%{arg0} name=%{arg1} 理由=%{arg2}"
 "[NeoUtl] オートセーブ失敗": "[NeoUtl] オートセーブ失敗"
 "[NeoUtl] カーブプリセット保存失敗 %{arg0}: %{arg1}": "[NeoUtl] カーブプリセット保存失敗 %{arg0}: %{arg1}"

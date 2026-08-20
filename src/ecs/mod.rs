@@ -8,6 +8,23 @@ pub mod transform;
 pub mod types;
 
 use crate::document::{DocumentModel, MediaSourceDoc, ObjectDoc, ObjectPayload};
+
+fn resolve_stable_id(kind_id: u32, object_id: usize) -> String {
+    match crate::objects::loader::by_kind_id(kind_id) {
+        Some(plugin) => plugin.stable_id.clone(),
+        None => {
+            eprintln!(
+                "{}",
+                t!(
+                    "[NeoUtl] オブジェクト %{arg0} の kind_id=%{arg1} を stable_id へ解決不能、空値で保存",
+                    arg0 = format!("{}", object_id),
+                    arg1 = format!("{}", kind_id)
+                )
+            );
+            String::new()
+        }
+    }
+}
 use crate::ecs::types::EffectInstance;
 use audio_plugins::PluginChain;
 use components::{
@@ -675,20 +692,37 @@ impl EcsWorld {
     }
 
     fn spawn_object_from_doc(&mut self, o: &ObjectDoc) -> shipyard::EntityId {
+        let kind_id = match crate::objects::loader::by_stable_id(&o.kind_stable_id) {
+            Some(plugin) => plugin.kind_id,
+            None => {
+                eprintln!(
+                    "{}",
+                    t!(
+                        "[NeoUtl] オブジェクト %{arg0} のプラグイン未検出、無描画で保持: stable_id=%{arg1}",
+                        arg0 = format!("{}", o.id),
+                        arg1 = format!("{}", o.kind_stable_id)
+                    )
+                );
+                crate::objects::loader::UNRESOLVED_KIND_ID
+            }
+        };
+        let is_audio_kind = o.kind_stable_id == neoutl_object_api::AUDIO_STABLE_ID;
         let entity = self.world.add_entity((
             ObjectId(o.id),
             TimeRange {
                 start_frame: o.start_frame,
                 end_frame: o.end_frame,
             },
-            KindId(o.kind_id),
+            KindId(kind_id),
             Layer(o.layer),
             SceneId(o.scene_id),
             o.transform,
             GlobalMatrix::default(),
-            o.audio,
             EffectStack(o.effects.clone()),
         ));
+        if is_audio_kind {
+            self.world.add_component(entity, o.audio);
+        }
         if let Some(t) = &o.payload.text {
             self.world.add_component(entity, t.clone());
         }
@@ -748,7 +782,7 @@ impl EcsWorld {
                 docs.push(ObjectDoc {
                     id: id.0,
                     scene_id: scene.0,
-                    kind_id: kind.0,
+                    kind_stable_id: resolve_stable_id(kind.0, id.0),
                     layer: layer.0,
                     start_frame: range.start_frame,
                     end_frame: range.end_frame,
@@ -1292,6 +1326,19 @@ impl EcsWorld {
             .run(|audio: View<AudioParams>| audio.get(entity).ok().copied())
     }
 
+    pub fn is_audio_object(&self, object_id: usize) -> bool {
+        let Some(entity) = self.find_entity(object_id) else {
+            return false;
+        };
+        self.world.run(|kind_ids: View<KindId>| {
+            kind_ids
+                .get(entity)
+                .ok()
+                .and_then(|k| crate::objects::loader::by_kind_id(k.0))
+                .is_some_and(|p| p.stable_id == neoutl_object_api::AUDIO_STABLE_ID)
+        })
+    }
+
     pub fn get_group_control(&self, object_id: usize) -> Option<GroupControl> {
         let entity = self.find_entity(object_id)?;
         self.world
@@ -1653,7 +1700,7 @@ impl EcsWorld {
                 objs.push(ObjectDoc {
                     id: id.0,
                     scene_id: scene.0,
-                    kind_id: kind.0,
+                    kind_stable_id: resolve_stable_id(kind.0, id.0),
                     layer: layer.0,
                     start_frame: range.start_frame,
                     end_frame: range.end_frame,
