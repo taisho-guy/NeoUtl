@@ -3496,6 +3496,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "neoutl-effect-mask-shape"
+version = "0.0.0"
+dependencies = [
+ "neoutl-effect-api",
+ "neoutl-effect-shader-build",
+ "rust-i18n",
+]
+
+[[package]]
 name = "neoutl-effect-mosaic"
 version = "0.0.0"
 dependencies = [

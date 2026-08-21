@@ -1,7 +1,7 @@
 use super::EcsWorld;
 use crate::ecs::components::{
-    AudioParams, GroupControl, KeyframeTracks, KindId, Layer, MediaSource, ObjectId, SceneId,
-    SceneObject, ShapeParams, TextContent, TimeRange,
+    AudioParams, ClipMode, ClippingControl, GroupControl, KeyframeTracks, KindId, Layer,
+    MediaSource, ObjectId, SceneId, SceneObject, ShapeParams, TextContent, TimeRange,
 };
 use crate::ecs::effects::{EffectStack, compute_effect_params_at};
 use crate::ecs::resources::{
@@ -17,10 +17,21 @@ use crate::media::MediaKind;
 use shipyard::{EntityId, Get, IntoIter, UniqueView, View};
 use std::collections::HashMap;
 
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum FrameBufferKind {
+    Group,
+    Clip {
+        mode: ClipMode,
+        chroma_hue: f32,
+        chroma_tolerance: f32,
+        blend_edge: bool,
+    },
+}
+
 #[derive(Clone, Copy, Debug)]
 pub enum ComposeSource {
     NestedScene { target_scene: i32, local_frame: i32 },
-    FrameBuffer { controller: EntityId },
+    FrameBuffer { controller: EntityId, kind: FrameBufferKind },
 }
 
 #[derive(Clone)]
@@ -46,6 +57,20 @@ fn projection_for(_kind_id: u32) -> Projection {
     }
 }
 
+#[derive(Clone, Copy)]
+enum ControllerKind {
+    Group {
+        generate_framebuffer: bool,
+        hide_captured: bool,
+    },
+    Clip {
+        mode: ClipMode,
+        chroma_hue: f32,
+        chroma_tolerance: f32,
+        blend_edge: bool,
+    },
+}
+
 struct CurtainInfo {
     entity: EntityId,
     layer: i32,
@@ -53,8 +78,26 @@ struct CurtainInfo {
     matrix: GlobalMatrix,
     effects: Vec<(String, HashMap<String, Value>)>,
     opacity: f32,
-    generate_framebuffer: bool,
-    hide_captured: bool,
+    kind: ControllerKind,
+}
+
+impl CurtainInfo {
+    fn requires_fb(&self) -> bool {
+        match self.kind {
+            ControllerKind::Group {
+                generate_framebuffer,
+                ..
+            } => generate_framebuffer,
+            ControllerKind::Clip { .. } => true,
+        }
+    }
+
+    fn hide_captured(&self) -> bool {
+        match self.kind {
+            ControllerKind::Group { hide_captured, .. } => hide_captured,
+            ControllerKind::Clip { .. } => false,
+        }
+    }
 }
 
 fn curtain_covers_layer(curtain_layer: i32, span: (u32, u32), target_layer: i32) -> bool {
@@ -121,6 +164,7 @@ type PayloadGroupViews<'v> = (
     View<'v, AudioParams>,
     View<'v, EffectStack>,
     View<'v, GroupControl>,
+    View<'v, ClippingControl>,
 );
 
 fn is_active_at(range: &TimeRange, scene: &SceneId, active_scene: i32, frame: i32) -> bool {
@@ -157,6 +201,7 @@ pub fn get_active_objects_system_at(
             _audio_params,
             effect_stacks,
             group_controls,
+            clipping_controls,
         ): PayloadGroupViews| {
             let project_width = project.width.max(1) as f32;
             let project_height = project.height.max(1) as f32;
@@ -189,8 +234,44 @@ pub fn get_active_objects_system_at(
                     matrix: compute_relative_matrix(&transform),
                     effects,
                     opacity: transform.opacity,
-                    generate_framebuffer: gc.generate_framebuffer,
-                    hide_captured: gc.hide_captured,
+                    kind: ControllerKind::Group {
+                        generate_framebuffer: gc.generate_framebuffer,
+                        hide_captured: gc.hide_captured,
+                    },
+                });
+            }
+            for (id, (range, scene, layer, cc)) in
+                (&time_ranges, &scene_ids, &layers, &clipping_controls)
+                    .iter()
+                    .with_id()
+            {
+                if scene.0 != active_scene
+                    || current < range.start_frame
+                    || current >= range.end_frame
+                {
+                    continue;
+                }
+                let mut transform = transforms.get(id).copied().unwrap_or_default();
+                if let Ok(kt) = keyframe_tracks.get(id) {
+                    kt.apply(&mut transform, current);
+                }
+                let effects = effect_stacks
+                    .get(id)
+                    .map(|stack| compute_effect_params_at(stack, current, world))
+                    .unwrap_or_default();
+                controllers.push(CurtainInfo {
+                    entity: id,
+                    layer: layer.0,
+                    span: (cc.layer_count_down, cc.layer_count_up),
+                    matrix: compute_relative_matrix(&transform),
+                    effects,
+                    opacity: transform.opacity,
+                    kind: ControllerKind::Clip {
+                        mode: cc.mode,
+                        chroma_hue: cc.chroma_hue,
+                        chroma_tolerance: cc.chroma_tolerance,
+                        blend_edge: cc.blend_edge,
+                    },
                 });
             }
 
@@ -307,13 +388,11 @@ pub fn get_active_objects_system_at(
                     layer: obj_layer,
                 };
 
-                let fb_pos = chain_idx
-                    .iter()
-                    .position(|&i| controllers[i].generate_framebuffer);
+                let fb_pos = chain_idx.iter().position(|&i| controllers[i].requires_fb());
 
                 if let Some(pos) = fb_pos {
                     let controller = controllers[chain_idx[pos]].entity;
-                    let hide_captured = controllers[chain_idx[pos]].hide_captured;
+                    let hide_captured = controllers[chain_idx[pos]].hide_captured();
                     let inner_chain = &chain_idx[..pos];
                     let inner_matrices: Vec<GlobalMatrix> =
                         inner_chain.iter().map(|&i| controllers[i].matrix).collect();
@@ -395,7 +474,7 @@ pub fn get_active_objects_system_at(
             }
 
             for c in controllers.iter() {
-                if !c.generate_framebuffer {
+                if !c.requires_fb() {
                     continue;
                 }
                 let Ok(kind) = kind_ids.get(c.entity) else {
@@ -435,6 +514,20 @@ pub fn get_active_objects_system_at(
                     effects,
                     compose_source: Some(ComposeSource::FrameBuffer {
                         controller: c.entity,
+                        kind: match c.kind {
+                            ControllerKind::Group { .. } => FrameBufferKind::Group,
+                            ControllerKind::Clip {
+                                mode,
+                                chroma_hue,
+                                chroma_tolerance,
+                                blend_edge,
+                            } => FrameBufferKind::Clip {
+                                mode,
+                                chroma_hue,
+                                chroma_tolerance,
+                                blend_edge,
+                            },
+                        },
                     }),
                     layer: c.layer,
                 });

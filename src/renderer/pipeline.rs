@@ -76,6 +76,9 @@ pub struct RenderEngine {
     effect_object_depth: wgpu::Texture,
     composite_pipeline: wgpu::RenderPipeline,
     composite_bind_group_layout: wgpu::BindGroupLayout,
+    clip_composite_pipeline: wgpu::RenderPipeline,
+    clip_composite_bind_group_layout: wgpu::BindGroupLayout,
+    clip_uniform_buffer: wgpu::Buffer,
     media_pipeline: wgpu::RenderPipeline,
     media_bind_group_layout: wgpu::BindGroupLayout,
     media_uniform_buffer: wgpu::Buffer,
@@ -649,6 +652,85 @@ fn fs_main(in: VOut) -> FOut {
 }
 "#;
 
+const CLIP_COMPOSITE_WGSL: &str = r#"
+struct VOut {
+    @builtin(position) position: vec4<f32>,
+    @location(0) uv: vec2<f32>,
+};
+
+@vertex
+fn vs_main(@builtin(vertex_index) vertex_index: u32) -> VOut {
+    var uv = vec2<f32>(f32((vertex_index << 1u) & 2u), f32(vertex_index & 2u));
+    var out: VOut;
+    out.position = vec4<f32>(uv * vec2<f32>(2.0, -2.0) + vec2<f32>(-1.0, 1.0), 0.0, 1.0);
+    out.uv = uv;
+    return out;
+}
+
+struct ClipUniform {
+    mode: u32,
+    chroma_hue: f32,
+    chroma_tolerance: f32,
+    blend_edge: u32,
+};
+
+@group(0) @binding(0) var content_tex: texture_2d<f32>;
+@group(0) @binding(1) var mold_tex: texture_2d<f32>;
+@group(0) @binding(2) var clip_sampler: sampler;
+@group(0) @binding(3) var content_depth: texture_depth_2d;
+@group(0) @binding(4) var<uniform> u: ClipUniform;
+
+fn rgb_to_hue(c: vec3<f32>) -> f32 {
+    let mx = max(c.r, max(c.g, c.b));
+    let mn = min(c.r, min(c.g, c.b));
+    let delta = mx - mn;
+    if (delta == 0.0) {
+        return 0.0;
+    }
+    if (mx == c.r) {
+        return 60.0 * (((c.g - c.b) / delta) % 6.0);
+    }
+    if (mx == c.g) {
+        return 60.0 * ((c.b - c.r) / delta + 2.0);
+    }
+    return 60.0 * ((c.r - c.g) / delta + 4.0);
+}
+
+fn hue_distance(a: f32, b: f32) -> f32 {
+    let d = ((a - b) % 360.0 + 360.0) % 360.0;
+    return min(d, 360.0 - d);
+}
+
+struct FOut {
+    @location(0) color: vec4<f32>,
+    @builtin(frag_depth) depth: f32,
+};
+
+@fragment
+fn fs_main(in: VOut) -> FOut {
+    let content = textureSample(content_tex, clip_sampler, in.uv);
+    let mold = textureSample(mold_tex, clip_sampler, in.uv);
+    var mask: f32;
+    switch (u.mode) {
+        case 0u: { mask = mold.a; }
+        case 1u: { mask = 1.0 - mold.a; }
+        case 2u: { mask = dot(mold.rgb, vec3<f32>(0.2126, 0.7152, 0.0722)); }
+        case 3u: { mask = 1.0 - dot(mold.rgb, vec3<f32>(0.2126, 0.7152, 0.0722)); }
+        default: {
+            let d = hue_distance(rgb_to_hue(mold.rgb), u.chroma_hue);
+            mask = select(0.0, 1.0, d > u.chroma_tolerance);
+        }
+    }
+    if (u.blend_edge == 0u) {
+        mask = select(0.0, 1.0, mask > 0.5);
+    }
+    var out: FOut;
+    out.color = vec4<f32>(content.rgb, content.a * mask);
+    out.depth = textureLoad(content_depth, vec2<i32>(in.position.xy), 0);
+    return out;
+}
+"#;
+
 fn create_composite_bind_group_layout(device: &wgpu::Device) -> wgpu::BindGroupLayout {
     device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
         label: Some("Composite BGL"),
@@ -683,6 +765,60 @@ fn create_composite_bind_group_layout(device: &wgpu::Device) -> wgpu::BindGroupL
     })
 }
 
+fn create_clip_composite_bind_group_layout(device: &wgpu::Device) -> wgpu::BindGroupLayout {
+    device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+        label: Some("Clip Composite BGL"),
+        entries: &[
+            wgpu::BindGroupLayoutEntry {
+                binding: 0,
+                visibility: wgpu::ShaderStages::FRAGMENT,
+                ty: wgpu::BindingType::Texture {
+                    sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                    view_dimension: wgpu::TextureViewDimension::D2,
+                    multisampled: false,
+                },
+                count: None,
+            },
+            wgpu::BindGroupLayoutEntry {
+                binding: 1,
+                visibility: wgpu::ShaderStages::FRAGMENT,
+                ty: wgpu::BindingType::Texture {
+                    sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                    view_dimension: wgpu::TextureViewDimension::D2,
+                    multisampled: false,
+                },
+                count: None,
+            },
+            wgpu::BindGroupLayoutEntry {
+                binding: 2,
+                visibility: wgpu::ShaderStages::FRAGMENT,
+                ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                count: None,
+            },
+            wgpu::BindGroupLayoutEntry {
+                binding: 3,
+                visibility: wgpu::ShaderStages::FRAGMENT,
+                ty: wgpu::BindingType::Texture {
+                    sample_type: wgpu::TextureSampleType::Depth,
+                    view_dimension: wgpu::TextureViewDimension::D2,
+                    multisampled: false,
+                },
+                count: None,
+            },
+            wgpu::BindGroupLayoutEntry {
+                binding: 4,
+                visibility: wgpu::ShaderStages::FRAGMENT,
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Uniform,
+                    has_dynamic_offset: false,
+                    min_binding_size: None,
+                },
+                count: None,
+            },
+        ],
+    })
+}
+
 fn build_composite_pipeline(
     device: &wgpu::Device,
     layout: &wgpu::PipelineLayout,
@@ -693,6 +829,51 @@ fn build_composite_pipeline(
     });
     device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
         label: Some("Composite"),
+        layout: Some(layout),
+        vertex: wgpu::VertexState {
+            module: &shader,
+            entry_point: Some("vs_main"),
+            buffers: &[],
+            compilation_options: wgpu::PipelineCompilationOptions::default(),
+        },
+        fragment: Some(wgpu::FragmentState {
+            module: &shader,
+            entry_point: Some("fs_main"),
+            targets: &[Some(wgpu::ColorTargetState {
+                format: wgpu::TextureFormat::Rgba16Float,
+                blend: Some(wgpu::BlendState::ALPHA_BLENDING),
+                write_mask: wgpu::ColorWrites::ALL,
+            })],
+            compilation_options: wgpu::PipelineCompilationOptions::default(),
+        }),
+        primitive: wgpu::PrimitiveState {
+            topology: wgpu::PrimitiveTopology::TriangleList,
+            cull_mode: None,
+            ..Default::default()
+        },
+        depth_stencil: Some(wgpu::DepthStencilState {
+            format: DEPTH_FORMAT,
+            depth_write_enabled: Some(true),
+            depth_compare: Some(wgpu::CompareFunction::LessEqual),
+            stencil: wgpu::StencilState::default(),
+            bias: wgpu::DepthBiasState::default(),
+        }),
+        multisample: wgpu::MultisampleState::default(),
+        multiview_mask: None,
+        cache: None,
+    })
+}
+
+fn build_clip_composite_pipeline(
+    device: &wgpu::Device,
+    layout: &wgpu::PipelineLayout,
+) -> wgpu::RenderPipeline {
+    let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+        label: Some("Clip Composite"),
+        source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(CLIP_COMPOSITE_WGSL)),
+    });
+    device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+        label: Some("Clip Composite"),
         layout: Some(layout),
         vertex: wgpu::VertexState {
             module: &shader,
@@ -884,6 +1065,22 @@ impl RenderEngine {
             });
         let composite_pipeline = build_composite_pipeline(&device, &composite_pipeline_layout);
 
+        let clip_composite_bind_group_layout = create_clip_composite_bind_group_layout(&device);
+        let clip_composite_pipeline_layout =
+            device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                label: Some("Clip Composite Pipeline Layout"),
+                bind_group_layouts: &[Some(&clip_composite_bind_group_layout)],
+                immediate_size: 0,
+            });
+        let clip_composite_pipeline =
+            build_clip_composite_pipeline(&device, &clip_composite_pipeline_layout);
+        let clip_uniform_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("Clip Uniform Buffer"),
+            size: 16,
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+
         let media_bind_group_layout = create_media_bind_group_layout(&device);
         let media_pipeline_layout =
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
@@ -980,6 +1177,9 @@ impl RenderEngine {
             effect_object_depth,
             composite_pipeline,
             composite_bind_group_layout,
+            clip_composite_pipeline,
+            clip_composite_bind_group_layout,
+            clip_uniform_buffer,
             media_pipeline,
             media_bind_group_layout,
             media_uniform_buffer,
@@ -1651,7 +1851,107 @@ impl RenderEngine {
         crate::gpu_shared::locked_submit(&self.queue, [encoder.finish()]);
     }
 
-    pub fn render(
+    fn composite_clipped_object(
+        &self,
+        content_pool_tex: &wgpu::Texture,
+        mold_pool_tex: &wgpu::Texture,
+        mode: crate::ecs::components::ClipMode,
+        chroma_hue: f32,
+        chroma_tolerance: f32,
+        blend_edge: bool,
+        clear_color: Option<wgpu::Color>,
+    ) {
+        let content_view = content_pool_tex.create_view(&wgpu::TextureViewDescriptor::default());
+        let mold_view = mold_pool_tex.create_view(&wgpu::TextureViewDescriptor::default());
+        let dst_view = self
+            .texture
+            .create_view(&wgpu::TextureViewDescriptor::default());
+        let content_depth_view = self
+            .effect_object_depth
+            .create_view(&wgpu::TextureViewDescriptor::default());
+        let dst_depth_view = self
+            .depth_texture
+            .create_view(&wgpu::TextureViewDescriptor::default());
+
+        let uniform_data: [u32; 4] = [
+            mode as u8 as u32,
+            chroma_hue.to_bits(),
+            chroma_tolerance.to_bits(),
+            u32::from(blend_edge),
+        ];
+        self.queue.write_buffer(
+            &self.clip_uniform_buffer,
+            0,
+            bytemuck::cast_slice(&uniform_data),
+        );
+
+        let bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("Clip Composite BG"),
+            layout: &self.clip_composite_bind_group_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::TextureView(&content_view),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::TextureView(&mold_view),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 2,
+                    resource: wgpu::BindingResource::Sampler(&self.effect_sampler),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 3,
+                    resource: wgpu::BindingResource::TextureView(&content_depth_view),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 4,
+                    resource: self.clip_uniform_buffer.as_entire_binding(),
+                },
+            ],
+        });
+        let mut encoder = self
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("Clip Composite Encoder"),
+            });
+        {
+            let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("Clip Composite Pass"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: &dst_view,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: match clear_color {
+                            Some(c) => wgpu::LoadOp::Clear(c),
+                            None => wgpu::LoadOp::Load,
+                        },
+                        store: wgpu::StoreOp::Store,
+                    },
+                    depth_slice: None,
+                })],
+                depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                    view: &dst_depth_view,
+                    depth_ops: Some(wgpu::Operations {
+                        load: match clear_color {
+                            Some(_) => wgpu::LoadOp::Clear(1.0),
+                            None => wgpu::LoadOp::Load,
+                        },
+                        store: wgpu::StoreOp::Store,
+                    }),
+                    stencil_ops: None,
+                }),
+                timestamp_writes: None,
+                occlusion_query_set: None,
+                multiview_mask: None,
+            });
+            rpass.set_pipeline(&self.clip_composite_pipeline);
+            rpass.set_bind_group(0, &bind_group, &[]);
+            rpass.draw(0..3, 0..1);
+        }
+        crate::gpu_shared::locked_submit(&self.queue, [encoder.finish()]);
+    }
         &mut self,
         world: &crate::ecs::EcsWorld,
         active_objects: &[ActiveObject],
@@ -1832,7 +2132,7 @@ impl RenderEngine {
                                 None,
                             )
                         }),
-                        Some(crate::ecs::systems::ComposeSource::FrameBuffer { controller }) => {
+                        Some(crate::ecs::systems::ComposeSource::FrameBuffer { controller, .. }) => {
                             let empty = Vec::new();
                             let objects = captured.get(&controller).unwrap_or(&empty);
                             self.render_composed_texture(

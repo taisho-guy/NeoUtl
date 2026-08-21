@@ -1,0 +1,18 @@
+templates:
+  - name: "バグ報告 / Bug Report"
+    title: "[バグ]: "
+    description: "うまく機能しない"
+    labels: ["種類/バグ"]
+    ref: "issue_template/bug.md"
+
+  - name: "機能提案・改善要望 / Feature Request"
+    title: "[強化]: "
+    description: "新しい機能の追加や、既存機能の改善案"
+    labels: ["種類/強化"]
+    ref: "issue_template/feature.md"
+
+  - name: "質問・議論 / Question"
+    title: "[議論]: "
+    description: "仕様についての確認や、開発に関する相談"
+    labels: ["状況/情報が必要"]
+    ref: "issue_template/question.md"

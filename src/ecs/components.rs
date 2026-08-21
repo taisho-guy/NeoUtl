@@ -83,6 +83,85 @@ impl ParamAccess for GroupControl {
     }
 }
 
+#[repr(u8)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ClipMode {
+    Alpha = 0,
+    AlphaInvert = 1,
+    Luminance = 2,
+    LuminanceInvert = 3,
+    Chroma = 4,
+}
+
+impl Default for ClipMode {
+    fn default() -> Self {
+        ClipMode::Alpha
+    }
+}
+
+#[derive(Clone, Copy, Debug, Component, Serialize, Deserialize)]
+pub struct ClippingControl {
+    pub layer_count_down: u32,
+    pub layer_count_up: u32,
+    pub mode: ClipMode,
+    pub chroma_hue: f32,
+    pub chroma_tolerance: f32,
+    pub blend_edge: bool,
+}
+
+impl Default for ClippingControl {
+    fn default() -> Self {
+        Self {
+            layer_count_down: 1,
+            layer_count_up: 0,
+            mode: ClipMode::Alpha,
+            chroma_hue: 120.0,
+            chroma_tolerance: 30.0,
+            blend_edge: true,
+        }
+    }
+}
+
+impl ParamAccess for ClippingControl {
+    fn get_param(&self, key: &str) -> Option<f32> {
+        Some(match key {
+            "layer_count_down" => self.layer_count_down as f32,
+            "layer_count_up" => self.layer_count_up as f32,
+            "mode" => self.mode as u8 as f32,
+            "chroma_hue" => self.chroma_hue,
+            "chroma_tolerance" => self.chroma_tolerance,
+            "blend_edge" => {
+                if self.blend_edge {
+                    1.0
+                } else {
+                    0.0
+                }
+            }
+            _ => return None,
+        })
+    }
+    fn set_param(&mut self, key: &str, value: f32) -> bool {
+        match key {
+            "layer_count_down" => self.layer_count_down = value.max(0.0) as u32,
+            "layer_count_up" => self.layer_count_up = value.max(0.0) as u32,
+            "mode" => {
+                self.mode = match value.round() as u8 {
+                    0 => ClipMode::Alpha,
+                    1 => ClipMode::AlphaInvert,
+                    2 => ClipMode::Luminance,
+                    3 => ClipMode::LuminanceInvert,
+                    _ => ClipMode::Chroma,
+                }
+            }
+            "chroma_hue" => self.chroma_hue = value.rem_euclid(360.0),
+            "chroma_tolerance" => self.chroma_tolerance = value.clamp(0.0, 180.0),
+            "blend_edge" => self.blend_edge = value > 0.5,
+            _ => return false,
+        }
+        true
+    }
+}
+
 #[derive(Clone, Copy, Debug, Component, Serialize, Deserialize)]
 pub struct AudioParams {
     pub volume: f32,
