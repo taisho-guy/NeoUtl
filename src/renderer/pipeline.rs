@@ -185,7 +185,7 @@ fn create_depth_texture(device: &wgpu::Device, width: u32, height: u32) -> wgpu:
         sample_count: 1,
         dimension: wgpu::TextureDimension::D2,
         format: DEPTH_FORMAT,
-        usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+        usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
         view_formats: &[],
     })
 }
@@ -633,10 +633,19 @@ fn vs_main(@builtin(vertex_index) vertex_index: u32) -> VOut {
 
 @group(0) @binding(0) var src_tex: texture_2d<f32>;
 @group(0) @binding(1) var src_sampler: sampler;
+@group(0) @binding(2) var src_depth: texture_depth_2d;
+
+struct FOut {
+    @location(0) color: vec4<f32>,
+    @builtin(frag_depth) depth: f32,
+};
 
 @fragment
-fn fs_main(in: VOut) -> @location(0) vec4<f32> {
-    return textureSample(src_tex, src_sampler, in.uv);
+fn fs_main(in: VOut) -> FOut {
+    var out: FOut;
+    out.color = textureSample(src_tex, src_sampler, in.uv);
+    out.depth = textureLoad(src_depth, vec2<i32>(in.position.xy), 0);
+    return out;
 }
 "#;
 
@@ -658,6 +667,16 @@ fn create_composite_bind_group_layout(device: &wgpu::Device) -> wgpu::BindGroupL
                 binding: 1,
                 visibility: wgpu::ShaderStages::FRAGMENT,
                 ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                count: None,
+            },
+            wgpu::BindGroupLayoutEntry {
+                binding: 2,
+                visibility: wgpu::ShaderStages::FRAGMENT,
+                ty: wgpu::BindingType::Texture {
+                    sample_type: wgpu::TextureSampleType::Depth,
+                    view_dimension: wgpu::TextureViewDimension::D2,
+                    multisampled: false,
+                },
                 count: None,
             },
         ],
@@ -696,7 +715,13 @@ fn build_composite_pipeline(
             cull_mode: None,
             ..Default::default()
         },
-        depth_stencil: None,
+        depth_stencil: Some(wgpu::DepthStencilState {
+            format: DEPTH_FORMAT,
+            depth_write_enabled: Some(true),
+            depth_compare: Some(wgpu::CompareFunction::LessEqual),
+            stencil: wgpu::StencilState::default(),
+            bias: wgpu::DepthBiasState::default(),
+        }),
         multisample: wgpu::MultisampleState::default(),
         multiview_mask: None,
         cache: None,
@@ -1529,7 +1554,7 @@ impl RenderEngine {
                     view: &depth_view,
                     depth_ops: Some(wgpu::Operations {
                         load: wgpu::LoadOp::Clear(1.0),
-                        store: wgpu::StoreOp::Discard,
+                        store: wgpu::StoreOp::Store,
                     }),
                     stencil_ops: None,
                 }),
@@ -1560,6 +1585,12 @@ impl RenderEngine {
         let dst_view = self
             .texture
             .create_view(&wgpu::TextureViewDescriptor::default());
+        let src_depth_view = self
+            .effect_object_depth
+            .create_view(&wgpu::TextureViewDescriptor::default());
+        let dst_depth_view = self
+            .depth_texture
+            .create_view(&wgpu::TextureViewDescriptor::default());
         let bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("Composite BG"),
             layout: &self.composite_bind_group_layout,
@@ -1571,6 +1602,10 @@ impl RenderEngine {
                 wgpu::BindGroupEntry {
                     binding: 1,
                     resource: wgpu::BindingResource::Sampler(&self.effect_sampler),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 2,
+                    resource: wgpu::BindingResource::TextureView(&src_depth_view),
                 },
             ],
         });
@@ -1594,7 +1629,17 @@ impl RenderEngine {
                     },
                     depth_slice: None,
                 })],
-                depth_stencil_attachment: None,
+                depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                    view: &dst_depth_view,
+                    depth_ops: Some(wgpu::Operations {
+                        load: match clear_color {
+                            Some(_) => wgpu::LoadOp::Clear(1.0),
+                            None => wgpu::LoadOp::Load,
+                        },
+                        store: wgpu::StoreOp::Store,
+                    }),
+                    stencil_ops: None,
+                }),
                 timestamp_writes: None,
                 occlusion_query_set: None,
                 multiview_mask: None,
@@ -2034,7 +2079,7 @@ impl RenderEngine {
                         view: &depth_view,
                         depth_ops: Some(wgpu::Operations {
                             load: depth_load,
-                            store: wgpu::StoreOp::Discard,
+                            store: wgpu::StoreOp::Store,
                         }),
                         stencil_ops: None,
                     }),
@@ -2087,7 +2132,7 @@ impl RenderEngine {
                         view: &depth_view,
                         depth_ops: Some(wgpu::Operations {
                             load: wgpu::LoadOp::Clear(1.0),
-                            store: wgpu::StoreOp::Discard,
+                            store: wgpu::StoreOp::Store,
                         }),
                         stencil_ops: None,
                     }),
