@@ -3,17 +3,20 @@
 ## 依存関係のインストール
 
 <details><summary>Linuxの場合</summary>
-ClangとRust、Git、LuaJIT、MakeFile、Carla、FFmpegをインストールしてください。
+Clang、Rust、Git、LuaJIT、MakeFile、Carla、FFmpegをインストールしてください。
 
 最新のArch Linux系ディストリビューションでのビルドを推奨します。
 </details>
 
 <details><summary>Windowsの場合</summary>
-MSVCとRust、Git、LuaJIT、vcpkg、CMakeをインストールしてください。
 
-Windows11以降でのビルドを推奨します。
+1. MSYS2をインストールしてください。
+2. MSYS2 CLANG64を開き、`pacman -Syu`し、再起動したら再び`pacman -Syu`します。
+3. MSYS2 CLANG64で`pacman -S git fish mingw-w64-clang-x86_64-luajit mingw-w64-clang-x86_64-clang mingw-w64-clang-x86_64-rust mingw-w64-clang-x86_64-ffmpeg mingw-w64-clang-x86_64-pkgconf mingw-w64-clang-x86_64-make mingw-w64-clang-x86_64-gcc-compat mingw-w64-clang-x86_64-vulkan-headers --needed`
+4. お好みで、エディターのターミナルをMSYS2 CLANG64 fishにすることを推奨いたします。
 
-Visual Studio付属のvcpkgは使用できません（クラシックモードを用いる必要がある為）。
+NeoUtlはVisual Studio/MSVCをサポートしておりません。
+
 </details>
 
 <details><summary>macOSの場合</summary>
@@ -28,14 +31,6 @@ Visual Studio付属のvcpkgは使用できません（クラシックモード�
 git clone "https://codeberg.org/taisho-guy/NeoUtl.git"
 git submodule update --init --recursive
 ```
-
-<details><summary>Windowsの場合は追加でこちらを実行します</summary>
-
-```fish
-vcpkg install ffmpeg:x64-windows --clean-after-build
-```
-
-</details>
 
 ## ビルド
 
