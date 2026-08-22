@@ -123,6 +123,14 @@ fn curtain_covers_layer(curtain_layer: i32, span: (u32, u32), target_layer: i32)
     }
 }
 
+fn group_only(chain: &[usize], controllers: &[CurtainInfo]) -> Vec<usize> {
+    chain
+        .iter()
+        .copied()
+        .filter(|&i| matches!(controllers[i].kind, ControllerKind::Group { .. }))
+        .collect()
+}
+
 fn resolve_group_chain(obj_layer: i32, controllers: &[CurtainInfo], max_depth: i32) -> Vec<usize> {
     let mut chain = Vec::new();
     let mut cursor_layer = obj_layer;
@@ -367,8 +375,9 @@ pub fn get_active_objects_system_at(
 
                 let obj_layer = layers.get(id).map_or(0, |l| l.0);
                 let chain_idx = resolve_group_chain(obj_layer, &controllers, max_depth);
+                let group_idx = group_only(&chain_idx, &controllers);
                 let chain_matrices: Vec<GlobalMatrix> =
-                    chain_idx.iter().map(|&i| controllers[i].matrix).collect();
+                    group_idx.iter().map(|&i| controllers[i].matrix).collect();
                 let matrix = compute_chained_matrix(&chain_matrices, &local_matrix);
 
                 let mvp = compute_mvp(
@@ -379,14 +388,14 @@ pub fn get_active_objects_system_at(
                     projection_for(kind.0),
                 );
                 let mut opacity = transform.opacity;
-                for &i in &chain_idx {
+                for &i in &group_idx {
                     opacity *= controllers[i].opacity;
                 }
                 let mut effects = effect_stacks
                     .get(id)
                     .map(|stack| compute_effect_params_at(stack, current, world))
                     .unwrap_or_default();
-                for &i in chain_idx.iter().rev() {
+                for &i in group_idx.iter().rev() {
                     let mut prefixed = controllers[i].effects.clone();
                     prefixed.append(&mut effects);
                     effects = prefixed;
@@ -437,8 +446,11 @@ pub fn get_active_objects_system_at(
                     let controller = controllers[chain_idx[pos]].entity;
                     let hide_captured = controllers[chain_idx[pos]].hide_captured();
                     let inner_chain = &chain_idx[..pos];
-                    let inner_matrices: Vec<GlobalMatrix> =
-                        inner_chain.iter().map(|&i| controllers[i].matrix).collect();
+                    let inner_group_idx = group_only(inner_chain, &controllers);
+                    let inner_matrices: Vec<GlobalMatrix> = inner_group_idx
+                        .iter()
+                        .map(|&i| controllers[i].matrix)
+                        .collect();
                     let inner_matrix = compute_chained_matrix(&inner_matrices, &local_matrix);
                     let inner_mvp = compute_mvp(
                         &inner_matrix,
@@ -448,14 +460,14 @@ pub fn get_active_objects_system_at(
                         projection_for(kind.0),
                     );
                     let mut inner_opacity = transform.opacity;
-                    for &i in inner_chain {
+                    for &i in &inner_group_idx {
                         inner_opacity *= controllers[i].opacity;
                     }
                     let mut inner_effects = effect_stacks
                         .get(id)
                         .map(|stack| compute_effect_params_at(stack, current, world))
                         .unwrap_or_default();
-                    for &i in inner_chain.iter().rev() {
+                    for &i in inner_group_idx.iter().rev() {
                         let mut prefixed = controllers[i].effects.clone();
                         prefixed.append(&mut inner_effects);
                         inner_effects = prefixed;
@@ -494,7 +506,8 @@ pub fn get_active_objects_system_at(
                             .filter(|&(i, _)| i != pos)
                             .map(|(_, v)| v)
                             .collect();
-                        let stationary_matrices: Vec<GlobalMatrix> = stationary_chain
+                        let stationary_group_idx = group_only(&stationary_chain, &controllers);
+                        let stationary_matrices: Vec<GlobalMatrix> = stationary_group_idx
                             .iter()
                             .map(|&i| controllers[i].matrix)
                             .collect();
@@ -508,14 +521,14 @@ pub fn get_active_objects_system_at(
                             projection_for(kind.0),
                         );
                         let mut stationary_opacity = transform.opacity;
-                        for &i in &stationary_chain {
+                        for &i in &stationary_group_idx {
                             stationary_opacity *= controllers[i].opacity;
                         }
                         let mut stationary_effects = effect_stacks
                             .get(id)
                             .map(|stack| compute_effect_params_at(stack, current, world))
                             .unwrap_or_default();
-                        for &i in stationary_chain.iter().rev() {
+                        for &i in stationary_group_idx.iter().rev() {
                             let mut prefixed = controllers[i].effects.clone();
                             prefixed.append(&mut stationary_effects);
                             stationary_effects = prefixed;
@@ -540,8 +553,9 @@ pub fn get_active_objects_system_at(
                     continue;
                 };
                 let chain_idx = resolve_group_chain(c.layer, &controllers, max_depth);
+                let group_idx = group_only(&chain_idx, &controllers);
                 let chain_matrices: Vec<GlobalMatrix> =
-                    chain_idx.iter().map(|&i| controllers[i].matrix).collect();
+                    group_idx.iter().map(|&i| controllers[i].matrix).collect();
                 let own_matrix = match c.kind {
                     ControllerKind::Group { .. } => {
                         scale_to_pixels(&c.matrix, project_width, project_height)
@@ -559,11 +573,11 @@ pub fn get_active_objects_system_at(
                     projection_for(kind.0),
                 );
                 let mut opacity = c.opacity;
-                for &i in &chain_idx {
+                for &i in &group_idx {
                     opacity *= controllers[i].opacity;
                 }
                 let mut effects = c.effects.clone();
-                for &i in chain_idx.iter().rev() {
+                for &i in group_idx.iter().rev() {
                     let mut prefixed = controllers[i].effects.clone();
                     prefixed.append(&mut effects);
                     effects = prefixed;
