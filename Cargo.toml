@@ -14,7 +14,6 @@ members = [
     "crates/neoutl-media-api",
     "crates/media/symphonia-decoder",
     "crates/media/image-decoder",
-    "crates/media/gstreamer-encoder",
     "crates/neo-media-core",
     "crates/neo-media-cache",
     "crates/neo-media-transfer-vaapi",
@@ -73,7 +72,6 @@ arc-swap = "1"
 notify = "8"
 rodio = { version = "0.22", default-features = false, features = ["playback", "symphonia-wav", "symphonia-mp3", "symphonia-vorbis", "symphonia-flac", "symphonia-aac", "symphonia-isomp4"] }
 neo-media-ffmpeg = { path = "crates/neo-media-ffmpeg" }
-neoutl-media-gstreamer-encoder = { path = "crates/media/gstreamer-encoder" }
 carla-host-sys.workspace = true
 self-replace = "1"
 sentry = { version = "0.49", default-features = false, features = ["backtrace", "contexts", "panic"] }
@@ -108,7 +106,6 @@ egui-system-fonts = "0.35"
 neoutl-object-shader-build.workspace = true
 
 [target.'cfg(target_os = "linux")'.dependencies]
-gpu-video = { version = "0.4", features = ["wgpu"] }
 ash = "0.38"
 wgpu-hal = { version = "29", features = ["vulkan"] }
 

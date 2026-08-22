@@ -9,10 +9,30 @@ use neo_media_core::{
 };
 
 pub use vulkan::{
-    CopyEngine, NeoutlVulkanContext, NeoutlVulkanDeviceCtx, SemiPlanarConvertEngine,
+    ColorTags, CopyEngine, NeoutlVulkanContext, NeoutlVulkanDeviceCtx, SemiPlanarConvertEngine,
     VkSurfaceCache, VulkanRawHandles, create_av_vulkan_device_ctx, extract_vulkan_raw_handles,
     init_vulkan_context, neoutl_vaapi_sync_surface_safe, query_vram_budget_bytes,
 };
+
+fn color_tags_of(input: &VaapiDecodedFrame) -> ColorTags {
+    ColorTags {
+        matrix_coefficients: match input.matrix_coefficients {
+            MatrixCoefficients::Bt2020Ncl => 1,
+            MatrixCoefficients::Smpte170m => 2,
+            MatrixCoefficients::Bt709 | MatrixCoefficients::Unknown => 0,
+        },
+        transfer_characteristics: match input.transfer_characteristics {
+            TransferCharacteristics::Smpte2084 => 1,
+            TransferCharacteristics::AribStdB67 => 2,
+            TransferCharacteristics::Bt709 | TransferCharacteristics::Unknown => 0,
+        },
+        color_primaries: match input.color_primaries {
+            ColorPrimaries::Bt2020 => 1,
+            ColorPrimaries::Bt709 | ColorPrimaries::Smpte170m | ColorPrimaries::Unknown => 0,
+        },
+        full_range: input.full_range as u32,
+    }
+}
 
 fn map_pool_error(err: PoolError) -> TransferError {
     match err {
@@ -241,6 +261,7 @@ impl TransferBackend for VaapiTransferBackend {
                     y_format,
                     uv_format,
                     dst_vk_format,
+                    color_tags_of(input),
                 )
             }
         } else {

@@ -109,7 +109,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .name("neoutl-init".into())
         .spawn(move || {
             configure_gst_plugin_path();
-            std::thread::spawn(neoutl_media_gstreamer_encoder::warm_up);
 
             objects::load_all(&objects::default_objects_dir());
             effects::load_all(

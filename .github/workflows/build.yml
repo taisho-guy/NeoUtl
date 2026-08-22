@@ -25,25 +25,25 @@ jobs:
             artifact_name: neoutl-linux-x86_64
             binary_name: NeoUtl
             lua_feature: luajit
-            install_cmd: sudo apt-get update && sudo apt-get install -y --no-install-recommends pkg-config clang cmake ninja-build mold libxkbcommon-dev libwayland-dev libegl1-mesa-dev libudev-dev libasound2-dev libfontconfig1-dev libfreetype6-dev libexpat1-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev gstreamer1.0-plugins-base gstreamer1.0-plugins-good gstreamer1.0-plugins-bad gstreamer1.0-plugins-ugly gstreamer1.0-libav
+            install_cmd: sudo apt-get update && sudo apt-get install -y --no-install-recommends pkg-config clang cmake ninja-build mold libxkbcommon-dev libwayland-dev libegl1-mesa-dev libudev-dev libasound2-dev libfontconfig1-dev libfreetype6-dev libexpat1-dev libavcodec-dev libavformat-dev libavutil-dev libswscale-dev libswresample-dev libva-dev
           - os: ubuntu-24.04-arm
             os_name: Linux(ARM64)
             artifact_name: neoutl-linux-arm64
             binary_name: NeoUtl
             lua_feature: luajit
-            install_cmd: sudo apt-get update && sudo apt-get install -y --no-install-recommends pkg-config clang cmake ninja-build mold libxkbcommon-dev libwayland-dev libegl1-mesa-dev libudev-dev libasound2-dev libfontconfig1-dev libfreetype6-dev libexpat1-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev gstreamer1.0-plugins-base gstreamer1.0-plugins-good gstreamer1.0-plugins-bad gstreamer1.0-plugins-ugly gstreamer1.0-libav
+            install_cmd: sudo apt-get update && sudo apt-get install -y --no-install-recommends pkg-config clang cmake ninja-build mold libxkbcommon-dev libwayland-dev libegl1-mesa-dev libudev-dev libasound2-dev libfontconfig1-dev libfreetype6-dev libexpat1-dev libavcodec-dev libavformat-dev libavutil-dev libswscale-dev libswresample-dev libva-dev
           - os: macos-latest
             os_name: macOS(Apple Silicon)
             artifact_name: neoutl-macos-aarch64
             binary_name: NeoUtl
             lua_feature: luajit
-            install_cmd: brew update && brew install gstreamer
+            install_cmd: brew update && brew install ffmpeg
           - os: macos-26-intel
             os_name: macOS(Intel)
             artifact_name: neoutl-macos-x86_64
             binary_name: NeoUtl
             lua_feature: luajit
-            install_cmd: brew update && brew install gstreamer
+            install_cmd: brew update && brew install ffmpeg
           - os: windows-latest
             os_name: Windows(x86_64)
             artifact_name: neoutl-windows-x86_64
@@ -86,7 +86,7 @@ jobs:
         with:
           vcpkgJsonGlob: "vcpkg.json"
 
-      - name: vcpkg経由GStreamerインストール(Windows)
+      - name: vcpkg経由FFmpegインストール(Windows)
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
