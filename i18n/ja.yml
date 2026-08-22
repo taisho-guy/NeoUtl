@@ -65,7 +65,6 @@
 "[NeoUtl] LuaSystem初期化失敗、system拡張を無効化: %{arg0}": "[NeoUtl] LuaSystem初期化失敗、system拡張を無効化: %{arg0}"
 "[NeoUtl] Luaエフェクト再ロード完了: %{arg0}件": "[NeoUtl] Luaエフェクト再ロード完了: %{arg0}件"
 "[NeoUtl] Luaエフェクト読込失敗 %{arg0}: %{arg1}": "[NeoUtl] Luaエフェクト読込失敗 %{arg0}: %{arg1}"
-"[NeoUtl] MediaSource未設定 kind_id=%{arg0}: 映像/画像オブジェクトにパスが割当てられていません": "[NeoUtl] MediaSource未設定 kind_id=%{arg0}: 映像/画像オブジェクトにパスが割当てられていません"
 "[NeoUtl] audio_mixer: Carlaプラグイン生成失敗 path=%{arg0}: %{arg1}": "[NeoUtl] audio_mixer: Carlaプラグイン生成失敗 path=%{arg0}: %{arg1}"
 "[NeoUtl] audio_mixer: デコード失敗 %{arg0}: %{arg1}": "[NeoUtl] audio_mixer: デコード失敗 %{arg0}: %{arg1}"
 "[NeoUtl] audio_mixer: 出力再構築失敗: %{arg0}": "[NeoUtl] audio_mixer: 出力再構築失敗: %{arg0}"
