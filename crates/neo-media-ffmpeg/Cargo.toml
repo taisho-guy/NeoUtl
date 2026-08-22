@@ -14,5 +14,5 @@ bytemuck = "1"
 ffmpeg-next = { version = "9", features = ["codec", "format", "software-resampling"] }
 ffmpeg-sys-next = { version = "9", features = ["swscale"] }
 libc = "0.2"
-wgpu = { version = "29", features = ["vulkan-portability"] }
+wgpu = { version = "30", features = ["vulkan-portability"] }
 libva = { package = "cros-libva-extended", version = "=0.0.13-extended.2" }

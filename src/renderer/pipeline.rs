@@ -1264,7 +1264,7 @@ impl RenderEngine {
             .expect(&t!("map_async結果受信失敗"))
             .expect(&t!("バッファmap失敗"));
 
-        let mapped = slice.get_mapped_range();
+        let mapped = slice.get_mapped_range().expect(&t!("get_mapped_range失敗"));
         let raw: &[u32] = bytemuck::cast_slice(&mapped);
         let count = (raw[4].max(1)) as f32;
         const SCALE: f32 = 1_000_000.0;
@@ -2502,6 +2502,7 @@ mod tests {
             power_preference: wgpu::PowerPreference::None,
             compatible_surface: None,
             force_fallback_adapter: false,
+            apply_limit_buckets: false,
         }))
         .ok()?;
         pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor::default())).ok()
@@ -2563,7 +2564,7 @@ mod tests {
             .expect(&t!("map_async結果受信失敗"))
             .expect(&t!("バッファmap失敗"));
 
-        let padded = slice.get_mapped_range();
+        let padded = slice.get_mapped_range().expect(&t!("get_mapped_range失敗"));
         let mut dense = Vec::with_capacity((unpadded_bytes_per_row * height) as usize);
         for row in 0..height as usize {
             let start = row * padded_bytes_per_row as usize;
