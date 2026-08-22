@@ -1,7 +1,7 @@
 use super::EcsWorld;
 use crate::ecs::components::{
-    AudioParams, ClipMode, ClippingControl, GroupControl, KeyframeTracks, KindId, Layer,
-    MediaSource, ObjectId, SceneId, SceneObject, ShapeParams, TextContent, TimeRange,
+    AudioParams, ClipMode, ClipTarget, GroupControl, KeyframeTracks, KindId, Layer, MediaSource,
+    ObjectId, SceneId, SceneObject, ShapeParams, TextContent, TimeRange,
 };
 use crate::ecs::effects::{EffectStack, compute_effect_params_at};
 use crate::ecs::resources::{
@@ -14,6 +14,7 @@ use crate::ecs::transform::{
 };
 use crate::ecs::types::Value;
 use crate::media::MediaKind;
+use neoutl_object_api::UNIT_SIZE_PX;
 use shipyard::{EntityId, Get, IntoIter, UniqueView, View};
 use std::collections::HashMap;
 
@@ -30,8 +31,23 @@ pub enum FrameBufferKind {
 
 #[derive(Clone, Copy, Debug)]
 pub enum ComposeSource {
-    NestedScene { target_scene: i32, local_frame: i32 },
-    FrameBuffer { controller: EntityId, kind: FrameBufferKind },
+    NestedScene {
+        target_scene: i32,
+        local_frame: i32,
+    },
+    FrameBuffer {
+        controller: EntityId,
+        kind: FrameBufferKind,
+    },
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct ClipTargetInfo {
+    pub controller: EntityId,
+    pub mode: ClipMode,
+    pub chroma_hue: f32,
+    pub chroma_tolerance: f32,
+    pub blend_edge: bool,
 }
 
 #[derive(Clone)]
@@ -47,6 +63,7 @@ pub struct ActiveObject {
     pub effects: Vec<(String, HashMap<String, Value>)>,
     pub compose_source: Option<ComposeSource>,
     pub layer: i32,
+    pub clip_target: Option<ClipTargetInfo>,
 }
 
 pub type CapturedObjects = HashMap<EntityId, Vec<ActiveObject>>;
@@ -79,6 +96,7 @@ struct CurtainInfo {
     effects: Vec<(String, HashMap<String, Value>)>,
     opacity: f32,
     kind: ControllerKind,
+    render_self: bool,
 }
 
 impl CurtainInfo {
@@ -157,6 +175,7 @@ type SelectorGroupViews<'v> = (
     View<'v, MediaSource>,
     View<'v, ObjectId>,
     View<'v, SceneObject>,
+    View<'v, ClipTarget>,
 );
 type PayloadGroupViews<'v> = (
     View<'v, Transform>,
@@ -164,7 +183,6 @@ type PayloadGroupViews<'v> = (
     View<'v, AudioParams>,
     View<'v, EffectStack>,
     View<'v, GroupControl>,
-    View<'v, ClippingControl>,
 );
 
 fn is_active_at(range: &TimeRange, scene: &SceneId, active_scene: i32, frame: i32) -> bool {
@@ -194,6 +212,7 @@ pub fn get_active_objects_system_at(
             media_sources,
             object_ids,
             scene_objects,
+            clip_targets,
         ): SelectorGroupViews,
          (
             transforms,
@@ -201,7 +220,6 @@ pub fn get_active_objects_system_at(
             _audio_params,
             effect_stacks,
             group_controls,
-            clipping_controls,
         ): PayloadGroupViews| {
             let project_width = project.width.max(1) as f32;
             let project_height = project.height.max(1) as f32;
@@ -238,14 +256,16 @@ pub fn get_active_objects_system_at(
                         generate_framebuffer: gc.generate_framebuffer,
                         hide_captured: gc.hide_captured,
                     },
+                    render_self: true,
                 });
             }
-            for (id, (range, scene, layer, cc)) in
-                (&time_ranges, &scene_ids, &layers, &clipping_controls)
+            for (id, (range, scene, layer, ct)) in
+                (&time_ranges, &scene_ids, &layers, &clip_targets)
                     .iter()
                     .with_id()
             {
-                if scene.0 != active_scene
+                if !ct.enabled
+                    || scene.0 != active_scene
                     || current < range.start_frame
                     || current >= range.end_frame
                 {
@@ -262,16 +282,17 @@ pub fn get_active_objects_system_at(
                 controllers.push(CurtainInfo {
                     entity: id,
                     layer: layer.0,
-                    span: (cc.layer_count_down, cc.layer_count_up),
+                    span: (ct.layer_count_down, ct.layer_count_up),
                     matrix: compute_relative_matrix(&transform),
                     effects,
                     opacity: transform.opacity,
                     kind: ControllerKind::Clip {
-                        mode: cc.mode,
-                        chroma_hue: cc.chroma_hue,
-                        chroma_tolerance: cc.chroma_tolerance,
-                        blend_edge: cc.blend_edge,
+                        mode: ct.mode,
+                        chroma_hue: ct.chroma_hue,
+                        chroma_tolerance: ct.chroma_tolerance,
+                        blend_edge: ct.blend_edge,
                     },
+                    render_self: ct.render_self,
                 });
             }
 
@@ -284,6 +305,9 @@ pub fn get_active_objects_system_at(
                     continue;
                 }
                 if group_controls.get(id).is_ok() {
+                    continue;
+                }
+                if clip_targets.get(id).is_ok_and(|t| t.enabled) {
                     continue;
                 }
                 let keyframes = keyframe_tracks.get(id).ok();
@@ -374,6 +398,22 @@ pub fn get_active_objects_system_at(
                     effects = prefixed;
                 }
 
+                                                let clip_target = chain_idx.iter().find_map(|&i| match controllers[i].kind {
+                    ControllerKind::Clip {
+                        mode,
+                        chroma_hue,
+                        chroma_tolerance,
+                        blend_edge,
+                    } => Some(ClipTargetInfo {
+                        controller: controllers[i].entity,
+                        mode,
+                        chroma_hue,
+                        chroma_tolerance,
+                        blend_edge,
+                    }),
+                    ControllerKind::Group { .. } => None,
+                });
+
                 let active_object = ActiveObject {
                     kind_id: kind.0,
                     clip_instance: object_ids.get(id).map_or(0, |o| o.0 as u64),
@@ -386,6 +426,7 @@ pub fn get_active_objects_system_at(
                     effects,
                     compose_source,
                     layer: obj_layer,
+                    clip_target,
                 };
 
                 let fb_pos = chain_idx.iter().position(|&i| controllers[i].requires_fb());
@@ -417,10 +458,26 @@ pub fn get_active_objects_system_at(
                         prefixed.append(&mut inner_effects);
                         inner_effects = prefixed;
                     }
+                    let inner_clip_target = inner_chain.iter().find_map(|&i| match controllers[i].kind {
+                        ControllerKind::Clip {
+                            mode,
+                            chroma_hue,
+                            chroma_tolerance,
+                            blend_edge,
+                        } => Some(ClipTargetInfo {
+                            controller: controllers[i].entity,
+                            mode,
+                            chroma_hue,
+                            chroma_tolerance,
+                            blend_edge,
+                        }),
+                        ControllerKind::Group { .. } => None,
+                    });
                     let captured_object = ActiveObject {
                         mvp: inner_mvp,
                         opacity: inner_opacity,
                         effects: inner_effects,
+                        clip_target: inner_clip_target,
                         ..active_object.clone()
                     };
                     captured
@@ -477,13 +534,23 @@ pub fn get_active_objects_system_at(
                 if !c.requires_fb() {
                     continue;
                 }
+                if !c.render_self {
+                    continue;
+                }
                 let Ok(kind) = kind_ids.get(c.entity) else {
                     continue;
                 };
                 let chain_idx = resolve_group_chain(c.layer, &controllers, max_depth);
                 let chain_matrices: Vec<GlobalMatrix> =
                     chain_idx.iter().map(|&i| controllers[i].matrix).collect();
-                let own_matrix = scale_to_pixels(&c.matrix, project_width, project_height);
+                let own_matrix = match c.kind {
+                    ControllerKind::Group { .. } => {
+                        scale_to_pixels(&c.matrix, project_width, project_height)
+                    }
+                    ControllerKind::Clip { .. } => {
+                        scale_to_pixels(&c.matrix, UNIT_SIZE_PX, UNIT_SIZE_PX)
+                    }
+                };
                 let matrix = compute_chained_matrix(&chain_matrices, &own_matrix);
                 let mvp = compute_mvp(
                     &matrix,
@@ -530,6 +597,7 @@ pub fn get_active_objects_system_at(
                         },
                     }),
                     layer: c.layer,
+                    clip_target: None,
                 });
             }
 
@@ -889,5 +957,126 @@ mod tests {
 
         assert!(captured.is_empty(), "非FBOグループは捕捉対象を生成しない");
         assert!(active.iter().any(|a| a.clip_instance == child as u64));
+    }
+
+    #[test]
+    fn clip_layer_span_excludes_out_of_range_layer() {
+        let mut world = EcsWorld::new();
+        let cc_id = world.add_object(0, 30, KIND_SHAPE, 1, None);
+        world.set_clip_target(
+            cc_id,
+            ClipTarget {
+                enabled: true,
+                layer_count_down: 1,
+                layer_count_up: 0,
+                ..ClipTarget::default()
+            },
+        );
+        world.set_layer(cc_id, 1);
+        let in_range = world.add_object(0, 30, KIND_TEXT, 0, Some(TextContent::default()));
+        world.set_layer(in_range, 0);
+        let out_of_range = world.add_object(0, 30, KIND_TEXT, -1, Some(TextContent::default()));
+        world.set_layer(out_of_range, -1);
+        world.set_current_frame(0);
+        let (active, captured) = get_active_objects_system(&world);
+
+        let entity = world.find_entity(cc_id).expect("entity存在前提");
+        let captured_list = captured.get(&entity).map(Vec::len).unwrap_or(0);
+        assert_eq!(captured_list, 1, "span範囲内のみ捕捉されmoldを構成");
+
+        let in_obj = active
+            .iter()
+            .find(|a| a.clip_instance == in_range as u64)
+            .unwrap();
+        assert!(
+            in_obj.clip_target.is_some(),
+            "span範囲内オブジェクトは自動的にcontentとして識別"
+        );
+        let out_obj = active
+            .iter()
+            .find(|a| a.clip_instance == out_of_range as u64)
+            .unwrap();
+        assert!(
+            out_obj.clip_target.is_none(),
+            "span範囲外はクリップ対象化されない"
+        );
+    }
+
+    #[test]
+    fn clip_mode_luminance_invert_is_stored_in_active_object() {
+        let mut world = EcsWorld::new();
+        let cc_id = world.add_object(0, 30, KIND_SHAPE, 1, None);
+        world.set_clip_target(
+            cc_id,
+            ClipTarget {
+                enabled: true,
+                layer_count_down: 1,
+                layer_count_up: 0,
+                mode: ClipMode::LuminanceInvert,
+                ..ClipTarget::default()
+            },
+        );
+        world.set_layer(cc_id, 1);
+        let child = world.add_object(0, 30, KIND_TEXT, 0, Some(TextContent::default()));
+        world.set_layer(child, 0);
+        world.set_current_frame(0);
+        let (active, _captured) = get_active_objects_system(&world);
+        let child_obj = active
+            .iter()
+            .find(|a| a.clip_instance == child as u64)
+            .unwrap();
+        assert_eq!(
+            child_obj.clip_target.map(|t| t.mode),
+            Some(ClipMode::LuminanceInvert)
+        );
+    }
+
+    #[test]
+    fn clip_and_group_curtains_resolve_independently() {
+        let mut world = EcsWorld::new();
+        let gc = GroupControl {
+            layer_count_down: 1,
+            layer_count_up: 0,
+            generate_framebuffer: true,
+            hide_captured: false,
+        };
+        let gc_id = world.add_group_control_object(0, 30, KIND_GROUP_CONTROL, 0, gc);
+        world.set_layer(gc_id, 2);
+        let cc_id = world.add_object(0, 30, KIND_SHAPE, 0, None);
+        world.set_clip_target(
+            cc_id,
+            ClipTarget {
+                enabled: true,
+                layer_count_down: 1,
+                layer_count_up: 0,
+                ..ClipTarget::default()
+            },
+        );
+        world.set_layer(cc_id, 1);
+        let leaf = world.add_object(0, 30, KIND_TEXT, 0, Some(TextContent::default()));
+        world.set_layer(leaf, 0);
+        world.set_current_frame(0);
+        let (active, captured) = get_active_objects_system(&world);
+
+        let gc_entity = world.find_entity(gc_id).expect("entity存在前提");
+        let cc_entity = world.find_entity(cc_id).expect("entity存在前提");
+        assert_eq!(
+            captured.get(&gc_entity).map(Vec::len),
+            Some(1),
+            "Groupチェーンはleafを1回のみ捕捉"
+        );
+        assert_eq!(
+            captured.get(&cc_entity).map(Vec::len),
+            Some(1),
+            "Clipチェーンはleafを1回のみ捕捉"
+        );
+        let leaf_instances = active
+            .iter()
+            .filter(|a| a.clip_instance == leaf as u64)
+            .count();
+        assert_eq!(
+            leaf_instances, 1,
+            "統一controllers解決によりleafは1回のみ描画対象化"
+        );
     }
 }

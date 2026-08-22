@@ -1952,6 +1952,8 @@ impl RenderEngine {
         }
         crate::gpu_shared::locked_submit(&self.queue, [encoder.finish()]);
     }
+
+    pub fn render(
         &mut self,
         world: &crate::ecs::EcsWorld,
         active_objects: &[ActiveObject],
@@ -2132,25 +2134,52 @@ impl RenderEngine {
                                 None,
                             )
                         }),
-                        Some(crate::ecs::systems::ComposeSource::FrameBuffer { controller, .. }) => {
-                            let empty = Vec::new();
-                            let objects = captured.get(&controller).unwrap_or(&empty);
-                            self.render_composed_texture(
-                                world,
-                                objects,
-                                captured,
-                                self.render_width,
-                                self.render_height,
-                                ComposeCacheKey::FrameBuffer(controller),
-                                depth + 1,
-                                None,
-                            )
-                        }
+                        Some(crate::ecs::systems::ComposeSource::FrameBuffer {
+                            controller,
+                            kind,
+                        }) => match kind {
+                            crate::ecs::systems::FrameBufferKind::Clip { .. } => None,
+                            crate::ecs::systems::FrameBufferKind::Group => {
+                                let empty = Vec::new();
+                                let objects = captured.get(&controller).unwrap_or(&empty);
+                                self.render_composed_texture(
+                                    world,
+                                    objects,
+                                    captured,
+                                    self.render_width,
+                                    self.render_height,
+                                    ComposeCacheKey::FrameBuffer(controller),
+                                    depth + 1,
+                                    None,
+                                )
+                            }
+                        },
                         None => None,
                     }
                 };
                 media_frames.push(tex);
             }
+        }
+        let mut mold_frames: Vec<Option<wgpu::Texture>> = Vec::with_capacity(active_objects.len());
+        for obj in active_objects {
+            let tex = match obj.clip_target {
+                Some(info) => {
+                    let empty = Vec::new();
+                    let objects = captured.get(&info.controller).unwrap_or(&empty);
+                    self.render_composed_texture(
+                        world,
+                        objects,
+                        captured,
+                        self.render_width,
+                        self.render_height,
+                        ComposeCacheKey::FrameBuffer(info.controller),
+                        depth + 1,
+                        None,
+                    )
+                }
+                None => None,
+            };
+            mold_frames.push(tex);
         }
         let mut media_offsets: Vec<Option<u32>> = Vec::with_capacity(active_objects.len());
         let mut media_next_index = 0u64;
@@ -2180,7 +2209,9 @@ impl RenderEngine {
         {
             let mut next_pool = 0usize;
             for obj in active_objects {
-                if !obj.effects.is_empty() && next_pool < config::MAX_EFFECT_OBJECTS {
+                if (!obj.effects.is_empty() || obj.clip_target.is_some())
+                    && next_pool < config::MAX_EFFECT_OBJECTS
+                {
                     effect_pool_index.push(Some(next_pool));
                     next_pool += 1;
                 } else {
@@ -2318,19 +2349,37 @@ impl RenderEngine {
 
                 let pool_tex = self.ensure_effect_object_target(pool_idx).clone();
                 self.render_effect_object_offscreen(&pool_tex, draw_kind);
-                self.apply_effect_chain(
-                    world,
-                    active_objects,
-                    captured,
-                    depth,
-                    &pool_tex,
-                    &pool_tex,
-                    &obj.effects,
-                );
-                self.composite_effect_object(
-                    &pool_tex,
-                    if drawn_any { None } else { Some(clear_color) },
-                );
+                if !obj.effects.is_empty() {
+                    self.apply_effect_chain(
+                        world,
+                        active_objects,
+                        captured,
+                        depth,
+                        &pool_tex,
+                        &pool_tex,
+                        &obj.effects,
+                    );
+                }
+                match obj.clip_target {
+                    Some(info) => {
+                        let mold_tex = mold_frames[idx].as_ref().unwrap_or(&pool_tex);
+                        self.composite_clipped_object(
+                            &pool_tex,
+                            mold_tex,
+                            info.mode,
+                            info.chroma_hue,
+                            info.chroma_tolerance,
+                            info.blend_edge,
+                            if drawn_any { None } else { Some(clear_color) },
+                        );
+                    }
+                    None => {
+                        self.composite_effect_object(
+                            &pool_tex,
+                            if drawn_any { None } else { Some(clear_color) },
+                        );
+                    }
+                }
                 drawn_any = true;
                 idx += 1;
                 continue;

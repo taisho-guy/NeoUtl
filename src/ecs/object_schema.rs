@@ -98,11 +98,30 @@ const fn text_field(group: &'static str, key: &'static str, label: &'static str)
     }
 }
 
+const fn enum_field(
+    group: &'static str,
+    key: &'static str,
+    label: &'static str,
+    options: &'static [&'static str],
+) -> ParamSchema {
+    ParamSchema {
+        group,
+        key,
+        label,
+        kind: ParamKind::Enum,
+        range: Range::Fixed(0.0, (options.len() - 1) as f32),
+        enum_options: options,
+        depends_on: None,
+        depends_eq: 0.0,
+    }
+}
+
 pub const TRANSFORM_GROUP: &str = "トランスフォーム";
 pub const TEXT_GROUP: &str = "テキスト";
 pub const SHAPE_GROUP: &str = "図形";
 pub const AUDIO_GROUP: &str = "オーディオ";
 pub const GROUP_CONTROL_GROUP: &str = "グループ制御";
+pub const CLIP_TARGET_GROUP: &str = "クリッピング制御";
 
 pub const TRANSFORM_SCHEMA: &[ParamSchema] = &[
     float_stage(TRANSFORM_GROUP, "x", "X", Range::StageWidth),
@@ -171,6 +190,51 @@ pub const GROUP_CONTROL_SCHEMA: &[ParamSchema] = &[
         1.0,
     ),
 ];
+
+const CLIP_MODE_OPTIONS: &[&str] = &["アルファ", "アルファ反転", "輝度", "輝度反転", "クロマキー"];
+
+pub const CLIP_TARGET_SCHEMA: &[ParamSchema] = &[
+    bool_field(CLIP_TARGET_GROUP, "enabled", "クリッピング対象を設定する"),
+    float_fixed(
+        CLIP_TARGET_GROUP,
+        "layer_count_down",
+        "対象レイヤー数(下)",
+        0.0,
+        100.0,
+    ),
+    float_fixed(
+        CLIP_TARGET_GROUP,
+        "layer_count_up",
+        "対象レイヤー数(上)",
+        0.0,
+        100.0,
+    ),
+    enum_field(CLIP_TARGET_GROUP, "mode", "モード", CLIP_MODE_OPTIONS),
+    dep(
+        float_fixed(CLIP_TARGET_GROUP, "chroma_hue", "色相(度)", 0.0, 360.0),
+        "mode",
+        4.0,
+    ),
+    dep(
+        float_fixed(
+            CLIP_TARGET_GROUP,
+            "chroma_tolerance",
+            "許容角度(度)",
+            0.0,
+            180.0,
+        ),
+        "mode",
+        4.0,
+    ),
+    bool_field(CLIP_TARGET_GROUP, "blend_edge", "境界を滑らかにする"),
+    bool_field(
+        CLIP_TARGET_GROUP,
+        "render_self",
+        "オブジェクト自身を描画する",
+    ),
+];
+
+pub const CLIP_TARGET_ENABLED_KEY: &str = "enabled";
 
 pub fn resolve_range(range: Range, stage_width: f32, stage_height: f32) -> (f32, f32) {
     match range {

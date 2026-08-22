@@ -9,13 +9,27 @@ use egui::{Color32, Painter, Pos2, Rect, Sense, Stroke, Vec2};
 use std::cell::RefCell;
 use std::rc::Rc;
 
+const GROUP_CURTAIN_COLOR: Color32 = Color32::from_rgb(90, 140, 220);
+const CLIP_CURTAIN_COLOR: Color32 = Color32::from_rgb(220, 120, 60);
+
 fn draw_group_curtain(painter: &Painter, ui: &egui::Ui, rect: Rect) {
-    let highlight = ui.visuals().selection.bg_fill;
-    painter.rect_filled(rect, 0.0, highlight.gamma_multiply(0.18));
+    let _ = ui;
+    painter.rect_filled(rect, 0.0, GROUP_CURTAIN_COLOR.gamma_multiply(0.18));
     painter.rect_stroke(
         rect,
         0.0,
-        Stroke::new(1.0, highlight.gamma_multiply(0.55)),
+        Stroke::new(1.0, GROUP_CURTAIN_COLOR.gamma_multiply(0.55)),
+        egui::StrokeKind::Inside,
+    );
+}
+
+fn draw_clip_curtain(painter: &Painter, ui: &egui::Ui, rect: Rect) {
+    let _ = ui;
+    painter.rect_filled(rect, 0.0, CLIP_CURTAIN_COLOR.gamma_multiply(0.18));
+    painter.rect_stroke(
+        rect,
+        0.0,
+        Stroke::new(1.0, CLIP_CURTAIN_COLOR.gamma_multiply(0.55)),
         egui::StrokeKind::Inside,
     );
 }
@@ -65,6 +79,21 @@ impl TimelineWindow {
                 Vec2::new(w, up_height),
             );
             draw_group_curtain(painter, ui, curtain_rect);
+        }
+        if obj.clip_layer_count_down > 0 {
+            let curtain_rect = Rect::from_min_size(
+                Pos2::new(clip_rect.min.x, clip_rect.min.y + h),
+                Vec2::new(w, obj.clip_layer_count_down as f32 * LAYER_HEIGHT),
+            );
+            draw_clip_curtain(painter, ui, curtain_rect);
+        }
+        if obj.clip_layer_count_up > 0 {
+            let up_height = obj.clip_layer_count_up as f32 * LAYER_HEIGHT;
+            let curtain_rect = Rect::from_min_size(
+                Pos2::new(clip_rect.min.x, clip_rect.min.y - up_height),
+                Vec2::new(w, up_height),
+            );
+            draw_clip_curtain(painter, ui, curtain_rect);
         }
 
         let palette = [

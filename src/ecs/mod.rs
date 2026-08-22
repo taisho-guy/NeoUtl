@@ -28,8 +28,8 @@ fn resolve_stable_id(kind_id: u32, object_id: usize) -> String {
 use crate::ecs::types::EffectInstance;
 use audio_plugins::PluginChain;
 use components::{
-    AudioParams, GroupControl, KeyframeTracks, KindId, Layer, MediaSource, ObjectId, ParamAccess,
-    PluginParams, SceneId, SceneObject, ShapeParams, TextContent, TimeRange,
+    AudioParams, ClipTarget, GroupControl, KeyframeTracks, KindId, Layer, MediaSource, ObjectId,
+    ParamAccess, PluginParams, SceneId, SceneObject, ShapeParams, TextContent, TimeRange,
 };
 use effects::EffectStack;
 use resources::{
@@ -62,6 +62,7 @@ struct ObjectQueryViews<'v> {
     plugin_chains: View<'v, PluginChain>,
     scene_objects: View<'v, SceneObject>,
     group_controls: View<'v, GroupControl>,
+    clip_targets: View<'v, ClipTarget>,
 }
 
 #[derive(Clone, Debug)]
@@ -75,6 +76,8 @@ pub struct TimelineData {
     pub media_trim_in_frame: i64,
     pub group_layer_count_down: i32,
     pub group_layer_count_up: i32,
+    pub clip_layer_count_down: i32,
+    pub clip_layer_count_up: i32,
 }
 
 #[derive(Clone, Debug)]
@@ -252,6 +255,32 @@ impl EcsWorld {
                 *slot = gc;
             }
         });
+    }
+
+    pub fn set_clip_target(&mut self, object_id: usize, ct: ClipTarget) {
+        let Some(entity) = self.find_entity(object_id) else {
+            return;
+        };
+        if self
+            .world
+            .run(|targets: View<ClipTarget>| targets.get(entity).is_ok())
+        {
+            self.world.run(|mut targets: ViewMut<ClipTarget>| {
+                if let Ok(mut slot) = (&mut targets).get(entity) {
+                    *slot = ct;
+                }
+            });
+        } else {
+            self.world.add_component(entity, ct);
+        }
+    }
+
+    pub fn get_clip_target(&self, object_id: usize) -> ClipTarget {
+        let Some(entity) = self.find_entity(object_id) else {
+            return ClipTarget::default();
+        };
+        self.world
+            .run(|targets: View<ClipTarget>| targets.get(entity).copied().unwrap_or_default())
     }
 
     #[allow(dead_code)]
@@ -442,7 +471,8 @@ impl EcsWorld {
              layers: View<Layer>,
              scene_ids: View<SceneId>,
              media: View<MediaSource>,
-             group_controls: View<GroupControl>| {
+             group_controls: View<GroupControl>,
+             clip_targets: View<ClipTarget>| {
                 let active = scenes.active_scene;
                 let mut objs = Vec::new();
                 for (_entity, (id, range, kind, layer, scene)) in
@@ -458,6 +488,12 @@ impl EcsWorld {
                         .ok()
                         .map(|gc| (gc.layer_count_down as i32, gc.layer_count_up as i32))
                         .unwrap_or((0, 0));
+                    let (clip_down, clip_up) = clip_targets
+                        .get(_entity)
+                        .ok()
+                        .filter(|ct| ct.enabled)
+                        .map(|ct| (ct.layer_count_down as i32, ct.layer_count_up as i32))
+                        .unwrap_or((0, 0));
                     objs.push(TimelineData {
                         id: id.0 as i32,
                         start_frame: range.start_frame,
@@ -468,6 +504,8 @@ impl EcsWorld {
                         media_trim_in_frame: media.get(_entity).ok().map_or(0, |m| m.trim_in_frame),
                         group_layer_count_down: curtain_down,
                         group_layer_count_up: curtain_up,
+                        clip_layer_count_down: clip_down,
+                        clip_layer_count_up: clip_up,
                     });
                 }
                 objs
@@ -747,6 +785,9 @@ impl EcsWorld {
         if let Some(gc) = o.payload.group_control {
             self.world.add_component(entity, gc);
         }
+        if let Some(ct) = o.payload.clip_target {
+            self.world.add_component(entity, ct);
+        }
         if !o.keyframes.is_empty() {
             self.world
                 .add_component(entity, KeyframeTracks(o.keyframes.clone()));
@@ -806,6 +847,7 @@ impl EcsWorld {
                         media: views.media.get(entity).ok().map(MediaSourceDoc::from),
                         scene: views.scene_objects.get(entity).ok().map(|s| s.target_scene),
                         group_control: views.group_controls.get(entity).ok().copied(),
+                        clip_target: views.clip_targets.get(entity).ok().copied(),
                     },
                 });
             }
@@ -1724,6 +1766,7 @@ impl EcsWorld {
                         media: views.media.get(entity).ok().map(MediaSourceDoc::from),
                         scene: views.scene_objects.get(entity).ok().map(|s| s.target_scene),
                         group_control: views.group_controls.get(entity).ok().copied(),
+                        clip_target: views.clip_targets.get(entity).ok().copied(),
                     },
                 });
             }
