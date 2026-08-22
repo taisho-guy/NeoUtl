@@ -178,7 +178,7 @@ impl TransferBackend for VaapiTransferBackend {
     fn transfer(
         &mut self,
         input: &Self::Input,
-        _device: &wgpu::Device,
+        device: &wgpu::Device,
         _queue: &wgpu::Queue,
         pool: &dyn NeoFramePool,
     ) -> Result<NeoFrame, TransferError> {
@@ -281,6 +281,11 @@ impl TransferBackend for VaapiTransferBackend {
         };
         self.surface_cache.update_layout(input.av_frame, new_layout);
         let _ = &self.entry;
+
+        let target_texture = match unsafe { pool.finalize_write(device, target_texture) } {
+            Ok(texture) => texture,
+            Err(e) => return Err(map_pool_error(e)),
+        };
 
         Ok(NeoFrame {
             texture: target_texture,

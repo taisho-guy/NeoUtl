@@ -2843,6 +2843,7 @@ version = "0.0.0"
 dependencies = [
  "neo-media-core",
  "wgpu",
+ "wgpu-hal",
 ]
 
 [[package]]

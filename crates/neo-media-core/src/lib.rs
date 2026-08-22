@@ -125,6 +125,11 @@ pub trait NeoFramePool: Send + Sync {
         height: u32,
     ) -> Result<wgpu::Texture, PoolError>;
     fn release(&self, texture: wgpu::Texture);
+    unsafe fn finalize_write(
+        &self,
+        device: &wgpu::Device,
+        texture: wgpu::Texture,
+    ) -> Result<wgpu::Texture, PoolError>;
 }
 
 pub trait TransferBackend: Send {
