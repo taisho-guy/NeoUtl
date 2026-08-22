@@ -3121,9 +3121,6 @@ dependencies = [
 [[package]]
 name = "neoutl-effect-shader-build"
 version = "0.0.0"
-dependencies = [
- "rust-i18n",
-]
 
 [[package]]
 name = "neoutl-effect-transform"
@@ -3218,9 +3215,6 @@ dependencies = [
 [[package]]
 name = "neoutl-object-shader-build"
 version = "0.0.0"
-dependencies = [
- "rust-i18n",
-]
 
 [[package]]
 name = "neoutl-object-shape"

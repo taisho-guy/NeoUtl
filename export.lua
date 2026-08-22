@@ -27,7 +27,16 @@ local EXCLUDE_DIRS = {
     "neoutl-wgpu", "Carla"
 }
 
+local IS_WINDOWS = os.getenv("OS") and os.getenv("OS"):match("[Ww]indows") or os.getenv("WINDIR") ~= nil
+
+local function normalize_path(path)
+    if not path then return "" end
+    path = path:gsub("\\", "/")
+    return (path:gsub("^%./", ""))
+end
+
 local function parse_path(path)
+    path = normalize_path(path)
     local filename = path:match("[^/]+$") or path
     local ext = filename:match("%.[^.]+$") or ""
     return filename, ext:lower()
@@ -40,9 +49,9 @@ local function load_gitignore(root_dir)
 
     for line in f:lines() do
         line = line:match("^%s*(.-)%s*$")
-        if line ~= "" and not line:match("^#") then
+        if line and line ~= "" and not line:match("^#") then
             line = line:gsub("/+$", "")
-            table.insert(ignore_patterns, line)
+            table.insert(ignore_patterns, normalize_path(line))
         end
     end
     f:close()
@@ -60,10 +69,33 @@ end
 
 local function scan_directory(root_dir, ignore_patterns)
     local files = {}
-    local p = io.popen("find " .. root_dir .. " -mindepth 1")
+    local cmd
+
+    if IS_WINDOWS then
+        cmd = 'dir /b /s /a-d "' .. root_dir .. '" 2>nul'
+    else
+        cmd = 'find "' .. root_dir .. '" -type f'
+    end
+
+    local p = io.popen(cmd)
     if not p then return files end
 
-    for path in p:lines() do
+    local current_dir = ""
+    if IS_WINDOWS then
+        local pwd_p = io.popen("cd")
+        if pwd_p then
+            current_dir = normalize_path(pwd_p:read("*l") or "")
+            pwd_p:close()
+        end
+    end
+
+    for raw_path in p:lines() do
+        local path = normalize_path(raw_path)
+        
+        if current_dir ~= "" and path:sub(1, #current_dir) == current_dir then
+            path = path:sub(#current_dir + 2)
+        end
+
         local should_exclude = false
         local filename, _ = parse_path(path)
 
@@ -72,7 +104,7 @@ local function scan_directory(root_dir, ignore_patterns)
         end
 
         do
-            local rel_path = path:sub(#root_dir + 2)
+            local rel_path = path
             for _, target in ipairs(EXCLUDE_DIRS) do
                 target = target:gsub("^/+", ""):gsub("/+$", "")
                 if rel_path == target or rel_path:sub(1, #target + 1) == target .. "/" then
@@ -91,7 +123,7 @@ local function scan_directory(root_dir, ignore_patterns)
         end
 
         if not should_exclude then
-            local rel_path = path:sub(#root_dir + 2)
+            local rel_path = path
             for _, pattern in ipairs(ignore_patterns) do
                 local anchored = pattern:match("^/(.+)$")
                 local target = anchored or pattern
@@ -118,14 +150,7 @@ local function scan_directory(root_dir, ignore_patterns)
         end
 
         if not should_exclude then
-            local f = io.open(path, "r")
-            if f then
-                local is_dir = f:read(0) == nil and io.open(path .. "/.", "r") ~= nil
-                f:close()
-                if not is_dir then
-                    table.insert(files, path)
-                end
-            end
+            table.insert(files, path)
         end
     end
     p:close()
@@ -135,11 +160,15 @@ end
 
 local function generate_tree(root_dir, files)
     local tree_lines = {}
-    local root_name = root_dir:match("[^/]+$") or root_dir
+    local root_name = root_dir
+    if root_dir == "." then
+        local pwd = normalize_path(os.getenv("CD") or os.getenv("PWD") or ".")
+        root_name = pwd:match("[^/]+$") or pwd
+    end
     table.insert(tree_lines, root_name .. "/")
 
     for _, filepath in ipairs(files) do
-        local rel_path = filepath:sub(#root_dir + 2)
+        local rel_path = filepath
         local filename, _ = parse_path(filepath)
 
         local is_hidden = filename:match("^%.") and filename ~= ".gitignore"
@@ -151,7 +180,7 @@ local function generate_tree(root_dir, files)
             
             local level = #parts - 1
             local indent = string.rep("  ", level)
-            local prefix = level > 0 and "├── " or "└── "
+            local prefix = level > 0 and "|-- " or "+-- "
             table.insert(tree_lines, indent .. prefix .. parts[#parts])
         end
     end
@@ -216,16 +245,16 @@ local function main()
 
     root_dir = root_dir:gsub("/+$", "")
 
-    print("📋 Loading .gitignore patterns...")
+    print("[*] Loading .gitignore patterns...")
     local ignore_patterns = load_gitignore(root_dir)
 
-    print("🔍 Scanning structure...")
+    print("[*] Scanning structure...")
     local all_files = scan_directory(root_dir, ignore_patterns)
     local tree_structure = generate_tree(root_dir, all_files)
 
     local out_f = io.open(output_file, "w")
     if not out_f then
-        print("❌ Error writing output file: " .. output_file)
+        print("[!] Error writing output file: " .. output_file)
         os.exit(1)
     end
 
@@ -241,7 +270,7 @@ local function main()
     out_f:write('  </metadata>\n')
     out_f:write('  <files>\n')
 
-    print("📄 Reading and embedding files into XML...")
+    print("[*] Reading and embedding files into XML...")
     local total_files = 0
     local extension_counts = {}
     local my_filename = parse_path(arg[0] or "")
@@ -256,7 +285,7 @@ local function main()
                     local content = f:read("*a")
                     f:close()
 
-                    local rel_path = filepath:sub(#root_dir + 2)
+                    local rel_path = filepath
                     extension_counts[ext] = (extension_counts[ext] or 0) + 1
                     total_files = total_files + 1
 
@@ -264,7 +293,7 @@ local function main()
                     out_f:write('      <content><![CDATA[' .. escape_cdata(content) .. ']]></content>\n')
                     out_f:write('    </file>\n')
                 else
-                    print("⚠️ Skipping " .. filepath .. ": Cannot open file")
+                    print("[!] Skipping " .. filepath .. ": Cannot open file")
                 end
             end
         end
@@ -284,7 +313,7 @@ local function main()
     out_f:write('</project>\n')
 
     out_f:close()
-    print("✅ XML export completed: " .. output_file)
+    print("[+] XML export completed: " .. output_file)
 end
 
 main()

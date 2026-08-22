@@ -154,11 +154,11 @@
 "[neoutl-video-decoder][diag][vulkan] raw_handles取得済み": "[neoutl-video-decoder][diag][vulkan] raw_handles取得済み"
 "[neoutl-video-decoder][diag][vulkan] 有効化デバイス拡張(count={}): {:?}": "[neoutl-video-decoder][diag][vulkan] 有効化デバイス拡張(count={}): {:?}"
 "[neoutl-video-decoder][診断] index_of_pts不一致 pts={pts} target={target} (このフレームは破棄される)": "[neoutl-video-decoder][診断] index_of_pts不一致 pts={pts} target={target} (このフレームは破棄される)"
-"[neoutl-video-decoder][診断][decode_task中断] requested_target={requested_target} \\\ntarget={target} last_decoded_frame={last_decoded_frame} superseded_by={superseded_by} \\\ndecoded_frame_count={}": "[neoutl-video-decoder][診断][decode_task中断] requested_target={requested_target} \\\ntarget={target} last_decoded_frame={last_decoded_frame} superseded_by={superseded_by} \\\ndecoded_frame_count={}"
-"[neoutl-video-decoder][診断][decode_task終了] requested_target={requested_target} \\\ntarget={target} key_index={key_index} gop_end={gop_end} \\\nlast_decoded_frame={last_decoded_frame} target_dispatched={target_dispatched} \\\ndecoded_frame_count={decoded_count} boundary={boundary_dump}": "[neoutl-video-decoder][診断][decode_task終了] requested_target={requested_target} \\\ntarget={target} key_index={key_index} gop_end={gop_end} \\\nlast_decoded_frame={last_decoded_frame} target_dispatched={target_dispatched} \\\ndecoded_frame_count={decoded_count} boundary={boundary_dump}"
+"[neoutl-video-decoder][診断][decode_task中断] requested_target={requested_target} \\\ntarget={target} last_decoded_frame={last_decoded_frame} superseded_by={superseded_by} \\\ndecoded_frame_count={}": "[neoutl-video-decoder][診断][decode_task中断] requested_target={requested_target} \\\ntarget={target} last_decoded_frame={last_decoded_frame} superseded_by={superseded_by} \\\ndecoded_frame_count={}"
+"[neoutl-video-decoder][診断][decode_task終了] requested_target={requested_target} \\\ntarget={target} key_index={key_index} gop_end={gop_end} \\\nlast_decoded_frame={last_decoded_frame} target_dispatched={target_dispatched} \\\ndecoded_frame_count={decoded_count} boundary={boundary_dump}": "[neoutl-video-decoder][診断][decode_task終了] requested_target={requested_target} \\\ntarget={target} key_index={key_index} gop_end={gop_end} \\\nlast_decoded_frame={last_decoded_frame} target_dispatched={target_dispatched} \\\ndecoded_frame_count={decoded_count} boundary={boundary_dump}"
 "[neoutl-video-decoder][診断][decode_task終了][frame_cache即応] requested_target={requested_target} target={target}": "[neoutl-video-decoder][診断][decode_task終了][frame_cache即応] requested_target={requested_target} target={target}"
 "[neoutl-video-decoder][診断][decode_task終了][gop_cache即応] requested_target={requested_target} target={target}": "[neoutl-video-decoder][診断][decode_task終了][gop_cache即応] requested_target={requested_target} target={target}"
-"[neoutl-video-decoder][診断][index] PTS不連続検出 index={i} \\\nprev_index={prev} prev_pts={prev_pts} prev_is_key={prev_key} \\\ncurr_pts={curr_pts} curr_is_key={curr_key} delta={delta} typical_delta={typical_delta}": "[neoutl-video-decoder][診断][index] PTS不連続検出 index={i} \\\nprev_index={prev} prev_pts={prev_pts} prev_is_key={prev_key} \\\ncurr_pts={curr_pts} curr_is_key={curr_key} delta={delta} typical_delta={typical_delta}"
+"[neoutl-video-decoder][診断][index] PTS不連続検出 index={i} \\\nprev_index={prev} prev_pts={prev_pts} prev_is_key={prev_key} \\\ncurr_pts={curr_pts} curr_is_key={curr_key} delta={delta} typical_delta={typical_delta}": "[neoutl-video-decoder][診断][index] PTS不連続検出 index={i} \\\nprev_index={prev} prev_pts={prev_pts} prev_is_key={prev_key} \\\ncurr_pts={curr_pts} curr_is_key={curr_key} delta={delta} typical_delta={typical_delta}"
 "[neoutl-video-decoder][診断][seek上書き] overwritten={overwritten} new={frame}": "[neoutl-video-decoder][診断][seek上書き] overwritten={overwritten} new={frame}"
 "[neoutl-video-decoder][診断][submit_lock] CopyEngine待機={waited:?}(競合)": "[neoutl-video-decoder][診断][submit_lock] CopyEngine待機={waited:?}(競合)"
 "[neoutl-video-decoder][診断][submit_lock] SemiPlanarConvertEngine待機={waited:?}(競合)": "[neoutl-video-decoder][診断][submit_lock] SemiPlanarConvertEngine待機={waited:?}(競合)"
@@ -305,7 +305,6 @@
 "{}を追加": "{}を追加"
 "このOS/アーキテクチャ向けの配布物がありません": "このOS/アーキテクチャ向けの配布物がありません"
 "この映像形式はGPUデコード非対応です(色形式/ビット深度)": "この映像形式はGPUデコード非対応です(色形式/ビット深度)"
-"しきい値": "しきい値"
 "すべて": "すべて"
 "ずれ量": "ずれ量"
 "ぼかし": "ぼかし"
@@ -593,7 +592,7 @@
 "有効": "有効"
 "未保存の変更": "未保存の変更"
 "未対応: layer={layer_idx} plane={plane_idx}のobject_index={}が0以外": "未対応: layer={layer_idx} plane={plane_idx}のobject_index={}が0以外"
-"未対応: 複数dma-bufオブジェクト(nb_objects={nb_objects})にまたがるフレーム。\\\n                 texture_from_dma_buf_fdは単一fdのみ対応": "未対応: 複数dma-bufオブジェクト(nb_objects={nb_objects})にまたがるフレーム。\\\n                 texture_from_dma_buf_fdは単一fdのみ対応"
+"未対応: 複数dma-bufオブジェクト(nb_objects={nb_objects})にまたがるフレーム。\\\n                 texture_from_dma_buf_fdは単一fdのみ対応": "未対応: 複数dma-bufオブジェクト(nb_objects={nb_objects})にまたがるフレーム。\\\n                 texture_from_dma_buf_fdは単一fdのみ対応"
 "未対応OS/CPUアーキテクチャ組合せ": "未対応OS/CPUアーキテクチャ組合せ"
 "未対応sw_format: {sw_format_i32}": "未対応sw_format: {sw_format_i32}"
 "未対応の拡張子（対応デコーダプラグイン未検出）: %{arg0}": "未対応の拡張子（対応デコーダプラグイン未検出）: %{arg0}"

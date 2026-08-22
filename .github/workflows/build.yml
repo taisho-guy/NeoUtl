@@ -26,13 +26,13 @@ jobs:
             artifact_name: neoutl-linux-x86_64
             binary_name: NeoUtl
             lua_feature: luajit
-            install_cmd: sudo apt-get update && sudo apt-get install -y --no-install-recommends pkg-config clang cmake ninja-build mold libxkbcommon-dev libwayland-dev libegl1-mesa-dev libudev-dev libasound2-dev libfontconfig1-dev libfreetype6-dev libexpat1-dev libavcodec-dev libavformat-dev libavutil-dev libswscale-dev libswresample-dev libva-dev
+            install_cmd: sudo apt-get update && sudo apt-get install -y --no-install-recommends pkg-config clang cmake ninja-build mold libxkbcommon-dev libwayland-dev libegl1-mesa-dev libudev-dev libasound2-dev libfontconfig1-dev libfreetype6-dev libexpat1-dev libavcodec-dev libavformat-dev libavutil-dev libavfilter-dev libswscale-dev libswresample-dev libva-dev
           - os: ubuntu-24.04-arm
             os_name: Linux(ARM64)
             artifact_name: neoutl-linux-arm64
             binary_name: NeoUtl
             lua_feature: luajit
-            install_cmd: sudo apt-get update && sudo apt-get install -y --no-install-recommends pkg-config clang cmake ninja-build mold libxkbcommon-dev libwayland-dev libegl1-mesa-dev libudev-dev libasound2-dev libfontconfig1-dev libfreetype6-dev libexpat1-dev libavcodec-dev libavformat-dev libavutil-dev libswscale-dev libswresample-dev libva-dev
+            install_cmd: sudo apt-get update && sudo apt-get install -y --no-install-recommends pkg-config clang cmake ninja-build mold libxkbcommon-dev libwayland-dev libegl1-mesa-dev libudev-dev libasound2-dev libfontconfig1-dev libfreetype6-dev libexpat1-dev libavcodec-dev libavformat-dev libavutil-dev libavfilter-dev libswscale-dev libswresample-dev libva-dev
           - os: macos-latest
             os_name: macOS(Apple Silicon)
             artifact_name: neoutl-macos-aarch64
