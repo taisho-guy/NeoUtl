@@ -12,6 +12,7 @@ permissions:
 
 env:
   VCPKG_BINARY_SOURCES: "clear;nuget,GitHub,readwrite"
+  CARLA_VERSION: "2.5.10"
 
 jobs:
   build:
@@ -37,13 +38,13 @@ jobs:
             artifact_name: neoutl-macos-aarch64
             binary_name: NeoUtl
             lua_feature: luajit
-            install_cmd: brew update && brew install ffmpeg
+            install_cmd: brew update && brew install ffmpeg carla
           - os: macos-26-intel
             os_name: macOS(Intel)
             artifact_name: neoutl-macos-x86_64
             binary_name: NeoUtl
             lua_feature: luajit
-            install_cmd: brew update && brew install ffmpeg
+            install_cmd: brew update && brew install ffmpeg carla
           - os: windows-latest
             os_name: Windows(x86_64)
             artifact_name: neoutl-windows-x86_64
@@ -138,7 +139,6 @@ jobs:
         run: |
           mkdir -p dist/package
           cp target/release/${{ matrix.binary_name }} dist/package/
-          cp target/release/vst3-host-helper dist/package/
           cp assets/icon.svg dist/package/
           cat > dist/package/NeoUtl.desktop <<'EOF'
           [Desktop Entry]
@@ -164,35 +164,29 @@ jobs:
           FRAMEWORKS_DIR="$APP_DIR/Contents/Frameworks"
           mkdir -p "$APP_DIR/Contents/MacOS"
           mkdir -p "$FRAMEWORKS_DIR"
-          mkdir -p "$APP_DIR/Contents/Resources/gstreamer-1.0"
+          mkdir -p "$APP_DIR/Contents/Resources"
 
           cp target/release/${{ matrix.binary_name }} "$APP_DIR/Contents/MacOS/"
-          cp target/release/vst3-host-helper "$APP_DIR/Contents/MacOS/"
           cp assets/icon.svg "$APP_DIR/Contents/Resources/"
           [ -d target/release/objects ] && cp -r target/release/objects "$APP_DIR/Contents/Resources/"
           [ -d target/release/effects ] && cp -r target/release/effects "$APP_DIR/Contents/Resources/"
 
-          BREW_GST_PLUGINS="$(brew --prefix gstreamer)/lib/gstreamer-1.0"
-          PLUGIN_DIRS=()
-          [ -d "$BREW_GST_PLUGINS" ] && PLUGIN_DIRS+=("$BREW_GST_PLUGINS")
-          if [ "${#PLUGIN_DIRS[@]}" -eq 0 ]; then
-            echo "エラー: GStreamerプラグインディレクトリが見つかりません" >&2
+          CARLA_PREFIX="$(brew --prefix carla)"
+          CARLA_DEST="$APP_DIR/Contents/Resources/carla"
+          mkdir -p "$CARLA_DEST"
+          find "$CARLA_PREFIX" -type f \( \
+            -name "libcarla_standalone2*" -o \
+            -name "libcarla_utils*" -o \
+            -name "carla-discovery-*" -o \
+            -name "carla-bridge-native*" -o \
+            -name "carla-bridge-lv2*" \
+          \) -exec cp -L {} "$CARLA_DEST/" \;
+          CARLA_FILE_COUNT=$(find "$CARLA_DEST" -type f | wc -l | tr -d ' ')
+          if [ "$CARLA_FILE_COUNT" -eq 0 ]; then
+            echo "エラー: Carlaホストバイナリが0件です（探索対象: $CARLA_PREFIX）" >&2
             exit 1
           fi
-          PLUGIN_COUNT=$(find "${PLUGIN_DIRS[@]}" -type f \( -name "*.so" -o -name "*.dylib" \) 2>/dev/null | wc -l | tr -d ' ')
-          if [ "$PLUGIN_COUNT" -eq 0 ]; then
-            echo "エラー: GStreamerプラグインが0件です" >&2
-            exit 1
-          fi
-          for plugin_dir in "${PLUGIN_DIRS[@]}"; do
-            find "$plugin_dir" -name "*.so" -exec cp {} "$APP_DIR/Contents/Resources/gstreamer-1.0/" \;
-            find "$plugin_dir" -name "*.dylib" -exec cp {} "$APP_DIR/Contents/Resources/gstreamer-1.0/" \;
-          done
-
-          EXCLUDE_PLUGINS="libgstnice.dylib libgstpython.dylib libgstgtk.dylib libgstgtk4.dylib libgstges.dylib libgstvalidategtk.dylib libgstvalidategapplication.dylib libgstvalidatessim.dylib libgstvalidatefaultinjection.dylib libgstvalidatetracer.dylib libgstdecklink.dylib libgstndi.dylib libgstjack.dylib libgstwhisper.dylib libgstdeepgram.dylib libgstelevenlabs.dylib libgstspeechmatics.dylib libgstdemucs.dylib libgsttensordecoders.dylib libgstspotify.dylib libgstrtmp.dylib libgstrtmp2.dylib libgstrtsp.dylib libgstrtspclientsink.dylib libgstsrt.dylib libgstsctp.dylib libgstdtls.dylib libgstsrtp.dylib libgstrist.dylib libgstwebrtc.dylib libgstwebrtchttp.dylib libgstshm.dylib libgstaws.dylib libgsticecast.dylib libgsthls.dylib libgsthlssink3.dylib libgsthlsmultivariantsink.dylib libgstdash.dylib libgstmse.dylib libgstreqwest.dylib libgstquinn.dylib libgstraptorq.dylib libgstunixfd.dylib libgstipcpipeline.dylib libgstthreadshare.dylib libgstnetsim.dylib libgstcurl.dylib libgstsoup.dylib libgstrfbsrc.dylib libgstvmnc.dylib"
-          for name in $EXCLUDE_PLUGINS; do
-            rm -f "$APP_DIR/Contents/Resources/gstreamer-1.0/$name"
-          done
+          chmod +x "$CARLA_DEST"/carla-discovery-* "$CARLA_DEST"/carla-bridge-native* "$CARLA_DEST"/carla-bridge-lv2-* 2>/dev/null || true
 
           relink() {
             local target="$1"
@@ -220,12 +214,13 @@ jobs:
           }
 
           relink "$APP_DIR/Contents/MacOS/${{ matrix.binary_name }}"
-          relink "$APP_DIR/Contents/MacOS/vst3-host-helper"
-          find "$APP_DIR/Contents/Resources/gstreamer-1.0" -type f -name "*.dylib" -print0 \
-            | while IFS= read -r -d '' plugin; do relink "$plugin"; done
+          find "$CARLA_DEST" -type f -perm -u+x -print0 | while IFS= read -r -d '' bin; do relink "$bin"; done
+          find "$CARLA_DEST" -type f -name "*.dylib" -print0 | while IFS= read -r -d '' lib; do relink "$lib"; done
 
           install_name_tool -add_rpath "@executable_path/../Frameworks" "$APP_DIR/Contents/MacOS/${{ matrix.binary_name }}"
-          install_name_tool -add_rpath "@executable_path/../Frameworks" "$APP_DIR/Contents/MacOS/vst3-host-helper"
+          find "$CARLA_DEST" -type f -perm -u+x -print0 | while IFS= read -r -d '' bin; do
+            install_name_tool -add_rpath "@executable_path/../../Frameworks" "$bin"
+          done
 
           FRAMEWORK_COUNT=$(find "$FRAMEWORKS_DIR" -type f | wc -l | tr -d ' ')
           if [ "$FRAMEWORK_COUNT" -eq 0 ]; then
@@ -259,64 +254,26 @@ jobs:
           EOF
 
           find "$APP_DIR/Contents/Frameworks" -type f -exec codesign --force --sign - {} \;
-          find "$APP_DIR/Contents/Resources/gstreamer-1.0" -type f -exec codesign --force --sign - {} \;
           [ -d "$APP_DIR/Contents/Resources/objects" ] && find "$APP_DIR/Contents/Resources/objects" -type f -exec codesign --force --sign - {} \;
           [ -d "$APP_DIR/Contents/Resources/effects" ] && find "$APP_DIR/Contents/Resources/effects" -type f -exec codesign --force --sign - {} \;
-          codesign --force --sign - "$APP_DIR/Contents/MacOS/vst3-host-helper"
+          find "$CARLA_DEST" -type f -exec codesign --force --sign - {} \;
           codesign --force --sign - "$APP_DIR/Contents/MacOS/${{ matrix.binary_name }}"
 
           cd dist
           zip -r ${{ matrix.artifact_name }}.zip NeoUtl.app
 
-      - name: GStreamer収集・パッケージング(Windows)
+      - name: FFmpeg依存関係収集(Windows)
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path dist/package | Out-Null
-          New-Item -ItemType Directory -Force -Path dist/package/lib/gstreamer-1.0 | Out-Null
 
           Copy-Item "target/release/${{ matrix.binary_name }}" dist/package/
-          Copy-Item "target/release/vst3-host-helper.exe" dist/package/
           Copy-Item "assets/icon.ico" dist/package/
           if (Test-Path "target/release/objects") { Copy-Item -Recurse "target/release/objects" dist/package/ }
           if (Test-Path "target/release/effects") { Copy-Item -Recurse "target/release/effects" dist/package/ }
 
           $vcpkgRoot = "${{ env.VCPKG_INSTALLED }}"
-          $vcpkgBin = "$vcpkgRoot/bin"
-
-          # vcpkgのgstreamerポートはプラグインDLLの実出力先がビルド構成・ポートバージョンで
-          # 変動する（bin直下 / bin/gstreamer-1.0 / plugins/gstreamer-1.0 等）。単一パス
-          # 決め打ちは実際の出力先と食い違うと「0件コピー」のままErrorAction
-          # SilentlyContinueで握り潰され検出漏れとなる（実際に発生した不具合）。
-          # そのためvcpkgRoot配下をgst*.dllで再帰探索し、コア共有ライブラリ
-          # （gst<name>-1.0-0.dll形式）を除いたものをプラグインとして扱う。
-          $allGstDlls = Get-ChildItem -Path $vcpkgRoot -Recurse -Filter "gst*.dll" -ErrorAction SilentlyContinue
-          $pluginDlls = $allGstDlls | Where-Object { $_.Name -notmatch '-1\.0-0\.dll$' }
-
-          if ($pluginDlls.Count -eq 0) {
-            Write-Error "エラー: GStreamerプラグインDLLが0件です（探索対象: $vcpkgRoot）"
-            exit 1
-          }
-
-          $pluginDlls |
-            Sort-Object FullName -Unique |
-            Copy-Item -Destination dist/package/lib/gstreamer-1.0/
-
-          $excludePlugins = @(
-            "gstdecklink.dll","gstrtmp.dll","gstrtmp2.dll","gstrtsp.dll","gstsrt.dll",
-            "gstsctp.dll","gstdtls.dll","gstsrtp.dll","gstrist.dll","gstwebrtc.dll",
-            "gstwebrtcdsp.dll","gsthls.dll","gstsoup.dll","gstrfbsrc.dll","gstvmnc.dll","gstshout2.dll"
-          )
-          foreach ($name in $excludePlugins) {
-            Remove-Item -Force -ErrorAction SilentlyContinue "dist/package/lib/gstreamer-1.0/$name"
-          }
-
-          $copiedCount = (Get-ChildItem -Path dist/package/lib/gstreamer-1.0 -Filter "*.dll").Count
-          if ($copiedCount -eq 0) {
-            Write-Error "エラー: 除外リスト適用後、同梱プラグインDLLが0件です"
-            exit 1
-          }
-          Write-Host "GStreamerプラグイン同梱数: $copiedCount"
 
           $dumpbin = Get-Command dumpbin.exe -ErrorAction SilentlyContinue
           $objdump = Get-Command llvm-objdump.exe -ErrorAction SilentlyContinue
@@ -331,9 +288,8 @@ jobs:
           $queued = [System.Collections.Generic.Queue[System.IO.FileInfo]]::new()
 
           $roots = @(
-            (Get-Item "dist/package/${{ matrix.binary_name }}"),
-            (Get-Item "dist/package/vst3-host-helper.exe")
-          ) + @(Get-ChildItem -Path "dist/package/lib/gstreamer-1.0" -Filter "*.dll" -File)
+            (Get-Item "dist/package/${{ matrix.binary_name }}")
+          )
           foreach ($root in $roots) { $queued.Enqueue($root) }
 
           function Is-SystemDll([string]$name) {
@@ -384,8 +340,58 @@ jobs:
           }
 
           $runtimeCount = (Get-ChildItem -Path $packageRoot -Filter "*.dll" -File).Count
+          if ($runtimeCount -eq 0) {
+            Write-Error "エラー: FFmpeg依存DLLが0件です（探索対象: $vcpkgRoot）"
+            exit 1
+          }
           Write-Host "依存関係を再帰解決したWindows DLL数: $runtimeCount"
 
+      - name: Carla配置(Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          # Carlaはx86_64ビルドのみ提供。Windows ARM64はx64エミュレーション経由で実行する。
+          $zipName = "Carla-${{ env.CARLA_VERSION }}-win64.zip"
+          $downloadUrl = "https://github.com/falkTX/Carla/releases/download/v${{ env.CARLA_VERSION }}/$zipName"
+
+          Invoke-WebRequest -Uri $downloadUrl -OutFile "carla.zip"
+          Expand-Archive -Path "carla.zip" -DestinationPath "carla_extracted"
+
+          $carlaDest = "dist/package/carla"
+          New-Item -ItemType Directory -Force -Path $carlaDest | Out-Null
+
+          $hostFilePatterns = @(
+            "libcarla_standalone2.dll",
+            "libcarla_utils.dll",
+            "carla-discovery-native.exe",
+            "carla-discovery-win32.exe",
+            "carla-bridge-native.exe",
+            "carla-bridge-win32.exe",
+            "carla-bridge-lv2.dll",
+            "carla-bridge-lv2-windows.exe",
+            "carla-bridge-lv2-gtk2.exe",
+            "carla-bridge-lv2-gtk3.exe"
+          )
+          foreach ($pattern in $hostFilePatterns) {
+            $found = Get-ChildItem -Path "carla_extracted" -Recurse -Filter $pattern -File -ErrorAction SilentlyContinue
+            foreach ($file in $found) {
+              Copy-Item $file.FullName -Destination (Join-Path $carlaDest $file.Name)
+            }
+          }
+
+          $carlaFileCount = (Get-ChildItem -Path $carlaDest -File).Count
+          if ($carlaFileCount -eq 0) {
+            Write-Error "エラー: Carlaホストバイナリが0件です（取得元: $downloadUrl）"
+            exit 1
+          }
+          Write-Host "配置したCarlaホストバイナリ数: $carlaFileCount"
+
+          Remove-Item -Recurse -Force "carla.zip", "carla_extracted"
+
+      - name: Windowsパッケージ圧縮
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
           Compress-Archive -Path dist/package/* -DestinationPath "dist/${{ matrix.artifact_name }}.zip"
 
       - name: 成果物アップロード

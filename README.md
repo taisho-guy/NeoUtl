@@ -77,6 +77,14 @@
 
 ロードマップは[TODO.md](https://codeberg.org/taisho-guy/NeoUtl/src/branch/main/TODO.md)でご覧下さい。
 
+### 既知の問題
+
+- 音声プラグインをホストしようとするとクラッシュします。
+- 書き出しは未開通です。
+- Linuxでのみ動画オブジェクトを正しく扱えます。
+
+これらは現在対処している最中です。
+
 ## ダウンロード方法
 
 [NeoUtlのお部屋](https://neoutl.taisho-guy.org)をご確認下さい。
