@@ -713,6 +713,15 @@ pub fn init_vulkan_context(
     }))
 }
 
+#[repr(C)]
+#[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
+pub struct ColorTags {
+    pub matrix_coefficients: u32,
+    pub transfer_characteristics: u32,
+    pub color_primaries: u32,
+    pub full_range: u32,
+}
+
 pub struct SemiPlanarConvertEngine {
     device: ash::Device,
     queue: ash::vk::Queue,
@@ -803,8 +812,13 @@ impl SemiPlanarConvertEngine {
                 .map_err(|e| format!("create_descriptor_set_layout失敗: {e}"))?;
 
             let set_layouts = [descriptor_set_layout];
-            let pipeline_layout_info =
-                ash::vk::PipelineLayoutCreateInfo::default().set_layouts(&set_layouts);
+            let push_constant_ranges = [ash::vk::PushConstantRange::default()
+                .stage_flags(ash::vk::ShaderStageFlags::COMPUTE)
+                .offset(0)
+                .size(std::mem::size_of::<ColorTags>() as u32)];
+            let pipeline_layout_info = ash::vk::PipelineLayoutCreateInfo::default()
+                .set_layouts(&set_layouts)
+                .push_constant_ranges(&push_constant_ranges);
             let pipeline_layout = device
                 .create_pipeline_layout(&pipeline_layout_info, None)
                 .map_err(|e| format!("create_pipeline_layout失敗: {e}"))?;
@@ -881,6 +895,7 @@ impl SemiPlanarConvertEngine {
         y_plane_format: ash::vk::Format,
         uv_plane_format: ash::vk::Format,
         dst_format: ash::vk::Format,
+        color_tags: ColorTags,
     ) -> Result<ash::vk::ImageLayout, String> {
         unsafe {
             let y_view_info = ash::vk::ImageViewCreateInfo::default()
@@ -1044,6 +1059,13 @@ impl SemiPlanarConvertEngine {
                 0,
                 &[descriptor_set],
                 &[],
+            );
+            self.device.cmd_push_constants(
+                self.command_buffer,
+                self.pipeline_layout,
+                ash::vk::ShaderStageFlags::COMPUTE,
+                0,
+                bytemuck::bytes_of(&color_tags),
             );
             self.device.cmd_dispatch(
                 self.command_buffer,

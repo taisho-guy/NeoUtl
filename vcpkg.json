@@ -1,33 +1,17 @@
 {
   "$schema": "https://raw.githubusercontent.com/microsoft/vcpkg-tool/main/docs/vcpkg.schema.json",
   "name": "neoutl",
-  "version-string": "0.0.0",
-  "builtin-baseline": "cd61e1e26a038e82d6550a3ebbe0fbbfe7da78e3",
+  "version-string": "0.6.0",
+  "builtin-baseline": "9e593bb18ea69cc5095e012465dcd675a822ed0d",
   "dependencies": [
     {
-      "name": "gstreamer",
+      "name": "ffmpeg",
       "default-features": false,
       "features": [
-        "plugins-base",
-        "plugins-good",
-        "plugins-bad",
-        "plugins-ugly",
-        "libav",
-        "gpl",
-        "ogg",
-        "vorbis",
-        "flac",
-        "mpg123",
-        "speex",
-        "taglib",
-        "sndfile",
-        "opus-base",
-        "opus-bad",
-        "x264",
-        "x265",
-        "vpx",
-        "webp",
-        "openjpeg"
+        "avcodec",
+        "avformat",
+        "swscale",
+        "swresample"
       ]
     }
   ]
