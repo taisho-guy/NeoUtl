@@ -4,5 +4,6 @@ version = "0.0.0"
 edition = "2024"
 
 [dependencies]
-wgpu = "30"
+wgpu = { version = "30", features = ["vulkan-portability"] }
+wgpu-hal = { version = "30", features = ["vulkan"] }
 neo-media-core = { path = "../neo-media-core" }

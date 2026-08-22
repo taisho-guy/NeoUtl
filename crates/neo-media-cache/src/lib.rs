@@ -37,6 +37,7 @@ enum SlotState {
 }
 
 struct Slot {
+    owning_texture: wgpu::Texture,
     texture: wgpu::Texture,
     state: SlotState,
     fence: Option<wgpu::SubmissionIndex>,
@@ -127,6 +128,17 @@ fn texture_usage(format: PixelFormat) -> wgpu::TextureUsages {
                 | wgpu::TextureUsages::STORAGE_BINDING
         }
         _ => wgpu::TextureUsages::COPY_DST | wgpu::TextureUsages::TEXTURE_BINDING,
+    }
+}
+
+fn hal_texture_uses(format: PixelFormat) -> wgpu::TextureUses {
+    match format {
+        PixelFormat::Rgba8 | PixelFormat::Rgba16Float => {
+            wgpu::TextureUses::COPY_DST
+                | wgpu::TextureUses::RESOURCE
+                | wgpu::TextureUses::STORAGE_READ_WRITE
+        }
+        _ => wgpu::TextureUses::COPY_DST | wgpu::TextureUses::RESOURCE,
     }
 }
 
@@ -279,6 +291,7 @@ impl FormatPool {
         if self.slots.len() < capacity {
             let texture = create_texture(device, self.format, self.width, self.height)?;
             self.slots.push(Slot {
+                owning_texture: texture.clone(),
                 texture: texture.clone(),
                 state: SlotState::Writing,
                 fence: None,
@@ -332,6 +345,77 @@ impl FormatPool {
                 self.record_write_duration(started.elapsed().as_micros() as u64);
             }
         }
+    }
+
+    unsafe fn finalize_write(
+        &mut self,
+        device: &wgpu::Device,
+        texture: wgpu::Texture,
+    ) -> Result<wgpu::Texture, PoolError> {
+        let Some(slot) = self.slots.iter_mut().find(|s| s.matches(&texture)) else {
+            return Err(PoolError::Exhausted);
+        };
+
+        let vk_image = unsafe {
+            let Some(hal_texture) = texture.as_hal::<wgpu_hal::api::Vulkan>() else {
+                return Err(PoolError::Exhausted);
+            };
+            hal_texture.raw_handle()
+        };
+
+        let hal_desc = wgpu_hal::TextureDescriptor {
+            label: Some("neo-media-cache-slot-finalized"),
+            size: wgpu::Extent3d {
+                width: self.width,
+                height: self.height,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu_texture_format(self.format)?,
+            usage: hal_texture_uses(self.format),
+            memory_flags: wgpu_hal::MemoryFlags::empty(),
+            view_formats: vec![],
+        };
+
+        let hal_wrapped = unsafe {
+            let Some(hal_device) = device.as_hal::<wgpu_hal::api::Vulkan>() else {
+                return Err(PoolError::Exhausted);
+            };
+            hal_device.texture_from_raw(
+                vk_image,
+                &hal_desc,
+                Some(Box::new(|| {})),
+                wgpu_hal::vulkan::TextureMemory::External,
+            )
+        };
+
+        let wgpu_desc = wgpu::TextureDescriptor {
+            label: Some("neo-media-cache-slot-finalized"),
+            size: wgpu::Extent3d {
+                width: self.width,
+                height: self.height,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu_texture_format(self.format)?,
+            usage: texture_usage(self.format),
+            view_formats: &[],
+        };
+
+        let finalized = unsafe {
+            device.create_texture_from_hal::<wgpu_hal::api::Vulkan>(
+                hal_wrapped,
+                &wgpu_desc,
+                wgpu::TextureUses::RESOURCE,
+            )
+        };
+
+        slot.texture = finalized.clone();
+        Ok(finalized)
     }
 
     fn acquire_for_read(
@@ -568,5 +652,19 @@ impl NeoFramePool for NeoMediaCache {
         for pool in pools.values_mut() {
             pool.release_free(&texture);
         }
+    }
+
+    unsafe fn finalize_write(
+        &self,
+        device: &wgpu::Device,
+        texture: wgpu::Texture,
+    ) -> Result<wgpu::Texture, PoolError> {
+        let mut pools = self.pools.lock().expect("pools mutex poisoned");
+        for pool in pools.values_mut() {
+            if pool.slots.iter().any(|s| s.matches(&texture)) {
+                return unsafe { pool.finalize_write(device, texture) };
+            }
+        }
+        Err(PoolError::Exhausted)
     }
 }
