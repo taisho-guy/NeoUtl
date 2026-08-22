@@ -21,12 +21,6 @@ use std::collections::HashMap;
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum FrameBufferKind {
     Group,
-    Clip {
-        mode: ClipMode,
-        chroma_hue: f32,
-        chroma_tolerance: f32,
-        blend_edge: bool,
-    },
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -429,7 +423,15 @@ pub fn get_active_objects_system_at(
                     clip_target,
                 };
 
-                let fb_pos = chain_idx.iter().position(|&i| controllers[i].requires_fb());
+                let fb_pos = chain_idx.iter().position(|&i| {
+                    matches!(
+                        controllers[i].kind,
+                        ControllerKind::Group {
+                            generate_framebuffer: true,
+                            ..
+                        }
+                    )
+                });
 
                 if let Some(pos) = fb_pos {
                     let controller = controllers[chain_idx[pos]].entity;
@@ -534,9 +536,6 @@ pub fn get_active_objects_system_at(
                 if !c.requires_fb() {
                     continue;
                 }
-                if !c.render_self {
-                    continue;
-                }
                 let Ok(kind) = kind_ids.get(c.entity) else {
                     continue;
                 };
@@ -569,36 +568,79 @@ pub fn get_active_objects_system_at(
                     prefixed.append(&mut effects);
                     effects = prefixed;
                 }
-                active.push(ActiveObject {
-                    kind_id: kind.0,
-                    clip_instance: object_ids.get(c.entity).map_or(0, |o| o.0 as u64),
-                    source_frame: 0,
-                    text_content: None,
-                    shape_params: None,
-                    media_source: None,
-                    mvp,
-                    opacity,
-                    effects,
-                    compose_source: Some(ComposeSource::FrameBuffer {
-                        controller: c.entity,
-                        kind: match c.kind {
-                            ControllerKind::Group { .. } => FrameBufferKind::Group,
-                            ControllerKind::Clip {
-                                mode,
-                                chroma_hue,
-                                chroma_tolerance,
-                                blend_edge,
-                            } => FrameBufferKind::Clip {
-                                mode,
-                                chroma_hue,
-                                chroma_tolerance,
-                                blend_edge,
-                            },
-                        },
-                    }),
-                    layer: c.layer,
-                    clip_target: None,
-                });
+
+                match c.kind {
+                    ControllerKind::Group { .. } => {
+                        if !c.render_self {
+                            continue;
+                        }
+                        active.push(ActiveObject {
+                            kind_id: kind.0,
+                            clip_instance: object_ids.get(c.entity).map_or(0, |o| o.0 as u64),
+                            source_frame: 0,
+                            text_content: None,
+                            shape_params: None,
+                            media_source: None,
+                            mvp,
+                            opacity,
+                            effects,
+                            compose_source: Some(ComposeSource::FrameBuffer {
+                                controller: c.entity,
+                                kind: FrameBufferKind::Group,
+                            }),
+                            layer: c.layer,
+                            clip_target: None,
+                        });
+                    }
+                    ControllerKind::Clip { .. } => {
+                        let keyframes = keyframe_tracks.get(c.entity).ok();
+
+                        let mut text_content = text_contents.get(c.entity).ok().cloned();
+                        if let (Some(tc), Some(kt)) = (text_content.as_mut(), keyframes) {
+                            kt.apply(tc, current);
+                        }
+                        let mut shape = shape_params.get(c.entity).ok().copied();
+                        if let (Some(sp), Some(kt)) = (shape.as_mut(), keyframes) {
+                            kt.apply(sp, current);
+                        }
+                        let media_source = media_sources.get(c.entity).ok().cloned();
+                        let source_frame = media_source.as_ref().map_or(0, |m| {
+                            let base = time_ranges
+                                .get(c.entity)
+                                .map_or(0.0, |r| f64::from(current - r.start_frame));
+                            let ratio = if matches!(m.kind, MediaKind::Video) {
+                                crate::media::cache::global()
+                                    .source_fps(&m.path)
+                                    .map_or(1.0, |src_fps| src_fps / f64::from(project.fps.max(1)))
+                            } else {
+                                1.0
+                            };
+                            m.trim_in_frame + (base * ratio).round() as i64
+                        });
+
+                        let mold_object = ActiveObject {
+                            kind_id: kind.0,
+                            clip_instance: object_ids.get(c.entity).map_or(0, |o| o.0 as u64),
+                            source_frame,
+                            text_content,
+                            shape_params: shape,
+                            media_source,
+                            mvp,
+                            opacity,
+                            effects,
+                            compose_source: None,
+                            layer: c.layer,
+                            clip_target: None,
+                        };
+                        captured
+                            .entry(c.entity)
+                            .or_default()
+                            .push(mold_object.clone());
+                        if c.render_self {
+                            active.push(mold_object);
+                        }
+                    }
+                }
             }
 
             active.sort_by_key(|o| o.layer);

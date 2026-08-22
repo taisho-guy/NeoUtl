@@ -2102,13 +2102,6 @@ impl RenderEngine {
                             }
                         }
                     } else {
-                        eprintln!(
-                            "{}",
-                            t!(
-                                "[NeoUtl] MediaSource未設定 kind_id=%{arg0}: 映像/画像オブジェクトにパスが割当てられていません",
-                                arg0 = format!("{}", obj.kind_id)
-                            )
-                        );
                         None
                     }
                 } else {
@@ -2136,24 +2129,21 @@ impl RenderEngine {
                         }),
                         Some(crate::ecs::systems::ComposeSource::FrameBuffer {
                             controller,
-                            kind,
-                        }) => match kind {
-                            crate::ecs::systems::FrameBufferKind::Clip { .. } => None,
-                            crate::ecs::systems::FrameBufferKind::Group => {
-                                let empty = Vec::new();
-                                let objects = captured.get(&controller).unwrap_or(&empty);
-                                self.render_composed_texture(
-                                    world,
-                                    objects,
-                                    captured,
-                                    self.render_width,
-                                    self.render_height,
-                                    ComposeCacheKey::FrameBuffer(controller),
-                                    depth + 1,
-                                    None,
-                                )
-                            }
-                        },
+                            kind: crate::ecs::systems::FrameBufferKind::Group,
+                        }) => {
+                            let empty = Vec::new();
+                            let objects = captured.get(&controller).unwrap_or(&empty);
+                            self.render_composed_texture(
+                                world,
+                                objects,
+                                captured,
+                                self.render_width,
+                                self.render_height,
+                                ComposeCacheKey::FrameBuffer(controller),
+                                depth + 1,
+                                None,
+                            )
+                        }
                         None => None,
                     }
                 };
