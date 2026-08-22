@@ -12,4 +12,4 @@ neoutl-media-api = { path = "../../neoutl-media-api" }
 neoutl-color = { path = "../../neoutl-color" }
 bytemuck = "1"
 image = "0.25"
-wgpu = "29"
+wgpu = "30"

@@ -264,6 +264,7 @@
 "entity存在前提": "entity存在前提"
 "enumerate_device_extension_properties失敗: {e}": "enumerate_device_extension_properties失敗: {e}"
 "free_descriptor_sets失敗: {e}": "free_descriptor_sets失敗: {e}"
+"get_mapped_range失敗": "get_mapped_range失敗"
 "hide_captured=false時は通常経路にも残存": "hide_captured=false時は通常経路にも残存"
 "hide_captured=true時は通常経路から除外": "hide_captured=true時は通常経路から除外"
 "hw_frames_ctx参照確保失敗": "hw_frames_ctx参照確保失敗"

@@ -77,28 +77,28 @@ self-replace = "1"
 sentry = { version = "0.49", default-features = false, features = ["backtrace", "contexts", "panic"] }
 semver = "1"
 tempfile = "3"
-wgpu = "29"
-wgpu_text = "29"
+wgpu = "30"
+wgpu_text = "30"
 tokio = { version = "1", features = ["rt-multi-thread", "sync"] }
 shipyard = "0.11"
 rust-yaml = { version = "1", features = ["serde"] }
 serde = { version = "1", features = ["derive"] }
 rfd = "0.17"
 pollster = "1"
-egui = "0.35"
-egui-wgpu = "0.35"
-egui-winit = "0.35"
+egui = "0.36"
+egui-wgpu = "0.36"
+egui-winit = "0.36"
 winit = "0.30"
-egui_extras = { version = "0.35", features = ["svg"] }
-egui_material_icons = "0.7"
-egui_code_editor = "0.3"
-egui_plot = "0.36"
-egui-elegance = "0.14"
+egui_extras = { version = "0.36", features = ["svg"] }
+egui_material_icons = "0.8"
+egui_code_editor = "0.4"
+egui_plot = "0.37"
+egui-elegance = "0.16"
 rust-i18n = "4"
 ureq = { version = "3", features = ["json", "_tls"] }
 zip = "8"
-egui_dock = "0.20"
-egui-system-fonts = "0.35"
+egui_dock = "0.21"
+egui-system-fonts = "0.36"
 
 [dev-dependencies]
 
@@ -107,7 +107,7 @@ neoutl-object-shader-build.workspace = true
 
 [target.'cfg(target_os = "linux")'.dependencies]
 ash = "0.38"
-wgpu-hal = { version = "29", features = ["vulkan"] }
+wgpu-hal = { version = "30", features = ["vulkan"] }
 
 [profile.release]
 opt-level = 3
@@ -116,8 +116,3 @@ codegen-units = 16
 panic = "unwind"
 strip = false
 debug = 1
-
-[patch.crates-io]
-wgpu = { path = "neoutl-wgpu/wgpu" }
-wgpu-core = { path = "neoutl-wgpu/wgpu-core" }
-wgpu-hal = { path = "neoutl-wgpu/wgpu-hal" }

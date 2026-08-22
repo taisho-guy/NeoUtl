@@ -191,6 +191,7 @@ impl NativeWindow {
         let config = wgpu::SurfaceConfiguration {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
             format: SURFACE_FORMAT,
+            color_space: wgpu::SurfaceColorSpace::Auto,
             width: size.width.max(1),
             height: size.height.max(1),
             present_mode: wgpu::PresentMode::Fifo,
@@ -253,9 +254,11 @@ impl NativeWindow {
             .texture
             .create_view(&wgpu::TextureViewDescriptor::default());
         let primitives = self.ctx.tessellate(output.shapes, output.pixels_per_point);
-        for (id, delta) in &output.textures_delta.set {
-            self.renderer
-                .update_texture(&gpu.device, &gpu.queue, *id, delta);
+        for (id, deltas) in &output.textures_delta.set {
+            for delta in deltas {
+                self.renderer
+                    .update_texture(&gpu.device, &gpu.queue, *id, delta);
+            }
         }
         let mut encoder = gpu
             .device
@@ -304,7 +307,7 @@ impl NativeWindow {
             self.renderer.free_texture(id);
         }
         gpu.queue.submit(Some(encoder.finish()));
-        frame.present();
+        gpu.queue.present(frame);
         if self.ctx.has_requested_repaint() {
             self.window.request_redraw();
         }

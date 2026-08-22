@@ -4,5 +4,5 @@ version = "0.0.0"
 edition = "2024"
 
 [dependencies]
-wgpu = "29"
+wgpu = "30"
 serde = { version = "1", features = ["derive"] }
