@@ -124,6 +124,7 @@ impl PropertiesPanel {
                     ui.separator();
 
                     sections::transform_section(ui, &mut world, id);
+                    sections::clip_target_section(ui, &mut world, id);
                     sections::text_section(ui, &mut world, id);
                     sections::shape_section(ui, &mut world, id);
                     sections::audio_section(ui, &mut world, id);

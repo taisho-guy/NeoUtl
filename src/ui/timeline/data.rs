@@ -50,6 +50,8 @@ impl TimelineWindow {
             waveform_duration_frames,
             group_layer_count_down: data.group_layer_count_down,
             group_layer_count_up: data.group_layer_count_up,
+            clip_layer_count_down: data.clip_layer_count_down,
+            clip_layer_count_up: data.clip_layer_count_up,
         }
     }
 

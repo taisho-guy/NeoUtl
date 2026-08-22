@@ -1,5 +1,7 @@
 use crate::ecs::audio_plugins::PluginInstanceRef;
-use crate::ecs::components::{AudioParams, GroupControl, MediaSource, ShapeParams, TextContent};
+use crate::ecs::components::{
+    AudioParams, ClipTarget, GroupControl, MediaSource, ShapeParams, TextContent,
+};
 use crate::ecs::resources::SceneMeta;
 use crate::ecs::transform::Transform;
 use crate::ecs::types::{EffectInstance, Keyframe};
@@ -46,6 +48,8 @@ pub struct ObjectPayload {
     pub scene: Option<i32>,
     #[serde(default)]
     pub group_control: Option<GroupControl>,
+    #[serde(default)]
+    pub clip_target: Option<ClipTarget>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
