@@ -10,7 +10,19 @@ local EXCLUDE_DIRS = {
 }
 
 local EXT_CONFIGS = {
-    rs = { jump = '[%/r%"]' },        lua = { jump = '[%-%"%\'%[]' },     slang = { jump = '[%/r%"]' },      json = { jump = '[%"]' },           toml = { jump = '[%#%"%\']' },       yaml = { jump = '[%#%"%\']' }    }
+    rs = { jump = '[%/r%"]' },
+    lua = { jump = '[%-%"%\'%[]' },
+    slang = { jump = '[%/r%"]' },
+    json = { jump = '[%"]' },
+    toml = { jump = '[%#%"%\']' },
+    yaml = { jump = '[%#%"%\']' }
+}
+
+local IS_WINDOWS = os.getenv("OS") and os.getenv("OS"):match("[Ww]indows") or os.getenv("WINDIR") ~= nil
+
+local function normalize_path(path)
+    return path:gsub("\\", "/")
+end
 
 local function clean_comments(content, ext)
     local len = #content
@@ -27,14 +39,14 @@ local function clean_comments(content, ext)
         i = next_idx
         local b1 = string_sub(content, i, i)
 
-                                if b1 == '"' or b1 == "'" then
+        if b1 == '"' or b1 == "'" then
             local q = b1
             i = i + 1
             while i <= len do
                 local _, end_idx = string_find(content, q, i, true)
                 if not end_idx then i = len + 1 break end
                 
-                                local esc_count = 0
+                local esc_count = 0
                 local check_idx = end_idx - 1
                 while check_idx >= i and string_sub(content, check_idx, check_idx) == '\\' do
                     esc_count = esc_count + 1
@@ -49,7 +61,7 @@ local function clean_comments(content, ext)
                 end
             end
 
-                                elseif (ext == "rs" or ext == "slang") and b1 == 'r' then
+        elseif (ext == "rs" or ext == "slang") and b1 == 'r' then
             local n2 = string_sub(content, i+1, i+2)
             if string_sub(n2, 1, 1) == '"' then
                 i = i + 2
@@ -87,8 +99,8 @@ local function clean_comments(content, ext)
                 i = i + 1
             end
 
-                                elseif ext == "lua" and b1 == '[' then
-                        if string_sub(content, i+1, i+1) == '[' then
+        elseif ext == "lua" and b1 == '[' then
+            if string_sub(content, i+1, i+1) == '[' then
                 local _, end_idx = string_find(content, ']]', i + 2, true)
                 i = end_idx and (end_idx + 2) or (len + 1)
             else
@@ -100,11 +112,11 @@ local function clean_comments(content, ext)
                 result[r_idx] = string_sub(content, last_pos, i - 1)
                 r_idx = r_idx + 1
                 
-                                if string_sub(content, i+2, i+3) == '[[' then
+                if string_sub(content, i+2, i+3) == '[[' then
                     local _, e = string_find(content, "]]", i + 4, true)
                     i = e and (e + 2) or (len + 1)
                 else
-                                        local _, e = string_find(content, "\n", i + 2, true)
+                    local _, e = string_find(content, "\n", i + 2, true)
                     i = e and (e + 1) or (len + 1)
                 end
                 last_pos = i
@@ -112,7 +124,7 @@ local function clean_comments(content, ext)
                 i = i + 1
             end
 
-                                elseif (ext == "toml" or ext == "yaml") and b1 == '#' then
+        elseif (ext == "toml" or ext == "yaml") and b1 == '#' then
             result[r_idx] = string_sub(content, last_pos, i - 1)
             r_idx = r_idx + 1
             local _, e = string_find(content, "\n", i + 1, true)
@@ -132,14 +144,14 @@ local function clean_comments(content, ext)
 end
 
 local function remove_comments_from_file(filepath, ext)
-    local file = io_open(filepath, "r")
+    local file = io_open(filepath, "rb")
     if not file then return end
     local content = file:read("*all")
     file:close()
 
     local cleaned = clean_comments(content, ext)
     if cleaned then
-        local wfile = io_open(filepath, "w")
+        local wfile = io_open(filepath, "wb")
         if wfile then
             wfile:write(cleaned)
             wfile:close()
@@ -153,9 +165,10 @@ local function pattern_escape(s)
 end
 
 local function is_excluded(filepath)
+    local norm_path = normalize_path(filepath)
     for _, dir in ipairs(EXCLUDE_DIRS) do
         local d = pattern_escape(dir)
-        if filepath:find("[/\\]" .. d .. "[/\\]") or filepath:find("^%.?[/\\]?" .. d .. "[/\\]") then
+        if norm_path:find("/" .. d .. "/") or norm_path:find("^%.?/?" .. d .. "/") then
             return true
         end
     end
@@ -163,16 +176,20 @@ local function is_excluded(filepath)
 end
 
 local function scan_project()
-        local cmd = (os.getenv("WINDIR") or os.getenv("windir"))
-        and 'dir /b /s *.rs *.lua *.slang *.json *.toml *.yaml 2>nul' 
-        or 'find . -type f \\( -name "*.rs" -o -name "*.lua" -o -name "*.slang" -o -name "*.json" -o -name "*.toml" -o -name "*.yaml" \\) -print'
+    local cmd
+    if IS_WINDOWS then
+        cmd = 'dir /b /s /a-d 2>nul'
+    else
+        cmd = 'find . -type f \\( -name "*.rs" -o -name "*.lua" -o -name "*.slang" -o -name "*.json" -o -name "*.toml" -o -name "*.yaml" \\) -print'
+    end
 
     local p = io.popen(cmd)
     if not p then return end
 
-    for file in p:lines() do
+    for raw_file in p:lines() do
+        local file = normalize_path(raw_file)
         if file ~= "" and not is_excluded(file) then
-            local ext = string_sub(file, #file - 3)             ext = ext:match("%.([^%.]+)$") or file:match("%.([^%.]+)$")
+            local ext = file:match("%.([^%.]+)$")
             if ext and EXT_CONFIGS[ext] then
                 remove_comments_from_file(file, ext)
             end
