@@ -34,37 +34,39 @@ fn main() {
 
     let carla_cmake_dir = carla_root.join("cmake");
     let carla_source_dir = carla_root.join("source");
-    let lilv_dir = carla_source_dir.join("modules").join("lilv");
-    let serd_include_dir = find_versioned_dir(&lilv_dir, "serd-");
-    let sord_include_dir = find_versioned_dir(&lilv_dir, "sord-");
-    let sratom_include_dir = find_versioned_dir(&lilv_dir, "sratom-");
-    let lilv_include_dir = find_versioned_dir(&lilv_dir, "lilv-");
-    let modules_dir = carla_source_dir.join("modules");
+    let target_os = env::var("CARGO_CFG_TARGET_OS").unwrap_or_default();
+    let target_env = env::var("CARGO_CFG_TARGET_ENV").unwrap_or_default();
+
+    let windows_lilv_includes: Option<[PathBuf; 4]> = if target_os == "windows" {
+        let lilv_dir = carla_source_dir.join("modules").join("lilv");
+        Some([
+            find_versioned_dir(&lilv_dir, "serd-"),
+            find_versioned_dir(&lilv_dir, "sord-"),
+            find_versioned_dir(&lilv_dir, "sratom-"),
+            find_versioned_dir(&lilv_dir, "lilv-"),
+        ])
+    } else {
+        None
+    };
 
     println!("cargo:rerun-if-changed={}", carla_cmake_dir.display());
     println!("cargo:rerun-if-changed={}", carla_source_dir.display());
     println!("cargo:rerun-if-changed=src/wrapper.h");
 
-    let target_os = env::var("CARGO_CFG_TARGET_OS").unwrap_or_default();
-    let target_env = env::var("CARGO_CFG_TARGET_ENV").unwrap_or_default();
-
     let mut cmake_config = cmake::Config::new(&carla_cmake_dir);
     cmake_config
+        .define("CMAKE_INTERPROCEDURAL_OPTIMIZATION", "OFF")
         .define("CARLA_BUILD_STATIC", "ON")
         .define("CARLA_BUILD_FRAMEWORKS", "OFF")
         .define("CARLA_USE_JACK", "OFF")
         .define("CARLA_USE_OSC", "OFF")
-        .define("CARLA_ENABLE_JSFX", "ON")
-        .cflag(format!("-I{}", serd_include_dir.display()))
-        .cxxflag(format!("-I{}", serd_include_dir.display()))
-        .cflag(format!("-I{}", sord_include_dir.display()))
-        .cxxflag(format!("-I{}", sord_include_dir.display()))
-        .cflag(format!("-I{}", sratom_include_dir.display()))
-        .cxxflag(format!("-I{}", sratom_include_dir.display()))
-        .cflag(format!("-I{}", lilv_include_dir.display()))
-        .cxxflag(format!("-I{}", lilv_include_dir.display()))
-        .cflag(format!("-I{}", modules_dir.display()))
-        .cxxflag(format!("-I{}", modules_dir.display()));
+        .define("CARLA_ENABLE_JSFX", "ON");
+    if let Some([serd, sord, sratom, lilv]) = &windows_lilv_includes {
+        for dir in [serd, sord, sratom, lilv] {
+            cmake_config.cflag(format!("-I{}", dir.display()));
+            cmake_config.cxxflag(format!("-I{}", dir.display()));
+        }
+    }
 
     cmake_config.build_target("carla-standalone");
     let dst = cmake_config.build();
@@ -110,8 +112,13 @@ fn main() {
         "carla-zita-resampler",
     ];
 
+    let use_whole_archive = matches!(target_os.as_str(), "linux" | "android");
     for lib in &static_libs {
-        println!("cargo:rustc-link-lib=static={}", lib);
+        if use_whole_archive {
+            println!("cargo:rustc-link-lib=static:+whole-archive={}", lib);
+        } else {
+            println!("cargo:rustc-link-lib=static={}", lib);
+        }
     }
 
     match target_os.as_str() {
@@ -152,7 +159,7 @@ fn main() {
         _ => {}
     }
 
-    let include_dirs = [
+    let mut include_dirs = vec![
         carla_source_dir.clone(),
         carla_source_dir.join("backend"),
         carla_source_dir.join("backend").join("engine"),
@@ -162,19 +169,20 @@ fn main() {
         carla_source_dir.join("modules").join("distrho"),
         carla_source_dir.join("modules").join("water"),
         carla_source_dir.join("utils"),
-        serd_include_dir.clone(),
-        sord_include_dir.clone(),
-        sratom_include_dir.clone(),
-        lilv_include_dir.clone(),
     ];
+    if let Some(dirs) = &windows_lilv_includes {
+        include_dirs.extend(dirs.iter().cloned());
+    }
 
     println!("cargo:rerun-if-changed=src/carla_bridge_ext.cpp");
     let mut cc_builder = cc::Build::new();
     cc_builder
         .cpp(true)
         .std("c++11")
-        .define("BUILDING_CARLA", None)
         .file("src/carla_bridge_ext.cpp");
+    if target_os == "windows" {
+        cc_builder.define("BUILDING_CARLA", None);
+    }
     for inc in &include_dirs {
         cc_builder.include(inc);
     }
@@ -182,7 +190,11 @@ fn main() {
 
     let mut bindgen_builder = bindgen::Builder::default()
         .header("src/wrapper.h")
-        .clang_args(["-x", "c++", "-std=c++11", "-DBUILDING_CARLA"])
+        .clang_args(["-x", "c++", "-std=c++11"]);
+    if target_os == "windows" {
+        bindgen_builder = bindgen_builder.clang_arg("-DBUILDING_CARLA");
+    }
+    let mut bindgen_builder = bindgen_builder
         .allowlist_function("carla_.*")
         .allowlist_type(".*Carla.*")
         .allowlist_type("Carla.*")
