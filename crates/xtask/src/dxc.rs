@@ -178,7 +178,10 @@ pub fn ensure_installed(workspace_root: &Path, offline: bool) {
     }
 
     let Some(asset) = select_asset(&release.assets) else {
-        panic!("[xtask][dxc] リリース{}に対応アセットなし", release.tag_name);
+        panic!(
+            "[xtask][dxc] リリース{}に対応アセットなし",
+            release.tag_name
+        );
     };
 
     eprintln!(

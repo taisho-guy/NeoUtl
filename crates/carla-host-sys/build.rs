@@ -1,6 +1,28 @@
 use std::env;
 use std::path::PathBuf;
 
+fn find_versioned_dir(base: &std::path::Path, prefix: &str) -> PathBuf {
+    std::fs::read_dir(base)
+        .unwrap_or_else(|e| panic!("ディレクトリ読み取り失敗 {}: {}", base.display(), e))
+        .filter_map(|entry| entry.ok())
+        .map(|entry| entry.path())
+        .find(|path| {
+            path.is_dir()
+                && path
+                    .file_name()
+                    .and_then(|n| n.to_str())
+                    .map(|n| n.starts_with(prefix))
+                    .unwrap_or(false)
+        })
+        .unwrap_or_else(|| {
+            panic!(
+                "{}配下に接頭辞{}のディレクトリ未検出",
+                base.display(),
+                prefix
+            )
+        })
+}
+
 fn main() {
     let manifest_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap());
     let carla_root = manifest_dir
@@ -12,6 +34,12 @@ fn main() {
 
     let carla_cmake_dir = carla_root.join("cmake");
     let carla_source_dir = carla_root.join("source");
+    let lilv_dir = carla_source_dir.join("modules").join("lilv");
+    let serd_include_dir = find_versioned_dir(&lilv_dir, "serd-");
+    let sord_include_dir = find_versioned_dir(&lilv_dir, "sord-");
+    let sratom_include_dir = find_versioned_dir(&lilv_dir, "sratom-");
+    let lilv_include_dir = find_versioned_dir(&lilv_dir, "lilv-");
+    let modules_dir = carla_source_dir.join("modules");
 
     println!("cargo:rerun-if-changed={}", carla_cmake_dir.display());
     println!("cargo:rerun-if-changed={}", carla_source_dir.display());
@@ -26,7 +54,17 @@ fn main() {
         .define("CARLA_BUILD_FRAMEWORKS", "OFF")
         .define("CARLA_USE_JACK", "OFF")
         .define("CARLA_USE_OSC", "OFF")
-        .define("CARLA_ENABLE_JSFX", "ON");
+        .define("CARLA_ENABLE_JSFX", "ON")
+        .cflag(format!("-I{}", serd_include_dir.display()))
+        .cxxflag(format!("-I{}", serd_include_dir.display()))
+        .cflag(format!("-I{}", sord_include_dir.display()))
+        .cxxflag(format!("-I{}", sord_include_dir.display()))
+        .cflag(format!("-I{}", sratom_include_dir.display()))
+        .cxxflag(format!("-I{}", sratom_include_dir.display()))
+        .cflag(format!("-I{}", lilv_include_dir.display()))
+        .cxxflag(format!("-I{}", lilv_include_dir.display()))
+        .cflag(format!("-I{}", modules_dir.display()))
+        .cxxflag(format!("-I{}", modules_dir.display()));
 
     cmake_config.build_target("carla-standalone");
     let dst = cmake_config.build();
@@ -124,6 +162,10 @@ fn main() {
         carla_source_dir.join("modules").join("distrho"),
         carla_source_dir.join("modules").join("water"),
         carla_source_dir.join("utils"),
+        serd_include_dir.clone(),
+        sord_include_dir.clone(),
+        sratom_include_dir.clone(),
+        lilv_include_dir.clone(),
     ];
 
     println!("cargo:rerun-if-changed=src/carla_bridge_ext.cpp");
@@ -131,6 +173,7 @@ fn main() {
     cc_builder
         .cpp(true)
         .std("c++11")
+        .define("BUILDING_CARLA", None)
         .file("src/carla_bridge_ext.cpp");
     for inc in &include_dirs {
         cc_builder.include(inc);
@@ -139,7 +182,7 @@ fn main() {
 
     let mut bindgen_builder = bindgen::Builder::default()
         .header("src/wrapper.h")
-        .clang_args(["-x", "c++", "-std=c++11"])
+        .clang_args(["-x", "c++", "-std=c++11", "-DBUILDING_CARLA"])
         .allowlist_function("carla_.*")
         .allowlist_type(".*Carla.*")
         .allowlist_type("Carla.*")

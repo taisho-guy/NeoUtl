@@ -196,7 +196,9 @@ pub fn ensure_installed(workspace_root: &Path, offline: bool) {
         Ok(release) => release,
         Err(err) => {
             if local_installed {
-                eprintln!("[xtask][slang] 更新確認をスキップ（{err}）。導入済みのSlangを継続利用します");
+                eprintln!(
+                    "[xtask][slang] 更新確認をスキップ（{err}）。導入済みのSlangを継続利用します"
+                );
                 return;
             }
             if let Some(system_slangc) = find_system_slangc() {

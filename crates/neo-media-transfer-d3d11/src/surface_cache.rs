@@ -3,8 +3,9 @@ use windows::Win32::Graphics::Direct3D11::{
     D3D11_BIND_SHADER_RESOURCE, D3D11_RESOURCE_MISC_SHARED_NTHANDLE, D3D11_TEXTURE2D_DESC,
     D3D11_USAGE_DEFAULT, ID3D11Device, ID3D11DeviceContext4, ID3D11Texture2D,
 };
-use windows::Win32::Graphics::Direct3D12::{ID3D12Device, ID3D12Resource};
-use windows::Win32::Graphics::Dxgi::{DXGI_FORMAT, IDXGIResource1};
+use windows::Win32::Graphics::Direct3D12::{ID3D12CommandQueue, ID3D12Device, ID3D12Resource};
+use windows::Win32::Graphics::Dxgi::Common::DXGI_FORMAT;
+use windows::Win32::Graphics::Dxgi::IDXGIResource1;
 use windows::core::Interface;
 
 use crate::fence::CrossApiFence;
@@ -18,7 +19,9 @@ struct RingEntry {
 }
 
 pub struct SurfaceCache {
+    #[allow(dead_code)]
     d3d11_device: ID3D11Device,
+    #[allow(dead_code)]
     d3d12_device: ID3D12Device,
     ctx4: ID3D11DeviceContext4,
     fence: CrossApiFence,
@@ -95,9 +98,14 @@ impl SurfaceCache {
             let handle: HANDLE = dxgi_resource
                 .CreateSharedHandle(None, GENERIC_ALL.0, None)
                 .map_err(|e| format!("CreateSharedHandle失敗: {e}"))?;
-            let d3d12_resource: ID3D12Resource = d3d12_device
-                .OpenSharedHandle(handle)
-                .map_err(|e| format!("ID3D12Device::OpenSharedHandle失敗: {e}"))?;
+            let d3d12_resource: ID3D12Resource = {
+                let mut resource: Option<ID3D12Resource> = None;
+                d3d12_device
+                    .OpenSharedHandle(handle, &mut resource)
+                    .map_err(|e| format!("ID3D12Device::OpenSharedHandle失敗: {e}"))?;
+                resource
+                    .ok_or_else(|| "ID3D12Device::OpenSharedHandle: リソース未取得".to_owned())?
+            };
             let _ = CloseHandle(handle);
 
             Ok(RingEntry {
@@ -112,7 +120,8 @@ impl SurfaceCache {
         &mut self,
         src_array_texture: &ID3D11Texture2D,
         subresource_index: u32,
-    ) -> Result<(ID3D12Resource, u64), String> {
+        wait_queue: &ID3D12CommandQueue,
+    ) -> Result<ID3D12Resource, String> {
         unsafe {
             let slot = self.next;
             self.next = (self.next + 1) % self.entries.len();
@@ -129,15 +138,18 @@ impl SurfaceCache {
             );
             let value = self.fence.signal_after_d3d11_copy(&self.ctx4)?;
             self.entries[slot].fence_value = value;
+            self.fence.wait_on_d3d12_queue(wait_queue, value)?;
 
-            Ok((self.entries[slot].d3d12_resource.clone(), value))
+            Ok(self.entries[slot].d3d12_resource.clone())
         }
     }
 
+    #[allow(dead_code)]
     pub fn format(&self) -> DXGI_FORMAT {
         self.format
     }
 
+    #[allow(dead_code)]
     pub fn size(&self) -> (u32, u32) {
         (self.width, self.height)
     }

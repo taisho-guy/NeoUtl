@@ -3,8 +3,11 @@ pub mod decoder;
 pub mod frame;
 pub mod index;
 mod source;
+#[cfg(unix)]
 mod vaapi_config_verify;
+#[cfg(unix)]
 mod vaapi_probe;
+#[cfg(unix)]
 mod vaapi_sys;
 
 pub use decoder::{VideoDecoder, VideoMeta, set_shared_wgpu_device, shared_wgpu_submit_lock};

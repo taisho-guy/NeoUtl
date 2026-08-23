@@ -1,3 +1,4 @@
+use std::mem::ManuallyDrop;
 use windows::Win32::Graphics::Direct3D12::*;
 use windows::Win32::Graphics::Dxgi::Common::*;
 use windows::core::Interface;
@@ -140,7 +141,7 @@ impl SemiPlanarConvertEngine {
             let root_signature = build_root_signature(&device)?;
 
             let pso_desc = D3D12_COMPUTE_PIPELINE_STATE_DESC {
-                pRootSignature: windows::core::ManuallyDrop::new(&root_signature),
+                pRootSignature: ManuallyDrop::new(Some(root_signature.clone())),
                 CS: D3D12_SHADER_BYTECODE {
                     pShaderBytecode: dxil_bytes.as_ptr() as *const _,
                     BytecodeLength: dxil_bytes.len(),

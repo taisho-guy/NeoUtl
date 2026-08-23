@@ -18,19 +18,27 @@ impl CrossApiFence {
     ) -> Result<Self, String> {
         unsafe {
             let device5: ID3D11Device5 = d3d11_device.cast().map_err(|e| format!("{e}"))?;
-            let d3d11_fence: ID3D11Fence = device5
+            let mut d3d11_fence: Option<ID3D11Fence> = None;
+            device5
                 .CreateFence(
                     0,
                     windows::Win32::Graphics::Direct3D11::D3D11_FENCE_FLAG_SHARED,
+                    &mut d3d11_fence,
                 )
                 .map_err(|e| format!("ID3D11Device5::CreateFence失敗: {e}"))?;
+            let d3d11_fence = d3d11_fence
+                .ok_or_else(|| "ID3D11Device5::CreateFence: フェンス未取得".to_owned())?;
             let shared_handle: HANDLE =
                 d3d11_fence
                     .CreateSharedHandle(None, GENERIC_ALL.0, None)
                     .map_err(|e| format!("ID3D11Fence::CreateSharedHandle失敗: {e}"))?;
-            let d3d12_fence: ID3D12Fence = d3d12_device
-                .OpenSharedHandle(shared_handle)
+            let mut d3d12_fence: Option<ID3D12Fence> = None;
+            d3d12_device
+                .OpenSharedHandle(shared_handle, &mut d3d12_fence)
                 .map_err(|e| format!("ID3D12Device::OpenSharedHandle(fence)失敗: {e}"))?;
+            let d3d12_fence = d3d12_fence.ok_or_else(|| {
+                "ID3D12Device::OpenSharedHandle(fence): フェンス未取得".to_owned()
+            })?;
             let _ = CloseHandle(shared_handle);
             Ok(Self {
                 d3d11_fence,

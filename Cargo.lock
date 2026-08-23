@@ -3084,7 +3084,6 @@ dependencies = [
  "mlua",
  "neoutl-effect-api",
  "neoutl-shared-abi",
- "rust-i18n",
 ]
 
 [[package]]

@@ -85,13 +85,7 @@ pub fn load_dir(dir: &Path) -> Vec<LuaEffectSource> {
             match load(&path) {
                 Ok(src) => Some(src),
                 Err(err) => {
-                    eprintln!(
-                        "{}",
-                        t!(
-                            "[NeoUtl] Luaエフェクト読込失敗 %{arg0}: %{arg1}",
-                            arg1 = format!("{}", err)
-                        )
-                    );
+                    eprintln!("[NeoUtl] Luaエフェクト読込失敗 {}: {err}", path.display());
                     None
                 }
             }
@@ -183,6 +177,3 @@ fn parse_param_kind(s: &str) -> Result<ParamKind, LuaEffectError> {
         other => return Err(LuaEffectError::UnknownParamKind(other.to_owned())),
     })
 }
-rust_i18n::i18n!("../../i18n");
-#[macro_use]
-extern crate rust_i18n;

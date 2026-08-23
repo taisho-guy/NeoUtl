@@ -1,7 +1,7 @@
 use std::ptr;
 
 use ffmpeg_sys_next as sys;
-use windows::Win32::Foundation::LUID;
+use windows::Win32::Foundation::{HMODULE, LUID};
 use windows::Win32::Graphics::Direct3D::D3D_DRIVER_TYPE_UNKNOWN;
 use windows::Win32::Graphics::Direct3D11::{
     D3D11_CREATE_DEVICE_BGRA_SUPPORT, D3D11_CREATE_DEVICE_VIDEO_SUPPORT, D3D11_SDK_VERSION,
@@ -10,6 +10,7 @@ use windows::Win32::Graphics::Direct3D11::{
 use windows::Win32::Graphics::Dxgi::{
     CreateDXGIFactory2, DXGI_CREATE_FACTORY_FLAGS, IDXGIFactory6,
 };
+use windows::core::Interface;
 
 const AV_HWDEVICE_TYPE_D3D11VA: sys::AVHWDeviceType = sys::AVHWDeviceType::AV_HWDEVICE_TYPE_D3D11VA;
 
@@ -48,7 +49,7 @@ pub fn create_d3d11_device_on_luid(luid: LUID) -> Result<ID3D11Device, String> {
         D3D11CreateDevice(
             &adapter,
             D3D_DRIVER_TYPE_UNKNOWN,
-            None,
+            HMODULE::default(),
             D3D11_CREATE_DEVICE_VIDEO_SUPPORT | D3D11_CREATE_DEVICE_BGRA_SUPPORT,
             None,
             D3D11_SDK_VERSION,

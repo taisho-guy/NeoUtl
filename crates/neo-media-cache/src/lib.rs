@@ -37,7 +37,6 @@ enum SlotState {
 }
 
 struct Slot {
-    owning_texture: wgpu::Texture,
     texture: wgpu::Texture,
     state: SlotState,
     fence: Option<wgpu::SubmissionIndex>,
@@ -291,7 +290,6 @@ impl FormatPool {
         if self.slots.len() < capacity {
             let texture = create_texture(device, self.format, self.width, self.height)?;
             self.slots.push(Slot {
-                owning_texture: texture.clone(),
                 texture: texture.clone(),
                 state: SlotState::Writing,
                 fence: None,

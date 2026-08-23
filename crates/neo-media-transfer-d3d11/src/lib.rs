@@ -72,9 +72,10 @@ pub unsafe fn device_from_raw(
     raw: *mut sys::ID3D11Device,
 ) -> windows::Win32::Graphics::Direct3D11::ID3D11Device {
     unsafe {
+        let raw = raw as *mut core::ffi::c_void;
         windows::core::Interface::from_raw_borrowed(&raw)
+            .map(|r: &windows::Win32::Graphics::Direct3D11::ID3D11Device| r.clone())
             .expect("AVD3D11VADeviceContext.deviceがnull")
-            .clone()
     }
 }
 
@@ -86,6 +87,7 @@ pub unsafe fn texture_from_av_frame(
         if raw.is_null() {
             return Err("AVFrame.data[0]がnull".to_owned());
         }
+        let raw = raw as *mut core::ffi::c_void;
         windows::core::Interface::from_raw_borrowed(&raw)
             .map(|r: &ID3D11Texture2D| r.clone())
             .ok_or_else(|| "ID3D11Texture2D復元失敗".to_owned())
@@ -98,6 +100,23 @@ pub fn dx12_adapter_luid(
     let handles = unsafe { extract_dx12_raw_handles(wgpu_device) }
         .ok_or_else(|| "wgpu DX12生ハンドル取得失敗".to_owned())?;
     unsafe { Ok(handles.device.GetAdapterLuid()) }
+}
+
+pub fn query_vram_budget_bytes(wgpu_device: &wgpu::Device) -> Option<u64> {
+    use windows::Win32::Graphics::Dxgi::{
+        CreateDXGIFactory2, DXGI_CREATE_FACTORY_FLAGS, DXGI_MEMORY_SEGMENT_GROUP_LOCAL,
+        DXGI_QUERY_VIDEO_MEMORY_INFO, IDXGIAdapter3, IDXGIFactory4,
+    };
+    let luid = dx12_adapter_luid(wgpu_device).ok()?;
+    unsafe {
+        let factory: IDXGIFactory4 = CreateDXGIFactory2(DXGI_CREATE_FACTORY_FLAGS(0)).ok()?;
+        let adapter: IDXGIAdapter3 = factory.EnumAdapterByLuid(luid).ok()?;
+        let mut info = DXGI_QUERY_VIDEO_MEMORY_INFO::default();
+        adapter
+            .QueryVideoMemoryInfo(0, DXGI_MEMORY_SEGMENT_GROUP_LOCAL, &mut info)
+            .ok()?;
+        Some(info.Budget)
+    }
 }
 
 pub fn is_sw_format_supported(sw_format_i32: i32) -> bool {
@@ -183,11 +202,10 @@ impl D3d11TransferBackend {
             .ok_or_else(|| "wgpu DX12生ハンドル取得失敗".to_owned())?;
         let engine = unsafe { SemiPlanarConvertEngine::new(&handles, SEMI_PLANAR_DXIL)? };
         let ctx4: windows::Win32::Graphics::Direct3D11::ID3D11DeviceContext4 = unsafe {
-            let mut ctx = None;
-            d3d11_device.GetImmediateContext(&mut ctx);
-            ctx.ok_or_else(|| "ID3D11DeviceContext取得失敗".to_owned())?
-                .cast()
-                .map_err(|e| format!("{e}"))?
+            let ctx = d3d11_device
+                .GetImmediateContext()
+                .map_err(|e| format!("ID3D11Device::GetImmediateContext失敗: {e}"))?;
+            ctx.cast().map_err(|e| format!("{e}"))?
         };
         Ok(Self {
             handles,
@@ -244,10 +262,11 @@ impl TransferBackend for D3d11TransferBackend {
             return Err(TransferError::UnsupportedFormat(PixelFormat::Nv12));
         };
 
+        let d3d12_queue = self.handles.queue.clone();
         let cache = self.cache_for(src_fmt).map_err(TransferError::SyncFailed)?;
 
-        let (shared_resource, _fence_value) =
-            unsafe { cache.import(&input.d3d11_texture, input.subresource_index) }
+        let shared_resource =
+            unsafe { cache.import(&input.d3d11_texture, input.subresource_index, &d3d12_queue) }
                 .map_err(TransferError::SyncFailed)?;
 
         let width = input.visible_rect.width;

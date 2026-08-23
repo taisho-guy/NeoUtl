@@ -20,6 +20,7 @@ use neo_media_transfer_vaapi::VaapiTransferBackend;
 use crate::cache::{GopCache, GopCacheBlock, PooledFrameCache};
 use crate::frame::{GpuFrame, VideoFrame, VideoFrameStore};
 use crate::index::{FrameIndex, build_index};
+#[cfg(unix)]
 use crate::vaapi_probe::probe_vaapi_node;
 
 static SHARED_WGPU: OnceLock<(Arc<wgpu::Device>, Arc<wgpu::Queue>)> = OnceLock::new();
@@ -37,13 +38,23 @@ fn rgba8_frame_bytes(width: u32, height: u32) -> u64 {
 }
 
 pub fn set_shared_wgpu_device(device: Arc<wgpu::Device>, queue: Arc<wgpu::Queue>) {
-    let device_for_query = device.clone();
-    let budget_provider: Arc<neo_media_cache::VramBudgetProvider> = Arc::new(move || unsafe {
-        neo_media_transfer_vaapi::query_vram_budget_bytes(&device_for_query)
-    });
+    #[cfg(unix)]
+    let budget_provider: Option<Arc<neo_media_cache::VramBudgetProvider>> = {
+        let device_for_query = device.clone();
+        Some(Arc::new(move || unsafe {
+            neo_media_transfer_vaapi::query_vram_budget_bytes(&device_for_query)
+        }))
+    };
+    #[cfg(not(unix))]
+    let budget_provider: Option<Arc<neo_media_cache::VramBudgetProvider>> = {
+        let device_for_query = device.clone();
+        Some(Arc::new(move || {
+            neo_media_transfer_d3d11::query_vram_budget_bytes(&device_for_query)
+        }))
+    };
     let _ = SHARED_CACHE.set(Arc::new(NeoMediaCache::new(
         (*device).clone(),
-        Some(budget_provider),
+        budget_provider,
     )));
     if let Some(cache) = SHARED_CACHE.get() {
         cache.register_consumer(neo_media_cache::KIND_PLAYBACK, 3);
@@ -364,6 +375,7 @@ impl Drop for OpenContext {
     }
 }
 
+#[cfg(unix)]
 fn is_10bit_pix_fmt(stream_sw_format_i32: i32) -> bool {
     stream_sw_format_i32 == av_pix_fmt_yuv420p10le()
         || stream_sw_format_i32 == av_pix_fmt_yuv420p12le()
@@ -439,6 +451,7 @@ unsafe fn config_supports_sw_format(
     }
 }
 
+#[cfg(unix)]
 fn vaapi_render_node_candidates(
     codec: *const sys::AVCodec,
     stream_sw_format: sys::AVPixelFormat,
@@ -457,6 +470,14 @@ fn vaapi_render_node_candidates(
         }
         None => Vec::new(),
     }
+}
+
+#[cfg(not(unix))]
+fn vaapi_render_node_candidates(
+    _codec: *const sys::AVCodec,
+    _stream_sw_format: sys::AVPixelFormat,
+) -> Vec<CString> {
+    Vec::new()
 }
 
 unsafe fn try_init_hw_device(
