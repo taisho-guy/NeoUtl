@@ -4,10 +4,7 @@ use std::{
     process::Command,
 };
 
-rust_i18n::i18n!("../../i18n");
-#[macro_use]
-extern crate rust_i18n;
-
+mod dxc;
 mod slang;
 
 struct DiscoveredCrate {
@@ -26,14 +23,7 @@ fn discover_crates(workspace_root: &Path, subdir: &str) -> Vec<DiscoveredCrate> 
     let entries = match fs::read_dir(&scan_dir) {
         Ok(e) => e,
         Err(err) => {
-            eprintln!(
-                "{}",
-                t!(
-                    "[xtask] %{arg0} 読取失敗: %{arg1}",
-                    arg0 = format!("{}", scan_dir.display()),
-                    arg1 = format!("{err}")
-                )
-            );
+            eprintln!("[xtask] {} 読取失敗: {err}", scan_dir.display());
             return result;
         }
     };
@@ -55,13 +45,7 @@ fn discover_crates(workspace_root: &Path, subdir: &str) -> Vec<DiscoveredCrate> 
             continue;
         };
         let Ok(doc) = text.parse::<toml::Table>() else {
-            eprintln!(
-                "{}",
-                t!(
-                    "[xtask] 解析失敗: %{arg0}",
-                    arg0 = format!("{}", manifest_path.display())
-                )
-            );
+            eprintln!("[xtask] 解析失敗: {}", manifest_path.display());
             continue;
         };
 
@@ -149,10 +133,7 @@ fn build_all<'a>(
     let mut package_count = 0usize;
     for (label, crates) in groups {
         if crates.is_empty() {
-            eprintln!(
-                "{}",
-                t!("[xtask] %{arg0}クレート0件", arg0 = format!("{label}"))
-            );
+            eprintln!("[xtask] {label}クレート0件");
             continue;
         }
         for c in *crates {
@@ -166,25 +147,42 @@ fn build_all<'a>(
     }
 
     if package_count == 0 {
-        eprintln!(
-            "{}",
-            t!("[xtask] ビルド対象パッケージ0件のためcargo呼び出しを省略")
-        );
+        eprintln!("[xtask] ビルド対象パッケージ0件のためcargo呼び出しを省略");
         return;
     }
 
-    slang::apply_build_env(&mut cmd, workspace_root);
+    apply_toolchain_env(&mut cmd, workspace_root);
 
-    let status = cmd.status().expect(&t!("cargo build 起動失敗"));
+    let status = cmd.status().expect("cargo build 起動失敗");
     if !status.success() {
-        panic!(
-            "{}",
-            t!(
-                "[xtask] 統合ビルド失敗: exit=%{arg0}",
-                arg0 = format!("{status}")
-            )
-        );
+        panic!("[xtask] 統合ビルド失敗: exit={status}");
     }
+}
+
+fn apply_toolchain_env(cmd: &mut Command, workspace_root: &Path) {
+    let mut extra_paths = Vec::new();
+
+    if slang::slangc_path(workspace_root).is_file() {
+        cmd.env("SLANG_DIR", slang::install_dir(workspace_root));
+        extra_paths.push(slang::bin_dir(workspace_root));
+    }
+
+    if dxc::dxcompiler_path(workspace_root).is_file() {
+        extra_paths.push(dxc::bin_dir(workspace_root));
+    }
+
+    if extra_paths.is_empty() {
+        return;
+    }
+
+    let existing_path = env::var_os("PATH").unwrap_or_default();
+    let mut paths = extra_paths;
+    paths.extend(env::split_paths(&existing_path));
+    let Ok(joined_path) = env::join_paths(paths) else {
+        eprintln!("[xtask] PATH合成失敗");
+        return;
+    };
+    cmd.env("PATH", joined_path);
 }
 
 fn stage_crates(
@@ -196,29 +194,17 @@ fn stage_crates(
 ) {
     let out_dir = target_dir(workspace_root, profile, target);
     let dest_dir = out_dir.join(dest_subdir);
-    fs::create_dir_all(&dest_dir).expect(&t!("配置先ディレクトリ作成失敗"));
+    fs::create_dir_all(&dest_dir).expect("配置先ディレクトリ作成失敗");
 
     for c in crates {
         let filename = dylib_filename(&c.lib_name);
         let src = out_dir.join(&filename);
         let dst = dest_dir.join(&filename);
         match fs::copy(&src, &dst) {
-            Ok(_) => eprintln!(
-                "{}",
-                t!(
-                    "[xtask] 配置: %{arg0}/%{arg1}",
-                    arg0 = format!("{dest_subdir}"),
-                    arg1 = format!("{filename}")
-                )
-            ),
+            Ok(_) => eprintln!("[xtask] 配置: {dest_subdir}/{filename}"),
             Err(err) => eprintln!(
-                "{}",
-                t!(
-                    "[xtask] 配置失敗 %{arg0}: %{arg1} (src=%{arg2})",
-                    arg0 = format!("{filename}"),
-                    arg1 = format!("{err}"),
-                    arg2 = format!("{}", src.display())
-                )
+                "[xtask] 配置失敗 {filename}: {err} (src={})",
+                src.display()
             ),
         }
         let catalog_src = c.source_dir.join("i18n");
@@ -249,8 +235,8 @@ fn stage_scripts(workspace_root: &Path, profile: &str, target: Option<&str>) {
         return;
     }
     let dst_dir = target_dir(workspace_root, profile, target).join("scripts");
-    copy_dir_recursive(&src_dir, &dst_dir).expect(&t!("Luaスクリプト配置失敗"));
-    eprintln!("{}", t!("[xtask] 配置: scripts/（Lua）"));
+    copy_dir_recursive(&src_dir, &dst_dir).expect("Luaスクリプト配置失敗");
+    eprintln!("[xtask] 配置: scripts/（Lua）");
 }
 
 fn copy_dir_recursive(src: &Path, dst: &Path) -> std::io::Result<()> {
@@ -272,7 +258,7 @@ fn workspace_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .parent()
         .and_then(Path::parent)
-        .expect(&t!("workspace root解決失敗"))
+        .expect("workspace root解決失敗")
         .to_path_buf()
 }
 
@@ -311,6 +297,7 @@ fn main() {
     generate_japanese_i18n(&root);
 
     slang::ensure_installed(&root, offline);
+    dxc::ensure_installed(&root, offline);
     let objects = discover_crates(&root, "crates/objects");
     let effects = discover_crates(&root, "crates/effects");
     let decoders = discover_crates(&root, "crates/media");
@@ -374,16 +361,16 @@ fn generate_japanese_i18n(root: &Path) {
         output.push_str(&format!("\"{escaped}\": \"{escaped}\"\n"));
     }
     let dir = root.join("i18n");
-    fs::create_dir_all(&dir).expect(&t!("i18nディレクトリ作成失敗"));
+    fs::create_dir_all(&dir).expect("i18nディレクトリ作成失敗");
     let catalog = dir.join("ja.yml");
     let unchanged = fs::read_to_string(&catalog)
         .map(|current| current == output)
         .unwrap_or(false);
     if !unchanged {
-        fs::write(&catalog, output).expect(&t!("日本語翻訳ファイル作成失敗"));
-        eprintln!("{}", t!("[xtask] i18n/ja.ymlを生成しました"));
+        fs::write(&catalog, output).expect("日本語翻訳ファイル作成失敗");
+        eprintln!("[xtask] i18n/ja.ymlを生成しました");
     } else {
-        eprintln!("{}", t!("[xtask] i18n/ja.ymlに変更なし"));
+        eprintln!("[xtask] i18n/ja.ymlに変更なし");
     }
 }
 

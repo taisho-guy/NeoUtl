@@ -17,6 +17,7 @@ members = [
     "crates/neo-media-core",
     "crates/neo-media-cache",
     "crates/neo-media-transfer-vaapi",
+    "crates/neo-media-transfer-d3d11",
     "crates/neo-media-support",
     "crates/neo-media-ffmpeg",
     "crates/neoutl-effect-shader-build",
@@ -108,6 +109,9 @@ neoutl-object-shader-build.workspace = true
 [target.'cfg(target_os = "linux")'.dependencies]
 ash = "0.38"
 wgpu-hal = { version = "30", features = ["vulkan"] }
+
+[target.'cfg(target_os = "windows")'.dependencies]
+wgpu-hal = { version = "30", features = ["dx12"] }
 
 [profile.release]
 opt-level = 3

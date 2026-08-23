@@ -5,17 +5,17 @@
 <details><summary>Linuxの場合</summary>
 Clang、Rust、Git、LuaJIT、MakeFile、Carla、FFmpegをインストールしてください。
 
-最新のArch Linux系ディストリビューションでのビルドを推奨します。
+最新のArch Linux系ディストリビューションでのビルドを推奨しますが、Ubuntu等でも一応通るかもしれません。
 </details>
 
 <details><summary>Windowsの場合</summary>
 
 1. MSYS2をインストールしてください。
 2. MSYS2 CLANG64を開き、`pacman -Syu`し、再起動したら再び`pacman -Syu`します。
-3. MSYS2 CLANG64で`pacman -S git fish mingw-w64-clang-x86_64-luajit mingw-w64-clang-x86_64-clang mingw-w64-clang-x86_64-rust mingw-w64-clang-x86_64-ffmpeg mingw-w64-clang-x86_64-pkgconf mingw-w64-clang-x86_64-make mingw-w64-clang-x86_64-gcc-compat mingw-w64-clang-x86_64-vulkan-headers --needed`
+3. MSYS2 CLANG64で`pacman -S git fish mingw-w64-clang-x86_64-luajit mingw-w64-clang-x86_64-clang mingw-w64-clang-x86_64-rust mingw-w64-clang-x86_64-ffmpeg mingw-w64-clang-x86_64-pkgconf mingw-w64-clang-x86_64-make mingw-w64-clang-x86_64-gcc-compat mingw-w64-clang-x86_64-vulkan-headers mingw-w64-clang-x86_64-cmake --needed`します。
 4. お好みで、エディターのターミナルをMSYS2 CLANG64 fishにすることを推奨いたします。
 
-NeoUtlはVisual Studio/MSVCをサポートしておりません。
+今後のNeoUtlの作業はMSYS2 CLANG64内で行われます。NeoUtlはVisual Studio/MSVCをサポートしておりません。
 
 </details>
 
@@ -42,15 +42,15 @@ cargo xtask build --release
 
 # 開発のルール
 
-## 中途半端な状態のプルリクエストは[WIP]にする
+## 中途半端な状態のプルリクエストは`[WIP]`にする
 
-マージできる品質になるまで、プルリクエスト名の先頭に[WIP]を追加してください。
+マージできる品質になるまで、プルリクエスト名の先頭に`[WIP]`を追加してください。
 
 未完成の状態でもプルリクエストを作成いただいて構いません。
 
 ## コメントを使わない
 
-勿論、[WIP]状態のときは、ご自身の為に、コメントを用いることが可能です。
+勿論、`[WIP]`状態のときは、ご自身の為に、コメントを用いることが可能です。
 
 但し、完成された、マージを待つコードにコメントは含まれてはいけません。
 

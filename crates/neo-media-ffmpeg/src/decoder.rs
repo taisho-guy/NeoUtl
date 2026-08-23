@@ -12,6 +12,9 @@ use neo_media_cache::NeoMediaCache;
 use neo_media_core::{
     ColorPrimaries, MatrixCoefficients, Rect, Size, TransferBackend, TransferCharacteristics,
 };
+#[cfg(target_os = "windows")]
+use neo_media_transfer_d3d11::D3d11TransferBackend;
+#[cfg(unix)]
 use neo_media_transfer_vaapi::VaapiTransferBackend;
 
 use crate::cache::{GopCache, GopCacheBlock, PooledFrameCache};
@@ -319,7 +322,10 @@ struct GpuPipeline {
     wgpu_device: Arc<wgpu::Device>,
     wgpu_queue: Arc<wgpu::Queue>,
     cache: Arc<NeoMediaCache>,
+    #[cfg(unix)]
     backend: VaapiTransferBackend,
+    #[cfg(target_os = "windows")]
+    backend: D3d11TransferBackend,
 }
 
 unsafe impl Send for GpuPipeline {}
@@ -392,6 +398,13 @@ unsafe fn config_supports_sw_format(
             return true;
         }
 
+        if device_type == sys::AVHWDeviceType::AV_HWDEVICE_TYPE_D3D11VA {
+            eprintln!(
+                "[neoutl-video-decoder][diag] D3D11VAはNV12/P010固定のためFFmpeg制約問い合わせを省略、対応扱い"
+            );
+            return true;
+        }
+
         let mut constraints =
             sys::av_hwdevice_get_hwframe_constraints(hw_device_ctx, config as *const c_void);
         if constraints.is_null() {
@@ -449,6 +462,7 @@ fn vaapi_render_node_candidates(
 unsafe fn try_init_hw_device(
     codec: *const sys::AVCodec,
     stream_sw_format: sys::AVPixelFormat,
+    gpu_device: &Option<Arc<wgpu::Device>>,
 ) -> Option<(*mut sys::AVBufferRef, i32)> {
     unsafe {
         sys::av_log_set_level(sys::AV_LOG_DEBUG);
@@ -483,6 +497,57 @@ unsafe fn try_init_hw_device(
                 } else {
                     vec![None]
                 };
+
+            #[cfg(target_os = "windows")]
+            if device_type == sys::AVHWDeviceType::AV_HWDEVICE_TYPE_D3D11VA {
+                let Some(wgpu_device) = gpu_device.as_ref() else {
+                    eprintln!(
+                        "[neoutl-video-decoder][diag] D3D11VA: wgpu_device未取得のため候補除外"
+                    );
+                    continue;
+                };
+                let Ok(luid) = neo_media_transfer_d3d11::dx12_adapter_luid(wgpu_device) else {
+                    eprintln!("[neoutl-video-decoder][diag] D3D11VA: LUID取得失敗");
+                    continue;
+                };
+                let Ok(d3d11_device) = neo_media_transfer_d3d11::create_d3d11_device_on_luid(luid)
+                else {
+                    eprintln!("[neoutl-video-decoder][diag] D3D11VA: 同一LUIDデバイス生成失敗");
+                    continue;
+                };
+                let Ok(device_ctx) =
+                    neo_media_transfer_d3d11::create_av_d3d11va_device_ctx(&d3d11_device)
+                else {
+                    eprintln!("[neoutl-video-decoder][diag] D3D11VA: av_hwdevice_ctx_init失敗");
+                    continue;
+                };
+                let mut i = 0;
+                loop {
+                    let config = sys::avcodec_get_hw_config(codec, i);
+                    if config.is_null() {
+                        break;
+                    }
+                    let methods = (*config).methods;
+                    let matches_method = (methods & AV_CODEC_HW_CONFIG_METHOD_HW_DEVICE_CTX) != 0;
+                    if matches_method
+                        && (*config).device_type == sys::AVHWDeviceType::AV_HWDEVICE_TYPE_D3D11VA
+                        && config_supports_sw_format(
+                            device_ctx.av_hw_device_ctx,
+                            config,
+                            stream_sw_format,
+                            device_type,
+                        )
+                    {
+                        let hw_device_ctx = sys::av_buffer_ref(device_ctx.av_hw_device_ctx);
+                        return Some((
+                            hw_device_ctx,
+                            std::mem::transmute::<sys::AVPixelFormat, i32>((*config).pix_fmt),
+                        ));
+                    }
+                    i += 1;
+                }
+                continue;
+            }
 
             for device_path in &device_paths {
                 let mut i = 0;
@@ -625,7 +690,9 @@ fn open_input(path: &Path, gpu_device: &Option<Arc<wgpu::Device>>) -> Result<Ope
         let stream_sw_format =
             std::mem::transmute::<i32, sys::AVPixelFormat>((*(*stream).codecpar).format);
 
-        if let Some((created_hw_ctx, hw_pix_fmt)) = try_init_hw_device(codec, stream_sw_format) {
+        if let Some((created_hw_ctx, hw_pix_fmt)) =
+            try_init_hw_device(codec, stream_sw_format, gpu_device)
+        {
             hw_device_ctx = created_hw_ctx;
             let boxed = Box::new(HwPixFmtBox {
                 pix_fmt: hw_pix_fmt,
@@ -659,7 +726,7 @@ fn open_input(path: &Path, gpu_device: &Option<Arc<wgpu::Device>>) -> Result<Ope
         let width = (*dec_ctx).width.max(0) as u32;
         let height = (*dec_ctx).height.max(0) as u32;
 
-        let gpu_pipeline = build_gpu_pipeline(gpu_device, hw_device_ctx);
+        let gpu_pipeline = build_gpu_pipeline(gpu_device, hw_device_ctx, width, height);
 
         if sys::av_seek_frame(fmt_ctx, stream_index, 0, sys::AVSEEK_FLAG_BACKWARD) < 0 {
             sys::av_seek_frame(fmt_ctx, -1, 0, sys::AVSEEK_FLAG_BACKWARD);
@@ -690,6 +757,8 @@ fn open_input(path: &Path, gpu_device: &Option<Arc<wgpu::Device>>) -> Result<Ope
 fn build_gpu_pipeline(
     gpu_device: &Option<Arc<wgpu::Device>>,
     hw_device_ctx: *mut sys::AVBufferRef,
+    #[cfg_attr(unix, allow(unused_variables))] dec_width: u32,
+    #[cfg_attr(unix, allow(unused_variables))] dec_height: u32,
 ) -> Option<GpuPipeline> {
     let wgpu_device = gpu_device.clone()?;
     let wgpu_queue = shared_wgpu_queue()?;
@@ -697,16 +766,43 @@ fn build_gpu_pipeline(
     if hw_device_ctx.is_null() {
         return None;
     }
-    match VaapiTransferBackend::new(&wgpu_device, shared_wgpu_submit_lock()) {
-        Ok(backend) => Some(GpuPipeline {
-            wgpu_device,
-            wgpu_queue,
-            cache,
-            backend,
-        }),
-        Err(e) => {
-            eprintln!("[neoutl-video-decoder] Vulkan相互運用初期化失敗、GPU経路無効: {e}");
-            None
+    #[cfg(unix)]
+    {
+        match VaapiTransferBackend::new(&wgpu_device, shared_wgpu_submit_lock()) {
+            Ok(backend) => Some(GpuPipeline {
+                wgpu_device,
+                wgpu_queue,
+                cache,
+                backend,
+            }),
+            Err(e) => {
+                eprintln!("[neoutl-video-decoder] Vulkan相互運用初期化失敗、GPU経路無効: {e}");
+                None
+            }
+        }
+    }
+    #[cfg(target_os = "windows")]
+    {
+        let coded_size = Size {
+            width: dec_width,
+            height: dec_height,
+        };
+        let d3d11_device = unsafe {
+            let device_ctx = (*hw_device_ctx).data as *mut sys::AVHWDeviceContext;
+            let hwctx = (*device_ctx).hwctx as *mut sys::AVD3D11VADeviceContext;
+            neo_media_transfer_d3d11::device_from_raw((*hwctx).device)
+        };
+        match D3d11TransferBackend::new(&wgpu_device, d3d11_device, coded_size) {
+            Ok(backend) => Some(GpuPipeline {
+                wgpu_device,
+                wgpu_queue,
+                cache,
+                backend,
+            }),
+            Err(e) => {
+                eprintln!("[neoutl-video-decoder] D3D12相互運用初期化失敗、GPU経路無効: {e}");
+                None
+            }
         }
     }
 }
@@ -821,6 +917,7 @@ fn try_convert_to_gpu(
         )
     };
 
+    #[cfg(unix)]
     let input = neo_media_transfer_vaapi::VaapiDecodedFrame {
         av_frame,
         src_hw_frames_ctx: hw_frames_ctx_ref,
@@ -843,6 +940,43 @@ fn try_convert_to_gpu(
         pts,
         duration: 0,
         progressive,
+    };
+
+    #[cfg(target_os = "windows")]
+    let input = {
+        let _ = is_direct_rgba;
+        let d3d11_texture =
+            match unsafe { neo_media_transfer_d3d11::texture_from_av_frame(av_frame) } {
+                Ok(t) => t,
+                Err(e) => {
+                    eprintln!("[neoutl-video-decoder] D3D11Texture2D取得失敗: {e}");
+                    return ConvertOutcome::Unsupported("D3D11Texture2D取得失敗");
+                }
+            };
+        let subresource_index = unsafe { (*av_frame).data[1] as usize as u32 };
+        neo_media_transfer_d3d11::D3d11DecodedFrame {
+            av_frame,
+            d3d11_texture,
+            subresource_index,
+            sw_format_i32,
+            coded_size: Size {
+                width: ctx.width,
+                height: ctx.height,
+            },
+            visible_rect: Rect {
+                x: 0,
+                y: 0,
+                width: ctx.width,
+                height: ctx.height,
+            },
+            color_primaries,
+            transfer_characteristics,
+            matrix_coefficients,
+            full_range,
+            pts,
+            duration: 0,
+            progressive,
+        }
     };
 
     let cache = gpu.cache.clone();
@@ -880,12 +1014,13 @@ fn try_convert_to_gpu(
             }
         };
 
-    let owner_token = cache.owner_token_of(
-        neo_media_transfer_vaapi::dst_pixel_format_for(sw_format_i32),
-        ctx.width,
-        ctx.height,
-        &neo_frame.texture,
-    );
+    #[cfg(unix)]
+    let dst_pixel_format = neo_media_transfer_vaapi::dst_pixel_format_for(sw_format_i32);
+    #[cfg(target_os = "windows")]
+    let dst_pixel_format = neo_media_transfer_d3d11::dst_pixel_format_for(sw_format_i32);
+
+    let owner_token =
+        cache.owner_token_of(dst_pixel_format, ctx.width, ctx.height, &neo_frame.texture);
     let gpu_frame =
         GpuFrame::new_pooled(neo_frame.texture, ctx.width, ctx.height, cache, owner_token);
     ConvertOutcome::Gpu(VideoFrame(Arc::new(gpu_frame)))
