@@ -1,5 +1,4 @@
 use carla_host_sys::{PluginFormat, PluginParamInfo};
-use serde::{Deserialize, Serialize};
 use shipyard::Component;
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -11,7 +10,7 @@ fn next_plugin_instance_uid() -> u64 {
     NEXT_PLUGIN_INSTANCE_UID.fetch_add(1, Ordering::Relaxed)
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct PluginInstanceRef {
     #[serde(default)]
     pub instance_uid: u64,
@@ -24,7 +23,56 @@ pub struct PluginInstanceRef {
     pub param_info: Vec<PluginParamInfo>,
 }
 
-#[derive(Clone, Debug, Default, Component, Serialize, Deserialize)]
+impl From<&PluginInstanceRef> for neoutl_schema::PluginInstanceRef {
+    fn from(value: &PluginInstanceRef) -> Self {
+        Self {
+            instance_uid: value.instance_uid,
+            format: value.format as i32,
+            path: value.path.to_string_lossy().to_string(),
+            plugin_id: value.plugin_id.clone(),
+            bypass: value.bypass,
+            params: value.params.clone(),
+            param_info: value
+                .param_info
+                .iter()
+                .map(|info| serde_json::to_vec(info).unwrap_or_default())
+                .collect(),
+        }
+    }
+}
+
+impl TryFrom<&neoutl_schema::PluginInstanceRef> for PluginInstanceRef {
+    type Error = String;
+
+    fn try_from(value: &neoutl_schema::PluginInstanceRef) -> Result<Self, Self::Error> {
+        let format = match value.format {
+            x if x == 0 => PluginFormat::Vst3,
+            x if x == 1 => PluginFormat::Clap,
+            x if x == 2 => PluginFormat::Lv2,
+            x if x == 3 => PluginFormat::Vst2,
+            x if x == 4 => PluginFormat::Au,
+            x if x == 5 => PluginFormat::Sf2,
+            x if x == 6 => PluginFormat::Sfz,
+            x if x == 7 => PluginFormat::Jsfx,
+            _ => PluginFormat::Internal,
+        };
+        Ok(Self {
+            instance_uid: value.instance_uid,
+            format,
+            path: PathBuf::from(&value.path),
+            plugin_id: value.plugin_id.clone(),
+            bypass: value.bypass,
+            params: value.params.clone(),
+            param_info: value
+                .param_info
+                .iter()
+                .filter_map(|bytes| serde_json::from_slice(bytes).ok())
+                .collect(),
+        })
+    }
+}
+
+#[derive(Clone, Debug, Default, Component)]
 pub struct PluginChain(pub Vec<PluginInstanceRef>);
 
 impl PluginChain {

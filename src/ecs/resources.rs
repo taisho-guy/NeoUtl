@@ -1,5 +1,4 @@
 use crate::config;
-use serde::{Deserialize, Serialize};
 use shipyard::Unique;
 
 #[derive(Clone, Debug, Unique)]
@@ -84,16 +83,14 @@ impl LayerStates {
 
 pub const GRID_MODE_AUTO: i32 = 0;
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug)]
 pub struct SceneMeta {
     pub id: i32,
     pub name: String,
     pub width: u32,
     pub height: u32,
     pub fps: u32,
-    #[serde(skip, default = "default_total_frames")]
     pub total_frames: i32,
-    #[serde(skip, default = "default_layer_states")]
     pub layer_states: Vec<(bool, bool)>,
 
     pub grid_mode: i32,
@@ -176,14 +173,12 @@ impl SceneResource {
     }
 }
 
-#[derive(Clone, Debug, Unique, Serialize, Deserialize)]
+#[derive(Clone, Debug, Unique)]
 pub struct SystemSettingsResource {
     pub autosave_enabled: bool,
     pub autosave_interval_sec: i32,
     pub theme_dark: bool,
-    #[serde(default)]
     pub theme_id: String,
-    #[serde(default)]
     pub easing_engine_id: String,
     pub ui_scale_percent: i32,
     pub worker_threads: i32,
@@ -193,16 +188,99 @@ pub struct SystemSettingsResource {
     pub magnetic_snap_range: i32,
     pub export_container: i32,
     pub export_codec: i32,
-    #[serde(default)]
     pub check_update_on_startup: bool,
-    #[serde(default)]
     pub crash_reporting_enabled: bool,
-    #[serde(default = "default_max_group_chain_depth")]
     pub max_group_chain_depth: i32,
 }
 
-fn default_max_group_chain_depth() -> i32 {
-    config::SYSTEM_DEFAULT_MAX_GROUP_CHAIN_DEPTH
+impl From<&SystemSettingsResource> for neoutl_schema::SystemSettings {
+    fn from(value: &SystemSettingsResource) -> Self {
+        Self {
+            autosave_enabled: value.autosave_enabled,
+            autosave_interval_sec: value.autosave_interval_sec,
+            theme_dark: value.theme_dark,
+            theme_id: value.theme_id.clone(),
+            easing_engine_id: value.easing_engine_id.clone(),
+            ui_scale_percent: value.ui_scale_percent,
+            worker_threads: value.worker_threads,
+            audio_max_block_size: value.audio_max_block_size,
+            decode_backend: value.decode_backend,
+            default_snap: value.default_snap,
+            magnetic_snap_range: value.magnetic_snap_range,
+            export_container: value.export_container,
+            export_codec: value.export_codec,
+            check_update_on_startup: value.check_update_on_startup,
+            crash_reporting_enabled: value.crash_reporting_enabled,
+            max_group_chain_depth: value.max_group_chain_depth,
+        }
+    }
+}
+
+impl TryFrom<&neoutl_schema::SystemSettings> for SystemSettingsResource {
+    type Error = String;
+
+    fn try_from(value: &neoutl_schema::SystemSettings) -> Result<Self, Self::Error> {
+        Ok(Self {
+            autosave_enabled: value.autosave_enabled,
+            autosave_interval_sec: value.autosave_interval_sec,
+            theme_dark: value.theme_dark,
+            theme_id: value.theme_id.clone(),
+            easing_engine_id: value.easing_engine_id.clone(),
+            ui_scale_percent: value.ui_scale_percent,
+            worker_threads: value.worker_threads,
+            audio_max_block_size: value.audio_max_block_size,
+            decode_backend: value.decode_backend,
+            default_snap: value.default_snap,
+            magnetic_snap_range: value.magnetic_snap_range,
+            export_container: value.export_container,
+            export_codec: value.export_codec,
+            check_update_on_startup: value.check_update_on_startup,
+            crash_reporting_enabled: value.crash_reporting_enabled,
+            max_group_chain_depth: value.max_group_chain_depth,
+        })
+    }
+}
+
+impl From<&SceneMeta> for neoutl_schema::SceneMeta {
+    fn from(value: &SceneMeta) -> Self {
+        Self {
+            id: value.id,
+            name: value.name.clone(),
+            width: value.width,
+            height: value.height,
+            fps: value.fps,
+            grid_mode: value.grid_mode,
+            grid_bpm: value.grid_bpm,
+            grid_offset: value.grid_offset,
+            grid_interval: value.grid_interval,
+            grid_subdivision: value.grid_subdivision,
+            enable_snap: value.enable_snap,
+            magnetic_snap_range: value.magnetic_snap_range,
+        }
+    }
+}
+
+impl TryFrom<&neoutl_schema::SceneMeta> for SceneMeta {
+    type Error = String;
+
+    fn try_from(value: &neoutl_schema::SceneMeta) -> Result<Self, Self::Error> {
+        Ok(Self {
+            id: value.id,
+            name: value.name.clone(),
+            width: value.width,
+            height: value.height,
+            fps: value.fps,
+            total_frames: default_total_frames(),
+            layer_states: default_layer_states(),
+            grid_mode: value.grid_mode,
+            grid_bpm: value.grid_bpm,
+            grid_offset: value.grid_offset,
+            grid_interval: value.grid_interval,
+            grid_subdivision: value.grid_subdivision,
+            enable_snap: value.enable_snap,
+            magnetic_snap_range: value.magnetic_snap_range,
+        })
+    }
 }
 
 impl Default for SystemSettingsResource {

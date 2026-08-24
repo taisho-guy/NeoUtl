@@ -38,6 +38,30 @@ pub struct GroupControl {
     pub hide_captured: bool,
 }
 
+impl From<&GroupControl> for neoutl_schema::GroupControl {
+    fn from(value: &GroupControl) -> Self {
+        Self {
+            layer_count_down: value.layer_count_down,
+            layer_count_up: value.layer_count_up,
+            generate_framebuffer: value.generate_framebuffer,
+            hide_captured: value.hide_captured,
+        }
+    }
+}
+
+impl TryFrom<&neoutl_schema::GroupControl> for GroupControl {
+    type Error = String;
+
+    fn try_from(value: &neoutl_schema::GroupControl) -> Result<Self, Self::Error> {
+        Ok(Self {
+            layer_count_down: value.layer_count_down,
+            layer_count_up: value.layer_count_up,
+            generate_framebuffer: value.generate_framebuffer,
+            hide_captured: value.hide_captured,
+        })
+    }
+}
+
 impl Default for GroupControl {
     fn default() -> Self {
         Self {
@@ -109,6 +133,50 @@ pub struct ClipTarget {
     pub chroma_tolerance: f32,
     pub blend_edge: bool,
     pub render_self: bool,
+}
+
+impl From<&ClipTarget> for neoutl_schema::ClipTarget {
+    fn from(value: &ClipTarget) -> Self {
+        Self {
+            enabled: value.enabled,
+            layer_count_down: value.layer_count_down,
+            layer_count_up: value.layer_count_up,
+            mode: match value.mode {
+                ClipMode::Alpha => neoutl_schema::ClipMode::Alpha as i32,
+                ClipMode::AlphaInvert => neoutl_schema::ClipMode::AlphaInvert as i32,
+                ClipMode::Luminance => neoutl_schema::ClipMode::Luminance as i32,
+                ClipMode::LuminanceInvert => neoutl_schema::ClipMode::LuminanceInvert as i32,
+                ClipMode::Chroma => neoutl_schema::ClipMode::Chroma as i32,
+            },
+            chroma_hue: value.chroma_hue,
+            chroma_tolerance: value.chroma_tolerance,
+            blend_edge: value.blend_edge,
+            render_self: value.render_self,
+        }
+    }
+}
+
+impl TryFrom<&neoutl_schema::ClipTarget> for ClipTarget {
+    type Error = String;
+
+    fn try_from(value: &neoutl_schema::ClipTarget) -> Result<Self, Self::Error> {
+        Ok(Self {
+            enabled: value.enabled,
+            layer_count_down: value.layer_count_down,
+            layer_count_up: value.layer_count_up,
+            mode: match value.mode() {
+                neoutl_schema::ClipMode::Alpha => ClipMode::Alpha,
+                neoutl_schema::ClipMode::AlphaInvert => ClipMode::AlphaInvert,
+                neoutl_schema::ClipMode::Luminance => ClipMode::Luminance,
+                neoutl_schema::ClipMode::LuminanceInvert => ClipMode::LuminanceInvert,
+                neoutl_schema::ClipMode::Chroma => ClipMode::Chroma,
+            },
+            chroma_hue: value.chroma_hue,
+            chroma_tolerance: value.chroma_tolerance,
+            blend_edge: value.blend_edge,
+            render_self: value.render_self,
+        })
+    }
 }
 
 impl Default for ClipTarget {
@@ -189,6 +257,28 @@ pub struct AudioParams {
     pub mute: bool,
 }
 
+impl From<&AudioParams> for neoutl_schema::AudioParams {
+    fn from(value: &AudioParams) -> Self {
+        Self {
+            volume: value.volume,
+            pan: value.pan,
+            mute: value.mute,
+        }
+    }
+}
+
+impl TryFrom<&neoutl_schema::AudioParams> for AudioParams {
+    type Error = String;
+
+    fn try_from(value: &neoutl_schema::AudioParams) -> Result<Self, Self::Error> {
+        Ok(Self {
+            volume: value.volume,
+            pan: value.pan,
+            mute: value.mute,
+        })
+    }
+}
+
 impl Default for AudioParams {
     fn default() -> Self {
         Self {
@@ -246,6 +336,58 @@ pub struct TextContent {
     pub outline_color: [f32; 4],
 }
 
+impl From<&TextContent> for neoutl_schema::TextContent {
+    fn from(value: &TextContent) -> Self {
+        Self {
+            text: value.text.clone(),
+            font_size: value.font_size,
+            color: value.color.to_vec(),
+            font_family: value.font_family.clone(),
+            bold: value.bold,
+            italic: value.italic,
+            align: match value.align {
+                TextAlign::Left => neoutl_schema::TextAlign::Left as i32,
+                TextAlign::Center => neoutl_schema::TextAlign::Center as i32,
+                TextAlign::Right => neoutl_schema::TextAlign::Right as i32,
+            },
+            line_height: value.line_height,
+            outline_width: value.outline_width,
+            outline_color: value.outline_color.to_vec(),
+        }
+    }
+}
+
+impl TryFrom<&neoutl_schema::TextContent> for TextContent {
+    type Error = String;
+
+    fn try_from(value: &neoutl_schema::TextContent) -> Result<Self, Self::Error> {
+        let mut color = [0.0; 4];
+        for (idx, v) in value.color.iter().take(4).enumerate() {
+            color[idx] = *v;
+        }
+        let mut outline_color = [0.0; 4];
+        for (idx, v) in value.outline_color.iter().take(4).enumerate() {
+            outline_color[idx] = *v;
+        }
+        Ok(Self {
+            text: value.text.clone(),
+            font_size: value.font_size,
+            color,
+            font_family: value.font_family.clone(),
+            bold: value.bold,
+            italic: value.italic,
+            align: match value.align() {
+                neoutl_schema::TextAlign::Left => TextAlign::Left,
+                neoutl_schema::TextAlign::Center => TextAlign::Center,
+                neoutl_schema::TextAlign::Right => TextAlign::Right,
+            },
+            line_height: value.line_height,
+            outline_width: value.outline_width,
+            outline_color,
+        })
+    }
+}
+
 impl Default for TextContent {
     fn default() -> Self {
         Self {
@@ -286,6 +428,40 @@ pub struct ShapeParams {
     pub stroke_color: [f32; 4],
     pub stroke_width: f32,
     pub extrude_depth: f32,
+}
+
+impl From<&ShapeParams> for neoutl_schema::ShapeParams {
+    fn from(value: &ShapeParams) -> Self {
+        Self {
+            sides: value.sides,
+            fill_color: value.fill_color.to_vec(),
+            stroke_color: value.stroke_color.to_vec(),
+            stroke_width: value.stroke_width,
+            extrude_depth: value.extrude_depth,
+        }
+    }
+}
+
+impl TryFrom<&neoutl_schema::ShapeParams> for ShapeParams {
+    type Error = String;
+
+    fn try_from(value: &neoutl_schema::ShapeParams) -> Result<Self, Self::Error> {
+        let mut fill_color = [0.0; 4];
+        for (idx, v) in value.fill_color.iter().take(4).enumerate() {
+            fill_color[idx] = *v;
+        }
+        let mut stroke_color = [0.0; 4];
+        for (idx, v) in value.stroke_color.iter().take(4).enumerate() {
+            stroke_color[idx] = *v;
+        }
+        Ok(Self {
+            sides: value.sides,
+            fill_color,
+            stroke_color,
+            stroke_width: value.stroke_width,
+            extrude_depth: value.extrude_depth,
+        })
+    }
 }
 
 impl Default for ShapeParams {

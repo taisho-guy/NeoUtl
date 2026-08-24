@@ -1,0 +1,65 @@
+syntax = "proto3";
+package neoutl.v1;
+
+import "neoutl/v1/common.proto";
+
+message MediaSourceDoc {
+  string path = 1;
+  MediaKind kind = 2;
+  int64 trim_in_frame = 3;
+}
+
+message ObjectPayload {
+  optional TextContent text = 1;
+  optional ShapeParams shape = 2;
+  map<string, float> plugin_params = 3;
+  optional MediaSourceDoc media = 4;
+  repeated PluginInstanceRef plugin_chain = 5;
+  optional int32 scene = 6;
+  optional GroupControl group_control = 7;
+  optional ClipTarget clip_target = 8;
+}
+
+message KeyframeTrack {
+  repeated Keyframe keyframes = 1;
+}
+
+message ObjectDoc {
+  uint64 id = 1;
+  int32 scene_id = 2;
+  string kind_stable_id = 3;
+  int32 layer = 4;
+  int32 start_frame = 5;
+  int32 end_frame = 6;
+  Transform transform = 7;
+  AudioParams audio = 8;
+  repeated EffectInstance effects = 9;
+  ObjectPayload payload = 10;
+  map<string, KeyframeTrack> keyframes = 11;
+}
+
+message SceneMeta {
+  int32 id = 1;
+  string name = 2;
+  uint32 width = 3;
+  uint32 height = 4;
+  uint32 fps = 5;
+  int32 grid_mode = 6;
+  float grid_bpm = 7;
+  float grid_offset = 8;
+  int32 grid_interval = 9;
+  int32 grid_subdivision = 10;
+  bool enable_snap = 11;
+  int32 magnetic_snap_range = 12;
+}
+
+message DocumentModel {
+  uint32 schema_version = 1;
+  string project_name = 2;
+  uint32 audio_sample_rate = 3;
+  uint32 audio_channels = 4;
+  int32 active_scene = 5;
+  uint64 next_object_id = 6;
+  repeated SceneMeta scenes = 7;
+  repeated ObjectDoc objects = 8;
+}

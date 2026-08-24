@@ -1,9 +1,8 @@
 use crate::ecs::components::ParamAccess;
 use neoutl_object_api::UNIT_SIZE_PX;
-use serde::{Deserialize, Serialize};
 use shipyard::{Component, Unique};
 
-#[derive(Clone, Copy, Debug, Component, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Component)]
 pub struct Transform {
     pub x: f32,
     pub y: f32,
@@ -123,6 +122,40 @@ pub fn compute_global_matrix(t: &Transform) -> GlobalMatrix {
     ];
     let rotation = mat4_mul(&rot_z, &mat4_mul(&rot_y, &rot_x));
     GlobalMatrix(mat4_mul(&translation, &mat4_mul(&rotation, &scale)))
+}
+
+impl From<&Transform> for neoutl_schema::Transform {
+    fn from(value: &Transform) -> Self {
+        Self {
+            x: value.x,
+            y: value.y,
+            z: value.z,
+            scale_x: value.scale_x,
+            scale_y: value.scale_y,
+            rot_x: value.rot_x,
+            rot_y: value.rot_y,
+            rot_z: value.rot_z,
+            opacity: value.opacity,
+        }
+    }
+}
+
+impl TryFrom<&neoutl_schema::Transform> for Transform {
+    type Error = String;
+
+    fn try_from(value: &neoutl_schema::Transform) -> Result<Self, Self::Error> {
+        Ok(Self {
+            x: value.x,
+            y: value.y,
+            z: value.z,
+            scale_x: value.scale_x,
+            scale_y: value.scale_y,
+            rot_x: value.rot_x,
+            rot_y: value.rot_y,
+            rot_z: value.rot_z,
+            opacity: value.opacity,
+        })
+    }
 }
 
 pub fn compute_relative_matrix(t: &Transform) -> GlobalMatrix {

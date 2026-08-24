@@ -1,0 +1,12 @@
+[package]
+name = "neoutl-schema"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+prost = { workspace = true }
+prost-types = { workspace = true }
+serde = { workspace = true }
+
+[build-dependencies]
+prost-build = { workspace = true }

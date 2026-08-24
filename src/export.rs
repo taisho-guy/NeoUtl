@@ -1,22 +1,23 @@
 use crate::app_state::{self, SharedAppState};
-use serde::{Deserialize, Serialize};
+use prost::Message;
 use std::collections::VecDeque;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
-#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ExportCodec {
     H264,
     H265,
 }
 
-#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum EncoderBackend {
     Auto,
     GpuVideo,
     Gstreamer,
 }
 
+#[allow(dead_code)]
 pub struct ExportJob {
     pub output_path: PathBuf,
     pub codec: ExportCodec,
@@ -29,7 +30,7 @@ pub struct ExportJob {
     pub cancel: Option<std::sync::Arc<std::sync::atomic::AtomicBool>>,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug)]
 pub struct ExportPreset {
     pub name: String,
     pub codec: ExportCodec,
@@ -37,11 +38,6 @@ pub struct ExportPreset {
     pub average_bitrate: u32,
     pub max_bitrate: u32,
     pub container_ext: String,
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize, Default)]
-struct ExportPresetFile {
-    presets: Vec<ExportPreset>,
 }
 
 pub fn default_export_presets() -> Vec<ExportPreset> {
@@ -70,16 +66,65 @@ fn presets_path() -> PathBuf {
         .parent()
         .unwrap_or_else(|| Path::new("."))
         .join("settings")
-        .join("export_presets.yaml")
+        .join("export_presets.npb")
+}
+
+impl From<&ExportPreset> for neoutl_schema::ExportPreset {
+    fn from(value: &ExportPreset) -> Self {
+        Self {
+            name: value.name.clone(),
+            codec: match value.codec {
+                ExportCodec::H264 => neoutl_schema::ExportCodec::H264 as i32,
+                ExportCodec::H265 => neoutl_schema::ExportCodec::H265 as i32,
+            },
+            backend: match value.backend {
+                EncoderBackend::Auto => neoutl_schema::EncoderBackend::Auto as i32,
+                EncoderBackend::GpuVideo => neoutl_schema::EncoderBackend::GpuVideo as i32,
+                EncoderBackend::Gstreamer => neoutl_schema::EncoderBackend::Gstreamer as i32,
+            },
+            average_bitrate: value.average_bitrate,
+            max_bitrate: value.max_bitrate,
+            container_ext: value.container_ext.clone(),
+        }
+    }
+}
+
+impl TryFrom<neoutl_schema::ExportPreset> for ExportPreset {
+    type Error = String;
+
+    fn try_from(value: neoutl_schema::ExportPreset) -> Result<Self, Self::Error> {
+        let name = value.name.clone();
+        let container_ext = value.container_ext.clone();
+        Ok(Self {
+            name,
+            codec: match value.codec() {
+                neoutl_schema::ExportCodec::H264 => ExportCodec::H264,
+                neoutl_schema::ExportCodec::H265 => ExportCodec::H265,
+            },
+            backend: match value.backend() {
+                neoutl_schema::EncoderBackend::Auto => EncoderBackend::Auto,
+                neoutl_schema::EncoderBackend::GpuVideo => EncoderBackend::GpuVideo,
+                neoutl_schema::EncoderBackend::Gstreamer => EncoderBackend::Gstreamer,
+            },
+            average_bitrate: value.average_bitrate,
+            max_bitrate: value.max_bitrate,
+            container_ext,
+        })
+    }
 }
 
 pub fn load_export_presets() -> Vec<ExportPreset> {
     let path = presets_path();
-    let Ok(text) = std::fs::read_to_string(path) else {
+    let Ok(bytes) = std::fs::read(path) else {
         return default_export_presets();
     };
-    rust_yaml::from_str::<ExportPresetFile>(&text)
-        .map(|f| f.presets)
+    let Ok(file) = neoutl_schema::ExportPresetFile::decode(bytes.as_slice()) else {
+        return default_export_presets();
+    };
+    file.presets
+        .into_iter()
+        .map(ExportPreset::try_from)
+        .collect::<Result<Vec<_>, _>>()
         .unwrap_or_else(|_| default_export_presets())
 }
 
@@ -87,11 +132,13 @@ pub fn save_export_presets(presets: &[ExportPreset]) -> Result<(), String> {
     let path = presets_path();
     std::fs::create_dir_all(path.parent().unwrap_or_else(|| Path::new(".")))
         .map_err(|e| e.to_string())?;
-    let text = rust_yaml::to_string(&ExportPresetFile {
-        presets: presets.to_vec(),
-    })
-    .map_err(|e| e.to_string())?;
-    std::fs::write(path, text).map_err(|e| e.to_string())
+    let file = neoutl_schema::ExportPresetFile {
+        presets: presets
+            .iter()
+            .map(neoutl_schema::ExportPreset::from)
+            .collect(),
+    };
+    std::fs::write(path, file.encode_to_vec()).map_err(|e| e.to_string())
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

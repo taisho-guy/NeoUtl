@@ -26,6 +26,40 @@ pub struct Keyframe {
     pub apply_mode: ApplyMode,
 }
 
+impl From<&Keyframe> for neoutl_schema::Keyframe {
+    fn from(value: &Keyframe) -> Self {
+        Self {
+            frame: value.frame,
+            value: value.value,
+            engine_id: value.engine_id.clone(),
+            engine_payload: value.engine_payload.clone(),
+            edit_seq: value.edit_seq,
+            apply_mode: match value.apply_mode {
+                ApplyMode::Linear => neoutl_schema::ApplyMode::Linear as i32,
+                ApplyMode::Interpolate => neoutl_schema::ApplyMode::Interpolate as i32,
+            },
+        }
+    }
+}
+
+impl TryFrom<&neoutl_schema::Keyframe> for Keyframe {
+    type Error = String;
+
+    fn try_from(value: &neoutl_schema::Keyframe) -> Result<Self, Self::Error> {
+        Ok(Self {
+            frame: value.frame,
+            value: value.value,
+            engine_id: value.engine_id.clone(),
+            engine_payload: value.engine_payload.clone(),
+            edit_seq: value.edit_seq,
+            apply_mode: match value.apply_mode() {
+                neoutl_schema::ApplyMode::Linear => ApplyMode::Linear,
+                neoutl_schema::ApplyMode::Interpolate => ApplyMode::Interpolate,
+            },
+        })
+    }
+}
+
 impl Keyframe {}
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -61,10 +95,73 @@ pub enum Value {
     TrackRef(i32),
 }
 
+impl From<&Value> for neoutl_schema::Value {
+    fn from(value: &Value) -> Self {
+        let kind = match value {
+            Value::Number(v) => neoutl_schema::value::Kind::Number(*v),
+            Value::Bool(v) => neoutl_schema::value::Kind::Boolean(*v),
+            Value::Text(v) => neoutl_schema::value::Kind::Text(v.clone()),
+            Value::FilePath(v) => neoutl_schema::value::Kind::FilePath(v.clone()),
+            Value::Enum(v) => neoutl_schema::value::Kind::EnumValue(*v),
+            Value::TrackRef(v) => neoutl_schema::value::Kind::TrackRef(*v),
+        };
+        Self { kind: Some(kind) }
+    }
+}
+
+impl TryFrom<&neoutl_schema::Value> for Value {
+    type Error = String;
+
+    fn try_from(value: &neoutl_schema::Value) -> Result<Self, Self::Error> {
+        match value.kind.as_ref() {
+            Some(neoutl_schema::value::Kind::Number(v)) => Ok(Self::Number(*v)),
+            Some(neoutl_schema::value::Kind::Boolean(v)) => Ok(Self::Bool(*v)),
+            Some(neoutl_schema::value::Kind::Text(v)) => Ok(Self::Text(v.clone())),
+            Some(neoutl_schema::value::Kind::FilePath(v)) => Ok(Self::FilePath(v.clone())),
+            Some(neoutl_schema::value::Kind::EnumValue(v)) => Ok(Self::Enum(*v)),
+            Some(neoutl_schema::value::Kind::TrackRef(v)) => Ok(Self::TrackRef(*v)),
+            None => Err("missing Value kind".to_string()),
+        }
+    }
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct EffectParam {
     pub static_value: Value,
     pub keyframes: Vec<Keyframe>,
+}
+
+impl From<&EffectParam> for neoutl_schema::EffectParam {
+    fn from(value: &EffectParam) -> Self {
+        Self {
+            static_value: Some(neoutl_schema::Value::from(&value.static_value)),
+            keyframes: value
+                .keyframes
+                .iter()
+                .map(neoutl_schema::Keyframe::from)
+                .collect(),
+        }
+    }
+}
+
+impl TryFrom<&neoutl_schema::EffectParam> for EffectParam {
+    type Error = String;
+
+    fn try_from(value: &neoutl_schema::EffectParam) -> Result<Self, Self::Error> {
+        Ok(Self {
+            static_value: value
+                .static_value
+                .as_ref()
+                .map(Value::try_from)
+                .transpose()?
+                .unwrap_or(Value::Number(0.0)),
+            keyframes: value
+                .keyframes
+                .iter()
+                .map(Keyframe::try_from)
+                .collect::<Result<Vec<_>, _>>()?,
+        })
+    }
 }
 
 impl EffectParam {
@@ -266,6 +363,36 @@ pub struct EffectInstance {
     pub effect_id: String,
     pub enabled: bool,
     pub params: HashMap<String, EffectParam>,
+}
+
+impl From<&EffectInstance> for neoutl_schema::EffectInstance {
+    fn from(value: &EffectInstance) -> Self {
+        Self {
+            effect_id: value.effect_id.clone(),
+            enabled: value.enabled,
+            params: value
+                .params
+                .iter()
+                .map(|(k, v)| (k.clone(), neoutl_schema::EffectParam::from(v)))
+                .collect(),
+        }
+    }
+}
+
+impl TryFrom<&neoutl_schema::EffectInstance> for EffectInstance {
+    type Error = String;
+
+    fn try_from(value: &neoutl_schema::EffectInstance) -> Result<Self, Self::Error> {
+        Ok(Self {
+            effect_id: value.effect_id.clone(),
+            enabled: value.enabled,
+            params: value
+                .params
+                .iter()
+                .map(|(k, v)| Ok((k.clone(), EffectParam::try_from(v)?)))
+                .collect::<Result<HashMap<_, _>, String>>()?,
+        })
+    }
 }
 
 impl EffectInstance {

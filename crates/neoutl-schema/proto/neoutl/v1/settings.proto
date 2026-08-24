@@ -1,0 +1,21 @@
+syntax = "proto3";
+package neoutl.v1;
+
+message SystemSettings {
+  bool autosave_enabled = 1;
+  int32 autosave_interval_sec = 2;
+  bool theme_dark = 3;
+  string theme_id = 4;
+  string easing_engine_id = 5;
+  int32 ui_scale_percent = 6;
+  int32 worker_threads = 7;
+  int32 audio_max_block_size = 8;
+  int32 decode_backend = 9;
+  bool default_snap = 10;
+  int32 magnetic_snap_range = 11;
+  int32 export_container = 12;
+  int32 export_codec = 13;
+  bool check_update_on_startup = 14;
+  bool crash_reporting_enabled = 15;
+  int32 max_group_chain_depth = 16;
+}

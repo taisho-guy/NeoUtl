@@ -1,3 +1,4 @@
+use prost::Message;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::sync::{Mutex, OnceLock};
@@ -331,7 +332,7 @@ pub const DEFAULT_KEYMAP: &[(CommandId, Scope, KeyBinding)] = &[
     ),
 ];
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub struct OwnedBinding {
     pub ctrl: bool,
     pub shift: bool,
@@ -366,9 +367,155 @@ pub struct Override {
     pub binding: OwnedBinding,
 }
 
+impl From<&Override> for neoutl_schema::Override {
+    fn from(value: &Override) -> Self {
+        Self {
+            command: value.command as i32,
+            scope: value.scope as i32,
+            binding: Some(neoutl_schema::OwnedBinding::from(&value.binding)),
+        }
+    }
+}
+
+impl TryFrom<&neoutl_schema::Override> for Override {
+    type Error = String;
+
+    fn try_from(value: &neoutl_schema::Override) -> Result<Self, Self::Error> {
+        let binding = value
+            .binding
+            .as_ref()
+            .map(OwnedBinding::try_from)
+            .transpose()?
+            .unwrap_or_default();
+        Ok(Self {
+            command: match value.command {
+                x if x == neoutl_schema::CommandId::NewProject as i32 => CommandId::NewProject,
+                x if x == neoutl_schema::CommandId::OpenProject as i32 => CommandId::OpenProject,
+                x if x == neoutl_schema::CommandId::SaveProject as i32 => CommandId::SaveProject,
+                x if x == neoutl_schema::CommandId::SaveProjectAs as i32 => {
+                    CommandId::SaveProjectAs
+                }
+                x if x == neoutl_schema::CommandId::ExportMedia as i32 => CommandId::ExportMedia,
+                x if x == neoutl_schema::CommandId::Quit as i32 => CommandId::Quit,
+                x if x == neoutl_schema::CommandId::Undo as i32 => CommandId::Undo,
+                x if x == neoutl_schema::CommandId::Redo as i32 => CommandId::Redo,
+                x if x == neoutl_schema::CommandId::TogglePlay as i32 => CommandId::TogglePlay,
+                x if x == neoutl_schema::CommandId::StepFrameFwd as i32 => CommandId::StepFrameFwd,
+                x if x == neoutl_schema::CommandId::StepFrameBack as i32 => {
+                    CommandId::StepFrameBack
+                }
+                x if x == neoutl_schema::CommandId::SeekHome as i32 => CommandId::SeekHome,
+                x if x == neoutl_schema::CommandId::SeekEnd as i32 => CommandId::SeekEnd,
+                x if x == neoutl_schema::CommandId::ShowTimeline as i32 => CommandId::ShowTimeline,
+                x if x == neoutl_schema::CommandId::ShowProperties as i32 => {
+                    CommandId::ShowProperties
+                }
+                x if x == neoutl_schema::CommandId::ShowPreview as i32 => CommandId::ShowPreview,
+                x if x == neoutl_schema::CommandId::ShowSystemSettings as i32 => {
+                    CommandId::ShowSystemSettings
+                }
+                x if x == neoutl_schema::CommandId::ShowProjectSettings as i32 => {
+                    CommandId::ShowProjectSettings
+                }
+                x if x == neoutl_schema::CommandId::ShowSceneSettings as i32 => {
+                    CommandId::ShowSceneSettings
+                }
+                x if x == neoutl_schema::CommandId::ShowKeybindings as i32 => {
+                    CommandId::ShowKeybindings
+                }
+                x if x == neoutl_schema::CommandId::NextProjectTab as i32 => {
+                    CommandId::NextProjectTab
+                }
+                x if x == neoutl_schema::CommandId::PrevProjectTab as i32 => {
+                    CommandId::PrevProjectTab
+                }
+                x if x == neoutl_schema::CommandId::CloseProjectTab as i32 => {
+                    CommandId::CloseProjectTab
+                }
+                x if x == neoutl_schema::CommandId::NewScene as i32 => CommandId::NewScene,
+                x if x == neoutl_schema::CommandId::CloseScene as i32 => CommandId::CloseScene,
+                x if x == neoutl_schema::CommandId::NextScene as i32 => CommandId::NextScene,
+                x if x == neoutl_schema::CommandId::PrevScene as i32 => CommandId::PrevScene,
+                x if x == neoutl_schema::CommandId::DeleteSelected as i32 => {
+                    CommandId::DeleteSelected
+                }
+                x if x == neoutl_schema::CommandId::SplitAtPlayhead as i32 => {
+                    CommandId::SplitAtPlayhead
+                }
+                x if x == neoutl_schema::CommandId::Duplicate as i32 => CommandId::Duplicate,
+                x if x == neoutl_schema::CommandId::Cut as i32 => CommandId::Cut,
+                x if x == neoutl_schema::CommandId::Copy as i32 => CommandId::Copy,
+                x if x == neoutl_schema::CommandId::Paste as i32 => CommandId::Paste,
+                x if x == neoutl_schema::CommandId::ToggleRipple as i32 => CommandId::ToggleRipple,
+                x if x == neoutl_schema::CommandId::ZoomIn as i32 => CommandId::ZoomIn,
+                x if x == neoutl_schema::CommandId::ZoomOut as i32 => CommandId::ZoomOut,
+                _ => CommandId::NewProject,
+            },
+            scope: match value.scope {
+                x if x == neoutl_schema::Scope::Global as i32 => Scope::Global,
+                x if x == neoutl_schema::Scope::Timeline as i32 => Scope::Timeline,
+                x if x == neoutl_schema::Scope::Properties as i32 => Scope::Properties,
+                x if x == neoutl_schema::Scope::Preview as i32 => Scope::Preview,
+                _ => Scope::Global,
+            },
+            binding,
+        })
+    }
+}
+
+impl From<&OwnedBinding> for neoutl_schema::OwnedBinding {
+    fn from(value: &OwnedBinding) -> Self {
+        Self {
+            ctrl: value.ctrl,
+            shift: value.shift,
+            alt: value.alt,
+            key: value.key.clone(),
+        }
+    }
+}
+
+impl TryFrom<&neoutl_schema::OwnedBinding> for OwnedBinding {
+    type Error = String;
+
+    fn try_from(value: &neoutl_schema::OwnedBinding) -> Result<Self, Self::Error> {
+        Ok(Self {
+            ctrl: value.ctrl,
+            shift: value.shift,
+            alt: value.alt,
+            key: value.key.clone(),
+        })
+    }
+}
+
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct KeymapResource {
     pub overrides: Vec<Override>,
+}
+
+impl From<&KeymapResource> for neoutl_schema::KeymapResource {
+    fn from(value: &KeymapResource) -> Self {
+        Self {
+            overrides: value
+                .overrides
+                .iter()
+                .map(neoutl_schema::Override::from)
+                .collect(),
+        }
+    }
+}
+
+impl TryFrom<&neoutl_schema::KeymapResource> for KeymapResource {
+    type Error = String;
+
+    fn try_from(value: &neoutl_schema::KeymapResource) -> Result<Self, Self::Error> {
+        Ok(Self {
+            overrides: value
+                .overrides
+                .iter()
+                .map(Override::try_from)
+                .collect::<Result<Vec<_>, _>>()?,
+        })
+    }
 }
 
 impl KeymapResource {
@@ -464,8 +611,8 @@ impl KeymapResource {
 fn keymap_path() -> PathBuf {
     std::env::current_exe()
         .ok()
-        .and_then(|p| p.parent().map(|d| d.join("settings").join("keymap.yaml")))
-        .unwrap_or_else(|| PathBuf::from("settings/keymap.yaml"))
+        .and_then(|p| p.parent().map(|d| d.join("settings").join("keymap.npb")))
+        .unwrap_or_else(|| PathBuf::from("settings/keymap.npb"))
 }
 
 pub fn save_to_disk(k: &KeymapResource) -> std::io::Result<()> {
@@ -473,13 +620,14 @@ pub fn save_to_disk(k: &KeymapResource) -> std::io::Result<()> {
     if let Some(dir) = path.parent() {
         std::fs::create_dir_all(dir)?;
     }
-    let yaml = rust_yaml::to_string(k).map_err(std::io::Error::other)?;
-    std::fs::write(path, yaml)
+    let encoded = neoutl_schema::KeymapResource::from(k).encode_to_vec();
+    std::fs::write(path, encoded)
 }
 
 pub fn load_from_disk() -> Option<KeymapResource> {
-    let content = std::fs::read_to_string(keymap_path()).ok()?;
-    rust_yaml::from_str(&content).ok()
+    let bytes = std::fs::read(keymap_path()).ok()?;
+    let message = neoutl_schema::KeymapResource::decode(bytes.as_slice()).ok()?;
+    KeymapResource::try_from(&message).ok()
 }
 
 static ACTIVE_KEYMAP: OnceLock<Mutex<KeymapResource>> = OnceLock::new();

@@ -237,6 +237,7 @@ impl AudioMixer {
         }
     }
 
+    #[allow(dead_code)]
     pub fn render_frame_offline(
         &mut self,
         world: &EcsWorld,

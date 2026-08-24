@@ -63,7 +63,7 @@ pub fn load_plugin_catalog(plugin_path: &Path) {
     let Ok(content) = std::fs::read_to_string(path) else {
         return;
     };
-    let Ok(entries) = rust_yaml::from_str::<HashMap<String, String>>(&content) else {
+    let Ok(entries) = serde_yaml::from_str::<HashMap<String, String>>(&content) else {
         return;
     };
     plugin_translations()

@@ -1,7 +1,7 @@
-use crate::document::{DocumentModel, ObjectDoc};
+use crate::document::DocumentModel;
 use crate::ecs::EcsWorld;
 use crate::ecs::resources::SceneMeta;
-use serde::{Deserialize, Serialize};
+use prost::Message;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -16,21 +16,6 @@ pub struct ProjectMeta {
     pub audio_channels: u32,
 }
 
-#[derive(Serialize, Deserialize)]
-struct ProjectFile {
-    name: String,
-    fps: u32,
-    width: u32,
-    height: u32,
-    audio_sample_rate: u32,
-    audio_channels: u32,
-    active_scene: i32,
-    next_object_id: usize,
-    scenes: Vec<SceneMeta>,
-    #[serde(default)]
-    objects: Vec<ObjectDoc>,
-}
-
 pub fn projects_dir() -> PathBuf {
     std::env::current_exe()
         .ok()
@@ -39,11 +24,11 @@ pub fn projects_dir() -> PathBuf {
 }
 
 fn meta_path(dir: &Path) -> PathBuf {
-    dir.join("project.yaml")
+    dir.join("project.npb")
 }
 
 fn recovery_path(dir: &Path) -> PathBuf {
-    dir.join(".recovery").join("autosave.yaml")
+    dir.join(".recovery").join("autosave.npb")
 }
 
 fn recovery_is_newer(dir: &Path) -> bool {
@@ -75,24 +60,25 @@ fn sanitize_dir_name(name: &str) -> String {
     }
 }
 
-fn read_file(dir: &Path) -> Option<ProjectFile> {
+fn read_file(dir: &Path) -> Option<neoutl_schema::DocumentModel> {
     let path = if recovery_is_newer(dir) {
         recovery_path(dir)
     } else {
         meta_path(dir)
     };
-    let content = std::fs::read_to_string(path).ok()?;
-    rust_yaml::from_str(&content).ok()
+    let bytes = std::fs::read(path).ok()?;
+    neoutl_schema::DocumentModel::decode(bytes.as_slice()).ok()
 }
 
 pub fn load_project(dir: &Path) -> Option<ProjectMeta> {
     let file = read_file(dir)?;
+    let active_scene = file.scenes.iter().find(|s| s.id == file.active_scene);
     Some(ProjectMeta {
-        name: file.name,
+        name: file.project_name,
         dir: dir.to_path_buf(),
-        fps: file.fps,
-        width: file.width,
-        height: file.height,
+        fps: active_scene.map_or(30, |s| s.fps),
+        width: active_scene.map_or(1920, |s| s.width),
+        height: active_scene.map_or(1080, |s| s.height),
         audio_sample_rate: file.audio_sample_rate,
         audio_channels: file.audio_channels,
     })
@@ -100,15 +86,7 @@ pub fn load_project(dir: &Path) -> Option<ProjectMeta> {
 
 pub fn load_document(dir: &Path) -> Option<DocumentModel> {
     let file = read_file(dir)?;
-    Some(DocumentModel {
-        project_name: file.name,
-        audio_sample_rate: file.audio_sample_rate,
-        audio_channels: file.audio_channels,
-        active_scene: file.active_scene,
-        next_object_id: file.next_object_id,
-        scenes: file.scenes,
-        objects: file.objects,
-    })
+    DocumentModel::try_from(&file).ok()
 }
 
 pub fn list_projects() -> Vec<ProjectMeta> {
@@ -177,27 +155,21 @@ pub fn create_project(
 }
 
 pub fn save_document(dir: &Path, doc: &DocumentModel) -> std::io::Result<()> {
-    let active_scene_meta = doc.scenes.iter().find(|s| s.id == doc.active_scene);
-    let file = ProjectFile {
-        name: doc.project_name.clone(),
-        fps: active_scene_meta.map_or(30, |s| s.fps),
-        width: active_scene_meta.map_or(1920, |s| s.width),
-        height: active_scene_meta.map_or(1080, |s| s.height),
-        audio_sample_rate: doc.audio_sample_rate,
-        audio_channels: doc.audio_channels,
-        active_scene: doc.active_scene,
-        next_object_id: doc.next_object_id,
-        scenes: doc.scenes.clone(),
-        objects: doc.objects.clone(),
-    };
-    let yaml = rust_yaml::to_string(&file).map_err(std::io::Error::other)?;
-    write_atomic(&meta_path(dir), &yaml)?;
+    let file = neoutl_schema::DocumentModel::from(doc);
+    let bytes = file.encode_to_vec();
+    write_atomic_bytes(&meta_path(dir), &bytes)?;
     clear_recovery(dir);
     Ok(())
 }
 
 fn write_atomic(path: &Path, content: &str) -> std::io::Result<()> {
-    let temp = path.with_extension("yaml.tmp");
+    let temp = path.with_extension("tmp");
+    std::fs::write(&temp, content)?;
+    std::fs::rename(temp, path)
+}
+
+fn write_atomic_bytes(path: &Path, content: &[u8]) -> std::io::Result<()> {
+    let temp = path.with_extension("tmp");
     std::fs::write(&temp, content)?;
     std::fs::rename(temp, path)
 }
@@ -212,21 +184,9 @@ pub fn save_autosave_from_world(world: &EcsWorld) -> std::io::Result<()> {
         std::fs::create_dir_all(parent)?;
     }
     let doc = world.to_document();
-    let active_scene_meta = doc.scenes.iter().find(|s| s.id == doc.active_scene);
-    let file = ProjectFile {
-        name: doc.project_name.clone(),
-        fps: active_scene_meta.map_or(30, |s| s.fps),
-        width: active_scene_meta.map_or(1920, |s| s.width),
-        height: active_scene_meta.map_or(1080, |s| s.height),
-        audio_sample_rate: doc.audio_sample_rate,
-        audio_channels: doc.audio_channels,
-        active_scene: doc.active_scene,
-        next_object_id: doc.next_object_id,
-        scenes: doc.scenes,
-        objects: doc.objects,
-    };
-    let yaml = rust_yaml::to_string(&file).map_err(std::io::Error::other)?;
-    write_atomic(&recovery, &yaml)
+    let file = neoutl_schema::DocumentModel::from(&doc);
+    let bytes = file.encode_to_vec();
+    write_atomic_bytes(&recovery, &bytes)
 }
 
 pub fn clear_recovery(dir: &Path) {
@@ -384,6 +344,33 @@ mod tests {
                 .trim_in_frame,
             0
         );
+    }
+
+    #[test]
+    #[test]
+    fn roundtrip_save_load_as_protobuf() {
+        let dir = tempfile::tempdir().unwrap();
+        let doc = DocumentModel {
+            project_name: "proto".to_string(),
+            audio_sample_rate: 48000,
+            audio_channels: 2,
+            active_scene: 0,
+            next_object_id: 2,
+            scenes: vec![SceneMeta::new(0, "Scene 1")],
+            objects: vec![sample_object(1, 0)],
+        };
+
+        save_document(dir.path(), &doc).unwrap();
+
+        let npb = dir.path().join("project.npb");
+        assert!(npb.exists());
+        assert!(!dir.path().join("project.yaml").exists());
+
+        let loaded = load_document(dir.path()).unwrap();
+        assert_eq!(loaded.project_name, doc.project_name);
+        assert_eq!(loaded.active_scene, doc.active_scene);
+        assert_eq!(loaded.objects.len(), 1);
+        assert_eq!(loaded.objects[0].id, 1);
     }
 
     #[test]

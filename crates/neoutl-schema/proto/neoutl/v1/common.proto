@@ -1,0 +1,132 @@
+syntax = "proto3";
+package neoutl.v1;
+
+message Transform {
+  float x = 1;
+  float y = 2;
+  float z = 3;
+  float scale_x = 4;
+  float scale_y = 5;
+  float rot_x = 6;
+  float rot_y = 7;
+  float rot_z = 8;
+  float opacity = 9;
+}
+
+message AudioParams {
+  float volume = 1;
+  float pan = 2;
+  bool mute = 3;
+}
+
+enum ClipMode {
+  CLIP_MODE_ALPHA = 0;
+  CLIP_MODE_ALPHA_INVERT = 1;
+  CLIP_MODE_LUMINANCE = 2;
+  CLIP_MODE_LUMINANCE_INVERT = 3;
+  CLIP_MODE_CHROMA = 4;
+}
+
+message ClipTarget {
+  bool enabled = 1;
+  uint32 layer_count_down = 2;
+  uint32 layer_count_up = 3;
+  ClipMode mode = 4;
+  float chroma_hue = 5;
+  float chroma_tolerance = 6;
+  bool blend_edge = 7;
+  bool render_self = 8;
+}
+
+message GroupControl {
+  uint32 layer_count_down = 1;
+  uint32 layer_count_up = 2;
+  bool generate_framebuffer = 3;
+  bool hide_captured = 4;
+}
+
+enum TextAlign {
+  TEXT_ALIGN_LEFT = 0;
+  TEXT_ALIGN_CENTER = 1;
+  TEXT_ALIGN_RIGHT = 2;
+}
+
+message TextContent {
+  string text = 1;
+  float font_size = 2;
+  repeated float color = 3;
+  string font_family = 4;
+  bool bold = 5;
+  bool italic = 6;
+  TextAlign align = 7;
+  float line_height = 8;
+  float outline_width = 9;
+  repeated float outline_color = 10;
+}
+
+message ShapeParams {
+  uint32 sides = 1;
+  repeated float fill_color = 2;
+  repeated float stroke_color = 3;
+  float stroke_width = 4;
+  float extrude_depth = 5;
+}
+
+enum MediaKind {
+  MEDIA_KIND_UNSPECIFIED = 0;
+  MEDIA_KIND_VIDEO = 1;
+  MEDIA_KIND_IMAGE = 2;
+  MEDIA_KIND_AUDIO = 3;
+}
+
+message MediaSource {
+  string path = 1;
+  MediaKind kind = 2;
+  int64 trim_in_frame = 3;
+}
+
+enum ApplyMode {
+  APPLY_MODE_LINEAR = 0;
+  APPLY_MODE_INTERPOLATE = 1;
+}
+
+message Keyframe {
+  int32 frame = 1;
+  float value = 2;
+  string engine_id = 3;
+  bytes engine_payload = 4;
+  uint64 edit_seq = 5;
+  ApplyMode apply_mode = 6;
+}
+
+message Value {
+  oneof kind {
+    float number = 1;
+    bool boolean = 2;
+    string text = 3;
+    string file_path = 4;
+    uint32 enum_value = 5;
+    int32 track_ref = 6;
+  }
+}
+
+message EffectParam {
+  Value static_value = 1;
+  repeated Keyframe keyframes = 2;
+}
+
+message EffectInstance {
+  string effect_id = 1;
+  bool enabled = 2;
+  map<string, EffectParam> params = 3;
+}
+
+message PluginInstanceRef {
+  uint64 instance_uid = 1;
+  int32 format = 2;
+  string path = 3;
+  string plugin_id = 4;
+  bool bypass = 5;
+  map<uint32, double> params = 6;
+  repeated bytes param_info = 7;
+}

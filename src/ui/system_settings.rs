@@ -7,6 +7,7 @@ use egui::{Context, Ui};
 use egui_material_icons::{MaterialIcon, icons};
 use elegance::{BuiltInTheme, ThemeSwitcher};
 use fields::{choice_field, int_field, toggle_field};
+use prost::Message;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
@@ -29,9 +30,9 @@ fn settings_path() -> PathBuf {
         .ok()
         .and_then(|p| {
             p.parent()
-                .map(|d| d.join("settings").join("system-settings.yaml"))
+                .map(|d| d.join("settings").join("system-settings.npb"))
         })
-        .unwrap_or_else(|| PathBuf::from("settings/system-settings.yaml"))
+        .unwrap_or_else(|| PathBuf::from("settings/system-settings.npb"))
 }
 
 fn save_to_disk(s: &SystemSettingsResource) -> std::io::Result<()> {
@@ -39,13 +40,14 @@ fn save_to_disk(s: &SystemSettingsResource) -> std::io::Result<()> {
     if let Some(dir) = path.parent() {
         std::fs::create_dir_all(dir)?;
     }
-    let yaml = rust_yaml::to_string(s).map_err(std::io::Error::other)?;
-    std::fs::write(path, yaml)
+    let encoded = neoutl_schema::SystemSettings::from(s).encode_to_vec();
+    std::fs::write(path, encoded)
 }
 
 pub(crate) fn load_from_disk() -> Option<SystemSettingsResource> {
-    let content = std::fs::read_to_string(settings_path()).ok()?;
-    rust_yaml::from_str(&content).ok()
+    let bytes = std::fs::read(settings_path()).ok()?;
+    let message = neoutl_schema::SystemSettings::decode(bytes.as_slice()).ok()?;
+    SystemSettingsResource::try_from(&message).ok()
 }
 
 fn easing_engine_ids_and_names() -> (Vec<String>, Vec<String>) {

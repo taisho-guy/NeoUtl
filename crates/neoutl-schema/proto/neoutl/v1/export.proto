@@ -1,0 +1,26 @@
+syntax = "proto3";
+package neoutl.v1;
+
+enum ExportCodec {
+  EXPORT_CODEC_H264 = 0;
+  EXPORT_CODEC_H265 = 1;
+}
+
+enum EncoderBackend {
+  ENCODER_BACKEND_AUTO = 0;
+  ENCODER_BACKEND_GPU_VIDEO = 1;
+  ENCODER_BACKEND_GSTREAMER = 2;
+}
+
+message ExportPreset {
+  string name = 1;
+  ExportCodec codec = 2;
+  EncoderBackend backend = 3;
+  uint32 average_bitrate = 4;
+  uint32 max_bitrate = 5;
+  string container_ext = 6;
+}
+
+message ExportPresetFile {
+  repeated ExportPreset presets = 1;
+}
