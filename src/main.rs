@@ -26,6 +26,7 @@ mod media;
 mod objects;
 mod project;
 mod renderer;
+mod schema;
 mod shortcuts;
 mod splash;
 mod theme;

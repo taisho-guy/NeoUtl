@@ -86,7 +86,7 @@ pub fn load_project(dir: &Path) -> Option<ProjectMeta> {
 
 pub fn load_document(dir: &Path) -> Option<DocumentModel> {
     let file = read_file(dir)?;
-    DocumentModel::try_from(&file).ok()
+    crate::schema::SchemaContract::from_schema(&file).ok()
 }
 
 pub fn list_projects() -> Vec<ProjectMeta> {
@@ -155,7 +155,7 @@ pub fn create_project(
 }
 
 pub fn save_document(dir: &Path, doc: &DocumentModel) -> std::io::Result<()> {
-    let file = neoutl_schema::DocumentModel::from(doc);
+    let file = crate::schema::SchemaContract::to_schema(doc);
     let bytes = file.encode_to_vec();
     write_atomic_bytes(&meta_path(dir), &bytes)?;
     clear_recovery(dir);
@@ -184,7 +184,7 @@ pub fn save_autosave_from_world(world: &EcsWorld) -> std::io::Result<()> {
         std::fs::create_dir_all(parent)?;
     }
     let doc = world.to_document();
-    let file = neoutl_schema::DocumentModel::from(&doc);
+    let file = crate::schema::SchemaContract::to_schema(&doc);
     let bytes = file.encode_to_vec();
     write_atomic_bytes(&recovery, &bytes)
 }
@@ -237,7 +237,7 @@ pub fn save_from_world(world: &EcsWorld) -> std::io::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::document::{MediaSourceDoc, ObjectPayload};
+    use crate::document::{MediaSourceDoc, ObjectDoc, ObjectPayload};
     use crate::ecs::components::{AudioParams, ShapeParams, TextContent};
     use crate::ecs::transform::Transform;
     use crate::media::MediaKind;
@@ -259,6 +259,10 @@ mod tests {
                 shape: None,
                 plugin_params: None,
                 media: None,
+                plugin_chain: None,
+                scene: None,
+                group_control: None,
+                clip_target: None,
             },
             keyframes: HashMap::new(),
         }
@@ -284,6 +288,10 @@ mod tests {
                     kind: MediaKind::Image,
                     trim_in_frame: 0,
                 }),
+                plugin_chain: None,
+                scene: None,
+                group_control: None,
+                clip_target: None,
             },
             keyframes: HashMap::new(),
         }
@@ -346,7 +354,6 @@ mod tests {
         );
     }
 
-    #[test]
     #[test]
     fn roundtrip_save_load_as_protobuf() {
         let dir = tempfile::tempdir().unwrap();

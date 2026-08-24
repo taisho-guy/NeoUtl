@@ -3,6 +3,7 @@ use egui::{Context, Ui};
 
 fn scope_label(s: Scope) -> String {
     match s {
+        Scope::Unspecified => t!("未定義"),
         Scope::Global => t!("全体"),
         Scope::Timeline => t!("タイムライン"),
         Scope::Properties => t!("設定ダイアログ"),

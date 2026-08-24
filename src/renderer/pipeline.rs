@@ -2598,7 +2598,9 @@ mod tests {
         };
         let mut engine = RenderEngine::new(device, queue, 32, 32);
         let project = ProjectResource::new();
-        engine.render(&[], &Default::default(), &project);
+        let world = crate::ecs::EcsWorld::new();
+        let captured = std::collections::HashMap::new();
+        engine.render(&world, &[], &captured, &project);
 
         let pixels = read_texture_rgba16f(
             &engine.device,
@@ -2628,6 +2630,7 @@ mod tests {
             effects,
             compose_source: None,
             layer: 0,
+            clip_target: None,
         }
     }
 
@@ -2639,13 +2642,15 @@ mod tests {
         };
         let mut engine = RenderEngine::new(device, queue, 32, 32);
         let project = ProjectResource::new();
+        let world = crate::ecs::EcsWorld::new();
 
         let plain = make_active_object(u32::MAX, Vec::new());
         let with_effect = make_active_object(
             u32::MAX,
             vec![("nonexistent-effect-id".to_string(), HashMap::new())],
         );
-        engine.render(&[plain, with_effect], &Default::default(), &project);
+        let captured = std::collections::HashMap::new();
+        engine.render(&world, &[plain, with_effect], &captured, &project);
 
         let pixels = read_texture_rgba16f(
             &engine.device,
@@ -2665,10 +2670,12 @@ mod tests {
         };
         let mut engine = RenderEngine::new(device, queue, 32, 32);
         let project = ProjectResource::new();
+        let world = crate::ecs::EcsWorld::new();
 
         let obj_a = make_active_object(u32::MAX, vec![("effect-a".to_string(), HashMap::new())]);
         let obj_b = make_active_object(u32::MAX, vec![("effect-b".to_string(), HashMap::new())]);
-        engine.render(&[obj_a, obj_b], &Default::default(), &project);
+        let captured = std::collections::HashMap::new();
+        engine.render(&world, &[obj_a, obj_b], &captured, &project);
 
         let pixels = read_texture_rgba16f(
             &engine.device,
@@ -2692,7 +2699,9 @@ mod tests {
         assert_eq!(engine.render_height, 72);
 
         let project = ProjectResource::new();
-        engine.render(&[], &Default::default(), &project);
+        let world = crate::ecs::EcsWorld::new();
+        let captured = std::collections::HashMap::new();
+        engine.render(&world, &[], &captured, &project);
         let pixels = read_texture_rgba16f(
             &engine.device,
             &engine.queue,

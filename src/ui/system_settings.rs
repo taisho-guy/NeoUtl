@@ -40,14 +40,14 @@ fn save_to_disk(s: &SystemSettingsResource) -> std::io::Result<()> {
     if let Some(dir) = path.parent() {
         std::fs::create_dir_all(dir)?;
     }
-    let encoded = neoutl_schema::SystemSettings::from(s).encode_to_vec();
+    let encoded = crate::schema::SchemaContract::to_schema(s).encode_to_vec();
     std::fs::write(path, encoded)
 }
 
 pub(crate) fn load_from_disk() -> Option<SystemSettingsResource> {
     let bytes = std::fs::read(settings_path()).ok()?;
     let message = neoutl_schema::SystemSettings::decode(bytes.as_slice()).ok()?;
-    SystemSettingsResource::try_from(&message).ok()
+    crate::schema::SchemaContract::from_schema(&message).ok()
 }
 
 fn easing_engine_ids_and_names() -> (Vec<String>, Vec<String>) {

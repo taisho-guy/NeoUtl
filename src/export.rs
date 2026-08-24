@@ -122,8 +122,8 @@ pub fn load_export_presets() -> Vec<ExportPreset> {
         return default_export_presets();
     };
     file.presets
-        .into_iter()
-        .map(ExportPreset::try_from)
+        .iter()
+        .map(|p| crate::schema::SchemaContract::from_schema(p))
         .collect::<Result<Vec<_>, _>>()
         .unwrap_or_else(|_| default_export_presets())
 }
@@ -135,7 +135,7 @@ pub fn save_export_presets(presets: &[ExportPreset]) -> Result<(), String> {
     let file = neoutl_schema::ExportPresetFile {
         presets: presets
             .iter()
-            .map(neoutl_schema::ExportPreset::from)
+            .map(crate::schema::SchemaContract::to_schema)
             .collect(),
     };
     std::fs::write(path, file.encode_to_vec()).map_err(|e| e.to_string())

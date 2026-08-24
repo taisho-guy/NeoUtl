@@ -4,51 +4,55 @@ use std::path::PathBuf;
 use std::sync::{Mutex, OnceLock};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[repr(i32)]
 pub enum Scope {
-    Global,
-    Timeline,
-    Properties,
-    Preview,
+    Unspecified = 0,
+    Global = 1,
+    Timeline = 2,
+    Properties = 3,
+    Preview = 4,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[repr(i32)]
 pub enum CommandId {
-    NewProject,
-    OpenProject,
-    SaveProject,
-    SaveProjectAs,
-    ExportMedia,
-    Quit,
-    Undo,
-    Redo,
-    TogglePlay,
-    StepFrameFwd,
-    StepFrameBack,
-    SeekHome,
-    SeekEnd,
-    ShowTimeline,
-    ShowProperties,
-    ShowPreview,
-    ShowSystemSettings,
-    ShowProjectSettings,
-    ShowSceneSettings,
-    ShowKeybindings,
-    NextProjectTab,
-    PrevProjectTab,
-    CloseProjectTab,
-    NewScene,
-    CloseScene,
-    NextScene,
-    PrevScene,
-    DeleteSelected,
-    SplitAtPlayhead,
-    Duplicate,
-    Cut,
-    Copy,
-    Paste,
-    ToggleRipple,
-    ZoomIn,
-    ZoomOut,
+    Unspecified = 0,
+    NewProject = 1,
+    OpenProject = 2,
+    SaveProject = 3,
+    SaveProjectAs = 4,
+    ExportMedia = 5,
+    Quit = 6,
+    Undo = 7,
+    Redo = 8,
+    TogglePlay = 9,
+    StepFrameFwd = 10,
+    StepFrameBack = 11,
+    SeekHome = 12,
+    SeekEnd = 13,
+    ShowTimeline = 14,
+    ShowProperties = 15,
+    ShowPreview = 16,
+    ShowSystemSettings = 17,
+    ShowProjectSettings = 18,
+    ShowSceneSettings = 19,
+    ShowKeybindings = 20,
+    NextProjectTab = 21,
+    PrevProjectTab = 22,
+    CloseProjectTab = 23,
+    NewScene = 24,
+    CloseScene = 25,
+    NextScene = 26,
+    PrevScene = 27,
+    DeleteSelected = 28,
+    SplitAtPlayhead = 29,
+    Duplicate = 30,
+    Cut = 31,
+    Copy = 32,
+    Paste = 33,
+    ToggleRipple = 34,
+    ZoomIn = 35,
+    ZoomOut = 36,
 }
 
 pub const ALL_COMMANDS: &[CommandId] = &[
@@ -92,6 +96,7 @@ pub const ALL_COMMANDS: &[CommandId] = &[
 
 pub fn label(id: CommandId) -> &'static str {
     match id {
+        CommandId::Unspecified => "未定義",
         CommandId::NewProject => "新規プロジェクト",
         CommandId::OpenProject => "プロジェクトを開く",
         CommandId::SaveProject => "プロジェクトを保存",
@@ -620,14 +625,14 @@ pub fn save_to_disk(k: &KeymapResource) -> std::io::Result<()> {
     if let Some(dir) = path.parent() {
         std::fs::create_dir_all(dir)?;
     }
-    let encoded = neoutl_schema::KeymapResource::from(k).encode_to_vec();
+    let encoded = crate::schema::SchemaContract::to_schema(k).encode_to_vec();
     std::fs::write(path, encoded)
 }
 
 pub fn load_from_disk() -> Option<KeymapResource> {
     let bytes = std::fs::read(keymap_path()).ok()?;
     let message = neoutl_schema::KeymapResource::decode(bytes.as_slice()).ok()?;
-    KeymapResource::try_from(&message).ok()
+    crate::schema::SchemaContract::from_schema(&message).ok()
 }
 
 static ACTIVE_KEYMAP: OnceLock<Mutex<KeymapResource>> = OnceLock::new();

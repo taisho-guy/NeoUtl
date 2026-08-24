@@ -648,6 +648,7 @@
 "最近使用": "最近使用"
 "有効": "有効"
 "未保存の変更": "未保存の変更"
+"未定義": "未定義"
 "未対応: layer={layer_idx} plane={plane_idx}のobject_index={}が0以外": "未対応: layer={layer_idx} plane={plane_idx}のobject_index={}が0以外"
 "未対応: 複数dma-bufオブジェクト(nb_objects={nb_objects})にまたがるフレーム。texture_from_dma_buf_fdは単一fdのみ対応": "未対応: 複数dma-bufオブジェクト(nb_objects={nb_objects})にまたがるフレーム。texture_from_dma_buf_fdは単一fdのみ対応"
 "未対応OS/CPUアーキテクチャ組合せ": "未対応OS/CPUアーキテクチャ組合せ"
