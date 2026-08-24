@@ -2,8 +2,14 @@ use super::{LAYER_HEIGHT, TimelineWindow};
 use egui::{Color32, Painter, Pos2, Rect, Stroke, Vec2};
 
 impl TimelineWindow {
-    pub(super) fn draw_grid(&self, painter: &Painter, rect: Rect, layer_count: i32) {
-        let frame_interval = self.frame_interval();
+    pub(super) fn draw_grid(
+        &self,
+        painter: &Painter,
+        rect: Rect,
+        layer_count: i32,
+        grid_interval: i32,
+    ) {
+        let frame_interval = grid_interval.max(1);
         for i in 0..layer_count {
             let y = rect.min.y + self.layer_to_y(i);
             if y + LAYER_HEIGHT < rect.min.y || y > rect.max.y {

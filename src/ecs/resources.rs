@@ -134,12 +134,33 @@ impl SceneMeta {
         meta
     }
 
+    pub fn effective_grid_interval(&self) -> i32 {
+        let fps = self.fps.max(1) as f32;
+        let interval = match self.grid_mode {
+            1 => {
+                let beats_per_minute = self.grid_bpm.max(1.0);
+                let beat_frames = (fps * 60.0 / beats_per_minute).max(1.0);
+                let subdivision = self.grid_subdivision.max(1) as f32;
+                (beat_frames / subdivision).round().max(1.0) as i32
+            }
+            2 => self.grid_interval.max(1),
+            _ => fps.round().max(1.0) as i32,
+        };
+        interval.max(1)
+    }
+
     pub fn snap_frame(&self, frame: i32) -> i32 {
-        if !self.enable_snap || self.grid_interval <= 0 {
+        if !self.enable_snap {
             return frame;
         }
-        let interval = self.grid_interval;
-        let nearest = ((frame as f32 / interval as f32).round() as i32) * interval;
+        let interval = self.effective_grid_interval();
+        if interval <= 0 {
+            return frame;
+        }
+        let offset_frames = (self.grid_offset * self.fps.max(1) as f32).round() as i32;
+        let relative = frame - offset_frames;
+        let nearest =
+            ((relative as f32 / interval as f32).round() as i32) * interval + offset_frames;
         if (nearest - frame).abs() <= self.magnetic_snap_range {
             nearest
         } else {
@@ -280,6 +301,39 @@ impl TryFrom<&neoutl_schema::SceneMeta> for SceneMeta {
             enable_snap: value.enable_snap,
             magnetic_snap_range: value.magnetic_snap_range,
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn bpm_grid_uses_subdivision_frames() {
+        let mut meta = SceneMeta::new(0, "Scene 1");
+        meta.fps = 30;
+        meta.grid_mode = 1;
+        meta.grid_bpm = 120.0;
+        meta.grid_subdivision = 2;
+        meta.enable_snap = true;
+        meta.magnetic_snap_range = 10;
+
+        assert_eq!(meta.effective_grid_interval(), 8);
+        assert_eq!(meta.snap_frame(7), 8);
+        assert_eq!(meta.snap_frame(15), 16);
+    }
+
+    #[test]
+    fn fixed_frame_grid_uses_configured_interval() {
+        let mut meta = SceneMeta::new(0, "Scene 1");
+        meta.grid_mode = 2;
+        meta.grid_interval = 24;
+        meta.enable_snap = true;
+        meta.magnetic_snap_range = 10;
+
+        assert_eq!(meta.effective_grid_interval(), 24);
+        assert_eq!(meta.snap_frame(23), 24);
+        assert_eq!(meta.snap_frame(25), 24);
     }
 }
 

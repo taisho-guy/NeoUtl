@@ -7,7 +7,6 @@ use egui::{Context, Ui};
 use egui_material_icons::{MaterialIcon, icons};
 use elegance::{BuiltInTheme, ThemeSwitcher};
 use fields::{choice_field, int_field, toggle_field};
-use prost::Message;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
@@ -40,14 +39,13 @@ fn save_to_disk(s: &SystemSettingsResource) -> std::io::Result<()> {
     if let Some(dir) = path.parent() {
         std::fs::create_dir_all(dir)?;
     }
-    let encoded = crate::schema::SchemaContract::to_schema(s).encode_to_vec();
+    let encoded = crate::schema::encode_schema(s);
     std::fs::write(path, encoded)
 }
 
 pub(crate) fn load_from_disk() -> Option<SystemSettingsResource> {
     let bytes = std::fs::read(settings_path()).ok()?;
-    let message = neoutl_schema::SystemSettings::decode(bytes.as_slice()).ok()?;
-    crate::schema::SchemaContract::from_schema(&message).ok()
+    crate::schema::decode_schema::<SystemSettingsResource>(&bytes).ok()
 }
 
 fn easing_engine_ids_and_names() -> (Vec<String>, Vec<String>) {

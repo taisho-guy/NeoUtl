@@ -44,6 +44,9 @@ impl<'a> TabViewer for SessionTabViewer<'a> {
         if response.clicked() {
             *self.switch_target = Some(tab.index);
         }
+        if response.secondary_clicked() && self.closable {
+            *self.close_target = Some(tab.index);
+        }
     }
 
     fn closeable(&mut self, _tab: &mut Self::Tab) -> bool {

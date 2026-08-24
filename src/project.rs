@@ -155,8 +155,7 @@ pub fn create_project(
 }
 
 pub fn save_document(dir: &Path, doc: &DocumentModel) -> std::io::Result<()> {
-    let file = crate::schema::SchemaContract::to_schema(doc);
-    let bytes = file.encode_to_vec();
+    let bytes = crate::schema::encode_schema(doc);
     write_atomic_bytes(&meta_path(dir), &bytes)?;
     clear_recovery(dir);
     Ok(())
@@ -184,8 +183,7 @@ pub fn save_autosave_from_world(world: &EcsWorld) -> std::io::Result<()> {
         std::fs::create_dir_all(parent)?;
     }
     let doc = world.to_document();
-    let file = crate::schema::SchemaContract::to_schema(&doc);
-    let bytes = file.encode_to_vec();
+    let bytes = crate::schema::encode_schema(&doc);
     write_atomic_bytes(&recovery, &bytes)
 }
 

@@ -1,8 +1,25 @@
+use prost::Message;
+
 pub trait SchemaContract: Sized {
     type Schema;
 
     fn to_schema(&self) -> Self::Schema;
     fn from_schema(schema: &Self::Schema) -> Result<Self, String>;
+}
+
+pub fn encode_schema<T: SchemaContract>(value: &T) -> Vec<u8>
+where
+    T::Schema: Message,
+{
+    value.to_schema().encode_to_vec()
+}
+
+pub fn decode_schema<T: SchemaContract>(bytes: &[u8]) -> Result<T, String>
+where
+    T::Schema: Message + Default,
+{
+    let schema = T::Schema::decode(bytes).map_err(|e| e.to_string())?;
+    T::from_schema(&schema)
 }
 
 impl SchemaContract for crate::document::DocumentModel {

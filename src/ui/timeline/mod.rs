@@ -127,18 +127,6 @@ impl TimelineWindow {
         self.layer_menu = None;
     }
 
-    pub(super) fn frame_interval(&self) -> i32 {
-        if self.zoom_scale > 3.0 {
-            10
-        } else if self.zoom_scale > 1.0 {
-            30
-        } else if self.zoom_scale > 0.3 {
-            60
-        } else {
-            300
-        }
-    }
-
     pub(super) fn frame_to_x(&self, frame: i32) -> f32 {
         frame as f32 * self.zoom_scale - self.scroll_x
     }

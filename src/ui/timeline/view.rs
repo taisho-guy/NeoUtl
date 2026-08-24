@@ -6,6 +6,17 @@ use egui::{Pos2, Rect, Sense, Stroke, Vec2};
 use std::cell::RefCell;
 use std::rc::Rc;
 
+fn world_grid_interval(state: &SharedAppState) -> i32 {
+    let world_holder = app_state::active_world(state);
+    let world = world_holder.lock().unwrap();
+    let active_scene = world.active_scene();
+    world
+        .scenes()
+        .into_iter()
+        .find(|scene| scene.id == active_scene)
+        .map_or(30, |scene| scene.effective_grid_interval())
+}
+
 impl TimelineWindow {
     pub(super) fn timeline_view(
         &mut self,
@@ -34,7 +45,8 @@ impl TimelineWindow {
         painter.rect_filled(rect, 0.0, bg);
 
         if self.show_grid {
-            self.draw_grid(&painter, rect, layer_count);
+            let grid_interval = world_grid_interval(state);
+            self.draw_grid(&painter, rect, layer_count, grid_interval);
         }
 
         self.handle_background_input(ui, &response, state, preview_panel);

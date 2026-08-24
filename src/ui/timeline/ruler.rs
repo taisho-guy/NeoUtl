@@ -52,13 +52,22 @@ impl TimelineWindow {
 
         let body_rect =
             Rect::from_min_max(Pos2::new(rect.min.x + HEADER_WIDTH, rect.min.y), rect.max);
-        let frame_interval = self.frame_interval();
-        let start_tick = (self.scroll_x / self.zoom_scale / frame_interval as f32).floor() as i32
-            * frame_interval;
+        let grid_interval = {
+            let world_holder = app_state::active_world(state);
+            let world = world_holder.lock().unwrap();
+            let active_scene = world.active_scene();
+            world
+                .scenes()
+                .into_iter()
+                .find(|scene| scene.id == active_scene)
+                .map_or(30, |scene| scene.effective_grid_interval())
+        };
+        let start_tick =
+            (self.scroll_x / self.zoom_scale / grid_interval as f32).floor() as i32 * grid_interval;
         let tick_count =
-            (body_rect.width() / self.zoom_scale / frame_interval as f32).ceil() as i32 + 2;
+            (body_rect.width() / self.zoom_scale / grid_interval as f32).ceil() as i32 + 2;
         for i in 0..tick_count {
-            let frame = start_tick + i * frame_interval;
+            let frame = start_tick + i * grid_interval;
             let x = body_rect.min.x + self.frame_to_x(frame);
             if x < body_rect.min.x || x > body_rect.max.x {
                 continue;

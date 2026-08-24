@@ -91,50 +91,7 @@
 
 ## ビルド方法
 
-x86_64又はARM64のCPUで動作するLinux/macOS/Windows上でビルド可能です。
-
-### 共通作業
-
-```fish
-git clone "https://codeberg.org/taisho-guy/NeoUtl.git"
-```
-
-```fish
-cd NeoUtl
-```
-<details>
-<summary>NeoUtlの場合</summary>
-  
-予めRust、Clang、Mold（Linuxの場合）、FFmpegをインストールしてください。
-
-```fish
-git switch main
-```
-
-```fish
-cargo xtask build --release
-```
-
-実行可能ファイルは`target/release`以下に生成されます。
-
-</details>
-
-<details>
-<summary>AviQtlの場合</summary>
-
-予めPython3、PySide6をインストールしてください。
-
-```fish
-git switch aviqtl
-```
-
-```fish
-python3 BUILD.py
-```
-
-実行可能ファイルは`build`以下に生成されます。
-
-</details>
+`CONTRIBUTING.md`をご確認下さい。
 
 ## 採用技術
 

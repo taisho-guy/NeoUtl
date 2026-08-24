@@ -12,6 +12,7 @@ use std::rc::Rc;
 struct SceneTabViewer<'a> {
     switch_target: &'a mut Option<i32>,
     rename_target: &'a mut Option<i32>,
+    settings_target: &'a mut Option<i32>,
     close_target: &'a mut Option<i32>,
     add_clicked: &'a mut bool,
 }
@@ -35,6 +36,9 @@ impl<'a> TabViewer for SceneTabViewer<'a> {
         }
         if response.double_clicked() {
             *self.rename_target = Some(tab.id);
+        }
+        if response.secondary_clicked() {
+            *self.settings_target = Some(tab.id);
         }
     }
 
@@ -72,11 +76,13 @@ impl TimelineWindow {
 
         let mut switch_target: Option<i32> = None;
         let mut rename_target: Option<i32> = None;
+        let mut settings_target: Option<i32> = None;
         let mut close_target: Option<i32> = None;
         let mut add_clicked = false;
         let mut viewer = SceneTabViewer {
             switch_target: &mut switch_target,
             rename_target: &mut rename_target,
+            settings_target: &mut settings_target,
             close_target: &mut close_target,
             add_clicked: &mut add_clicked,
         };
@@ -100,6 +106,9 @@ impl TimelineWindow {
             self.switch_scene_tab(state, preview_panel, id);
         }
         if let Some(id) = rename_target {
+            dialogs.borrow_mut().open_scene_edit(state, id);
+        }
+        if let Some(id) = settings_target {
             dialogs.borrow_mut().open_scene_edit(state, id);
         }
         if let Some(id) = close_target {
