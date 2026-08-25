@@ -7,83 +7,20 @@
 <a href="https://codeberg.org/taisho-guy/NeoUtl/src/branch/aviqtl">AviQtl</a>
 </p>
 <p align="center">
-    Video editing software aiming to replace and surpass AviUtl. Compatible with Windows, macOS, and Linux.
+NeoUtl: Ever Optimize &mdash; Until Triumphing Liberty.
 </p>
 
-## 目的
+## NeoUtlとは
 
-<details>
-<summary>AviUtl 1.10/ExEdit 0.92のような操作感</summary>
+AviUtl ExEdit0 ライクな動画編集ソフトウェアです。LinuxやWindowsで動作します。macOSも将来的にサポートする予定です。
 
-- NeoUtl
-  - AviUtl 1.10とExEdit 0.92（そして数々の拡張）に酷似することを目標としています。
-- AviUtl
-  - ExEdit2への移行に伴い、新たに独自の操作感を構築しています。
-</details>
-
-<details>
-<summary>自由ライセンスかつ無料</summary>
-
-- NeoUtl
-  - AGPLv3+でライセンスされた自由ソフトウェアで、無料で配布されています。
-  - ソースコードも無料で入手できます。
-- AviUtl
-  - プロプライエタリで、ソースコードも非公開です。
-</details>
-
-<details>
-<summary>Linux / macOS / Windowsに対応</summary>
-
-- NeoUtl
-  - Linuxを中心に複数OSをサポートしています。
-- AviUtl
-  - Windowsでしかネイティブに動作しません。
-</details>
-
-<details>
-<summary>クラッシュ・フリーズ知らず</summary>
-
-- NeoUtl
-  - Rust言語での実装により、メモリ由来の不正を構造的に排除しています。
-- AviUtl
-  - 古典的なC++言語での実装により、メモリ由来の不正を防ぎきれません。
-</details>
-
-<details>
-<summary>ハイパフォーマンスかつ超省資源</summary>
-
-- NeoUtl
-  - Shyphardを用いたデータ指向設計を実践。CPUのキャッシュ効率を最大化しています。これにより、大量のクリップの処理性能が大幅に向上します。
-  - Vulkan、Metal、DirectX12等、各プラットフォームに最適なネイティブAPIを呼び出し、GPUのパフォーマンスを最大限に引き出します。
-  - 処理をなるべくGPU内で完結させるゼロコピー設計により、高解像度編集でのボトルネックを排除します。
-- AviUtl
-  - 古典的なオブジェクト指向設計に基づいており、CPUのキャッシュミスが頻発します。
-  - DirectX11のみにしか対応しておりません。
-  - エフェクト毎にテクスチャがCPUとGPU間を行き来することが多く、大きなボトルネックが発生します。
-</details>
-
-<details>
-<summary>柔軟で堅牢なアーキテクチャ</summary>
-
-- NeoUtl
-  - モジュール化を徹底し、「疎」で読みやすいソースコードを維持。拡張が容易です。
-- AviUtl
-  - 外部拡張はSDKに依存。内部のロジックが不透明で、プラグイン作者の「職人技」がエコシステムを左右します。
-</details>
+<img src="assets/screenshot.webp"/>
 
 ## 開発状況
 
 開発状況は[NeoUtlのお部屋](https://neoutl.taisho-guy.org)でご覧下さい。
 
 ロードマップは[TODO.md](https://codeberg.org/taisho-guy/NeoUtl/src/branch/main/TODO.md)でご覧下さい。
-
-### 既知の問題
-
-- 音声プラグインをホストしようとするとクラッシュします。
-- 書き出しは未開通です。
-- Linuxでのみ動画オブジェクトを正しく扱えます。
-
-これらは現在対処している最中です。
 
 ## ダウンロード方法
 
@@ -100,7 +37,7 @@ NeoUtlはRust言語で実装されています。
 |項目|採用クレート|
 |---|---|
 |GUI|[egui](https://www.egui.rs/)|
-|プレビュー|[neoutl-wgpu](https://codeberg.org/taisho-guy/neoutl-wgpu)|
+|プレビュー|[wgpu](https://wgpu.rs)|
 |シェーダ|[Slang](https://shader-slang.org/)|
 |ECS|[Shipyard](https://github.com/leudz/shipyard)|
 |非同期処理|[tokio](https://tokio.rs/)|

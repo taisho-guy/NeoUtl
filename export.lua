@@ -9,7 +9,7 @@ local DEFAULT_EXTENSIONS = {
     ".wgsl", ".def", ".vcxproj", ".filters", ".props", ".targets", ".sln",
     ".vcproj", ".vdproj", ".sass", ".scss", ".css", ".html", ".htm",
     ".nuspec", ".config", ".editorconfig", ".resx", ".manifest", ".metal", 
-    ".vert", ".glsl", ".hlsl", "js"
+    ".vert", ".glsl", ".hlsl", "js", ".proto"
 }
 
 local DEFAULT_FILENAMES = {
