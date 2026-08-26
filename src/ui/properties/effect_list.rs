@@ -131,7 +131,7 @@ pub fn effects_section(
     if !plugins.is_empty() {
         ui.colored_label(
             egui::Color32::from_rgb(0x8a, 0xab, 0xff),
-            t!("音声エフェクト (Carla)"),
+            t!("音声エフェクト"),
         );
         let last = plugins.len() - 1;
         for (index, inst) in plugins.into_iter().enumerate() {

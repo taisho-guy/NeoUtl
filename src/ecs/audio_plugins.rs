@@ -1,4 +1,4 @@
-use carla_host_sys::{PluginFormat, PluginParamInfo};
+use maolan_host_adapter::{PluginFormat, PluginParamInfo};
 use shipyard::Component;
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -23,6 +23,32 @@ pub struct PluginInstanceRef {
     pub param_info: Vec<PluginParamInfo>,
 }
 
+fn param_info_to_schema(value: &PluginParamInfo) -> neoutl_schema::PluginParamInfo {
+    neoutl_schema::PluginParamInfo {
+        id: value.id,
+        name: value.name.clone(),
+        symbol: value.symbol.clone(),
+        unit: value.unit.clone(),
+        comment: value.comment.clone(),
+        min: value.min,
+        max: value.max,
+        default: value.default,
+    }
+}
+
+fn param_info_from_schema(value: &neoutl_schema::PluginParamInfo) -> PluginParamInfo {
+    PluginParamInfo {
+        id: value.id,
+        name: value.name.clone(),
+        symbol: value.symbol.clone(),
+        unit: value.unit.clone(),
+        comment: value.comment.clone(),
+        min: value.min,
+        max: value.max,
+        default: value.default,
+    }
+}
+
 impl From<&PluginInstanceRef> for neoutl_schema::PluginInstanceRef {
     fn from(value: &PluginInstanceRef) -> Self {
         Self {
@@ -32,11 +58,7 @@ impl From<&PluginInstanceRef> for neoutl_schema::PluginInstanceRef {
             plugin_id: value.plugin_id.clone(),
             bypass: value.bypass,
             params: value.params.clone(),
-            param_info: value
-                .param_info
-                .iter()
-                .map(|info| serde_json::to_vec(info).unwrap_or_default())
-                .collect(),
+            param_info: value.param_info.iter().map(param_info_to_schema).collect(),
         }
     }
 }
@@ -66,7 +88,7 @@ impl TryFrom<&neoutl_schema::PluginInstanceRef> for PluginInstanceRef {
             param_info: value
                 .param_info
                 .iter()
-                .filter_map(|bytes| serde_json::from_slice(bytes).ok())
+                .map(param_info_from_schema)
                 .collect(),
         })
     }

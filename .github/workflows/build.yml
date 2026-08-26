@@ -12,7 +12,6 @@ permissions:
 
 env:
   VCPKG_BINARY_SOURCES: "clear;nuget,GitHub,readwrite"
-  CARLA_VERSION: "2.5.10"
 
 jobs:
   build:
@@ -33,104 +32,56 @@ jobs:
             binary_name: NeoUtl
             lua_feature: luajit
             install_cmd: sudo apt-get update && sudo apt-get install -y --no-install-recommends pkg-config clang cmake ninja-build mold libxkbcommon-dev libwayland-dev libegl1-mesa-dev libudev-dev libasound2-dev libfontconfig1-dev libfreetype6-dev libexpat1-dev libavcodec-dev libavformat-dev libavutil-dev libavfilter-dev libswscale-dev libswresample-dev libva-dev
-          - os: macos-latest
-            os_name: macOS(Apple Silicon)
-            artifact_name: neoutl-macos-aarch64
-            binary_name: NeoUtl
-            lua_feature: luajit
-            install_cmd: brew update && brew install ffmpeg carla
-          - os: macos-26-intel
-            os_name: macOS(Intel)
-            artifact_name: neoutl-macos-x86_64
-            binary_name: NeoUtl
-            lua_feature: luajit
-            install_cmd: brew update && brew install ffmpeg carla
           - os: windows-latest
-            os_name: Windows(x86_64)
+            os_name: Windows(x86_64/MSYS2)
             artifact_name: neoutl-windows-x86_64
             binary_name: NeoUtl.exe
-            rust_target: x86_64-pc-windows-msvc
-            vcpkg_triplet: x64-windows
-            msvc_arch: x64
+            rust_target: x86_64-pc-windows-gnu
+            msystem: MINGW64
+            msys_prefix: mingw-w64-x86_64
             lua_feature: luajit
-          - os: windows-11-arm
-            os_name: Windows(ARM64)
-            artifact_name: neoutl-windows-arm64
-            binary_name: NeoUtl.exe
-            rust_target: aarch64-pc-windows-msvc
-            vcpkg_triplet: arm64-windows
-            msvc_arch: arm64
-            lua_feature: lua54
     runs-on: ${{ matrix.os }}
 
     steps:
       - uses: actions/checkout@v7
 
-      - name: ネイティブ依存関係インストール(Unix)
-        if: runner.os != 'Windows'
+      - name: ネイティブ依存関係インストール(Linux)
+        if: runner.os == 'Linux'
         shell: bash
         run: ${{ matrix.install_cmd }}
 
-      - name: NuGet GitHub Packagesソース登録(Windows)
+      - name: MSYS2セットアップ(Windows)
         if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          dotnet nuget add source "https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json" `
-            --name GitHub `
-            --username "${{ github.repository_owner }}" `
-            --password "${{ secrets.GITHUB_TOKEN }}" `
-            --store-password-in-clear-text
-
-      - name: vcpkgセットアップ(Windows)
-        if: runner.os == 'Windows'
-        uses: lukka/run-vcpkg@v11
+        uses: msys2/setup-msys2@v2
         with:
-          vcpkgJsonGlob: "vcpkg.json"
+          msystem: ${{ matrix.msystem }}
+          update: true
+          install: >-
+            ${{ matrix.msys_prefix }}-toolchain
+            ${{ matrix.msys_prefix }}-rust
+            ${{ matrix.msys_prefix }}-pkgconf
+            ${{ matrix.msys_prefix }}-cmake
+            ${{ matrix.msys_prefix }}-ninja
+            ${{ matrix.msys_prefix }}-ffmpeg
+            ${{ matrix.msys_prefix }}-luajit
 
-      - name: vcpkg経由FFmpegインストール(Windows)
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          ${{ github.workspace }}/vcpkg/vcpkg install --triplet ${{ matrix.vcpkg_triplet }}
-          echo "VCPKG_INSTALLED=${{ github.workspace }}/vcpkg_installed/${{ matrix.vcpkg_triplet }}" >> $env:GITHUB_ENV
-
-      - name: pkg-config導入(Windows)
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          choco install pkgconfiglite -y --no-progress
-          $pkgConfigDir = "C:\ProgramData\chocolatey\lib\pkgconfiglite\tools\pkg-config-lite-0.28-1\bin"
-          echo $pkgConfigDir >> $env:GITHUB_PATH
-
-      - name: Rustツールチェーンセットアップ
+      - name: Rustツールチェーンセットアップ(Linux)
+        if: runner.os == 'Linux'
         uses: dtolnay/rust-toolchain@stable
 
-      - name: ビルド(Unix)
-        if: runner.os != 'Windows'
+      - name: ビルド(Linux)
+        if: runner.os == 'Linux'
         shell: bash
         env:
           PKG_CONFIG: pkg-config
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: cargo xtask build --release --lua-feature ${{ matrix.lua_feature }}
 
-      - name: MSVC開発者環境セットアップ(Windows x86_64)
-        # mlua vendored機能のLuaJIT配置(luajit-src crate)はmsvcbuild.batを直接実行して
-        # LuaJITを静的ビルドする。cc crateとは独立した経路のため、cl.exe/link.exe/LIB/INCLUDE
-        # を事前にPATH・環境変数へ展開しておく必要がある（未設定時はLuaJITビルド失敗で
-        # neoutl-lua-runtimeのコンパイルごと失敗する）。
-        # Windows ARM64はLuaJIT非対応のためvendored Lua5.4を使用し、これはcc crate経由の
-        # 通常ビルドでMSVCを自動検出するため本ステップ不要（x86_64のみ実行）。
-        if: runner.os == 'Windows' && matrix.msvc_arch == 'x64'
-        uses: ilammy/msvc-dev-cmd@v1
-        with:
-          arch: ${{ matrix.msvc_arch }}
-
-      - name: ビルド(Windows / MSVC)
+      - name: ビルド(Windows / MSYS2)
         if: runner.os == 'Windows'
-        shell: pwsh
+        shell: msys2 {0}
         env:
-          PKG_CONFIG_PATH: ${{ env.VCPKG_INSTALLED }}/lib/pkgconfig
-          PKG_CONFIG: pkg-config.exe
+          PKG_CONFIG: pkg-config
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: cargo xtask build --release --lua-feature ${{ matrix.lua_feature }}
 
@@ -155,244 +106,20 @@ jobs:
           cd dist/package
           zip -r ../${{ matrix.artifact_name }}.zip .
 
-      - name: .appバンドル作成・パッケージング(macOS Homebrew)
-        if: runner.os == 'macOS'
+      - name: 成果物収集(Windows / MSYS2)
+        if: runner.os == 'Windows'
+        shell: msys2 {0}
         run: |
-          set -euo pipefail
-          mkdir -p dist
-          APP_DIR="dist/NeoUtl.app"
-          FRAMEWORKS_DIR="$APP_DIR/Contents/Frameworks"
-          mkdir -p "$APP_DIR/Contents/MacOS"
-          mkdir -p "$FRAMEWORKS_DIR"
-          mkdir -p "$APP_DIR/Contents/Resources"
-
-          cp target/release/${{ matrix.binary_name }} "$APP_DIR/Contents/MacOS/"
-          cp assets/icon.svg "$APP_DIR/Contents/Resources/"
-          [ -d target/release/objects ] && cp -r target/release/objects "$APP_DIR/Contents/Resources/"
-          [ -d target/release/effects ] && cp -r target/release/effects "$APP_DIR/Contents/Resources/"
-
-          CARLA_PREFIX="$(brew --prefix carla)"
-          CARLA_DEST="$APP_DIR/Contents/Resources/carla"
-          mkdir -p "$CARLA_DEST"
-          find "$CARLA_PREFIX" -type f \( \
-            -name "libcarla_standalone2*" -o \
-            -name "libcarla_utils*" -o \
-            -name "carla-discovery-*" -o \
-            -name "carla-bridge-native*" -o \
-            -name "carla-bridge-lv2*" \
-          \) -exec cp -L {} "$CARLA_DEST/" \;
-          CARLA_FILE_COUNT=$(find "$CARLA_DEST" -type f | wc -l | tr -d ' ')
-          if [ "$CARLA_FILE_COUNT" -eq 0 ]; then
-            echo "エラー: Carlaホストバイナリが0件です（探索対象: $CARLA_PREFIX）" >&2
-            exit 1
-          fi
-          chmod +x "$CARLA_DEST"/carla-discovery-* "$CARLA_DEST"/carla-bridge-native* "$CARLA_DEST"/carla-bridge-lv2-* 2>/dev/null || true
-
-          relink() {
-            local target="$1"
-            chmod +w "$target"
-            otool -L "$target" | tail -n +2 | awk '{print $1}' | while read -r dep; do
-              case "$dep" in
-                /opt/homebrew/*|/usr/local/*)
-                  local base
-                  base="$(basename "$dep")"
-                  local dest="$FRAMEWORKS_DIR/$base"
-                  if [ ! -e "$dep" ]; then
-                    echo "警告: macOS依存ライブラリが見つかりません: $dep" >&2
-                  elif [ ! -f "$dest" ]; then
-                    cp -L "$dep" "$dest"
-                    chmod +w "$dest"
-                    install_name_tool -id "@rpath/$base" "$dest"
-                    relink "$dest"
-                    install_name_tool -change "$dep" "@rpath/$base" "$target"
-                  else
-                    install_name_tool -change "$dep" "@rpath/$base" "$target"
-                  fi
-                  ;;
-              esac
-            done
-          }
-
-          relink "$APP_DIR/Contents/MacOS/${{ matrix.binary_name }}"
-          find "$CARLA_DEST" -type f -perm -u+x -print0 | while IFS= read -r -d '' bin; do relink "$bin"; done
-          find "$CARLA_DEST" -type f -name "*.dylib" -print0 | while IFS= read -r -d '' lib; do relink "$lib"; done
-
-          install_name_tool -add_rpath "@executable_path/../Frameworks" "$APP_DIR/Contents/MacOS/${{ matrix.binary_name }}"
-          find "$CARLA_DEST" -type f -perm -u+x -print0 | while IFS= read -r -d '' bin; do
-            install_name_tool -add_rpath "@executable_path/../../Frameworks" "$bin"
+          mkdir -p dist/package
+          cp target/release/${{ matrix.binary_name }} dist/package/
+          cp assets/icon.ico dist/package/
+          [ -d target/release/objects ] && cp -r target/release/objects dist/package/
+          [ -d target/release/effects ] && cp -r target/release/effects dist/package/
+          ldd target/release/${{ matrix.binary_name }} | awk '{print $3}' | grep -i '/mingw64/bin/' | while read -r dep; do
+            cp -n "$dep" dist/package/
           done
-
-          FRAMEWORK_COUNT=$(find "$FRAMEWORKS_DIR" -type f | wc -l | tr -d ' ')
-          if [ "$FRAMEWORK_COUNT" -eq 0 ]; then
-            echo "エラー: Frameworksが0件です" >&2
-            exit 1
-          fi
-
-          cat > "$APP_DIR/Contents/Info.plist" <<EOF
-          <?xml version="1.0" encoding="UTF-8"?>
-          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-          <plist version="1.0">
-          <dict>
-            <key>CFBundleName</key>
-            <string>NeoUtl</string>
-            <key>CFBundleExecutable</key>
-            <string>NeoUtl</string>
-            <key>CFBundleIdentifier</key>
-            <string>org.codeberg.taisho-guy.NeoUtl</string>
-            <key>CFBundleVersion</key>
-            <string>${{ github.ref_name }}</string>
-            <key>CFBundleShortVersionString</key>
-            <string>${{ github.ref_name }}</string>
-            <key>CFBundlePackageType</key>
-            <string>APPL</string>
-            <key>CFBundleIconFile</key>
-            <string>icon.svg</string>
-            <key>LSMinimumSystemVersion</key>
-            <string>11.0</string>
-          </dict>
-          </plist>
-          EOF
-
-          find "$APP_DIR/Contents/Frameworks" -type f -exec codesign --force --sign - {} \;
-          [ -d "$APP_DIR/Contents/Resources/objects" ] && find "$APP_DIR/Contents/Resources/objects" -type f -exec codesign --force --sign - {} \;
-          [ -d "$APP_DIR/Contents/Resources/effects" ] && find "$APP_DIR/Contents/Resources/effects" -type f -exec codesign --force --sign - {} \;
-          find "$CARLA_DEST" -type f -exec codesign --force --sign - {} \;
-          codesign --force --sign - "$APP_DIR/Contents/MacOS/${{ matrix.binary_name }}"
-
-          cd dist
-          zip -r ${{ matrix.artifact_name }}.zip NeoUtl.app
-
-      - name: FFmpeg依存関係収集(Windows)
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          New-Item -ItemType Directory -Force -Path dist/package | Out-Null
-
-          Copy-Item "target/release/${{ matrix.binary_name }}" dist/package/
-          Copy-Item "assets/icon.ico" dist/package/
-          if (Test-Path "target/release/objects") { Copy-Item -Recurse "target/release/objects" dist/package/ }
-          if (Test-Path "target/release/effects") { Copy-Item -Recurse "target/release/effects" dist/package/ }
-
-          $vcpkgRoot = "${{ env.VCPKG_INSTALLED }}"
-
-          $dumpbin = Get-Command dumpbin.exe -ErrorAction SilentlyContinue
-          $objdump = Get-Command llvm-objdump.exe -ErrorAction SilentlyContinue
-          if (-not $dumpbin -and -not $objdump) {
-            Write-Error "エラー: dumpbin.exe/llvm-objdump.exeが見つかりません。依存DLLを解析できません"
-            exit 1
-          }
-
-          $packageRoot = (Resolve-Path dist/package).Path
-          $searchDlls = Get-ChildItem -Path $vcpkgRoot -Recurse -Filter "*.dll" -File
-          $visited = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
-          $queued = [System.Collections.Generic.Queue[System.IO.FileInfo]]::new()
-
-          $roots = @(
-            (Get-Item "dist/package/${{ matrix.binary_name }}")
-          )
-          foreach ($root in $roots) { $queued.Enqueue($root) }
-
-          function Is-SystemDll([string]$name) {
-            $lower = $name.ToLowerInvariant()
-            $system32 = Join-Path $env:windir "System32\$name"
-            if (Test-Path $system32) { return $true }
-            return $lower.StartsWith("api-ms-win-") -or
-              $lower.StartsWith("ext-ms-win-") -or
-              @("kernel32.dll","user32.dll","advapi32.dll","ole32.dll","oleaut32.dll",
-                "shell32.dll","ws2_32.dll","bcrypt.dll","ntdll.dll","gdi32.dll",
-                "winmm.dll","imm32.dll","version.dll","shlwapi.dll","secur32.dll",
-                "iphlpapi.dll","setupapi.dll","dwmapi.dll","uxtheme.dll").Contains($lower)
-          }
-
-          while ($queued.Count -gt 0) {
-            $current = $queued.Dequeue()
-            $key = $current.FullName
-            if (-not $visited.Add($key)) { continue }
-
-            if ($dumpbin) {
-              $deps = & $dumpbin.Source /DEPENDENTS $current.FullName 2>$null |
-                ForEach-Object {
-                  if ($_ -match '^\s+([A-Za-z0-9_.-]+\.dll)\s*$') { $matches[1] }
-                }
-            } else {
-              $deps = & $objdump.Source -p $current.FullName 2>$null |
-                ForEach-Object {
-                  if ($_ -match '^\s*DLL Name:\s*([^\s]+\.dll)\s*$') { $matches[1] }
-                }
-            }
-
-            foreach ($name in $deps) {
-              $dependency = $searchDlls |
-                Where-Object { $_.Name -ieq $name } |
-                Select-Object -First 1
-              if (-not $dependency) {
-                if (Is-SystemDll $name) { continue }
-                Write-Error "エラー: 依存DLLを解決できません: $name (from=$($current.Name))"
-                exit 1
-              }
-
-              $destination = Join-Path $packageRoot $dependency.Name
-              if (-not (Test-Path $destination)) {
-                Copy-Item $dependency.FullName $destination
-              }
-              $queued.Enqueue($dependency)
-            }
-          }
-
-          $runtimeCount = (Get-ChildItem -Path $packageRoot -Filter "*.dll" -File).Count
-          if ($runtimeCount -eq 0) {
-            Write-Error "エラー: FFmpeg依存DLLが0件です（探索対象: $vcpkgRoot）"
-            exit 1
-          }
-          Write-Host "依存関係を再帰解決したWindows DLL数: $runtimeCount"
-
-      - name: Carla配置(Windows)
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          # Carlaはx86_64ビルドのみ提供。Windows ARM64はx64エミュレーション経由で実行する。
-          $zipName = "Carla-${{ env.CARLA_VERSION }}-win64.zip"
-          $downloadUrl = "https://github.com/falkTX/Carla/releases/download/v${{ env.CARLA_VERSION }}/$zipName"
-
-          Invoke-WebRequest -Uri $downloadUrl -OutFile "carla.zip"
-          Expand-Archive -Path "carla.zip" -DestinationPath "carla_extracted"
-
-          $carlaDest = "dist/package/carla"
-          New-Item -ItemType Directory -Force -Path $carlaDest | Out-Null
-
-          $hostFilePatterns = @(
-            "libcarla_standalone2.dll",
-            "libcarla_utils.dll",
-            "carla-discovery-native.exe",
-            "carla-discovery-win32.exe",
-            "carla-bridge-native.exe",
-            "carla-bridge-win32.exe",
-            "carla-bridge-lv2.dll",
-            "carla-bridge-lv2-windows.exe",
-            "carla-bridge-lv2-gtk2.exe",
-            "carla-bridge-lv2-gtk3.exe"
-          )
-          foreach ($pattern in $hostFilePatterns) {
-            $found = Get-ChildItem -Path "carla_extracted" -Recurse -Filter $pattern -File -ErrorAction SilentlyContinue
-            foreach ($file in $found) {
-              Copy-Item $file.FullName -Destination (Join-Path $carlaDest $file.Name)
-            }
-          }
-
-          $carlaFileCount = (Get-ChildItem -Path $carlaDest -File).Count
-          if ($carlaFileCount -eq 0) {
-            Write-Error "エラー: Carlaホストバイナリが0件です（取得元: $downloadUrl）"
-            exit 1
-          }
-          Write-Host "配置したCarlaホストバイナリ数: $carlaFileCount"
-
-          Remove-Item -Recurse -Force "carla.zip", "carla_extracted"
-
-      - name: Windowsパッケージ圧縮
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          Compress-Archive -Path dist/package/* -DestinationPath "dist/${{ matrix.artifact_name }}.zip"
+          cd dist/package
+          zip -r ../${{ matrix.artifact_name }}.zip .
 
       - name: 成果物アップロード
         uses: actions/upload-artifact@v6
@@ -431,7 +158,4 @@ jobs:
           files: |
             dist/neoutl-linux-x86_64/neoutl-linux-x86_64.zip
             dist/neoutl-linux-arm64/neoutl-linux-arm64.zip
-            dist/neoutl-macos-aarch64/neoutl-macos-aarch64.zip
-            dist/neoutl-macos-x86_64/neoutl-macos-x86_64.zip
             dist/neoutl-windows-x86_64/neoutl-windows-x86_64.zip
-            dist/neoutl-windows-arm64/neoutl-windows-arm64.zip

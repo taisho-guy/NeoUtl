@@ -9,7 +9,6 @@ fn main() {
         "media_video",
         "src/renderer/slang/media_video.slang",
     );
-    link_carla_muldefs();
 }
 
 fn copy_data_themes() {
@@ -36,11 +35,4 @@ fn copy_data_themes() {
         }
     }
     println!("cargo:rerun-if-changed=assets/themes");
-}
-
-fn link_carla_muldefs() {
-    let target_os = std::env::var("CARGO_CFG_TARGET_OS").unwrap_or_default();
-    if target_os == "linux" || target_os == "android" {
-        println!("cargo:rustc-link-arg=-Wl,-z,muldefs");
-    }
 }

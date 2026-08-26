@@ -121,6 +121,17 @@ message EffectInstance {
   map<string, EffectParam> params = 3;
 }
 
+message PluginParamInfo {
+  uint32 id = 1;
+  string name = 2;
+  string symbol = 3;
+  string unit = 4;
+  string comment = 5;
+  double min = 6;
+  double max = 7;
+  double default = 8;
+}
+
 message PluginInstanceRef {
   uint64 instance_uid = 1;
   int32 format = 2;
@@ -128,5 +139,5 @@ message PluginInstanceRef {
   string plugin_id = 4;
   bool bypass = 5;
   map<uint32, double> params = 6;
-  repeated bytes param_info = 7;
+  repeated PluginParamInfo param_info = 7;
 }

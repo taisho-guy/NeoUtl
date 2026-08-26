@@ -3,7 +3,7 @@
 ## 依存関係のインストール
 
 <details><summary>Linuxの場合</summary>
-Clang、Rust、Git、LuaJIT、MakeFile、Carla、FFmpegをインストールしてください。
+Clang、Rust、Git、LuaJIT、MakeFile、FFmpegをインストールしてください。
 
 最新のArch Linux系ディストリビューションでのビルドを推奨しますが、Ubuntu等でも通るかもしれません。
 </details>

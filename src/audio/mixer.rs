@@ -3,9 +3,7 @@ use crate::ecs::audio_plugins::PluginInstanceRef;
 use crate::ecs::components::{AudioParams, MediaSource};
 use crate::ecs::systems::get_active_audio_system;
 use crate::media;
-use carla_host_sys::{
-    BinaryType, CarlaHost, EngineOption, EngineProcessMode, EngineTransportMode, PluginFormat,
-};
+use maolan_host_adapter::{HostError, PluginFormat, PluginHost, PluginParamInfo};
 use neoutl_media_api::AudioBuffer;
 use rodio::Source;
 use rodio::stream::{DeviceSinkBuilder, MixerDeviceSink};
@@ -21,6 +19,8 @@ const TARGET_BUFFER_SECONDS: f64 = 0.12;
 
 const CONTINUITY_GAP_SECONDS: f64 = 0.25;
 
+const DEFAULT_PLUGIN_BLOCK_SIZE: usize = 4096;
+
 pub struct AudioMixer {
     output: Option<MixerDeviceSink>,
     ring: Arc<Mutex<VecDeque<f32>>>,
@@ -30,7 +30,7 @@ pub struct AudioMixer {
     clip_phase: HashMap<usize, f64>,
     clip_last_tick: HashMap<usize, Instant>,
     plugin_instances: HashMap<u64, CachedPlugin>,
-    carla_host: Option<CarlaHost>,
+    plugin_host: PluginHost,
 }
 
 unsafe impl Send for AudioMixer {}
@@ -38,7 +38,7 @@ unsafe impl Send for AudioMixer {}
 struct CachedPlugin {
     path: PathBuf,
     plugin_id: String,
-    carla_id: Option<u32>,
+    instance_id: Option<u32>,
 }
 
 impl AudioMixer {
@@ -48,43 +48,11 @@ impl AudioMixer {
             sample_rate as usize * channels as usize * RING_CAPACITY_SECONDS,
         )));
         let output = build_output(sample_rate, channels, ring.clone())?;
-        let carla_host = match CarlaHost::new() {
-            Ok(mut h) => {
-                let _ = h.set_engine_option(
-                    EngineOption::ProcessMode,
-                    EngineProcessMode::ContinuousRack as i32,
-                    None,
-                );
-                let _ = h.set_engine_option(
-                    EngineOption::TransportMode,
-                    EngineTransportMode::Internal as i32,
-                    None,
-                );
-                let _ =
-                    h.set_engine_option(EngineOption::AudioSampleRate, sample_rate as i32, None);
-                let _ = h.set_engine_option(EngineOption::AudioBufferSize, 4096, None);
-                if let Err(e) = h.init_engine("Dummy", "NeoUtlMixer") {
-                    eprintln!(
-                        "{}",
-                        t!(
-                            "[NeoUtl] Carla engine 初期化警告: %{arg0}",
-                            arg0 = format!("{:?}", e)
-                        )
-                    );
-                }
-                Some(h)
-            }
-            Err(e) => {
-                eprintln!(
-                    "{}",
-                    t!(
-                        "[NeoUtl] CarlaHost 生成失敗: %{arg0}",
-                        arg0 = format!("{:?}", e)
-                    )
-                );
-                None
-            }
-        };
+        let plugin_host = PluginHost::new(
+            plugin_host_binary_path(),
+            sample_rate as f64,
+            DEFAULT_PLUGIN_BLOCK_SIZE,
+        );
 
         Ok(Self {
             output: Some(output),
@@ -95,7 +63,7 @@ impl AudioMixer {
             clip_phase: HashMap::new(),
             clip_last_tick: HashMap::new(),
             plugin_instances: HashMap::new(),
-            carla_host,
+            plugin_host,
         })
     }
 
@@ -109,7 +77,11 @@ impl AudioMixer {
             clip_phase: HashMap::new(),
             clip_last_tick: HashMap::new(),
             plugin_instances: HashMap::new(),
-            carla_host: None,
+            plugin_host: PluginHost::new(
+                plugin_host_binary_path(),
+                48_000.0,
+                DEFAULT_PLUGIN_BLOCK_SIZE,
+            ),
         }
     }
 
@@ -118,8 +90,11 @@ impl AudioMixer {
             return;
         }
         self.sample_rate = sample_rate;
-        if let Some(host) = self.carla_host.as_mut() {
-            let _ = host.set_engine_option(EngineOption::AudioSampleRate, sample_rate as i32, None);
+        self.plugin_host.set_sample_rate(sample_rate as f64);
+        for (_, cached) in self.plugin_instances.drain() {
+            if let Some(id) = cached.instance_id {
+                let _ = self.plugin_host.remove_plugin(id);
+            }
         }
         self.ring.lock().unwrap().clear();
         match build_output(sample_rate, self.channels, self.ring.clone()) {
@@ -152,42 +127,28 @@ impl AudioMixer {
         format: PluginFormat,
         path: &Path,
         plugin_id: &str,
-    ) -> Vec<carla_host_sys::PluginParamInfo> {
-        let Some(host) = self.carla_host.as_mut() else {
+    ) -> Vec<PluginParamInfo> {
+        let spec = plugin_spec_for(path, plugin_id);
+        let Some(spec) = spec else {
             return Vec::new();
         };
-        let name = path
-            .file_stem()
-            .and_then(|s| s.to_str())
-            .unwrap_or("plugin");
-        let label = if !plugin_id.is_empty()
-            && (plugin_id.starts_with("http")
-                || plugin_id.contains(':')
-                || format == PluginFormat::Internal)
-        {
-            Some(plugin_id)
-        } else {
-            None
-        };
-        let filename = if path.as_os_str().is_empty() {
-            None
-        } else {
-            path.to_str()
-        };
-        if let Ok(pid) = host.add_plugin(
-            BinaryType::NATIVE,
-            format.to_plugin_type(),
-            filename,
-            Some(name),
-            label,
-            0,
-            0,
-        ) {
-            let list = host.full_param_info_list(pid);
-            let _ = host.remove_plugin(pid);
-            list
-        } else {
-            Vec::new()
+        match self.plugin_host.add_plugin(format, &spec) {
+            Ok(id) => {
+                let list = self.plugin_host.full_param_info_list(id);
+                let _ = self.plugin_host.remove_plugin(id);
+                list
+            }
+            Err(err) => {
+                eprintln!(
+                    "{}",
+                    t!(
+                        "[NeoUtl] audio_mixer: プラグイン情報取得失敗 spec=%{arg0}: %{arg1}",
+                        arg0 = spec,
+                        arg1 = format!("{}", err)
+                    )
+                );
+                Vec::new()
+            }
         }
     }
 
@@ -217,8 +178,7 @@ impl AudioMixer {
             .flat_map(|entity| entity.plugin_chain.iter().map(|p| p.instance_uid))
             .filter(|uid| *uid != 0)
             .collect();
-        self.plugin_instances
-            .retain(|uid, _| active_uids.contains(uid));
+        self.evict_inactive_plugins(&active_uids);
 
         for entity in get_active_audio_system(world, current_frame) {
             if entity.audio.mute {
@@ -253,6 +213,26 @@ impl AudioMixer {
             self.mix_entity(&entity, now, 1.0, &mut master, sample_count);
         }
         master
+    }
+
+    fn handle_plugin_failure(&self, spec: &str, err: &HostError) {
+        handle_plugin_failure_impl(spec, err);
+    }
+
+    fn evict_inactive_plugins(&mut self, active_uids: &HashSet<u64>) {
+        let stale_keys: Vec<u64> = self
+            .plugin_instances
+            .keys()
+            .filter(|key| !active_uids.contains(key))
+            .copied()
+            .collect();
+        for key in stale_keys {
+            if let Some(cached) = self.plugin_instances.remove(&key) {
+                if let Some(id) = cached.instance_id {
+                    let _ = self.plugin_host.remove_plugin(id);
+                }
+            }
+        }
     }
 
     fn mix_entity(
@@ -343,10 +323,6 @@ impl AudioMixer {
         chan_l: &mut [f32],
         chan_r: &mut [f32],
     ) {
-        let Some(host) = self.carla_host.as_mut() else {
-            return;
-        };
-        host.idle();
         let frames = chan_l.len();
         for instance_ref in chain {
             if instance_ref.bypass {
@@ -360,61 +336,41 @@ impl AudioMixer {
             let stale = self.plugin_instances.get(&key).is_none_or(|c| {
                 c.path != instance_ref.path
                     || c.plugin_id != instance_ref.plugin_id
-                    || c.carla_id.is_none()
+                    || c.instance_id.is_none()
             });
             if stale {
                 if let Some(old_plugin) = self.plugin_instances.remove(&key) {
-                    if let Some(pid) = old_plugin.carla_id {
-                        let _ = host.remove_plugin(pid);
+                    if let Some(id) = old_plugin.instance_id {
+                        let _ = self.plugin_host.remove_plugin(id);
                     }
                 }
-                let name = instance_ref
-                    .path
-                    .file_stem()
-                    .and_then(|s| s.to_str())
-                    .unwrap_or("plugin");
-                let label = if !instance_ref.plugin_id.is_empty()
-                    && (instance_ref.plugin_id.starts_with("http")
-                        || instance_ref.plugin_id.contains(':')
-                        || instance_ref.format == PluginFormat::Internal)
+                let instance_id = match plugin_spec_for(&instance_ref.path, &instance_ref.plugin_id)
                 {
-                    Some(instance_ref.plugin_id.as_str())
-                } else {
-                    None
-                };
-                let filename = if instance_ref.path.as_os_str().is_empty() {
-                    None
-                } else {
-                    instance_ref.path.to_str()
-                };
-                let carla_id = match host.add_plugin(
-                    BinaryType::NATIVE,
-                    instance_ref.format.to_plugin_type(),
-                    filename,
-                    Some(name),
-                    label,
-                    0,
-                    0,
-                ) {
-                    Ok(pid) => Some(pid),
-                    Err(err) => {
-                        eprintln!(
-                            "{}",
-                            t!(
-                                "[NeoUtl] audio_mixer: Carlaプラグイン生成失敗 path=%{arg0}: %{arg1}",
-                                arg0 = format!("{}", instance_ref.path.display()),
-                                arg1 = format!("{:?}", err)
-                            )
-                        );
-                        None
-                    }
+                    Some(spec) => match self.plugin_host.add_plugin(instance_ref.format, &spec) {
+                        Ok(id) => Some(id),
+                        Err(err) => {
+                            if !matches!(err, maolan_host_adapter::HostError::Blocked(_)) {
+                                self.handle_plugin_failure(&spec, &err);
+                            }
+                            eprintln!(
+                                "{}",
+                                t!(
+                                    "[NeoUtl] audio_mixer: プラグイン生成失敗 spec=%{arg0}: %{arg1}",
+                                    arg0 = spec,
+                                    arg1 = format!("{}", err)
+                                )
+                            );
+                            None
+                        }
+                    },
+                    None => None,
                 };
                 self.plugin_instances.insert(
                     key,
                     CachedPlugin {
                         path: instance_ref.path.clone(),
                         plugin_id: instance_ref.plugin_id.clone(),
-                        carla_id,
+                        instance_id,
                     },
                 );
             }
@@ -422,22 +378,80 @@ impl AudioMixer {
             let Some(cached) = self.plugin_instances.get(&key) else {
                 continue;
             };
-            let Some(plugin_id) = cached.carla_id else {
+            let Some(instance_id) = cached.instance_id else {
                 continue;
             };
 
             for (&param_id, &value) in &instance_ref.params {
-                host.set_parameter_value(plugin_id, param_id, value as f32);
+                self.plugin_host
+                    .set_parameter_value(instance_id, param_id, value as f32);
             }
 
             let mut out_l = vec![0.0f32; frames];
             let mut out_r = vec![0.0f32; frames];
-            host.process_stereo(plugin_id, chan_l, chan_r, &mut out_l, &mut out_r, frames);
-            chan_l.copy_from_slice(&out_l);
-            chan_r.copy_from_slice(&out_r);
+            match self.plugin_host.process_stereo(
+                instance_id,
+                chan_l,
+                chan_r,
+                &mut out_l,
+                &mut out_r,
+                frames,
+            ) {
+                Ok(()) => {
+                    chan_l.copy_from_slice(&out_l);
+                    chan_r.copy_from_slice(&out_r);
+                }
+                Err(err) => {
+                    if let Some(cached) = self.plugin_instances.get_mut(&key) {
+                        cached.instance_id = None;
+                    }
+                    let spec = plugin_spec_for(&instance_ref.path, &instance_ref.plugin_id)
+                        .unwrap_or_default();
+                    self.handle_plugin_failure(&spec, &err);
+                }
+            }
         }
-        host.idle();
     }
+}
+
+fn handle_plugin_failure_impl(spec: &str, err: &HostError) {
+    if spec.is_empty() {
+        return;
+    }
+    let count = maolan_host_adapter::record_crash(spec);
+    if count >= maolan_host_adapter::CRASH_THRESHOLD {
+        maolan_host_adapter::block_plugin(spec, &format!("{}", err));
+        eprintln!(
+            "{}",
+            t!(
+                "[NeoUtl] audio_mixer: 連続失敗によりブロックリスト登録 spec=%{arg0} count=%{arg1}",
+                arg0 = spec.to_string(),
+                arg1 = count.to_string()
+            )
+        );
+    }
+}
+
+fn plugin_spec_for(path: &Path, plugin_id: &str) -> Option<String> {
+    if !plugin_id.is_empty() {
+        Some(plugin_id.to_string())
+    } else if !path.as_os_str().is_empty() {
+        Some(path.to_string_lossy().into_owned())
+    } else {
+        None
+    }
+}
+
+fn plugin_host_binary_path() -> PathBuf {
+    let exe_name = if cfg!(windows) {
+        "maolan-plugin-host.exe"
+    } else {
+        "maolan-plugin-host"
+    };
+    std::env::current_exe()
+        .ok()
+        .and_then(|p| p.parent().map(|d| d.join(exe_name)))
+        .unwrap_or_else(|| PathBuf::from(exe_name))
 }
 
 fn lerp_sample(samples: &[f32], frame_idx: usize, channels: usize, ch: usize, frac: f32) -> f32 {

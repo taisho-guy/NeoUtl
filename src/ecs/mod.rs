@@ -1151,8 +1151,8 @@ impl EcsWorld {
     pub fn add_audio_plugin(
         &mut self,
         object_id: usize,
-        entry: &carla_host_sys::PluginCatalogEntry,
-        param_info: Vec<carla_host_sys::PluginParamInfo>,
+        entry: &maolan_host_adapter::PluginCatalogEntry,
+        param_info: Vec<maolan_host_adapter::PluginParamInfo>,
     ) {
         let Some(entity) = self.find_entity(object_id) else {
             return;
