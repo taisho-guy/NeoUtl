@@ -7,6 +7,7 @@ local EXCLUDE_DIRS = {
     "target",
     ".git",
     "neoutl-wgpu",
+    "slang"
 }
 
 local EXT_CONFIGS = {

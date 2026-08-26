@@ -483,7 +483,9 @@ fn vaapi_render_node_candidates(
 unsafe fn try_init_hw_device(
     codec: *const sys::AVCodec,
     stream_sw_format: sys::AVPixelFormat,
-    _gpu_device: &Option<Arc<wgpu::Device>>,
+    #[cfg_attr(not(target_os = "windows"), allow(unused_variables))] gpu_device: &Option<
+        Arc<wgpu::Device>,
+    >,
 ) -> Option<(*mut sys::AVBufferRef, i32)> {
     unsafe {
         sys::av_log_set_level(sys::AV_LOG_DEBUG);
