@@ -1977,6 +1977,75 @@ impl RenderEngine {
         self.run_lua_reduce_hooks();
     }
 
+    pub fn read_frame_rgba8(&self) -> Vec<u8> {
+        let width = self.render_width;
+        let height = self.render_height;
+        let unpadded_bytes_per_row = width * 8;
+        let align = wgpu::COPY_BYTES_PER_ROW_ALIGNMENT;
+        let padded_bytes_per_row = unpadded_bytes_per_row.div_ceil(align) * align;
+        let buffer_size = (padded_bytes_per_row * height) as wgpu::BufferAddress;
+
+        let output_buffer = self.device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("Export Readback Buffer"),
+            size: buffer_size,
+            usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
+            mapped_at_creation: false,
+        });
+
+        let mut encoder = self
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
+        encoder.copy_texture_to_buffer(
+            wgpu::TexelCopyTextureInfo {
+                texture: &self.texture,
+                mip_level: 0,
+                origin: wgpu::Origin3d::ZERO,
+                aspect: wgpu::TextureAspect::All,
+            },
+            wgpu::TexelCopyBufferInfo {
+                buffer: &output_buffer,
+                layout: wgpu::TexelCopyBufferLayout {
+                    offset: 0,
+                    bytes_per_row: Some(padded_bytes_per_row),
+                    rows_per_image: Some(height),
+                },
+            },
+            wgpu::Extent3d {
+                width,
+                height,
+                depth_or_array_layers: 1,
+            },
+        );
+        crate::gpu_shared::locked_submit(&self.queue, [encoder.finish()]);
+
+        let slice = output_buffer.slice(..);
+        let (tx, rx) = std::sync::mpsc::channel();
+        slice.map_async(wgpu::MapMode::Read, move |result| {
+            tx.send(result).expect(&t!("map_async結果送信失敗"));
+        });
+        self.device
+            .poll(wgpu::PollType::wait_indefinitely())
+            .expect(&t!("device poll失敗"));
+        rx.recv()
+            .expect(&t!("map_async結果受信失敗"))
+            .expect(&t!("バッファmap失敗"));
+
+        let padded = slice.get_mapped_range().expect(&t!("get_mapped_range失敗"));
+        let mut rgba8 = Vec::with_capacity((width * height * 4) as usize);
+        for row in 0..height as usize {
+            let start = row * padded_bytes_per_row as usize;
+            for pixel in padded[start..start + unpadded_bytes_per_row as usize].chunks_exact(8) {
+                for channel in pixel.chunks_exact(2) {
+                    let v = half::f16::from_le_bytes([channel[0], channel[1]]).to_f32();
+                    rgba8.push((v.clamp(0.0, 1.0) * 255.0).round() as u8);
+                }
+            }
+        }
+        drop(padded);
+        output_buffer.unmap();
+        rgba8
+    }
+
     fn drain_hot_reload_events(&mut self) {
         let Some(rx) = &self.hot_reload_rx else {
             return;

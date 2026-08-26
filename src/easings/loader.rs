@@ -1,7 +1,5 @@
-use crate::easings::registry::{CurveRegistry, default_presets_path};
 use libloading::{Library, Symbol};
 use neoutl_easing_api::{ENTRY_SYMBOL, EasingEngineMeta, EasingEngineVTable, EntryFn, KeyframeC};
-use std::sync::Mutex;
 use std::{
     ffi::{CStr, OsStr},
     path::{Path, PathBuf},
@@ -36,7 +34,6 @@ impl EasingPlugin {
 }
 
 static REGISTRY: OnceLock<Vec<EasingPlugin>> = OnceLock::new();
-static CURVE_PRESETS: OnceLock<Mutex<CurveRegistry>> = OnceLock::new();
 
 pub fn load_all(easings_dir: &Path) {
     REGISTRY.get_or_init(|| {
@@ -107,9 +104,6 @@ pub fn load_all(easings_dir: &Path) {
         }
         plugins
     });
-
-    CURVE_PRESETS
-        .get_or_init(|| Mutex::new(CurveRegistry::load(&default_presets_path(easings_dir))));
 }
 
 pub fn registry() -> &'static [EasingPlugin] {
@@ -121,10 +115,6 @@ pub fn by_id(id: &str) -> Option<&'static EasingPlugin> {
         .iter()
         .find(|p| p.id == id)
         .or_else(|| registry().iter().find(|p| p.id == "neoutl-easing-standard"))
-}
-
-pub fn curve_presets() -> Option<&'static Mutex<CurveRegistry>> {
-    CURVE_PRESETS.get()
 }
 
 pub fn default_easings_dir() -> PathBuf {

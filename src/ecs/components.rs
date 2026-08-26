@@ -542,14 +542,6 @@ impl KeyframeTracks {
         }
     }
 
-    pub fn set_apply_mode(&mut self, key: &str, frame: i32, mode: crate::ecs::types::ApplyMode) {
-        if let Some(track) = self.0.get_mut(key)
-            && let Some(k) = track.iter_mut().find(|k| k.frame == frame)
-        {
-            k.apply_mode = mode;
-        }
-    }
-
     pub fn remove_keyframe(&mut self, key: &str, frame: i32) {
         if let Some(track) = self.0.get_mut(key) {
             track.retain(|k| k.frame != frame);

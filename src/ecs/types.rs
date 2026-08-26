@@ -227,12 +227,6 @@ impl EffectParam {
         }
     }
 
-    pub fn set_apply_mode(&mut self, frame: i32, mode: ApplyMode) {
-        if let Some(k) = self.keyframes.iter_mut().find(|k| k.frame == frame) {
-            k.apply_mode = mode;
-        }
-    }
-
     pub fn shift_keyframes(&mut self, delta: i32) {
         for k in self.keyframes.iter_mut() {
             k.frame += delta;

@@ -1404,23 +1404,6 @@ impl EcsWorld {
         });
     }
 
-    pub fn set_keyframe_apply_mode(
-        &mut self,
-        object_id: usize,
-        key: &str,
-        frame: i32,
-        mode: crate::ecs::types::ApplyMode,
-    ) {
-        let Some(entity) = self.find_entity(object_id) else {
-            return;
-        };
-        self.world.run(|mut tracks: ViewMut<KeyframeTracks>| {
-            if let Ok(mut t) = (&mut tracks).get(entity) {
-                t.set_apply_mode(key, frame, mode);
-            }
-        });
-    }
-
     pub fn move_keyframe(
         &mut self,
         object_id: usize,
@@ -1485,24 +1468,6 @@ impl EcsWorld {
         self.world.run(|mut stacks: ViewMut<EffectStack>| {
             if let Ok(mut stack) = (&mut stacks).get(entity) {
                 stack.remove_keyframe(index, key, frame);
-            }
-        });
-    }
-
-    pub fn set_effect_keyframe_apply_mode(
-        &mut self,
-        object_id: usize,
-        index: usize,
-        key: &str,
-        frame: i32,
-        mode: crate::ecs::types::ApplyMode,
-    ) {
-        let Some(entity) = self.find_entity(object_id) else {
-            return;
-        };
-        self.world.run(|mut stacks: ViewMut<EffectStack>| {
-            if let Ok(mut stack) = (&mut stacks).get(entity) {
-                stack.set_apply_mode(index, key, frame, mode);
             }
         });
     }

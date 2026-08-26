@@ -1,15 +1,16 @@
 #!/usr/bin/env luajit
 
 local DEFAULT_EXTENSIONS = {
-    ".cpp", ".hpp", ".c", ".h", ".hh", ".hxx", ".cc", ".cxx", ".rs", ".toml",
-    ".slint", ".qml", ".qrc", ".ui", ".pro", ".pri", ".js", ".jsx", ".ts",
-    ".tsx", ".json", ".cmake", ".sh", ".bash", ".py", ".lua", ".fish", ".xml",
-    ".yaml", ".yml", ".ini", ".conf", ".clang-format", ".clang-tidy",
-    ".gitignore", ".md", ".txt", ".rst", ".glsl", ".frag", ".vert", ".slang",
-    ".wgsl", ".def", ".vcxproj", ".filters", ".props", ".targets", ".sln",
-    ".vcproj", ".vdproj", ".sass", ".scss", ".css", ".html", ".htm",
-    ".nuspec", ".config", ".editorconfig", ".resx", ".manifest", ".metal", 
-    ".vert", ".glsl", ".hlsl", "js", ".proto"
+    ".cpp", ".hpp", ".c", ".h", ".hh", ".hxx", ".cc", ".cxx", ".def",
+    ".vcxproj", ".vcxproj.user", ".filters", ".props", ".targets", ".sln",
+    ".vcproj", ".vdproj", ".cmake",
+    ".py", ".lua", ".sh", ".bash", ".ps1", ".fish", ".bat", ".cmd",
+    ".json", ".ini", ".conf", ".xml", ".yaml", ".yml", ".toml", ".resx",
+    ".nuspec", ".config", ".editorconfig", ".manifest", ".clang-format", ".clang-tidy",
+    ".js", ".jsx", ".ts", ".tsx", ".html", ".htm", ".css", ".sass", ".scss",
+    ".slint", ".qml", ".qrc", ".ui", ".pro", ".pri", ".proto",
+    ".glsl", ".frag", ".vert", ".slang", ".wgsl", ".metal", ".hlsl",
+    ".gitignore", ".md", ".txt", ".rst", ".rs"
 }
 
 local DEFAULT_FILENAMES = {

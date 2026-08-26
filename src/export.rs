@@ -17,7 +17,6 @@ pub enum EncoderBackend {
     Gstreamer,
 }
 
-#[allow(dead_code)]
 pub struct ExportJob {
     pub output_path: PathBuf,
     pub codec: ExportCodec,
@@ -254,8 +253,92 @@ impl Default for RenderQueue {
     }
 }
 
-const ENCODER_UNAVAILABLE: &str = "動画書き出しエンコーダ経路(gstreamer-encoder / gpuvideo-encoder)は撤去済み。ffmpeg専用エンコーダの実装待ち";
+pub fn run(state: &SharedAppState, mut job: ExportJob) -> Result<(), String> {
+    if job.end_frame < job.start_frame {
+        return Err(format!(
+            "終了フレーム({})が開始フレーム({})より前です",
+            job.end_frame, job.start_frame
+        ));
+    }
+    if let Some(parent) = job.output_path.parent()
+        && !parent.as_os_str().is_empty()
+        && !parent.exists()
+    {
+        std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    }
+    let is_canceled = |job: &ExportJob| {
+        job.cancel
+            .as_ref()
+            .is_some_and(|c| c.load(std::sync::atomic::Ordering::Relaxed))
+    };
+    if is_canceled(&job) {
+        return Err("キャンセル済み".to_owned());
+    }
 
-pub fn run(_state: &SharedAppState, _job: ExportJob) -> Result<(), String> {
-    Err(ENCODER_UNAVAILABLE.to_owned())
+    let world_holder = app_state::active_world(state);
+    let engine_holder = app_state::active_engine(state);
+    let (width, height, fps) = {
+        let world = world_holder.lock().unwrap();
+        let project = world.get_project();
+        (project.width, project.height, project.fps.max(1))
+    };
+
+    let encoder_codec = match job.codec {
+        ExportCodec::H264 => neo_media_ffmpeg::EncoderCodec::H264,
+        ExportCodec::H265 => neo_media_ffmpeg::EncoderCodec::H265,
+    };
+    let encoder_backend = match job.backend {
+        EncoderBackend::Auto => neo_media_ffmpeg::EncoderBackend::Auto,
+        EncoderBackend::GpuVideo => neo_media_ffmpeg::EncoderBackend::GpuVideo,
+        EncoderBackend::Gstreamer => neo_media_ffmpeg::EncoderBackend::Software,
+    };
+    let mut encoder = neo_media_ffmpeg::VideoEncoder::open(
+        &job.output_path,
+        neo_media_ffmpeg::EncoderConfig {
+            width,
+            height,
+            fps,
+            average_bitrate: job.average_bitrate,
+            max_bitrate: job.max_bitrate,
+            codec: encoder_codec,
+            backend: encoder_backend,
+        },
+    )?;
+    eprintln!(
+        "[NeoUtl][export] エンコーダ選択: {} (HW={})",
+        encoder.encoder_name,
+        neo_media_ffmpeg::is_hw_encoder_name(&encoder.encoder_name)
+    );
+
+    for frame in job.start_frame..=job.end_frame {
+        if is_canceled(&job) {
+            return Err("キャンセルされました".to_owned());
+        }
+        let rgba8 = {
+            let mut world = world_holder.lock().unwrap();
+            world.set_current_frame(frame);
+            let (active, captured) = crate::ecs::systems::get_active_objects_system(&world);
+            let project = world.get_project();
+            let mut engine_lock = engine_holder.lock().unwrap();
+            let Some(engine) = engine_lock.as_mut() else {
+                return Err(
+                    "レンダーエンジン未初期化です。プレビューを一度表示してから書き出してください"
+                        .to_owned(),
+                );
+            };
+            if engine.render_width != width || engine.render_height != height {
+                engine.resize_render_target(width, height);
+            }
+            engine.render(&world, &active, &captured, &project);
+            engine.read_frame_rgba8()
+        };
+        encoder
+            .encode_rgba8(&rgba8)
+            .map_err(|e| format!("エンコード失敗(frame={frame}): {e}"))?;
+        if let Some(progress) = &mut job.progress {
+            progress(frame, job.end_frame);
+        }
+    }
+
+    encoder.finish()
 }

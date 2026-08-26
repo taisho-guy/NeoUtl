@@ -101,20 +101,6 @@ impl EffectStack {
         }
     }
 
-    pub fn set_apply_mode(
-        &mut self,
-        index: usize,
-        key: &str,
-        frame: i32,
-        mode: crate::ecs::types::ApplyMode,
-    ) {
-        if let Some(e) = self.0.get_mut(index)
-            && let Some(p) = e.params.get_mut(key)
-        {
-            p.set_apply_mode(frame, mode);
-        }
-    }
-
     pub fn remove_keyframe(&mut self, index: usize, key: &str, frame: i32) {
         if let Some(e) = self.0.get_mut(index)
             && let Some(p) = e.params.get_mut(key)
