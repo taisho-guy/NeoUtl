@@ -3,7 +3,9 @@ use crate::ecs::audio_plugins::PluginInstanceRef;
 use crate::ecs::components::{AudioParams, MediaSource};
 use crate::ecs::systems::get_active_audio_system;
 use crate::media;
-use maolan_host_adapter::{HostError, PluginFormat, PluginHost, PluginParamInfo};
+use maolan_host_adapter::{
+    HostError, PluginFormat, PluginHost, PluginParamInfo, default_binary_path,
+};
 use neoutl_media_api::AudioBuffer;
 use rodio::Source;
 use rodio::stream::{DeviceSinkBuilder, MixerDeviceSink};
@@ -49,7 +51,7 @@ impl AudioMixer {
         )));
         let output = build_output(sample_rate, channels, ring.clone())?;
         let plugin_host = PluginHost::new(
-            plugin_host_binary_path(),
+            default_binary_path(),
             sample_rate as f64,
             DEFAULT_PLUGIN_BLOCK_SIZE,
         );
@@ -78,7 +80,7 @@ impl AudioMixer {
             clip_last_tick: HashMap::new(),
             plugin_instances: HashMap::new(),
             plugin_host: PluginHost::new(
-                plugin_host_binary_path(),
+                default_binary_path(),
                 48_000.0,
                 DEFAULT_PLUGIN_BLOCK_SIZE,
             ),
@@ -440,18 +442,6 @@ fn plugin_spec_for(path: &Path, plugin_id: &str) -> Option<String> {
     } else {
         None
     }
-}
-
-fn plugin_host_binary_path() -> PathBuf {
-    let exe_name = if cfg!(windows) {
-        "maolan-plugin-host.exe"
-    } else {
-        "maolan-plugin-host"
-    };
-    std::env::current_exe()
-        .ok()
-        .and_then(|p| p.parent().map(|d| d.join(exe_name)))
-        .unwrap_or_else(|| PathBuf::from(exe_name))
 }
 
 fn lerp_sample(samples: &[f32], frame_idx: usize, channels: usize, ch: usize, frac: f32) -> f32 {

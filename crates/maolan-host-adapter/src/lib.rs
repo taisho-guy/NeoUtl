@@ -1,8 +1,10 @@
+mod binary_path;
 mod crash;
 mod process;
 mod registry;
 mod types;
 
+pub use binary_path::default_binary_path;
 pub use crash::{CRASH_THRESHOLD, block_plugin, is_blocked, record_crash};
 pub use registry::{catalog, invalidate};
 pub use types::{HostError, PluginCatalogEntry, PluginFormat, PluginParamInfo};

@@ -185,6 +185,55 @@ fn apply_toolchain_env(cmd: &mut Command, workspace_root: &Path) {
     cmd.env("PATH", joined_path);
 }
 
+const PLUGIN_HOST_VERSION: &str = "0.0.7";
+
+fn plugin_host_install_root(workspace_root: &Path) -> PathBuf {
+    workspace_root
+        .join("target")
+        .join("maolan-plugin-host-install")
+}
+
+fn stage_plugin_host(workspace_root: &Path, profile: &str, target: Option<&str>, offline: bool) {
+    let install_root = plugin_host_install_root(workspace_root);
+    let bin_name = exe_filename("maolan-plugin-host");
+    let installed_bin = install_root.join("bin").join(&bin_name);
+
+    if !installed_bin.is_file() {
+        let mut cmd = Command::new("cargo");
+        cmd.arg("install")
+            .arg("maolan-plugin-host")
+            .arg("--version")
+            .arg(PLUGIN_HOST_VERSION)
+            .arg("--locked")
+            .arg("--root")
+            .arg(&install_root);
+        if let Some(triple) = target {
+            cmd.arg("--target").arg(triple);
+        }
+        if offline {
+            cmd.arg("--offline");
+        }
+        apply_toolchain_env(&mut cmd, workspace_root);
+        let status = cmd
+            .status()
+            .expect("maolan-plugin-hostインストール起動失敗");
+        if !status.success() {
+            panic!("[xtask] maolan-plugin-hostインストール失敗: exit={status}");
+        }
+    }
+
+    let dest_dir = target_dir(workspace_root, profile, target);
+    fs::create_dir_all(&dest_dir).expect("配置先ディレクトリ作成失敗");
+    let dest = dest_dir.join(&bin_name);
+    fs::copy(&installed_bin, &dest).unwrap_or_else(|err| {
+        panic!(
+            "[xtask] maolan-plugin-host配置失敗: {err} (src={})",
+            installed_bin.display()
+        )
+    });
+    eprintln!("[xtask] 配置: {bin_name}");
+}
+
 fn stage_crates(
     workspace_root: &Path,
     profile: &str,
@@ -312,6 +361,7 @@ fn main() {
         &lua_feature,
     );
 
+    stage_plugin_host(&root, profile, target, offline);
     stage_crates(&root, profile, target, "objects", &objects);
     stage_crates(&root, profile, target, "effects", &effects);
     stage_crates(&root, profile, target, "decoders", &decoders);
