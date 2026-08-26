@@ -80,6 +80,7 @@ struct ScanVst3Entry {
     path: String,
 }
 
+#[cfg(unix)]
 #[derive(Deserialize)]
 struct ScanLv2Entry {
     uri: String,

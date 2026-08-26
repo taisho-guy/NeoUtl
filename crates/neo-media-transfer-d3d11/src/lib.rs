@@ -227,7 +227,11 @@ impl D3d11TransferBackend {
         } else {
             &mut self.surface_cache_p010
         };
-        if slot.is_none() {
+        let stale = slot.as_ref().is_some_and(|cache| {
+            cache.format() != format
+                || cache.size() != (self.coded_size.width, self.coded_size.height)
+        });
+        if slot.is_none() || stale {
             let fence_for_cache =
                 fence::CrossApiFence::new(&self.d3d11_device, &self.handles.device)?;
             *slot = Some(surface_cache::SurfaceCache::new(
@@ -300,16 +304,16 @@ impl TransferBackend for D3d11TransferBackend {
         };
 
         let convert_result = unsafe {
-            self.engine.convert(
-                &shared_resource,
-                y_fmt,
-                uv_fmt,
-                &dst_resource,
-                dst_dxgi_format,
+            self.engine.convert(dx12::ConvertRequest {
+                src_resource: &shared_resource,
+                y_format: y_fmt,
+                uv_format: uv_fmt,
+                dst_resource: &dst_resource,
+                dst_format: dst_dxgi_format,
                 width,
                 height,
-                color_tags_of(input),
-            )
+                tags: color_tags_of(input),
+            })
         };
         if let Err(e) = convert_result {
             release_and_return!(TransferError::CopyFailed(e));

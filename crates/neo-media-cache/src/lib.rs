@@ -164,6 +164,15 @@ fn create_texture(
     }))
 }
 
+struct AcquireWriteRequest<'a> {
+    device: &'a wgpu::Device,
+    capacity: usize,
+    kind_id: u8,
+    quotas: &'a [ConsumerQuota],
+    acquire_seq: u64,
+    clip_key_hint: &'a str,
+}
+
 impl FormatPool {
     fn new(format: PixelFormat, width: u32, height: u32) -> Self {
         Self {
@@ -263,16 +272,18 @@ impl FormatPool {
             .map(|(i, _)| i)
     }
 
-    #[allow(clippy::too_many_arguments)]
     fn acquire_for_write(
         &mut self,
-        device: &wgpu::Device,
-        capacity: usize,
-        kind_id: u8,
-        quotas: &[ConsumerQuota],
-        acquire_seq: u64,
-        clip_key_hint: &str,
+        ctx: AcquireWriteRequest<'_>,
     ) -> Result<(wgpu::Texture, Arc<SlotOwnerToken>), PoolError> {
+        let AcquireWriteRequest {
+            device,
+            capacity,
+            kind_id,
+            quotas,
+            acquire_seq,
+            clip_key_hint,
+        } = ctx;
         self.reclaim_completed(device);
         let write_started = Instant::now();
         let token = new_owner_token();
@@ -569,14 +580,14 @@ impl NeoMediaCache {
             .entry((format, width, height))
             .or_insert_with(|| FormatPool::new(format, width, height));
         let acquire_seq = self.acquire_counter.load(Ordering::Relaxed);
-        pool.acquire_for_write(
-            &self.device,
+        pool.acquire_for_write(AcquireWriteRequest {
+            device: &self.device,
             capacity,
             kind_id,
-            &quotas_guard,
+            quotas: &quotas_guard,
             acquire_seq,
-            "cache",
-        )
+            clip_key_hint: "cache",
+        })
     }
 
     pub fn owner_token_of(

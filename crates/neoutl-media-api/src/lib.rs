@@ -1,5 +1,3 @@
-#![allow(non_camel_case_types)]
-
 pub const DEFAULT_DECODE_CACHE_BYTES: i64 = 512 * 1024 * 1024;
 
 pub const VIDEO_TEXTURE_POOL_CAPACITY: usize = 32;

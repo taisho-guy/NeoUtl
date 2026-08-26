@@ -132,6 +132,17 @@ unsafe fn build_root_signature(device: &ID3D12Device) -> Result<ID3D12RootSignat
     }
 }
 
+pub struct ConvertRequest<'a> {
+    pub src_resource: &'a ID3D12Resource,
+    pub y_format: DXGI_FORMAT,
+    pub uv_format: DXGI_FORMAT,
+    pub dst_resource: &'a ID3D12Resource,
+    pub dst_format: DXGI_FORMAT,
+    pub width: u32,
+    pub height: u32,
+    pub tags: ColorTags,
+}
+
 impl SemiPlanarConvertEngine {
     pub unsafe fn new(handles: &Dx12RawHandles, dxil_bytes: &'static [u8]) -> Result<Self, String> {
         unsafe {
@@ -207,18 +218,17 @@ impl SemiPlanarConvertEngine {
         }
     }
 
-    #[allow(clippy::too_many_arguments)]
-    pub unsafe fn convert(
-        &self,
-        src_resource: &ID3D12Resource,
-        y_format: DXGI_FORMAT,
-        uv_format: DXGI_FORMAT,
-        dst_resource: &ID3D12Resource,
-        dst_format: DXGI_FORMAT,
-        width: u32,
-        height: u32,
-        tags: ColorTags,
-    ) -> Result<(), String> {
+    pub unsafe fn convert(&self, req: ConvertRequest<'_>) -> Result<(), String> {
+        let ConvertRequest {
+            src_resource,
+            y_format,
+            uv_format,
+            dst_resource,
+            dst_format,
+            width,
+            height,
+            tags,
+        } = req;
         unsafe {
             self.cmd_allocator.Reset().map_err(|e| format!("{e}"))?;
             self.cmd_list

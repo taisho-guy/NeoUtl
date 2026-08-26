@@ -738,6 +738,18 @@ pub struct SemiPlanarConvertEngine {
     submit_lock: Arc<Mutex<()>>,
 }
 
+pub struct ConvertRequest {
+    pub src_image: ash::vk::Image,
+    pub src_layout: ash::vk::ImageLayout,
+    pub dst_image: ash::vk::Image,
+    pub width: u32,
+    pub height: u32,
+    pub y_plane_format: ash::vk::Format,
+    pub uv_plane_format: ash::vk::Format,
+    pub dst_format: ash::vk::Format,
+    pub color_tags: ColorTags,
+}
+
 impl SemiPlanarConvertEngine {
     pub unsafe fn new(
         handles: &VulkanRawHandles,
@@ -884,19 +896,18 @@ impl SemiPlanarConvertEngine {
         }
     }
 
-    #[allow(clippy::too_many_arguments)]
-    pub unsafe fn convert(
-        &self,
-        src_image: ash::vk::Image,
-        src_layout: ash::vk::ImageLayout,
-        dst_image: ash::vk::Image,
-        width: u32,
-        height: u32,
-        y_plane_format: ash::vk::Format,
-        uv_plane_format: ash::vk::Format,
-        dst_format: ash::vk::Format,
-        color_tags: ColorTags,
-    ) -> Result<ash::vk::ImageLayout, String> {
+    pub unsafe fn convert(&self, req: ConvertRequest) -> Result<ash::vk::ImageLayout, String> {
+        let ConvertRequest {
+            src_image,
+            src_layout,
+            dst_image,
+            width,
+            height,
+            y_plane_format,
+            uv_plane_format,
+            dst_format,
+            color_tags,
+        } = req;
         unsafe {
             let y_view_info = ash::vk::ImageViewCreateInfo::default()
                 .image(src_image)

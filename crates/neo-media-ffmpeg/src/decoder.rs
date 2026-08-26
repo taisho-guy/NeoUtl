@@ -82,10 +82,6 @@ fn pf(fmt: sys::AVPixelFormat) -> i32 {
 fn av_pix_fmt_none() -> i32 {
     pf(sys::AVPixelFormat::AV_PIX_FMT_NONE)
 }
-#[allow(dead_code)]
-fn av_pix_fmt_vulkan() -> i32 {
-    pf(sys::AVPixelFormat::AV_PIX_FMT_VULKAN)
-}
 fn av_pix_fmt_rgb0() -> i32 {
     pf(sys::AVPixelFormat::AV_PIX_FMT_RGB0)
 }
@@ -182,17 +178,17 @@ impl VideoDecoder {
         let join = std::thread::Builder::new()
             .name("neoutl-video-decoder".into())
             .spawn(move || {
-                run_worker(
+                run_worker(WorkerSpawnRequest {
                     path,
                     clip_key,
                     store,
                     gpu_device,
                     gpu_queue,
-                    shared_thread,
-                    is_ready_thread,
-                    last_requested_thread,
+                    shared: shared_thread,
+                    is_ready: is_ready_thread,
+                    last_requested_frame: last_requested_thread,
                     on_ready,
-                );
+                });
             })
             .expect("video decoder thread spawn failed");
 
@@ -345,8 +341,6 @@ struct OpenContext {
     fmt_ctx: *mut sys::AVFormatContext,
     dec_ctx: *mut sys::AVCodecContext,
     stream_index: i32,
-    #[allow(dead_code)]
-    time_base: (i32, i32),
     fps: f64,
     width: u32,
     height: u32,
@@ -483,10 +477,10 @@ fn vaapi_render_node_candidates(
 unsafe fn try_init_hw_device(
     codec: *const sys::AVCodec,
     stream_sw_format: sys::AVPixelFormat,
-    #[cfg_attr(not(target_os = "windows"), allow(unused_variables))] gpu_device: &Option<
-        Arc<wgpu::Device>,
-    >,
+    gpu_device: &Option<Arc<wgpu::Device>>,
 ) -> Option<(*mut sys::AVBufferRef, i32)> {
+    #[cfg(not(target_os = "windows"))]
+    let _ = gpu_device;
     unsafe {
         sys::av_log_set_level(sys::AV_LOG_DEBUG);
         eprintln!(
@@ -683,7 +677,6 @@ fn open_input(path: &Path, gpu_device: &Option<Arc<wgpu::Device>>) -> Result<Ope
         }
 
         let stream = *(*fmt_ctx).streams.add(stream_index as usize);
-        let time_base = ((*stream).time_base.num, (*stream).time_base.den);
         let mut fps =
             (*stream).avg_frame_rate.num as f64 / (*stream).avg_frame_rate.den.max(1) as f64;
         if fps <= 0.0 {
@@ -764,7 +757,6 @@ fn open_input(path: &Path, gpu_device: &Option<Arc<wgpu::Device>>) -> Result<Ope
             fmt_ctx,
             dec_ctx,
             stream_index,
-            time_base,
             fps: if fps > 0.0 { fps } else { 30.0 },
             width,
             height,
@@ -780,9 +772,11 @@ fn open_input(path: &Path, gpu_device: &Option<Arc<wgpu::Device>>) -> Result<Ope
 fn build_gpu_pipeline(
     gpu_device: &Option<Arc<wgpu::Device>>,
     hw_device_ctx: *mut sys::AVBufferRef,
-    #[cfg_attr(unix, allow(unused_variables))] dec_width: u32,
-    #[cfg_attr(unix, allow(unused_variables))] dec_height: u32,
+    dec_width: u32,
+    dec_height: u32,
 ) -> Option<GpuPipeline> {
+    #[cfg(unix)]
+    let _ = (dec_width, dec_height);
     let wgpu_device = gpu_device.clone()?;
     let wgpu_queue = shared_wgpu_queue()?;
     let cache = shared_media_cache()?;
@@ -1066,18 +1060,30 @@ fn convert_frame(
     }
 }
 
-#[allow(clippy::too_many_arguments)]
-fn run_worker(
+struct WorkerSpawnRequest<F: FnOnce(VideoMeta) + Send + 'static> {
     path: std::path::PathBuf,
     clip_key: String,
     store: Arc<VideoFrameStore>,
     gpu_device: Option<Arc<wgpu::Device>>,
-    _gpu_queue: Option<Arc<wgpu::Queue>>,
+    gpu_queue: Option<Arc<wgpu::Queue>>,
     shared: Arc<(Mutex<Mailbox>, Condvar)>,
     is_ready: Arc<AtomicBool>,
     last_requested_frame: Arc<AtomicI64>,
-    on_ready: impl FnOnce(VideoMeta) + Send + 'static,
-) {
+    on_ready: F,
+}
+
+fn run_worker<F: FnOnce(VideoMeta) + Send + 'static>(req: WorkerSpawnRequest<F>) {
+    let WorkerSpawnRequest {
+        path,
+        clip_key,
+        store,
+        gpu_device,
+        gpu_queue: _gpu_queue,
+        shared,
+        is_ready,
+        last_requested_frame,
+        on_ready,
+    } = req;
     let mut ctx = match open_input(&path, &gpu_device) {
         Ok(ctx) => ctx,
         Err(e) => {
@@ -1104,9 +1110,11 @@ fn run_worker(
         height: ctx.height,
     });
 
-    let mut frame_cache = PooledFrameCache::new(pooled_frame_cache_capacity(ctx.width, ctx.height));
-    let mut gop_cache = GopCache::new(GOP_CACHE_CAPACITY);
-    let mut last_decoded_frame: i64 = -1;
+    let mut caches = DecodeCaches {
+        frame_cache: PooledFrameCache::new(pooled_frame_cache_capacity(ctx.width, ctx.height)),
+        gop_cache: GopCache::new(GOP_CACHE_CAPACITY),
+        last_decoded_frame: -1,
+    };
 
     const DEBOUNCE_WINDOW: Duration = Duration::from_millis(16);
 
@@ -1144,9 +1152,7 @@ fn run_worker(
             target,
             &clip_key,
             &store,
-            &mut frame_cache,
-            &mut gop_cache,
-            &mut last_decoded_frame,
+            &mut caches,
             &last_requested_frame,
         );
 
@@ -1164,17 +1170,25 @@ fn run_worker(
     }
 }
 
-#[allow(clippy::too_many_arguments)]
+struct DecodeCaches {
+    frame_cache: PooledFrameCache,
+    gop_cache: GopCache,
+    last_decoded_frame: i64,
+}
+
 fn decode_task(
     ctx: &mut OpenContext,
     requested_target: i64,
     clip_key: &str,
     store: &Arc<VideoFrameStore>,
-    frame_cache: &mut PooledFrameCache,
-    gop_cache: &mut GopCache,
-    last_decoded_frame: &mut i64,
+    caches: &mut DecodeCaches,
     last_requested_frame: &AtomicI64,
 ) {
+    let DecodeCaches {
+        frame_cache,
+        gop_cache,
+        last_decoded_frame,
+    } = caches;
     if ctx.index.is_empty() {
         return;
     }

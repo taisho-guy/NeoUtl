@@ -1,5 +1,3 @@
-#![allow(non_camel_case_types)]
-
 use std::os::raw::{c_char, c_void};
 
 #[repr(C)]

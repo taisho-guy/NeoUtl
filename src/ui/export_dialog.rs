@@ -2,7 +2,6 @@ use crate::app_state::SharedAppState;
 use crate::export::{EncoderBackend, ExportCodec, ExportJob, ExportPreset};
 use crate::localization::tr;
 use egui::{Context, Ui};
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
 pub struct ExportDialog {
@@ -21,11 +20,10 @@ pub struct ExportDialog {
     end_frame: i32,
     total_frames: i32,
 
-    is_exporting: bool,
     progress: Arc<Mutex<(i32, i32)>>,
     status_text: String,
     status_is_error: bool,
-    cancel: Option<Arc<AtomicBool>>,
+    active_queue: Option<crate::export::RenderQueue>,
 }
 
 impl ExportDialog {
@@ -44,11 +42,10 @@ impl ExportDialog {
             start_frame: 0,
             end_frame: 0,
             total_frames: 0,
-            is_exporting: false,
             progress: Arc::new(Mutex::new((0, 0))),
             status_text: String::new(),
             status_is_error: false,
-            cancel: None,
+            active_queue: None,
         }
     }
 
@@ -158,8 +155,6 @@ impl ExportDialog {
         if self.output_path.is_empty() {
             return;
         }
-        let cancel = Arc::new(AtomicBool::new(false));
-        self.cancel = Some(cancel.clone());
 
         let progress = self.progress.clone();
         let job = ExportJob {
@@ -181,10 +176,9 @@ impl ExportDialog {
             progress: Some(Box::new(move |current, total| {
                 *progress.lock().unwrap() = (current, total);
             })),
-            cancel: Some(cancel),
+            cancel: None,
         };
 
-        self.is_exporting = true;
         self.status_is_error = false;
         self.status_text.clear();
 
@@ -198,8 +192,9 @@ impl ExportDialog {
         };
         queue.enqueue(job, project_dir);
         queue.start(state.clone());
-        self.is_exporting = false;
-        self.status_text = t!("レンダーキューに追加しました");
+        let pending = queue.pending_count();
+        self.active_queue = Some(queue);
+        self.status_text = format!("{}({pending}件待機中)", t!("レンダーキューに追加しました"));
     }
 
     pub fn show(&mut self, _ctx: &Context, ui: &mut Ui, state: &SharedAppState) {
@@ -208,6 +203,16 @@ impl ExportDialog {
         }
 
         let (progress_current, progress_total) = *self.progress.lock().unwrap();
+        let queue_running = self
+            .active_queue
+            .as_ref()
+            .map(|q| {
+                matches!(
+                    q.state(),
+                    crate::export::QueueState::Running | crate::export::QueueState::CancelRequested
+                )
+            })
+            .unwrap_or(false);
 
         let mut close_requested = false;
         egui::CentralPanel::default().show(ui, |ui| {
@@ -240,7 +245,7 @@ impl ExportDialog {
                     self.output_path.clone()
                 };
                 ui.label(display);
-                ui.add_enabled(!self.is_exporting, egui::Button::new(tr("選択...")))
+                ui.add_enabled(!queue_running, egui::Button::new(tr("選択...")))
                     .clicked()
                     .then(|| self.pick_output_path());
             });
@@ -293,7 +298,7 @@ impl ExportDialog {
                 });
             });
 
-            if self.is_exporting {
+            if queue_running {
                 ui.label(
                     t!("書き出し中: {progress_current} / {progress_total}")
                         .replace("{progress_current}", &progress_current.to_string())
@@ -318,22 +323,22 @@ impl ExportDialog {
 
             ui.separator();
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                let start_enabled = !self.is_exporting && !self.output_path.is_empty();
+                let start_enabled = !queue_running && !self.output_path.is_empty();
                 if ui
                     .add_enabled(start_enabled, egui::Button::new(tr("書き出し")))
                     .clicked()
                 {
                     self.start_export(state);
                 }
-                let close_label = if self.is_exporting {
+                let close_label = if queue_running {
                     t!("中止")
                 } else {
                     t!("閉じる")
                 };
                 if ui.button(close_label).clicked() {
-                    if self.is_exporting {
-                        if let Some(c) = &self.cancel {
-                            c.store(true, Ordering::Relaxed);
+                    if queue_running {
+                        if let Some(queue) = &self.active_queue {
+                            queue.cancel_current();
                         }
                     } else {
                         close_requested = true;

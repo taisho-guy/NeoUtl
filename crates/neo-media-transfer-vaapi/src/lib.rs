@@ -252,17 +252,17 @@ impl TransferBackend for VaapiTransferBackend {
                 )),
             };
             unsafe {
-                engine.convert(
+                engine.convert(vulkan::ConvertRequest {
                     src_image,
                     src_layout,
-                    dst_vk_image,
+                    dst_image: dst_vk_image,
                     width,
                     height,
-                    y_format,
-                    uv_format,
-                    dst_vk_format,
-                    color_tags_of(input),
-                )
+                    y_plane_format: y_format,
+                    uv_plane_format: uv_format,
+                    dst_format: dst_vk_format,
+                    color_tags: color_tags_of(input),
+                })
             }
         } else {
             unsafe {

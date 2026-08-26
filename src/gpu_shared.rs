@@ -1,4 +1,5 @@
 use egui_wgpu::wgpu;
+#[cfg(target_os = "linux")]
 use std::ffi::CStr;
 use std::sync::Arc;
 
@@ -23,6 +24,7 @@ pub fn locked_submit(
     queue.submit(buffers)
 }
 
+#[cfg(target_os = "linux")]
 const EXTRA_DEVICE_EXTENSIONS: &[&CStr] = &[
     c"VK_EXT_queue_family_foreign",
     c"VK_KHR_external_semaphore",

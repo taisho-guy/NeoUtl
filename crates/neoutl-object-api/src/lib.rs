@@ -1,5 +1,3 @@
-#![allow(non_camel_case_types)]
-
 pub use neoutl_shared_abi::{Dimensionality, ParamKind, ParamSchema, StrRef, WgslSource};
 
 #[repr(C)]

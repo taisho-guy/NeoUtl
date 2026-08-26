@@ -1,5 +1,3 @@
-#![allow(non_camel_case_types)]
-
 pub use neoutl_shared_abi::{ParamKind, StrRef, WgslSource};
 pub type EffectParamSchema = neoutl_shared_abi::ParamSchema;
 

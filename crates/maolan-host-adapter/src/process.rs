@@ -79,9 +79,21 @@ impl PluginProcess {
 
         let child = cmd.spawn().map_err(HostError::SpawnFailed)?;
 
-        let mut events = events;
         #[cfg(unix)]
-        events.close_daw_unused();
+        let events = {
+            #[cfg(unix)]
+            {
+                let mut events = events;
+                events.close_daw_unused();
+                events
+            }
+            #[cfg(not(unix))]
+            {
+                events
+            }
+        };
+        #[cfg(not(unix))]
+        let events = events;
 
         let header = unsafe { protocol::header_ref(shm.as_ptr()) };
         if !protocol::wait_for_ready(header, READY_TIMEOUT) {

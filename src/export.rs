@@ -145,8 +145,6 @@ pub fn save_export_presets(presets: &[ExportPreset]) -> Result<(), String> {
 pub enum QueueState {
     Idle,
     Running,
-    #[allow(dead_code)]
-    Paused,
     CancelRequested,
     Completed,
 }
@@ -156,7 +154,6 @@ pub struct QueuedJob {
     pub project_dir: PathBuf,
     pub id: u64,
 }
-#[allow(dead_code)]
 pub struct JobHandle {
     pub id: u64,
     pub cancel: Arc<std::sync::atomic::AtomicBool>,
@@ -174,7 +171,6 @@ pub struct RenderQueue {
     inner: Arc<Mutex<QueueInner>>,
 }
 
-#[allow(dead_code)]
 impl RenderQueue {
     pub fn new() -> Self {
         Self {
@@ -208,6 +204,7 @@ impl RenderQueue {
     pub fn cancel_current(&self) {
         let mut q = self.inner.lock().unwrap();
         if let Some(h) = &q.current {
+            eprintln!("[NeoUtl][export] キャンセル要求 job_id={}", h.id);
             h.cancel.store(true, std::sync::atomic::Ordering::Relaxed);
             q.state = QueueState::CancelRequested;
         }

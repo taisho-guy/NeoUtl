@@ -19,10 +19,8 @@ struct RingEntry {
 }
 
 pub struct SurfaceCache {
-    #[allow(dead_code)]
-    d3d11_device: ID3D11Device,
-    #[allow(dead_code)]
-    d3d12_device: ID3D12Device,
+    _d3d11_device: ID3D11Device,
+    _d3d12_device: ID3D12Device,
     ctx4: ID3D11DeviceContext4,
     fence: CrossApiFence,
     format: DXGI_FORMAT,
@@ -53,8 +51,8 @@ impl SurfaceCache {
             )?);
         }
         Ok(Self {
-            d3d11_device,
-            d3d12_device,
+            _d3d11_device: d3d11_device,
+            _d3d12_device: d3d12_device,
             ctx4,
             fence,
             format,
@@ -144,12 +142,10 @@ impl SurfaceCache {
         }
     }
 
-    #[allow(dead_code)]
     pub fn format(&self) -> DXGI_FORMAT {
         self.format
     }
 
-    #[allow(dead_code)]
     pub fn size(&self) -> (u32, u32) {
         (self.width, self.height)
     }
