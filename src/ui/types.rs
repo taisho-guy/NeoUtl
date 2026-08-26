@@ -46,7 +46,6 @@ pub struct ContextMenuItem {
     pub action: i32,
     pub kind: i32,
     pub enabled: bool,
-    #[allow(dead_code)]
     pub icon: String,
     pub checked: Option<bool>,
     pub submenu: Vec<ContextMenuItem>,

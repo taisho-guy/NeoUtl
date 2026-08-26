@@ -11,6 +11,24 @@ use std::rc::Rc;
 const MENU_WIDTH: f32 = 220.0;
 const ROW_HEIGHT: f32 = 24.0;
 
+fn icon_glyph(icon: &str) -> &'static str {
+    match icon {
+        "scissors" => "\u{2702}",
+        "copy" => "\u{2398}",
+        "paste" => "\u{2399}",
+        "trash" => "\u{1F5D1}",
+        "copy-plus" => "\u{29FA}",
+        "circle-plus" => "\u{2295}",
+        "mouse-pointer-click" => "\u{1F5B1}",
+        "list" => "\u{2261}",
+        "grid" => "\u{25A6}",
+        "audio-lines" => "\u{1F50A}",
+        "eye" => "\u{1F441}",
+        "lock" => "\u{1F512}",
+        _ => "\u{25CF}",
+    }
+}
+
 pub(super) fn menu_row(
     ui: &mut egui::Ui,
     item: &ContextMenuItem,
@@ -46,10 +64,22 @@ pub(super) fn menu_row(
                 );
             }
         }
-        let label_x = if item.checked.is_some() {
+        let icon_x = if item.checked.is_some() {
             check_x + 16.0
         } else {
             rect.min.x + 10.0
+        };
+        let label_x = if item.icon.is_empty() {
+            icon_x
+        } else {
+            ui.painter().text(
+                egui::pos2(icon_x, rect.center().y),
+                egui::Align2::LEFT_CENTER,
+                icon_glyph(&item.icon),
+                egui::FontId::proportional(12.0),
+                text_color.gamma_multiply(0.75),
+            );
+            icon_x + 18.0
         };
         ui.painter().text(
             egui::pos2(label_x, rect.center().y),

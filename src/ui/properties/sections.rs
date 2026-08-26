@@ -10,23 +10,38 @@ use crate::ecs::object_schema::{
 use crate::localization::effect_param_label;
 use neoutl_shared_abi::ParamKind;
 
-#[allow(clippy::too_many_arguments)]
-pub(super) fn float_row(
+pub(super) struct FloatRowCtx<'a, S: std::hash::Hash + Copy + std::fmt::Debug> {
+    pub id_source: S,
+    pub target: super::easing_editor::TrackTarget,
+    pub label: &'a str,
+    pub min: f32,
+    pub max: f32,
+    pub clip_start: i32,
+    pub clip_end: i32,
+    pub current_frame: i32,
+    pub base_value: f32,
+    pub track: &'a [crate::ecs::types::Keyframe],
+}
+
+pub(super) fn float_row<S: std::hash::Hash + Copy + std::fmt::Debug>(
     ui: &mut egui::Ui,
     world: &mut EcsWorld,
-    id_source: impl std::hash::Hash + Copy + std::fmt::Debug,
-    target: super::easing_editor::TrackTarget,
-    label: &str,
-    min: f32,
-    max: f32,
-    clip_start: i32,
-    clip_end: i32,
-    current_frame: i32,
-    base_value: f32,
-    track: &[crate::ecs::types::Keyframe],
+    ctx: FloatRowCtx<S>,
     mut set_kf: impl FnMut(&mut EcsWorld, i32, f32, String, Vec<u8>),
     mut remove_kf: impl FnMut(&mut EcsWorld, i32),
 ) {
+    let FloatRowCtx {
+        id_source,
+        target,
+        label,
+        min,
+        max,
+        clip_start,
+        clip_end,
+        current_frame,
+        base_value,
+        track,
+    } = ctx;
     let segment = resolve_segment(track, clip_start, clip_end, current_frame, base_value);
     let outcome = property_row(ui, id_source, label, segment, min, max);
     if outcome.label_clicked {
@@ -105,19 +120,21 @@ pub fn transform_section(ui: &mut egui::Ui, world: &mut EcsWorld, id: usize) {
                 float_row(
                     ui,
                     world,
-                    (id, "transform", schema.key),
-                    super::easing_editor::TrackTarget::Object {
-                        object_id: id,
-                        key: schema.key.to_string(),
+                    FloatRowCtx {
+                        id_source: (id, "transform", schema.key),
+                        target: super::easing_editor::TrackTarget::Object {
+                            object_id: id,
+                            key: schema.key.to_string(),
+                        },
+                        label: schema.label,
+                        min,
+                        max,
+                        clip_start,
+                        clip_end,
+                        current_frame,
+                        base_value: value,
+                        track: &track,
                     },
-                    schema.label,
-                    min,
-                    max,
-                    clip_start,
-                    clip_end,
-                    current_frame,
-                    value,
-                    &track,
                     |w, f, v, e, p| w.set_keyframe(id, schema.key, f, v, e, p),
                     |w, f| w.remove_keyframe(id, schema.key, f),
                 );
@@ -154,19 +171,21 @@ pub fn text_section(ui: &mut egui::Ui, world: &mut EcsWorld, id: usize) {
                 float_row(
                     ui,
                     world,
-                    (id, "text", schema.key),
-                    super::easing_editor::TrackTarget::Object {
-                        object_id: id,
-                        key: schema.key.to_string(),
+                    FloatRowCtx {
+                        id_source: (id, "text", schema.key),
+                        target: super::easing_editor::TrackTarget::Object {
+                            object_id: id,
+                            key: schema.key.to_string(),
+                        },
+                        label: schema.label,
+                        min,
+                        max,
+                        clip_start,
+                        clip_end,
+                        current_frame,
+                        base_value: value,
+                        track: &track,
                     },
-                    schema.label,
-                    min,
-                    max,
-                    clip_start,
-                    clip_end,
-                    current_frame,
-                    value,
-                    &track,
                     |w, f, v, e, p| w.set_keyframe(id, schema.key, f, v, e, p),
                     |w, f| w.remove_keyframe(id, schema.key, f),
                 );
@@ -191,19 +210,21 @@ pub fn shape_section(ui: &mut egui::Ui, world: &mut EcsWorld, id: usize) {
         float_row(
             ui,
             world,
-            (id, "shape", schema.key),
-            super::easing_editor::TrackTarget::Object {
-                object_id: id,
-                key: schema.key.to_string(),
+            FloatRowCtx {
+                id_source: (id, "shape", schema.key),
+                target: super::easing_editor::TrackTarget::Object {
+                    object_id: id,
+                    key: schema.key.to_string(),
+                },
+                label: schema.label,
+                min,
+                max,
+                clip_start,
+                clip_end,
+                current_frame,
+                base_value: value,
+                track: &track,
             },
-            schema.label,
-            min,
-            max,
-            clip_start,
-            clip_end,
-            current_frame,
-            value,
-            &track,
             |w, f, v, e, p| w.set_keyframe(id, schema.key, f, v, e, p),
             |w, f| w.remove_keyframe(id, schema.key, f),
         );

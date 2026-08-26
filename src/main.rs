@@ -32,8 +32,8 @@ mod splash;
 mod theme;
 mod ui;
 mod update;
+#[cfg(any(target_os = "macos", target_os = "windows"))]
 fn default_gst_plugin_dir() -> Option<std::path::PathBuf> {
-    #[allow(unused_variables)]
     let exe_dir = std::env::current_exe().ok()?.parent()?.to_path_buf();
     #[cfg(target_os = "macos")]
     {
@@ -45,10 +45,10 @@ fn default_gst_plugin_dir() -> Option<std::path::PathBuf> {
         let dir = exe_dir.join("lib/gstreamer-1.0");
         return dir.is_dir().then_some(dir);
     }
-    #[cfg(target_os = "linux")]
-    {
-        None
-    }
+}
+#[cfg(target_os = "linux")]
+fn default_gst_plugin_dir() -> Option<std::path::PathBuf> {
+    None
 }
 fn gst_registry_cache_path() -> Option<std::path::PathBuf> {
     let exe_dir = std::env::current_exe().ok()?.parent()?.to_path_buf();

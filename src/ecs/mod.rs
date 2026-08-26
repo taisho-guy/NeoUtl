@@ -283,7 +283,7 @@ impl EcsWorld {
             .run(|targets: View<ClipTarget>| targets.get(entity).copied().unwrap_or_default())
     }
 
-    #[allow(dead_code)]
+    #[cfg(test)]
     pub fn set_layer(&mut self, object_id: usize, layer: i32) {
         let Some(entity) = self.find_entity(object_id) else {
             return;
@@ -295,7 +295,7 @@ impl EcsWorld {
         });
     }
 
-    #[allow(dead_code)]
+    #[cfg(test)]
     pub fn set_transform_param(&mut self, object_id: usize, key: &str, value: f32) {
         let Some(entity) = self.find_entity(object_id) else {
             return;
@@ -310,20 +310,6 @@ impl EcsWorld {
                 }
             },
         );
-    }
-
-    #[allow(dead_code)]
-    pub fn max_group_chain_depth(&self) -> i32 {
-        self.world
-            .run(|s: UniqueView<SystemSettingsResource>| s.max_group_chain_depth)
-    }
-
-    #[allow(dead_code)]
-    pub fn set_max_group_chain_depth(&mut self, depth: i32) {
-        self.world
-            .run(|mut s: UniqueViewMut<SystemSettingsResource>| {
-                s.max_group_chain_depth = depth.max(1);
-            });
     }
 
     pub fn delete_object(&mut self, id: usize) {

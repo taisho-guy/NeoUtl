@@ -199,24 +199,6 @@ impl AudioMixer {
         }
     }
 
-    #[allow(dead_code)]
-    pub fn render_frame_offline(
-        &mut self,
-        world: &EcsWorld,
-        current_frame: i32,
-        sample_count: usize,
-    ) -> Vec<f32> {
-        let now = Instant::now();
-        let mut master = vec![0.0f32; sample_count * self.channels as usize];
-        for entity in get_active_audio_system(world, current_frame) {
-            if entity.audio.mute {
-                continue;
-            }
-            self.mix_entity(&entity, now, 1.0, &mut master, sample_count);
-        }
-        master
-    }
-
     fn handle_plugin_failure(&self, spec: &str, err: &HostError) {
         handle_plugin_failure_impl(spec, err);
     }

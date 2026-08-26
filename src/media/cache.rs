@@ -590,26 +590,6 @@ impl MediaCache {
         }
     }
 
-    #[allow(dead_code)]
-    pub fn total_frames(&self, path: &Path) -> Result<i64, String> {
-        let entry = self.entry_existing(path).ok_or_else(|| {
-            t!(
-                "メディアがまだロードされていません: %{arg0}",
-                arg0 = format!("{}", path.display())
-            )
-            .to_string()
-        })?;
-        let guard = entry.lock().unwrap();
-        match &*guard {
-            PathEntry::Video(video) => Ok(video.total_frames),
-            _ => Err(t!(
-                "映像フレーム総数が存在しません: %{arg0}",
-                arg0 = format!("{}", path.display())
-            )
-            .to_string()),
-        }
-    }
-
     pub fn audio(&self, path: &Path) -> Result<Arc<AudioBuffer>, String> {
         let entry = self.entry_existing(path).ok_or_else(|| {
             t!(

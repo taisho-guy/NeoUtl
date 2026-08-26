@@ -277,20 +277,22 @@ pub fn effects_section(
                             float_row(
                                 ui,
                                 world,
-                                (id, index, &s.key),
-                                super::easing_editor::TrackTarget::Effect {
-                                    object_id: id,
-                                    effect_index: index,
-                                    key: s.key.clone(),
+                                super::sections::FloatRowCtx {
+                                    id_source: (id, index, &s.key),
+                                    target: super::easing_editor::TrackTarget::Effect {
+                                        object_id: id,
+                                        effect_index: index,
+                                        key: s.key.clone(),
+                                    },
+                                    label: &s.label,
+                                    min,
+                                    max,
+                                    clip_start,
+                                    clip_end,
+                                    current_frame,
+                                    base_value: base,
+                                    track: &track,
                                 },
-                                &s.label,
-                                min,
-                                max,
-                                clip_start,
-                                clip_end,
-                                current_frame,
-                                base,
-                                &track,
                                 move |w, f, v, e, p| {
                                     w.set_effect_keyframe(id, index, &key_set, f, v, e, p)
                                 },

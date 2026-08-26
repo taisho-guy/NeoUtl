@@ -212,8 +212,6 @@ pub struct DecodeWorker {
     signal: Arc<(Mutex<bool>, Condvar)>,
     store: Arc<Mutex<TextureStore>>,
     last_error: Arc<Mutex<Option<String>>>,
-    #[allow(dead_code)]
-    exact_queue: Arc<Mutex<VecDeque<i64>>>,
 
     task: Option<tokio::task::JoinHandle<()>>,
     worker_thread_id: Arc<Mutex<Option<ThreadId>>>,
@@ -386,7 +384,6 @@ impl DecodeWorker {
             signal,
             store,
             last_error,
-            exact_queue,
             task: Some(task),
             worker_thread_id,
         }
@@ -394,14 +391,6 @@ impl DecodeWorker {
 
     pub fn request(&self, frame_index: i64) {
         self.requested.store(frame_index, Ordering::Release);
-        let (lock, cvar) = &*self.signal;
-        *lock.lock().unwrap() = true;
-        cvar.notify_one();
-    }
-
-    #[allow(dead_code)]
-    pub fn request_exact(&self, frame_index: i64) {
-        self.exact_queue.lock().unwrap().push_back(frame_index);
         let (lock, cvar) = &*self.signal;
         *lock.lock().unwrap() = true;
         cvar.notify_one();
