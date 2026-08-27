@@ -639,12 +639,15 @@ impl ApplicationHandler<AppWakeEvent> for EguiMainWindow {
                 .sync_preview_requests(&p.state, &p.panel);
         }
         self.sync_dialog_windows(event_loop);
-        let mut any_visible = false;
-        for native in self.windows.values() {
-            if native.window.is_visible().unwrap_or(true) {
-                any_visible = true;
-                native.window.request_redraw();
-            }
+        let visible_ids: Vec<WindowId> = self
+            .windows
+            .iter()
+            .filter(|(_, native)| native.window.is_visible().unwrap_or(true))
+            .map(|(id, _)| *id)
+            .collect();
+        let any_visible = !visible_ids.is_empty();
+        for id in visible_ids {
+            self.redraw(id);
         }
         if any_visible {
             let _ = self.wake_proxy.send_event(AppWakeEvent::ContinueLoop);
