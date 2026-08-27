@@ -116,9 +116,12 @@ maolan-host-adapter.workspace = true
 [build-dependencies]
 neoutl-object-shader-build.workspace = true
 
-[target.'cfg(any(target_os = "linux", target_os = "windows"))'.dependencies]
+[target.'cfg(target_os = "linux")'.dependencies]
 ash = "0.38"
 wgpu-hal = { version = "30", features = ["vulkan"] }
+
+[target.'cfg(target_os = "windows")'.dependencies]
+wgpu-hal = { version = "30", features = ["dx12"] }
 
 [profile.release]
 opt-level = 3

@@ -13,10 +13,15 @@ use std::rc::Rc;
 use std::sync::Arc;
 use winit::application::ApplicationHandler;
 use winit::event::WindowEvent;
-use winit::event_loop::{ActiveEventLoop, EventLoop};
+use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop, EventLoopProxy};
 use winit::window::{Window, WindowId};
 
 const SURFACE_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Bgra8Unorm;
+
+#[derive(Debug)]
+enum AppWakeEvent {
+    ContinueLoop,
+}
 
 pub struct RegisteredPreview {
     pub panel: Rc<RefCell<PreviewPanel>>,
@@ -322,10 +327,16 @@ pub struct EguiMainWindow {
     project_windows_created: bool,
     init_rx: std::sync::mpsc::Receiver<()>,
     init_done: bool,
+    wake_proxy: EventLoopProxy<AppWakeEvent>,
 }
 
 impl EguiMainWindow {
-    fn new(gpu: Rc<SharedGpu>, slot: PreviewSlot, init_rx: std::sync::mpsc::Receiver<()>) -> Self {
+    fn new(
+        gpu: Rc<SharedGpu>,
+        slot: PreviewSlot,
+        init_rx: std::sync::mpsc::Receiver<()>,
+        wake_proxy: EventLoopProxy<AppWakeEvent>,
+    ) -> Self {
         Self {
             gpu,
             slot,
@@ -334,6 +345,7 @@ impl EguiMainWindow {
             project_windows_created: false,
             init_rx,
             init_done: false,
+            wake_proxy,
         }
     }
 
@@ -561,7 +573,7 @@ impl EguiMainWindow {
     }
 }
 
-impl ApplicationHandler for EguiMainWindow {
+impl ApplicationHandler<AppWakeEvent> for EguiMainWindow {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         if self.windows.is_empty() {
             let (w, h) = crate::splash::WINDOW_SIZE;
@@ -627,12 +639,20 @@ impl ApplicationHandler for EguiMainWindow {
                 .sync_preview_requests(&p.state, &p.panel);
         }
         self.sync_dialog_windows(event_loop);
+        let mut any_visible = false;
         for native in self.windows.values() {
             if native.window.is_visible().unwrap_or(true) {
+                any_visible = true;
                 native.window.request_redraw();
             }
         }
+        if any_visible {
+            let _ = self.wake_proxy.send_event(AppWakeEvent::ContinueLoop);
+        }
+        event_loop.set_control_flow(ControlFlow::Wait);
     }
+
+    fn user_event(&mut self, _event_loop: &ActiveEventLoop, _event: AppWakeEvent) {}
 }
 
 pub fn run(
@@ -640,8 +660,10 @@ pub fn run(
     slot: PreviewSlot,
     init_rx: std::sync::mpsc::Receiver<()>,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let event_loop = EventLoop::new()?;
-    let mut app = EguiMainWindow::new(gpu, slot, init_rx);
+    let event_loop = EventLoop::<AppWakeEvent>::with_user_event().build()?;
+    event_loop.set_control_flow(ControlFlow::Wait);
+    let wake_proxy = event_loop.create_proxy();
+    let mut app = EguiMainWindow::new(gpu, slot, init_rx, wake_proxy);
     event_loop.run_app(&mut app)?;
     Ok(())
 }

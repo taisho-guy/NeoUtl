@@ -1,4 +1,5 @@
 use egui_wgpu::wgpu;
+#[cfg(target_os = "linux")]
 use std::ffi::CStr;
 use std::sync::Arc;
 
@@ -28,22 +29,9 @@ const EXTRA_DEVICE_EXTENSIONS: &[&CStr] = &[
     c"VK_EXT_queue_family_foreign",
     c"VK_KHR_external_semaphore",
     c"VK_KHR_external_semaphore_fd",
-    c"VK_EXT_memory_budget",
 ];
 
-#[cfg(target_os = "windows")]
-const EXTRA_DEVICE_EXTENSIONS: &[&CStr] = &[
-    c"VK_KHR_external_memory",
-    c"VK_KHR_external_memory_win32",
-    c"VK_KHR_external_semaphore",
-    c"VK_KHR_external_semaphore_win32",
-    c"VK_KHR_dedicated_allocation",
-    c"VK_KHR_get_memory_requirements2",
-    c"VK_KHR_sampler_ycbcr_conversion",
-    c"VK_EXT_memory_budget",
-];
-
-#[cfg(any(target_os = "linux", target_os = "windows"))]
+#[cfg(target_os = "linux")]
 fn find_graphics_compute_queue_family(
     instance: &ash::Instance,
     physical_device: ash::vk::PhysicalDevice,
@@ -58,11 +46,10 @@ fn find_graphics_compute_queue_family(
         .ok_or_else(|| "GRAPHICS+COMPUTE対応キューファミリーが見つからない".to_owned())
 }
 
-#[cfg(any(target_os = "linux", target_os = "windows"))]
+#[cfg(target_os = "linux")]
 fn filter_supported_extra_extensions(
     instance: &ash::Instance,
     physical_device: ash::vk::PhysicalDevice,
-    already_required: &[&CStr],
 ) -> Result<Vec<&'static CStr>, String> {
     let supported = unsafe {
         instance
@@ -76,9 +63,8 @@ fn filter_supported_extra_extensions(
     let mut result = Vec::new();
     for ext in EXTRA_DEVICE_EXTENSIONS {
         let found = supported_names.iter().any(|s| *s == *ext);
-        let duplicate = already_required.iter().any(|s| *s == *ext);
-        eprintln!("[gpu_shared][vulkan] 拡張確認 name={ext:?} 対応={found} 重複={duplicate}");
-        if found && !duplicate {
+        eprintln!("[gpu_shared][vulkan] 拡張確認 name={ext:?} 対応={found}");
+        if found {
             result.push(*ext);
         }
     }
@@ -86,7 +72,7 @@ fn filter_supported_extra_extensions(
 }
 
 pub fn init_shared_gpu() -> Result<SharedGpu, Box<dyn std::error::Error>> {
-    #[cfg(any(target_os = "linux", target_os = "windows"))]
+    #[cfg(target_os = "linux")]
     {
         let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
             backends: wgpu::Backends::VULKAN,
@@ -106,17 +92,13 @@ pub fn init_shared_gpu() -> Result<SharedGpu, Box<dyn std::error::Error>> {
             .map_err(|_| "Vulkanアダプタ取得失敗")?;
 
         let adapter_features = wgpu_adapter.features();
-        #[cfg(target_os = "linux")]
         let dma_buf_supported =
             adapter_features.contains(wgpu::Features::VULKAN_EXTERNAL_MEMORY_DMA_BUF);
         let planar_video_format_supported =
             adapter_features.contains(wgpu::Features::TEXTURE_FORMAT_NV12);
-        #[cfg(target_os = "linux")]
         eprintln!("[gpu_shared] VULKAN_EXTERNAL_MEMORY_DMA_BUFサポート={dma_buf_supported}");
         eprintln!("[gpu_shared] TEXTURE_FORMAT_NV12サポート={planar_video_format_supported}");
-
         let mut wgpu_features = wgpu::Features::empty();
-        #[cfg(target_os = "linux")]
         if dma_buf_supported {
             wgpu_features |= wgpu::Features::VULKAN_EXTERNAL_MEMORY_DMA_BUF;
         }
@@ -134,11 +116,7 @@ pub fn init_shared_gpu() -> Result<SharedGpu, Box<dyn std::error::Error>> {
             let raw_instance = shared_instance.raw_instance();
 
             let mut required_extensions = hal_adapter.required_device_extensions(wgpu_features);
-            let extra = filter_supported_extra_extensions(
-                raw_instance,
-                raw_physical_device,
-                &required_extensions,
-            )?;
+            let extra = filter_supported_extra_extensions(raw_instance, raw_physical_device)?;
             required_extensions.extend(extra);
             let required_extensions_ptrs: Vec<*const std::os::raw::c_char> =
                 required_extensions.iter().map(|e| e.as_ptr()).collect();
@@ -209,9 +187,12 @@ pub fn init_shared_gpu() -> Result<SharedGpu, Box<dyn std::error::Error>> {
         });
     }
 
-    #[cfg(target_os = "macos")]
+    #[cfg(not(target_os = "linux"))]
     {
+        #[cfg(target_os = "macos")]
         let backends = wgpu::Backends::METAL;
+        #[cfg(target_os = "windows")]
+        let backends = wgpu::Backends::DX12;
 
         let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
             backends,
@@ -230,7 +211,10 @@ pub fn init_shared_gpu() -> Result<SharedGpu, Box<dyn std::error::Error>> {
 
         let mut limits = wgpu::Limits::default();
         limits.max_storage_buffers_per_shader_stage = 1;
+        #[cfg(target_os = "macos")]
         let required_features = wgpu::Features::TEXTURE_FORMAT_NV12;
+        #[cfg(target_os = "windows")]
+        let required_features = wgpu::Features::empty();
 
         let (device, queue) =
             pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor {
