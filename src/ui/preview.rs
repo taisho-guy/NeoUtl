@@ -5,59 +5,13 @@ use crate::renderer::RenderEngine;
 use crate::shortcuts::{self, CommandId, Scope};
 use crate::ui::dialogs::DialogSet;
 use crate::ui::timeline::util::egui_key_name;
-use egui_dock::{
-    AllowedSplits, DockArea, DockState, NodeIndex, Style, SurfaceIndex, TabIndex, TabViewer,
-};
 use egui_wgpu::Renderer as EguiRenderer;
 use egui_wgpu::wgpu;
+use elegance::{BrowserTab, BrowserTabs, BrowserTabsEvent};
 use std::cell::RefCell;
 use std::rc::Rc;
 use std::sync::Arc;
 use std::time::Instant;
-
-#[derive(Clone)]
-struct SessionTab {
-    index: usize,
-    name: String,
-}
-
-struct SessionTabViewer<'a> {
-    switch_target: &'a mut Option<usize>,
-    close_target: &'a mut Option<usize>,
-    closable: bool,
-}
-
-impl<'a> TabViewer for SessionTabViewer<'a> {
-    type Tab = SessionTab;
-
-    fn id(&mut self, tab: &mut Self::Tab) -> egui::Id {
-        egui::Id::new("session-tab").with(tab.index)
-    }
-
-    fn title(&mut self, tab: &mut Self::Tab) -> egui::WidgetText {
-        (&tab.name).into()
-    }
-
-    fn ui(&mut self, _ui: &mut egui::Ui, _tab: &mut Self::Tab) {}
-
-    fn on_tab_button(&mut self, tab: &mut Self::Tab, response: &egui::Response) {
-        if response.clicked() {
-            *self.switch_target = Some(tab.index);
-        }
-        if response.secondary_clicked() && self.closable {
-            *self.close_target = Some(tab.index);
-        }
-    }
-
-    fn closeable(&mut self, _tab: &mut Self::Tab) -> bool {
-        self.closable
-    }
-
-    fn on_close(&mut self, tab: &mut Self::Tab) -> egui_dock::widgets::tab_viewer::OnCloseResponse {
-        *self.close_target = Some(tab.index);
-        egui_dock::widgets::tab_viewer::OnCloseResponse::Ignore
-    }
-}
 
 pub struct LegacyWindows {}
 
@@ -321,50 +275,38 @@ impl PreviewPanel {
         state: &SharedAppState,
         dialogs: &Rc<RefCell<DialogSet>>,
     ) {
-        let (tabs, active_index) = {
+        let (names, active_index) = {
             let s = state.lock().unwrap();
-            let tabs: Vec<SessionTab> = s
+            let names: Vec<String> = s
                 .sessions
                 .iter()
-                .enumerate()
-                .map(|(i, sess)| SessionTab {
-                    index: i,
-                    name: sess.meta.name.clone(),
-                })
+                .map(|sess| sess.meta.name.clone())
                 .collect();
-            (tabs, s.active)
+            (names, s.active)
         };
-        let closable = tabs.len() > 1;
+        let closable = names.len() > 1;
 
-        let mut dock_state = DockState::new(tabs);
-        let _ = dock_state.set_active_tab(egui_dock::TabPath::new(
-            SurfaceIndex::main(),
-            NodeIndex::root(),
-            TabIndex(active_index),
-        ));
+        let mut tabs = BrowserTabs::new("session-tabs").show_new_button(false);
+        for (index, name) in names.iter().enumerate() {
+            tabs = tabs.with_tab(BrowserTab::new(index.to_string(), name.clone()));
+        }
+        tabs.set_selected(active_index.to_string());
+
+        tabs.show(ui);
 
         let mut switch_target: Option<usize> = None;
         let mut close_target: Option<usize> = None;
-        let mut viewer = SessionTabViewer {
-            switch_target: &mut switch_target,
-            close_target: &mut close_target,
-            closable,
-        };
-
-        ui.allocate_ui_with_layout(
-            egui::Vec2::new(ui.available_width(), 28.0),
-            egui::Layout::top_down(egui::Align::Min),
-            |ui| {
-                DockArea::new(&mut dock_state)
-                    .id(egui::Id::new("session-tabs"))
-                    .style(Style::from_egui(ui.style().as_ref()))
-                    .show_add_buttons(false)
-                    .show_close_buttons(closable)
-                    .draggable_tabs(false)
-                    .allowed_splits(AllowedSplits::None)
-                    .show_inside(ui, &mut viewer);
-            },
-        );
+        for event in tabs.take_events() {
+            match event {
+                BrowserTabsEvent::Activated(id) => switch_target = id.parse().ok(),
+                BrowserTabsEvent::Closed(id) => {
+                    if closable {
+                        close_target = id.parse().ok();
+                    }
+                }
+                BrowserTabsEvent::NewRequested => {}
+            }
+        }
 
         if let Some(i) = switch_target {
             {

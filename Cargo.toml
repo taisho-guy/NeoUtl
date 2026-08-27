@@ -107,7 +107,6 @@ egui-elegance = "0.16"
 rust-i18n = "4"
 ureq = { version = "3", features = ["json", "_tls"] }
 zip = "8"
-egui_dock = "0.21"
 egui-system-fonts = "0.36"
 cxx = "1"
 maolan-host-adapter.workspace = true

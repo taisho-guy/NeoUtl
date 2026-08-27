@@ -16,7 +16,6 @@ dependencies = [
  "egui-wgpu",
  "egui-winit",
  "egui_code_editor",
- "egui_dock",
  "egui_extras",
  "egui_material_icons",
  "egui_plot",
@@ -1233,17 +1232,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d8b14ccef22fc6f5a8f4d7d768562a182c04ce9a3b3157b91390b52ddfdf1a76"
 
 [[package]]
-name = "duplicate"
-version = "2.0.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8e92f10a49176cbffacaedabfaa11d51db1ea0f80a83c26e1873b43cd1742c24"
-dependencies = [
- "heck",
- "proc-macro2",
- "proc-macro2-diagnostics",
-]
-
-[[package]]
 name = "ecolor"
 version = "0.36.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1342,18 +1330,6 @@ checksum = "98493866b1b41f71c5be08ead53cfa8a86f7a799b1b5f65f02b239947fea6dc5"
 dependencies = [
  "egui",
  "opener",
-]
-
-[[package]]
-name = "egui_dock"
-version = "0.21.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2d9f668eb59ff0ab130c8bce71a513135e1d3017fb3103fb8758e9eea99d759f"
-dependencies = [
- "duplicate",
- "egui",
- "paste",
- "thiserror 2.0.20",
 ]
 
 [[package]]
@@ -4399,18 +4375,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "985e7ec9bb745e6ce6535b544d84d6cd6f7ad8bd711c398938ae983b91a766d9"
 dependencies = [
  "unicode-ident",
-]
-
-[[package]]
-name = "proc-macro2-diagnostics"
-version = "0.10.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "af066a9c399a26e020ada66a034357a868728e72cd426f3adcd35f80d88d88c8"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 2.0.119",
- "version_check",
 ]
 
 [[package]]
