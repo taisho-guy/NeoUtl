@@ -7,8 +7,8 @@ use windows::core::Interface;
 
 pub struct CrossApiFence {
     d3d11_fence: ID3D11Fence,
+    vk_device: ash::Device,
     vk_semaphore: vk::Semaphore,
-    external_semaphore_win32: ash::khr::external_semaphore_win32::Device,
     counter: AtomicU64,
 }
 
@@ -63,8 +63,8 @@ impl CrossApiFence {
 
             Ok(Self {
                 d3d11_fence,
+                vk_device: vk_device.clone(),
                 vk_semaphore,
-                external_semaphore_win32,
                 counter: AtomicU64::new(0),
             })
         }
@@ -82,11 +82,12 @@ impl CrossApiFence {
     pub fn vk_semaphore(&self) -> vk::Semaphore {
         self.vk_semaphore
     }
+}
 
-    pub unsafe fn destroy(&self, vk_device: &ash::Device) {
+impl Drop for CrossApiFence {
+    fn drop(&mut self) {
         unsafe {
-            vk_device.destroy_semaphore(self.vk_semaphore, None);
+            self.vk_device.destroy_semaphore(self.vk_semaphore, None);
         }
-        let _ = &self.external_semaphore_win32;
     }
 }

@@ -94,12 +94,11 @@ pub struct SemiPlanarConvertEngine {
 impl SemiPlanarConvertEngine {
     pub fn new(device: ash::Device, queue_family_index: u32) -> Result<Self, String> {
         unsafe {
-            let shader_info = vk::ShaderModuleCreateInfo::default().code(bytemuck::cast_slice(
-                &SEMI_PLANAR_TO_RGBA_SPV
-                    .chunks_exact(4)
-                    .map(|c| u32::from_le_bytes([c[0], c[1], c[2], c[3]]))
-                    .collect::<Vec<u32>>(),
-            ));
+            let spirv_words: Vec<u32> = SEMI_PLANAR_TO_RGBA_SPV
+                .chunks_exact(4)
+                .map(|c| u32::from_le_bytes([c[0], c[1], c[2], c[3]]))
+                .collect();
+            let shader_info = vk::ShaderModuleCreateInfo::default().code(&spirv_words);
             let shader_module = device
                 .create_shader_module(&shader_info, None)
                 .map_err(|e| format!("vkCreateShaderModule失敗: {e}"))?;

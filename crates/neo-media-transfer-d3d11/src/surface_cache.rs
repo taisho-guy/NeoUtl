@@ -34,15 +34,10 @@ pub struct SharedResource {
 }
 
 pub struct SurfaceCache {
-    d3d11_device: ID3D11Device,
     vk_device: ash::Device,
-    external_memory_win32: ash::khr::external_memory_win32::Device,
-    physical_device: vk::PhysicalDevice,
-    instance: ash::Instance,
     ctx4: ID3D11DeviceContext4,
     fence: CrossApiFence,
     format: DXGI_FORMAT,
-    vk_format: vk::Format,
     width: u32,
     height: u32,
     entries: Vec<RingEntry>,
@@ -77,15 +72,10 @@ impl SurfaceCache {
             )?);
         }
         Ok(Self {
-            d3d11_device,
             vk_device: handles.device.clone(),
-            external_memory_win32,
-            physical_device: handles.physical_device,
-            instance: handles.instance.clone(),
             ctx4,
             fence,
             format,
-            vk_format,
             width,
             height,
             entries,
@@ -154,10 +144,12 @@ impl SurfaceCache {
                 .create_image(&image_info, None)
                 .map_err(|e| format!("vkCreateImage失敗: {e}"))?;
 
-            let mem_props = external_memory_win32
-                .memory_win32_handle_properties(
+            let mut mem_props = vk::MemoryWin32HandlePropertiesKHR::default();
+            external_memory_win32
+                .get_memory_win32_handle_properties(
                     vk::ExternalMemoryHandleTypeFlags::D3D11_TEXTURE,
                     handle.0 as isize,
+                    &mut mem_props,
                 )
                 .map_err(|e| format!("vkGetMemoryWin32HandlePropertiesKHR失敗: {e}"))?;
 
@@ -199,10 +191,6 @@ impl SurfaceCache {
         self.format
     }
 
-    pub fn vk_format(&self) -> vk::Format {
-        self.vk_format
-    }
-
     pub fn size(&self) -> (u32, u32) {
         (self.width, self.height)
     }
@@ -238,16 +226,8 @@ impl SurfaceCache {
         }
     }
 
-    pub fn ctx4(&self) -> &ID3D11DeviceContext4 {
-        &self.ctx4
-    }
-
     pub fn fence(&self) -> &CrossApiFence {
         &self.fence
-    }
-
-    pub fn d3d11_device(&self) -> &ID3D11Device {
-        &self.d3d11_device
     }
 }
 
@@ -278,8 +258,5 @@ impl Drop for SurfaceCache {
                 self.vk_device.free_memory(entry.vk_memory, None);
             }
         }
-        let _ = &self.instance;
-        let _ = &self.physical_device;
-        let _ = &self.d3d11_device;
     }
 }
