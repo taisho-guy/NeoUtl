@@ -63,6 +63,7 @@ pub fn property_row(
     const ROW_HEIGHT: f32 = 22.0;
     const SLIDER_MIN_W: f32 = 60.0;
 
+    let button_text = effect_param_label(label);
     let spacing = ui.spacing().item_spacing.x;
     let fixed_w = BOX_W * 2.0 + BUTTON_W + spacing * 4.0;
     let slider_w = ((ui.available_width() - fixed_w) / 2.0).max(SLIDER_MIN_W);
@@ -95,7 +96,7 @@ pub fn property_row(
         if ui
             .add_sized(
                 [BUTTON_W, ROW_HEIGHT],
-                Button::new(effect_param_label(label)).size(ButtonSize::Small),
+                Button::new(button_text).size(ButtonSize::Small),
             )
             .clicked()
         {

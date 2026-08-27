@@ -206,60 +206,110 @@ impl PreviewPanel {
         let mut open_keybindings = false;
         let mut open_timeline = false;
         let mut open_properties = false;
-        MenuBar::new("preview_menu_bar").show(ui, |bar| {
-            bar.menu(t!("ファイル"), |ui| {
-                if ui.add(MenuItem::new(t!("新規プロジェクト"))).clicked() {
-                    let _ = app_state::new_project_session(state);
+        ui.horizontal(|ui| {
+            MenuBar::new("preview_menu_bar").show(ui, |bar| {
+                bar.menu(t!("ファイル"), |ui| {
+                    if ui.add(MenuItem::new(t!("新規プロジェクト"))).clicked() {
+                        let _ = app_state::new_project_session(state);
+                    }
+                    if ui.add(MenuItem::new(t!("プロジェクトを開く"))).clicked() {
+                        if let Some(dir) = rfd::FileDialog::new().pick_folder() {
+                            let _ = app_state::open_project_session(state, &dir);
+                        }
+                    }
+                    if ui.add(MenuItem::new(t!("上書き保存"))).clicked() {
+                        let _ = app_state::save_active(state);
+                    }
+                    if ui.add(MenuItem::new(t!("名前を付けて保存"))).clicked() {
+                        if let Some(dir) = rfd::FileDialog::new().pick_folder() {
+                            let world_holder = app_state::active_world(state);
+                            let doc = world_holder.lock().unwrap().to_document();
+                            let _ = crate::project::save_document(&dir, &doc);
+                        }
+                    }
+                    if ui.add(MenuItem::new(t!("メディアの書き出し"))).clicked() {
+                        open_export = true;
+                    }
+                    ui.separator();
+                    if ui.add(MenuItem::new(t!("終了"))).clicked() {
+                        app_state::save_all(state);
+                        std::process::exit(0);
+                    }
+                });
+                bar.menu(t!("編集"), |ui| {
+                    if ui.add(MenuItem::new(t!("元に戻す"))).clicked() {
+                        app_state::undo_active(state);
+                    }
+                    if ui.add(MenuItem::new(t!("やり直し"))).clicked() {
+                        app_state::redo_active(state);
+                    }
+                    ui.separator();
+                    if ui.add(MenuItem::new(t!("システム設定"))).clicked() {
+                        open_system_settings = true;
+                    }
+                    if ui.add(MenuItem::new(t!("プロジェクト設定"))).clicked() {
+                        open_project_settings = true;
+                    }
+                    if ui.add(MenuItem::new(t!("ショートカット設定"))).clicked() {
+                        open_keybindings = true;
+                    }
+                });
+                bar.menu(t!("表示"), |ui| {
+                    if ui.add(MenuItem::new(t!("拡張編集"))).clicked() {
+                        open_timeline = true;
+                    }
+                    if ui.add(MenuItem::new(t!("プロパティ"))).clicked() {
+                        open_properties = true;
+                    }
+                });
+            });
+
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                ui.add(
+                    egui::DragValue::new(&mut self.speed_percent)
+                        .range(
+                            crate::config::PLAYBACK_SPEED_MIN_PERCENT
+                                ..=crate::config::PLAYBACK_SPEED_MAX_PERCENT,
+                        )
+                        .suffix("%"),
+                );
+                ui.label(t!("速度"));
+
+                if ui
+                    .add_sized([28.0, 28.0], elegance::Button::new("⏭"))
+                    .clicked()
+                {
+                    self.apply_frame(self.current_frame + 1, state);
                 }
-                if ui.add(MenuItem::new(t!("プロジェクトを開く"))).clicked() {
-                    if let Some(dir) = rfd::FileDialog::new().pick_folder() {
-                        let _ = app_state::open_project_session(state, &dir);
+                let icon = if self.is_playing { "⏸" } else { "▶" };
+                if ui
+                    .add_sized([28.0, 28.0], elegance::Button::new(icon))
+                    .clicked()
+                {
+                    self.is_playing = !self.is_playing;
+                    let mixer = app_state::active_audio_mixer(state);
+                    if self.is_playing {
+                        self.playback_anchor = Some((Instant::now(), self.current_frame));
+                        mixer.lock().unwrap().play();
+                    } else {
+                        self.playback_anchor = None;
+                        mixer.lock().unwrap().pause();
                     }
                 }
-                if ui.add(MenuItem::new(t!("上書き保存"))).clicked() {
-                    let _ = app_state::save_active(state);
+                if ui
+                    .add_sized([28.0, 28.0], elegance::Button::new("⏮"))
+                    .clicked()
+                {
+                    self.apply_frame(self.current_frame - 1, state);
                 }
-                if ui.add(MenuItem::new(t!("名前を付けて保存"))).clicked() {
-                    if let Some(dir) = rfd::FileDialog::new().pick_folder() {
-                        let world_holder = app_state::active_world(state);
-                        let doc = world_holder.lock().unwrap().to_document();
-                        let _ = crate::project::save_document(&dir, &doc);
-                    }
-                }
-                if ui.add(MenuItem::new(t!("メディアの書き出し"))).clicked() {
-                    open_export = true;
-                }
-                ui.separator();
-                if ui.add(MenuItem::new(t!("終了"))).clicked() {
-                    app_state::save_all(state);
-                    std::process::exit(0);
-                }
-            });
-            bar.menu(t!("編集"), |ui| {
-                if ui.add(MenuItem::new(t!("元に戻す"))).clicked() {
-                    app_state::undo_active(state);
-                }
-                if ui.add(MenuItem::new(t!("やり直し"))).clicked() {
-                    app_state::redo_active(state);
-                }
-                ui.separator();
-                if ui.add(MenuItem::new(t!("システム設定"))).clicked() {
-                    open_system_settings = true;
-                }
-                if ui.add(MenuItem::new(t!("プロジェクト設定"))).clicked() {
-                    open_project_settings = true;
-                }
-                if ui.add(MenuItem::new(t!("ショートカット設定"))).clicked() {
-                    open_keybindings = true;
-                }
-            });
-            bar.menu(t!("表示"), |ui| {
-                if ui.add(MenuItem::new(t!("拡張編集"))).clicked() {
-                    open_timeline = true;
-                }
-                if ui.add(MenuItem::new(t!("プロパティ"))).clicked() {
-                    open_properties = true;
-                }
+
+                let digits = self.total_frames.max(1).to_string().len();
+                ui.monospace(format!(
+                    "{:0width$} / {}",
+                    self.current_frame,
+                    self.total_frames,
+                    width = digits
+                ));
             });
         });
         if open_export {
@@ -447,77 +497,17 @@ impl PreviewPanel {
     }
 
     fn playback_controls(&mut self, ui: &mut egui::Ui, state: &SharedAppState) {
-        ui.set_min_height(38.0);
-        ui.horizontal(|ui| {
-            let mut frame = self.current_frame;
-            let slider = ui.add_sized(
-                [ui.available_width() - 220.0, 20.0],
-                elegance::Slider::new(&mut frame, 0..=self.total_frames.max(1)).show_value(false),
-            );
-            if slider.changed() {
-                self.apply_frame(frame, state);
-                if self.is_playing {
-                    self.playback_anchor = Some((Instant::now(), self.current_frame));
-                }
+        let mut frame = self.current_frame;
+        let slider = ui.add_sized(
+            [ui.available_width(), 20.0],
+            elegance::Slider::new(&mut frame, 0..=self.total_frames.max(1)).show_value(false),
+        );
+        if slider.changed() {
+            self.apply_frame(frame, state);
+            if self.is_playing {
+                self.playback_anchor = Some((Instant::now(), self.current_frame));
             }
-
-            let digits = self.total_frames.max(1).to_string().len();
-            ui.monospace(format!(
-                "{:0width$} / {}",
-                self.current_frame,
-                self.total_frames,
-                width = digits
-            ));
-
-            if ui
-                .add_sized([32.0, 32.0], elegance::Button::new("⏮"))
-                .clicked()
-            {
-                self.apply_frame(self.current_frame - 1, state);
-            }
-            let icon = if self.is_playing { "⏸" } else { "▶" };
-            if ui
-                .add_sized([32.0, 32.0], elegance::Button::new(icon))
-                .clicked()
-            {
-                self.is_playing = !self.is_playing;
-                let mixer = app_state::active_audio_mixer(state);
-                if self.is_playing {
-                    self.playback_anchor = Some((Instant::now(), self.current_frame));
-                    mixer.lock().unwrap().play();
-                } else {
-                    self.playback_anchor = None;
-                    mixer.lock().unwrap().pause();
-                }
-            }
-            if ui
-                .add_sized([32.0, 32.0], elegance::Button::new("⏭"))
-                .clicked()
-            {
-                self.apply_frame(self.current_frame + 1, state);
-            }
-
-            ui.label(t!("速度"));
-            let mut speed = self.speed_percent as f32;
-            if ui
-                .add_sized(
-                    [80.0, 28.0],
-                    elegance::MetricSlider::new(
-                        &mut speed,
-                        crate::config::PLAYBACK_SPEED_MIN_PERCENT as f32
-                            ..=crate::config::PLAYBACK_SPEED_MAX_PERCENT as f32,
-                    )
-                    .step(1.0)
-                    .callout_fmt(|v| format!("{:.1}x", v / 100.0)),
-                )
-                .changed()
-            {
-                self.speed_percent = speed as i32;
-                if self.is_playing {
-                    self.playback_anchor = Some((Instant::now(), self.current_frame));
-                }
-            }
-        });
+        }
     }
 
     pub fn sync_active_session(&mut self, state: &SharedAppState) {
@@ -547,32 +537,29 @@ impl PreviewPanel {
 
         self.render_frame(egui_renderer, state);
 
-        const PLAYBACK_BAR_HEIGHT: f32 = 38.0;
-        let total_height = ui.available_height();
-        let image_height = (total_height - PLAYBACK_BAR_HEIGHT).max(0.0);
-
-        ui.allocate_ui(egui::vec2(ui.available_width(), image_height), |ui| {
-            if let Some(texture_id) = self.texture_id {
-                let (w, h) = self.texture_dims;
-                let aspect = w as f32 / h.max(1) as f32;
-                let avail = ui.available_size();
-                let size = if avail.x / avail.y > aspect {
-                    egui::vec2(avail.y * aspect, avail.y)
-                } else {
-                    egui::vec2(avail.x, avail.x / aspect)
-                };
-                ui.centered_and_justified(|ui| {
-                    ui.add(egui::Image::new((texture_id, size)).fit_to_exact_size(size));
-                });
-            }
-        });
-
-        ui.allocate_ui(
-            egui::vec2(ui.available_width(), PLAYBACK_BAR_HEIGHT),
-            |ui| {
+        egui::Panel::bottom("preview_playback_bar")
+            .frame(egui::Frame::default().inner_margin(egui::Margin::symmetric(6, 4)))
+            .show(ui, |ui| {
                 self.playback_controls(ui, state);
-            },
-        );
+            });
+
+        egui::CentralPanel::default()
+            .frame(egui::Frame::default())
+            .show(ui, |ui| {
+                if let Some(texture_id) = self.texture_id {
+                    let (w, h) = self.texture_dims;
+                    let aspect = w as f32 / h.max(1) as f32;
+                    let avail = ui.available_size();
+                    let size = if avail.x / avail.y > aspect {
+                        egui::vec2(avail.y * aspect, avail.y)
+                    } else {
+                        egui::vec2(avail.x, avail.x / aspect)
+                    };
+                    ui.centered_and_justified(|ui| {
+                        ui.add(egui::Image::new((texture_id, size)).fit_to_exact_size(size));
+                    });
+                }
+            });
 
         if self.is_playing {
             self.advance_playback(state);
