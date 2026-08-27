@@ -2,6 +2,7 @@ use crate::app_state::SharedAppState;
 use crate::export::{EncoderBackend, ExportCodec, ExportJob, ExportPreset};
 use crate::localization::tr;
 use egui::{Context, Ui};
+use elegance::{Button, ProgressBar, SegmentedControl, Slider, TextInput};
 use std::sync::{Arc, Mutex};
 
 pub struct ExportDialog {
@@ -223,19 +224,19 @@ impl ExportDialog {
                     .get(self.selected_preset.max(0) as usize)
                     .map(|p| p.name.clone())
                     .unwrap_or_else(|| t!("(未選択)"));
-                if ui.button(&current).clicked() && !self.presets.is_empty() {
+                if ui.add(Button::new(&current)).clicked() && !self.presets.is_empty() {
                     let next = (self.selected_preset + 1).rem_euclid(self.presets.len() as i32);
                     self.selected_preset = next;
                     self.apply_preset(next as usize);
                 }
-                if ui.button(t!("保存")).clicked() {
+                if ui.add(Button::new(t!("保存"))).clicked() {
                     self.save_preset();
                 }
-                ui.add_enabled(self.selected_preset >= 0, egui::Button::new(tr("削除")))
+                ui.add_enabled(self.selected_preset >= 0, Button::new(tr("削除")))
                     .clicked()
                     .then(|| self.delete_preset());
             });
-            ui.text_edit_singleline(&mut self.preset_name);
+            ui.add(TextInput::new(&mut self.preset_name));
 
             ui.label(t!("出力ファイル"));
             ui.horizontal(|ui| {
@@ -245,40 +246,58 @@ impl ExportDialog {
                     self.output_path.clone()
                 };
                 ui.label(display);
-                ui.add_enabled(!queue_running, egui::Button::new(tr("選択...")))
+                ui.add_enabled(!queue_running, Button::new(tr("選択...")))
                     .clicked()
                     .then(|| self.pick_output_path());
             });
 
             ui.label(t!("映像コーデック"));
-            ui.horizontal(|ui| {
-                ui.selectable_value(&mut self.codec, 0, "H.264");
-                ui.selectable_value(&mut self.codec, 1, "H.265");
-            });
+            {
+                let mut codec_idx = self.codec.max(0) as usize;
+                if ui
+                    .add(SegmentedControl::new(&mut codec_idx, ["H.264", "H.265"]))
+                    .changed()
+                {
+                    self.codec = codec_idx as i32;
+                }
+            }
 
             ui.label(t!("エンコーダー"));
-            ui.horizontal(|ui| {
-                ui.selectable_value(&mut self.backend, 0, t!("自動(HW優先)"));
-                ui.selectable_value(&mut self.backend, 1, t!("GPU HW固定"));
-                ui.selectable_value(&mut self.backend, 2, t!("ソフトウェア"));
-            });
+            {
+                let mut backend_idx = self.backend.max(0) as usize;
+                if ui
+                    .add(SegmentedControl::new(
+                        &mut backend_idx,
+                        [t!("自動(HW優先)"), t!("GPU HW固定"), t!("ソフトウェア")],
+                    ))
+                    .changed()
+                {
+                    self.backend = backend_idx as i32;
+                }
+            }
 
             ui.label(t!("コンテナ"));
-            ui.horizontal(|ui| {
-                ui.selectable_value(&mut self.mkv_container, false, "MP4 + AAC");
-                ui.selectable_value(&mut self.mkv_container, true, "MKV + Opus");
-            });
+            {
+                let mut container_idx: usize = if self.mkv_container { 1 } else { 0 };
+                if ui
+                    .add(SegmentedControl::new(
+                        &mut container_idx,
+                        ["MP4 + AAC", "MKV + Opus"],
+                    ))
+                    .changed()
+                {
+                    self.mkv_container = container_idx == 1;
+                }
+            }
 
             ui.horizontal(|ui| {
                 ui.vertical(|ui| {
                     ui.label(t!("平均ビットレート(kbps)"));
-                    ui.add(
-                        egui::DragValue::new(&mut self.average_bitrate_kbps).range(500..=200000),
-                    );
+                    ui.add(Slider::new(&mut self.average_bitrate_kbps, 500..=200000));
                 });
                 ui.vertical(|ui| {
                     ui.label(t!("最大ビットレート(kbps)"));
-                    ui.add(egui::DragValue::new(&mut self.max_bitrate_kbps).range(500..=200000));
+                    ui.add(Slider::new(&mut self.max_bitrate_kbps, 500..=200000));
                 });
             });
 
@@ -290,11 +309,11 @@ impl ExportDialog {
                 };
                 ui.vertical(|ui| {
                     ui.label(t!("開始フレーム"));
-                    ui.add(egui::DragValue::new(&mut self.start_frame).range(0..=end_max));
+                    ui.add(Slider::new(&mut self.start_frame, 0..=end_max));
                 });
                 ui.vertical(|ui| {
                     ui.label(t!("終了フレーム"));
-                    ui.add(egui::DragValue::new(&mut self.end_frame).range(1..=self.total_frames));
+                    ui.add(Slider::new(&mut self.end_frame, 1..=self.total_frames));
                 });
             });
 
@@ -309,7 +328,7 @@ impl ExportDialog {
                 } else {
                     0.0
                 };
-                ui.add(egui::ProgressBar::new(fraction));
+                ui.add(ProgressBar::new(fraction));
             }
 
             if !self.status_text.is_empty() {
@@ -325,7 +344,7 @@ impl ExportDialog {
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 let start_enabled = !queue_running && !self.output_path.is_empty();
                 if ui
-                    .add_enabled(start_enabled, egui::Button::new(tr("書き出し")))
+                    .add_enabled(start_enabled, Button::new(tr("書き出し")))
                     .clicked()
                 {
                     self.start_export(state);
@@ -335,7 +354,7 @@ impl ExportDialog {
                 } else {
                     t!("閉じる")
                 };
-                if ui.button(close_label).clicked() {
+                if ui.add(Button::new(close_label).outline()).clicked() {
                     if queue_running {
                         if let Some(queue) = &self.active_queue {
                             queue.cancel_current();

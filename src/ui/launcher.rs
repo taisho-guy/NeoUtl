@@ -1,4 +1,5 @@
 use crate::project::{self, ProjectMeta};
+use elegance::{Button, TextInput};
 
 pub struct LauncherPanel {
     name: String,
@@ -48,36 +49,47 @@ impl LauncherPanel {
             columns[1].group(|ui| {
                 ui.heading(t!("新規プロジェクト"));
                 ui.label(t!("名前"));
-                ui.text_edit_singleline(&mut self.name);
+                ui.add(TextInput::new(&mut self.name));
+
+                ui.label("fps");
                 ui.add(
                     egui::DragValue::new(&mut self.fps)
                         .range(1..=240)
-                        .prefix("fps: "),
+                        .suffix(" fps"),
                 );
+
+                ui.label(t!("幅"));
                 ui.add(
                     egui::DragValue::new(&mut self.width)
                         .range(16..=7680)
-                        .prefix(t!("幅: ")),
+                        .suffix(" px"),
                 );
+
+                ui.label(t!("高さ"));
                 ui.add(
                     egui::DragValue::new(&mut self.height)
                         .range(16..=7680)
-                        .prefix(t!("高さ: ")),
+                        .suffix(" px"),
                 );
+
+                ui.label("Hz");
                 ui.add(
                     egui::DragValue::new(&mut self.sample_rate)
                         .range(8000..=192000)
-                        .prefix("Hz: "),
+                        .suffix(" Hz"),
                 );
+
+                ui.label("ch");
                 ui.add(
                     egui::DragValue::new(&mut self.channels)
                         .range(1..=8)
-                        .prefix("ch: "),
+                        .suffix(" ch"),
                 );
+
                 if !self.status.is_empty() {
                     ui.colored_label(egui::Color32::LIGHT_RED, &self.status);
                 }
-                if ui.button(t!("作成して開く")).clicked() {
+                if ui.add(Button::new(t!("作成して開く"))).clicked() {
                     match project::create_project(
                         &self.name,
                         self.fps,

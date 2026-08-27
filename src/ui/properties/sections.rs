@@ -8,6 +8,7 @@ use crate::ecs::object_schema::{
     TEXT_SCHEMA, TRANSFORM_SCHEMA, is_visible, resolve_range,
 };
 use crate::localization::effect_param_label;
+use elegance::{Checkbox, Select, Slider, TextArea};
 use neoutl_shared_abi::ParamKind;
 
 pub(super) struct FloatRowCtx<'a, S: std::hash::Hash + Copy + std::fmt::Debug> {
@@ -108,7 +109,7 @@ pub fn transform_section(ui: &mut egui::Ui, world: &mut EcsWorld, id: usize) {
                 ui.horizontal(|ui| {
                     ui.label(effect_param_label(schema.label));
                     let mut b = value > 0.5;
-                    if ui.checkbox(&mut b, "").changed() {
+                    if ui.add(Checkbox::new(&mut b, "")).changed() {
                         transform.set_param(schema.key, if b { 1.0 } else { 0.0 });
                         world.set_transform(id, transform);
                     }
@@ -158,7 +159,7 @@ pub fn text_section(ui: &mut egui::Ui, world: &mut EcsWorld, id: usize) {
                 ui.label(effect_param_label(schema.label));
                 let width = ui.available_width();
                 if ui
-                    .add_sized([width, 80.0], egui::TextEdit::multiline(&mut content.text))
+                    .add_sized([width, 80.0], TextArea::new(&mut content.text).rows(4))
                     .changed()
                 {
                     world.set_text(id, content.text.clone(), content.font_size);
@@ -246,7 +247,7 @@ pub fn audio_section(ui: &mut egui::Ui, world: &mut EcsWorld, id: usize) {
             match schema.kind {
                 ParamKind::Bool => {
                     let mut b = audio.get_param(schema.key).unwrap_or(0.0) > 0.5;
-                    if ui.checkbox(&mut b, "").changed() {
+                    if ui.add(Checkbox::new(&mut b, "")).changed() {
                         audio.set_param(schema.key, if b { 1.0 } else { 0.0 });
                         world.set_audio_params(id, audio.volume, audio.pan, audio.mute);
                     }
@@ -256,9 +257,8 @@ pub fn audio_section(ui: &mut egui::Ui, world: &mut EcsWorld, id: usize) {
                     let mut value = audio.get_param(schema.key).unwrap_or(0.0);
                     if ui
                         .add(
-                            egui::DragValue::new(&mut value)
-                                .range(min..=max)
-                                .speed((max - min).max(0.001) / 1000.0),
+                            Slider::new(&mut value, min..=max)
+                                .step(((max - min).max(0.001) / 1000.0) as f64),
                         )
                         .changed()
                     {
@@ -287,7 +287,7 @@ pub fn group_control_section(ui: &mut egui::Ui, world: &mut EcsWorld, id: usize)
             match schema.kind {
                 ParamKind::Bool => {
                     let mut b = gc.get_param(schema.key).unwrap_or(0.0) > 0.5;
-                    if ui.checkbox(&mut b, "").changed() {
+                    if ui.add(Checkbox::new(&mut b, "")).changed() {
                         gc.set_param(schema.key, if b { 1.0 } else { 0.0 });
                         world.set_group_control(id, gc);
                     }
@@ -297,9 +297,8 @@ pub fn group_control_section(ui: &mut egui::Ui, world: &mut EcsWorld, id: usize)
                     let mut value = gc.get_param(schema.key).unwrap_or(0.0);
                     if ui
                         .add(
-                            egui::DragValue::new(&mut value)
-                                .range(min..=max)
-                                .speed((max - min).max(0.001) / 1000.0),
+                            Slider::new(&mut value, min..=max)
+                                .step(((max - min).max(0.001) / 1000.0) as f64),
                         )
                         .changed()
                     {
@@ -332,7 +331,7 @@ pub fn clip_target_section(ui: &mut egui::Ui, world: &mut EcsWorld, id: usize) {
             match schema.kind {
                 ParamKind::Bool => {
                     let mut b = ct.get_param(schema.key).unwrap_or(0.0) > 0.5;
-                    if ui.checkbox(&mut b, "").changed() {
+                    if ui.add(Checkbox::new(&mut b, "")).changed() {
                         ct.set_param(schema.key, if b { 1.0 } else { 0.0 });
                         world.set_clip_target(id, ct);
                     }
@@ -342,9 +341,8 @@ pub fn clip_target_section(ui: &mut egui::Ui, world: &mut EcsWorld, id: usize) {
                     let mut value = ct.get_param(schema.key).unwrap_or(0.0);
                     if ui
                         .add(
-                            egui::DragValue::new(&mut value)
-                                .range(min..=max)
-                                .speed((max - min).max(0.001) / 1000.0),
+                            Slider::new(&mut value, min..=max)
+                                .step(((max - min).max(0.001) / 1000.0) as f64),
                         )
                         .changed()
                     {
@@ -354,22 +352,19 @@ pub fn clip_target_section(ui: &mut egui::Ui, world: &mut EcsWorld, id: usize) {
                 }
                 ParamKind::Enum => {
                     let mut current = ct.get_param(schema.key).unwrap_or(0.0).round() as usize;
-                    let label = schema
-                        .enum_options
-                        .get(current)
-                        .copied()
-                        .unwrap_or(schema.label);
-                    egui::ComboBox::from_id_salt((id, schema.key))
-                        .selected_text(label)
-                        .show_ui(ui, |ui| {
-                            for (i, opt) in schema.enum_options.iter().enumerate() {
-                                if ui.selectable_label(i == current, *opt).clicked() {
-                                    current = i;
-                                    ct.set_param(schema.key, i as f32);
-                                    world.set_clip_target(id, ct);
-                                }
-                            }
-                        });
+                    let resp = ui.add(
+                        Select::new((id, schema.key), &mut current).options(
+                            schema
+                                .enum_options
+                                .iter()
+                                .enumerate()
+                                .map(|(i, opt)| (i, *opt)),
+                        ),
+                    );
+                    if resp.changed() {
+                        ct.set_param(schema.key, current as f32);
+                        world.set_clip_target(id, ct);
+                    }
                 }
                 _ => {}
             }

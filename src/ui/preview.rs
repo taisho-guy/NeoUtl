@@ -199,74 +199,87 @@ impl PreviewPanel {
     }
 
     fn menu_bar(&mut self, ui: &mut egui::Ui, state: &SharedAppState) {
-        egui::MenuBar::new().ui(ui, |ui| {
-            ui.menu_button(t!("ファイル"), |ui| {
-                if ui.button(t!("新規プロジェクト")).clicked() {
+        use elegance::{MenuBar, MenuItem};
+        let mut open_export = false;
+        let mut open_system_settings = false;
+        let mut open_project_settings = false;
+        let mut open_keybindings = false;
+        let mut open_timeline = false;
+        let mut open_properties = false;
+        MenuBar::new("preview_menu_bar").show(ui, |bar| {
+            bar.menu(t!("ファイル"), |ui| {
+                if ui.add(MenuItem::new(t!("新規プロジェクト"))).clicked() {
                     let _ = app_state::new_project_session(state);
-                    ui.close();
                 }
-                if ui.button(t!("プロジェクトを開く")).clicked() {
+                if ui.add(MenuItem::new(t!("プロジェクトを開く"))).clicked() {
                     if let Some(dir) = rfd::FileDialog::new().pick_folder() {
                         let _ = app_state::open_project_session(state, &dir);
                     }
-                    ui.close();
                 }
-                if ui.button(t!("上書き保存")).clicked() {
+                if ui.add(MenuItem::new(t!("上書き保存"))).clicked() {
                     let _ = app_state::save_active(state);
-                    ui.close();
                 }
-                if ui.button(t!("名前を付けて保存")).clicked() {
+                if ui.add(MenuItem::new(t!("名前を付けて保存"))).clicked() {
                     if let Some(dir) = rfd::FileDialog::new().pick_folder() {
                         let world_holder = app_state::active_world(state);
                         let doc = world_holder.lock().unwrap().to_document();
                         let _ = crate::project::save_document(&dir, &doc);
                     }
-                    ui.close();
                 }
-                if ui.button(t!("メディアの書き出し")).clicked() {
-                    self.open_export = true;
-                    ui.close();
+                if ui.add(MenuItem::new(t!("メディアの書き出し"))).clicked() {
+                    open_export = true;
                 }
                 ui.separator();
-                if ui.button(t!("終了")).clicked() {
+                if ui.add(MenuItem::new(t!("終了"))).clicked() {
                     app_state::save_all(state);
                     std::process::exit(0);
                 }
             });
-            ui.menu_button(t!("編集"), |ui| {
-                if ui.button(t!("元に戻す")).clicked() {
+            bar.menu(t!("編集"), |ui| {
+                if ui.add(MenuItem::new(t!("元に戻す"))).clicked() {
                     app_state::undo_active(state);
-                    ui.close();
                 }
-                if ui.button(t!("やり直し")).clicked() {
+                if ui.add(MenuItem::new(t!("やり直し"))).clicked() {
                     app_state::redo_active(state);
-                    ui.close();
                 }
                 ui.separator();
-                if ui.button(t!("システム設定")).clicked() {
-                    self.open_system_settings = true;
-                    ui.close();
+                if ui.add(MenuItem::new(t!("システム設定"))).clicked() {
+                    open_system_settings = true;
                 }
-                if ui.button(t!("プロジェクト設定")).clicked() {
-                    self.open_project_settings = true;
-                    ui.close();
+                if ui.add(MenuItem::new(t!("プロジェクト設定"))).clicked() {
+                    open_project_settings = true;
                 }
-                if ui.button(t!("ショートカット設定")).clicked() {
-                    self.open_keybindings = true;
-                    ui.close();
+                if ui.add(MenuItem::new(t!("ショートカット設定"))).clicked() {
+                    open_keybindings = true;
                 }
             });
-            ui.menu_button(t!("表示"), |ui| {
-                if ui.button(t!("拡張編集")).clicked() {
-                    self.open_timeline = true;
-                    ui.close();
+            bar.menu(t!("表示"), |ui| {
+                if ui.add(MenuItem::new(t!("拡張編集"))).clicked() {
+                    open_timeline = true;
                 }
-                if ui.button(t!("プロパティ")).clicked() {
-                    self.open_properties = true;
-                    ui.close();
+                if ui.add(MenuItem::new(t!("プロパティ"))).clicked() {
+                    open_properties = true;
                 }
             });
         });
+        if open_export {
+            self.open_export = true;
+        }
+        if open_system_settings {
+            self.open_system_settings = true;
+        }
+        if open_project_settings {
+            self.open_project_settings = true;
+        }
+        if open_keybindings {
+            self.open_keybindings = true;
+        }
+        if open_timeline {
+            self.open_timeline = true;
+        }
+        if open_properties {
+            self.open_properties = true;
+        }
     }
 
     fn tab_bar(
@@ -386,25 +399,37 @@ impl PreviewPanel {
         let mut save_and_close = false;
         let mut discard_and_close = false;
         let mut cancel = false;
-        egui::Window::new(t!("未保存の変更"))
-            .collapsible(false)
-            .resizable(false)
+        let mut modal_open = true;
+        elegance::Modal::new("confirm_close_session", &mut modal_open)
+            .heading(t!("未保存の変更"))
             .show(ctx, |ui| {
                 ui.label(t!(
                     "保存されていない変更があります。閉じる前に保存しますか？"
                 ));
                 ui.horizontal(|ui| {
-                    if ui.button(t!("保存して閉じる")).clicked() {
+                    if ui
+                        .add(elegance::Button::new(t!("保存して閉じる")))
+                        .clicked()
+                    {
                         save_and_close = true;
                     }
-                    if ui.button(t!("保存せず閉じる")).clicked() {
+                    if ui
+                        .add(elegance::Button::new(t!("保存せず閉じる")).outline())
+                        .clicked()
+                    {
                         discard_and_close = true;
                     }
-                    if ui.button(t!("キャンセル")).clicked() {
+                    if ui
+                        .add(elegance::Button::new(t!("キャンセル")).outline())
+                        .clicked()
+                    {
                         cancel = true;
                     }
                 });
             });
+        if !modal_open {
+            cancel = true;
+        }
         if save_and_close {
             app_state::save_session(state, index);
             let _ = app_state::close_session(state, index);
@@ -427,7 +452,7 @@ impl PreviewPanel {
             let mut frame = self.current_frame;
             let slider = ui.add_sized(
                 [ui.available_width() - 220.0, 20.0],
-                egui::Slider::new(&mut frame, 0..=self.total_frames.max(1)).show_value(false),
+                elegance::Slider::new(&mut frame, 0..=self.total_frames.max(1)).show_value(false),
             );
             if slider.changed() {
                 self.apply_frame(frame, state);
@@ -444,12 +469,15 @@ impl PreviewPanel {
                 width = digits
             ));
 
-            if ui.add_sized([32.0, 32.0], egui::Button::new("⏮")).clicked() {
+            if ui
+                .add_sized([32.0, 32.0], elegance::Button::new("⏮"))
+                .clicked()
+            {
                 self.apply_frame(self.current_frame - 1, state);
             }
             let icon = if self.is_playing { "⏸" } else { "▶" };
             if ui
-                .add_sized([32.0, 32.0], egui::Button::new(icon))
+                .add_sized([32.0, 32.0], elegance::Button::new(icon))
                 .clicked()
             {
                 self.is_playing = !self.is_playing;
@@ -462,26 +490,29 @@ impl PreviewPanel {
                     mixer.lock().unwrap().pause();
                 }
             }
-            if ui.add_sized([32.0, 32.0], egui::Button::new("⏭")).clicked() {
+            if ui
+                .add_sized([32.0, 32.0], elegance::Button::new("⏭"))
+                .clicked()
+            {
                 self.apply_frame(self.current_frame + 1, state);
             }
 
             ui.label(t!("速度"));
-            let mut speed = self.speed_percent;
+            let mut speed = self.speed_percent as f32;
             if ui
                 .add_sized(
                     [80.0, 28.0],
-                    egui::DragValue::new(&mut speed)
-                        .range(
-                            crate::config::PLAYBACK_SPEED_MIN_PERCENT
-                                ..=crate::config::PLAYBACK_SPEED_MAX_PERCENT,
-                        )
-                        .custom_formatter(|v, _| format!("{:.1}x", v / 100.0))
-                        .speed(1.0),
+                    elegance::MetricSlider::new(
+                        &mut speed,
+                        crate::config::PLAYBACK_SPEED_MIN_PERCENT as f32
+                            ..=crate::config::PLAYBACK_SPEED_MAX_PERCENT as f32,
+                    )
+                    .step(1.0)
+                    .callout_fmt(|v| format!("{:.1}x", v / 100.0)),
                 )
                 .changed()
             {
-                self.speed_percent = speed;
+                self.speed_percent = speed as i32;
                 if self.is_playing {
                     self.playback_anchor = Some((Instant::now(), self.current_frame));
                 }

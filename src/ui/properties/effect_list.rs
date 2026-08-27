@@ -4,6 +4,9 @@ use crate::ecs::TimelineData;
 use crate::ecs::effects::{find_effect, param_schema};
 use crate::ecs::types::Value;
 use crate::localization::effect_param_label;
+use elegance::{
+    BadgeTone, Checkbox, ContextMenu, MenuItem, SegmentedButton, Select, SortableItem, SortableList,
+};
 use neoutl_shared_abi::ParamKind;
 use std::collections::HashMap;
 use std::sync::Mutex;
@@ -35,37 +38,64 @@ pub fn effects_sidebar(ui: &mut egui::Ui, world: &mut EcsWorld, id: usize) {
     }
     let card = elegance::Theme::current(ui.ctx()).palette.card;
     if !effects.is_empty() {
-        let last = effects.len() - 1;
-        for (index, inst) in effects.into_iter().enumerate() {
-            ui.push_id(("effect_sidebar_row", id, index), |ui| {
-                egui::Frame::default()
-                    .fill(card)
-                    .corner_radius(3.0)
-                    .inner_margin(4.0)
-                    .show(ui, |ui| {
-                        ui.horizontal(|ui| {
-                            let mut enabled = inst.enabled;
-                            if ui.checkbox(&mut enabled, "").changed() {
-                                world.set_effect_enabled(id, index, enabled);
-                            }
-                            ui.add(egui::Label::new(&inst.effect_id).truncate());
-                            ui.add_enabled_ui(index > 0, |ui| {
-                                if ui.small_button("↑").clicked() {
-                                    world.reorder_effect(id, index, index - 1);
-                                }
-                            });
-                            ui.add_enabled_ui(index < last, |ui| {
-                                if ui.small_button("↓").clicked() {
-                                    world.reorder_effect(id, index, index + 1);
-                                }
-                            });
-                            if ui.small_button("✕").clicked() {
-                                world.remove_effect(id, index);
-                            }
-                        });
-                    });
-            });
+        let mut sortable_items: Vec<SortableItem> = effects
+            .iter()
+            .enumerate()
+            .map(|(index, inst)| {
+                SortableItem::new(index.to_string(), inst.effect_id.clone()).status(
+                    if inst.enabled {
+                        t!("有効")
+                    } else {
+                        t!("無効")
+                    },
+                    if inst.enabled {
+                        BadgeTone::Ok
+                    } else {
+                        BadgeTone::Neutral
+                    },
+                )
+            })
+            .collect();
+        let original_order: Vec<usize> = (0..effects.len()).collect();
+        let list_resp =
+            SortableList::new(("effect_sidebar_sortable", id), &mut sortable_items).show(ui);
+
+        let new_order: Vec<usize> = sortable_items
+            .iter()
+            .map(|item| item.id.parse::<usize>().unwrap())
+            .collect();
+        if new_order != original_order {
+            let mut current = original_order.clone();
+            for target_pos in 0..new_order.len() {
+                let want = new_order[target_pos];
+                let cur_pos = current.iter().position(|&x| x == want).unwrap();
+                if cur_pos != target_pos {
+                    world.reorder_effect(id, cur_pos, target_pos);
+                    let moved = current.remove(cur_pos);
+                    current.insert(target_pos, moved);
+                }
+            }
         }
+
+        ContextMenu::new(("effect_sidebar_menu", id)).show(&list_resp, |ui| {
+            let effects = world.get_effects(id);
+            for (index, inst) in effects.iter().enumerate() {
+                let toggle_label = if inst.enabled {
+                    format!("{}: {}", inst.effect_id, t!("無効化"))
+                } else {
+                    format!("{}: {}", inst.effect_id, t!("有効化"))
+                };
+                if ui.add(MenuItem::new(toggle_label)).clicked() {
+                    world.set_effect_enabled(id, index, !inst.enabled);
+                }
+                if ui
+                    .add(MenuItem::new(format!("{}: {}", inst.effect_id, t!("削除"))).danger())
+                    .clicked()
+                {
+                    world.remove_effect(id, index);
+                }
+            }
+        });
     }
 
     if !plugins.is_empty() {
@@ -84,7 +114,7 @@ pub fn effects_sidebar(ui: &mut egui::Ui, world: &mut EcsWorld, id: usize) {
                     .show(ui, |ui| {
                         ui.horizontal(|ui| {
                             let mut active = !inst.bypass;
-                            if ui.checkbox(&mut active, "").changed() {
+                            if ui.add(Checkbox::new(&mut active, "")).changed() {
                                 world.set_audio_plugin_bypass(id, index, !active);
                             }
                             let name = inst
@@ -138,7 +168,7 @@ pub fn effects_section(
             ui.push_id(("audio_plugin_row", id, index), |ui| {
                 ui.horizontal(|ui| {
                     let mut active = !inst.bypass;
-                    if ui.checkbox(&mut active, "").changed() {
+                    if ui.add(Checkbox::new(&mut active, "")).changed() {
                         world.set_audio_plugin_bypass(id, index, !active);
                     }
                     let name = inst
@@ -206,7 +236,7 @@ pub fn effects_section(
             ui.push_id(("effect_row", id, index), |ui| {
                 ui.horizontal(|ui| {
                     let mut enabled = inst.enabled;
-                    if ui.checkbox(&mut enabled, "").changed() {
+                    if ui.add(Checkbox::new(&mut enabled, "")).changed() {
                         world.set_effect_enabled(id, index, enabled);
                     }
                     ui.label(&inst.effect_id);
@@ -235,10 +265,13 @@ pub fn effects_section(
                 for s in &schema {
                     if s.kind == ParamKind::Group {
                         let initial_open = s.default_float != 0.0;
-                        let open = is_group_open(id, index as i32, &s.label, initial_open);
+                        let mut open = is_group_open(id, index as i32, &s.label, initial_open);
                         if ui
-                            .selectable_label(open, format!("▸ {}", effect_param_label(&s.label)))
-                            .clicked()
+                            .add(SegmentedButton::new(
+                                &mut open,
+                                format!("▸ {}", effect_param_label(&s.label)),
+                            ))
+                            .changed()
                         {
                             toggle_group_open(id, index as i32, &s.label);
                         }
@@ -328,39 +361,32 @@ fn param_widget(
                     Some(Value::Bool(b)) => *b,
                     _ => s.default_float != 0.0,
                 };
-                ui.checkbox(&mut b, "").changed().then_some(Value::Bool(b))
+                ui.add(Checkbox::new(&mut b, ""))
+                    .changed()
+                    .then_some(Value::Bool(b))
             }
             ParamKind::Enum => {
                 let mut index = match current {
                     Some(Value::Enum(i)) => *i,
                     _ => s.default_float as u32,
                 };
-                let current_label = s
-                    .enum_options
-                    .get(index as usize)
-                    .map(|o| effect_param_label(o))
-                    .unwrap_or_default();
-                let mut changed = false;
-                egui::ComboBox::from_id_salt(("effect_enum", object_id, effect_index, &s.key))
-                    .selected_text(current_label)
-                    .show_ui(ui, |ui| {
-                        for (i, opt) in s.enum_options.iter().enumerate() {
-                            if ui
-                                .selectable_value(&mut index, i as u32, effect_param_label(opt))
-                                .changed()
-                            {
-                                changed = true;
-                            }
-                        }
-                    });
-                changed.then_some(Value::Enum(index))
+                let resp = ui.add(
+                    Select::new(("effect_enum", object_id, effect_index, &s.key), &mut index)
+                        .options(
+                            s.enum_options
+                                .iter()
+                                .enumerate()
+                                .map(|(i, opt)| (i as u32, effect_param_label(opt))),
+                        ),
+                );
+                resp.changed().then_some(Value::Enum(index))
             }
             ParamKind::Text => {
                 let mut t = match current {
                     Some(Value::Text(t)) => t.clone(),
                     _ => String::new(),
                 };
-                ui.text_edit_singleline(&mut t)
+                ui.add(elegance::TextInput::new(&mut t))
                     .changed()
                     .then_some(Value::Text(t))
             }
@@ -370,10 +396,10 @@ fn param_widget(
                     _ => String::new(),
                 };
                 let mut changed = false;
-                if ui.text_edit_singleline(&mut t).changed() {
+                if ui.add(elegance::TextInput::new(&mut t)).changed() {
                     changed = true;
                 }
-                if ui.button(t!("参照…")).clicked() {
+                if ui.add(elegance::Button::new(t!("参照…"))).clicked() {
                     let dialog = rfd::FileDialog::new();
                     let picked = if s.kind == ParamKind::Folder {
                         dialog.pick_folder()
@@ -392,32 +418,21 @@ fn param_widget(
                     Some(Value::TrackRef(i)) => *i,
                     _ => -1,
                 };
-                let current_label = if track_ref < 0 {
-                    t!("未選択")
-                } else {
-                    format!("Object {track_ref}")
-                };
-                let mut changed = false;
-                egui::ComboBox::from_id_salt(("effect_track", object_id, effect_index, &s.key))
-                    .selected_text(current_label)
-                    .show_ui(ui, |ui| {
-                        if ui
-                            .selectable_value(&mut track_ref, -1, t!("未選択"))
-                            .changed()
-                        {
-                            changed = true;
-                        }
-                        for o in objects {
-                            if o.id as usize == object_id {
-                                continue;
-                            }
-                            let label = format!("Object {}", o.id);
-                            if ui.selectable_value(&mut track_ref, o.id, label).changed() {
-                                changed = true;
-                            }
-                        }
-                    });
-                changed.then_some(Value::TrackRef(track_ref))
+                let mut options: Vec<(i32, String)> = vec![(-1, t!("未選択").to_string())];
+                for o in objects {
+                    if o.id as usize == object_id {
+                        continue;
+                    }
+                    options.push((o.id, format!("Object {}", o.id)));
+                }
+                let resp = ui.add(
+                    Select::new(
+                        ("effect_track", object_id, effect_index, &s.key),
+                        &mut track_ref,
+                    )
+                    .options(options),
+                );
+                resp.changed().then_some(Value::TrackRef(track_ref))
             }
             ParamKind::Group | ParamKind::Separator | ParamKind::Float | ParamKind::Color => None,
         }

@@ -30,7 +30,6 @@ const LAYER_HEIGHT: f32 = 30.0;
 const RULER_HEIGHT: f32 = 32.0;
 const HANDLE_WIDTH: f32 = 10.0;
 const KEYFRAME_SIZE: f32 = 8.0;
-const SCENE_TAB_HEIGHT: f32 = 28.0;
 
 #[derive(PartialEq)]
 enum DragMode {

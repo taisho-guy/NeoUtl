@@ -1,6 +1,7 @@
 use crate::localization::tr;
 use crate::ui::types::CatalogRow;
 use egui::Ui;
+use elegance::{Button, SegmentedControl, TextInput};
 
 pub trait EffectCatalogSource {
     fn categories(&self) -> &[String];
@@ -43,7 +44,7 @@ impl EffectAddDialog {
             .frame(egui::Frame::default().inner_margin(4.0))
             .show(ui, |ui| {
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    if ui.button(t!("閉じる")).clicked() {
+                    if ui.add(Button::new(t!("閉じる"))).clicked() {
                         close_clicked = true;
                     }
                 });
@@ -54,43 +55,37 @@ impl EffectAddDialog {
             .show(ui, |ui| {
                 ui.horizontal(|ui| {
                     ui.label(t!("検索:"));
-                    ui.add(
-                        egui::TextEdit::singleline(&mut self.query)
-                            .hint_text(t!("エフェクト名を検索…")),
-                    );
+                    let hint = t!("エフェクト名を検索…").to_string();
+                    ui.add(TextInput::new(&mut self.query).hint(hint.as_str()));
                 });
 
-                ui.horizontal(|ui| {
-                    for (mode, label) in [(0, "カテゴリ順"), (1, "名前順"), (2, "最近使用")]
-                    {
-                        if ui
-                            .selectable_label(self.sort_mode == mode, tr(label))
-                            .clicked()
-                        {
-                            self.sort_mode = mode;
-                        }
-                    }
-                });
+                {
+                    let sort_labels = ["カテゴリ順", "名前順", "最近使用"];
+                    let mut sort_idx = self.sort_mode as usize;
+                    ui.add(SegmentedControl::new(
+                        &mut sort_idx,
+                        sort_labels.iter().map(|l| tr(l)),
+                    ));
+                    self.sort_mode = sort_idx as i32;
+                }
 
                 egui::ScrollArea::horizontal()
                     .id_salt("category_tabs")
                     .show(ui, |ui| {
-                        ui.horizontal(|ui| {
-                            if ui
-                                .selectable_label(self.category_filter.is_empty(), t!("全て"))
-                                .clicked()
-                            {
-                                self.category_filter.clear();
-                            }
-                            for cat in source.categories() {
-                                if ui
-                                    .selectable_label(&self.category_filter == cat, cat)
-                                    .clicked()
-                                {
-                                    self.category_filter = cat.clone();
-                                }
-                            }
-                        });
+                        let categories = source.categories();
+                        let mut labels: Vec<String> = Vec::with_capacity(categories.len() + 1);
+                        labels.push(t!("全て").to_string());
+                        labels.extend(categories.iter().cloned());
+                        let mut cat_idx = labels
+                            .iter()
+                            .position(|c| c == &self.category_filter)
+                            .unwrap_or(0);
+                        ui.add(SegmentedControl::new(&mut cat_idx, labels.iter().cloned()));
+                        self.category_filter = if cat_idx == 0 {
+                            String::new()
+                        } else {
+                            labels[cat_idx].clone()
+                        };
                     });
 
                 ui.separator();
@@ -109,7 +104,7 @@ impl EffectAddDialog {
                         for row in &rows {
                             let (clicked, _) = egui::Sides::new().shrink_left().truncate().show(
                                 ui,
-                                |ui| ui.add(egui::Button::new(&row.name).frame(false)).clicked(),
+                                |ui| ui.add(Button::new(&row.name).outline()).clicked(),
                                 |ui| {
                                     ui.colored_label(
                                         egui::Color32::from_rgb(0x8a, 0xab, 0xff),

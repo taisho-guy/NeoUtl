@@ -196,13 +196,16 @@ fn show_curve_editor_layout(ctx: &egui::Context, ui: &mut egui::Ui, world: &mut 
             ui.small_button(icon).on_hover_text(tip);
         }
         ui.separator();
-        egui::ComboBox::from_id_salt(("curve_mode", &target))
-            .selected_text("標準")
-            .show_ui(ui, |ui| {
-                for mode in ["標準", "振動", "バウンス", "スクリプト"] {
-                    let _ = ui.selectable_label(mode == "標準", mode);
-                }
-            });
+        {
+            let mut curve_mode_idx: usize = 0;
+            ui.add(
+                elegance::Select::new(("curve_mode", &target), &mut curve_mode_idx).options(
+                    ["標準", "振動", "バウンス", "スクリプト"]
+                        .into_iter()
+                        .enumerate(),
+                ),
+            );
+        }
         if ui.small_button("‹").clicked() {}
         ui.label("1");
         if ui.small_button("＋").clicked() {}
@@ -474,12 +477,7 @@ fn show_curve_editor_layout(ctx: &egui::Context, ui: &mut egui::Ui, world: &mut 
         if ui
             .add_sized(
                 egui::vec2(ui.available_size_before_wrap().x, 30.0),
-                egui::Button::new(
-                    egui::RichText::new("適用")
-                        .color(egui::Color32::WHITE)
-                        .strong(),
-                )
-                .fill(egui::Color32::from_rgb(0x2d, 0x76, 0xb8)),
+                elegance::Button::new("適用").accent(elegance::Accent::Blue),
             )
             .clicked()
         {

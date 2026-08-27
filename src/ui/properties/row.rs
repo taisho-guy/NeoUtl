@@ -1,5 +1,6 @@
 use super::segment::Segment;
 use crate::localization::effect_param_label;
+use elegance::{Button, ButtonSize, Slider};
 use std::collections::HashMap;
 use std::sync::Mutex;
 
@@ -53,51 +54,40 @@ pub fn property_row(
     let id = ui.make_persistent_id(id_source);
     let (mut left_active, mut right_active) = take_active(id);
     let mut out = RowOutcome::empty();
-    let speed = (max - min).max(0.001) / 1000.0;
+    let step = (max - min).max(0.001) / 1000.0;
     let mut start_v = segment.start_value;
     let mut end_v = segment.end_value;
 
-    const VALUE_W: f32 = 70.0;
+    const BOX_W: f32 = 70.0;
     const BUTTON_W: f32 = 100.0;
     const ROW_HEIGHT: f32 = 22.0;
+    const SLIDER_MIN_W: f32 = 60.0;
+
     let spacing = ui.spacing().item_spacing.x;
-    let fixed_w = VALUE_W * 2.0 + BUTTON_W + spacing * 4.0;
-    let slider_w = ((ui.available_width() - fixed_w) / 2.0).max(60.0);
+    let fixed_w = BOX_W * 2.0 + BUTTON_W + spacing * 4.0;
+    let slider_w = ((ui.available_width() - fixed_w) / 2.0).max(SLIDER_MIN_W);
 
     ui.horizontal(|ui| {
         ui.spacing_mut().slider_width = slider_w;
+
         let slider_l = ui.add_sized(
             [slider_w, ROW_HEIGHT],
-            egui::Slider::new(&mut start_v, min..=max)
-                .show_value(false)
-                .trailing_fill(true),
+            Slider::new(&mut start_v, min..=max).show_value(false),
         );
-        if slider_l.changed() {
-            if !left_active {
-                left_active = true;
-                out.start_commit = true;
-            }
-            out.start_value = Some(start_v.clamp(min, max));
-        }
-        if slider_l.drag_stopped() {
-            left_active = false;
-            out.start_release = true;
-        }
-
-        let drag_l = ui.add_sized(
-            [VALUE_W, ROW_HEIGHT],
+        let box_l = ui.add_sized(
+            [BOX_W, ROW_HEIGHT],
             egui::DragValue::new(&mut start_v)
                 .range(min..=max)
-                .speed(speed),
+                .speed(step),
         );
-        if drag_l.changed() {
+        if slider_l.changed() || box_l.changed() {
             if !left_active {
                 left_active = true;
                 out.start_commit = true;
             }
             out.start_value = Some(start_v.clamp(min, max));
         }
-        if drag_l.drag_stopped() || drag_l.lost_focus() {
+        if slider_l.drag_stopped() || box_l.drag_stopped() || box_l.lost_focus() {
             left_active = false;
             out.start_release = true;
         }
@@ -105,45 +95,31 @@ pub fn property_row(
         if ui
             .add_sized(
                 [BUTTON_W, ROW_HEIGHT],
-                egui::Button::new(effect_param_label(label)).small(),
+                Button::new(effect_param_label(label)).size(ButtonSize::Small),
             )
             .clicked()
         {
             out.label_clicked = true;
         }
 
-        let drag_r = ui.add_sized(
-            [VALUE_W, ROW_HEIGHT],
+        let box_r = ui.add_sized(
+            [BOX_W, ROW_HEIGHT],
             egui::DragValue::new(&mut end_v)
                 .range(min..=max)
-                .speed(speed),
+                .speed(step),
         );
-        if drag_r.changed() {
-            if !right_active {
-                right_active = true;
-                out.end_commit = true;
-            }
-            out.end_value = Some(end_v.clamp(min, max));
-        }
-        if drag_r.drag_stopped() || drag_r.lost_focus() {
-            right_active = false;
-            out.end_release = true;
-        }
-
         let slider_r = ui.add_sized(
             [slider_w, ROW_HEIGHT],
-            egui::Slider::new(&mut end_v, min..=max)
-                .show_value(false)
-                .trailing_fill(true),
+            Slider::new(&mut end_v, min..=max).show_value(false),
         );
-        if slider_r.changed() {
+        if box_r.changed() || slider_r.changed() {
             if !right_active {
                 right_active = true;
                 out.end_commit = true;
             }
             out.end_value = Some(end_v.clamp(min, max));
         }
-        if slider_r.drag_stopped() {
+        if box_r.drag_stopped() || box_r.lost_focus() || slider_r.drag_stopped() {
             right_active = false;
             out.end_release = true;
         }

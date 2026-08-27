@@ -157,21 +157,27 @@ pub fn keyframe_track(
         }
     }
 
-    response.context_menu(|ui| {
+    elegance::ContextMenu::new(track_id).show(&response, |ui| {
         let hits = CONTEXT_HIT.lock().unwrap();
         let Some(&(fixed_nearest, pos_x)) = hits.as_ref().and_then(|m| m.get(&track_id)) else {
             return;
         };
         match fixed_nearest {
             Some((idx, f, d)) if d <= POINT_RADIUS * 2.5 && !hit_endpoint(idx) => {
-                if ui.button(t!("キーフレーム削除")).clicked() {
+                if ui
+                    .add(elegance::Button::new(t!("キーフレーム削除")))
+                    .clicked()
+                {
                     remove_cell.set(Some(f));
                     ui.close();
                 }
             }
             _ => {
                 let f = frame_at(pos_x);
-                if ui.button(t!("キーフレーム追加")).clicked() {
+                if ui
+                    .add(elegance::Button::new(t!("キーフレーム追加")))
+                    .clicked()
+                {
                     add_cell.set(Some(f));
                     ui.close();
                 }

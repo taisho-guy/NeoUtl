@@ -1,5 +1,6 @@
 use crate::localization::tr;
-use egui::{Color32, Ui};
+use egui::Ui;
+use elegance::{Select, Slider, Switch, TextInput};
 
 pub fn field_height(ui: &Ui) -> f32 {
     ui.text_style_height(&egui::TextStyle::Body) + 2.0 * ui.spacing().button_padding.y
@@ -18,7 +19,7 @@ pub fn name_field(ui: &mut Ui, label: &str, value: &mut String) -> bool {
     let changed = ui
         .add_sized(
             egui::vec2(ui.available_width(), field_height(ui)),
-            egui::TextEdit::singleline(value).vertical_align(egui::Align::Center),
+            TextInput::new(value),
         )
         .changed();
     ui.end_row();
@@ -27,16 +28,14 @@ pub fn name_field(ui: &mut Ui, label: &str, value: &mut String) -> bool {
 
 pub fn toggle_field(ui: &mut Ui, label: &str, value: &mut bool) -> bool {
     field_label(ui, label);
-    let changed = ui.checkbox(value, "").changed();
+    let changed = ui.add(Switch::new(value, "")).changed();
     ui.end_row();
     changed
 }
 
 pub fn int_field(ui: &mut Ui, label: &str, value: &mut i32, min: i32, max: i32) -> bool {
     field_label(ui, label);
-    let changed = ui
-        .add(egui::DragValue::new(value).range(min..=max))
-        .changed();
+    let changed = ui.add(Slider::new(value, min..=max)).changed();
     *value = (*value).clamp(min, max);
     ui.end_row();
     changed
@@ -44,7 +43,9 @@ pub fn int_field(ui: &mut Ui, label: &str, value: &mut i32, min: i32, max: i32) 
 
 pub fn float_field(ui: &mut Ui, label: &str, value: &mut f32) -> bool {
     field_label(ui, label);
-    let changed = ui.add(egui::DragValue::new(value).speed(0.1)).changed();
+    let changed = ui
+        .add(Slider::new(value, f32::MIN..=f32::MAX).step(0.1))
+        .changed();
     ui.end_row();
     changed
 }
@@ -56,18 +57,14 @@ pub fn choice_field(ui: &mut Ui, label: &str, options: &[String], selected: &mut
         egui::vec2(0.0, field_height(ui)),
         egui::Layout::left_to_right(egui::Align::Center),
         |ui| {
-            for (i, opt) in options.iter().enumerate() {
-                let i = i as i32;
-                let active = i == *selected;
-                let text = if active {
-                    egui::RichText::new(tr(opt)).color(Color32::WHITE)
-                } else {
-                    egui::RichText::new(tr(opt))
-                };
-                if ui.selectable_label(active, text).clicked() {
-                    *selected = i;
-                    changed = true;
-                }
+            let mut idx = (*selected).max(0) as usize;
+            let resp = ui.add(
+                Select::new((ui.id(), "choice_field"), &mut idx)
+                    .options(options.iter().enumerate().map(|(i, o)| (i, tr(o)))),
+            );
+            if resp.changed() {
+                *selected = idx as i32;
+                changed = true;
             }
         },
     );

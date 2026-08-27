@@ -5,7 +5,10 @@ use crate::localization::tr;
 use crate::update::{self, UpdateStatus};
 use egui::{Context, Ui};
 use egui_material_icons::{MaterialIcon, icons};
-use elegance::{BuiltInTheme, ThemeSwitcher};
+use elegance::{
+    BuiltInTheme, Button, Indicator, IndicatorState, ProgressBar, SegmentedButton, Spinner,
+    ThemeSwitcher,
+};
 use fields::{choice_field, int_field, toggle_field};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
@@ -188,14 +191,14 @@ impl SystemSettingsWindow {
                     |ui| {
                         ui.label(&self.save_status);
                         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                            if ui.button(t!("保存")).clicked() {
+                            if ui.add(Button::new(t!("保存"))).clicked() {
                                 let s = world_holder.lock().unwrap().get_system_settings();
                                 self.save_status = match save_to_disk(&s) {
                                     Ok(()) => t!("保存完了"),
                                     Err(_) => t!("保存失敗"),
                                 };
                             }
-                            if ui.button(t!("再読込")).clicked() {
+                            if ui.add(Button::new(t!("再読込")).outline()).clicked() {
                                 self.reload(world_holder);
                             }
                         });
@@ -259,7 +262,8 @@ impl SystemSettingsWindow {
         let mark = if has_update { " ●" } else { "" };
         let text = format!("{}  {}{mark}", icon.codepoint, tr(label));
 
-        if ui.selectable_label(active, text).clicked() {
+        let mut on = active;
+        if ui.add(SegmentedButton::new(&mut on, text)).changed() && on {
             self.selected_category = index;
         }
     }
@@ -431,46 +435,67 @@ impl SystemSettingsWindow {
         let status = self.update_status.lock().unwrap().clone();
         match status {
             UpdateStatus::Idle => {
-                ui.label(t!("未確認"));
+                ui.horizontal(|ui| {
+                    ui.add(Indicator::new(IndicatorState::Off));
+                    ui.label(t!("未確認"));
+                });
                 ui.end_row();
             }
             UpdateStatus::Checking => {
-                ui.label(t!("確認中..."));
+                ui.horizontal(|ui| {
+                    ui.add(Spinner::new());
+                    ui.label(t!("確認中..."));
+                });
                 ui.end_row();
             }
             UpdateStatus::UpToDate => {
-                ui.label(t!("最新版です"));
+                ui.horizontal(|ui| {
+                    ui.add(Indicator::new(IndicatorState::On));
+                    ui.label(t!("最新版です"));
+                });
                 ui.end_row();
             }
             UpdateStatus::Available(info) => {
-                ui.label(t!(
-                    "新バージョン: %{arg0}",
-                    arg0 = format!("{}", info.version)
-                ));
+                ui.horizontal(|ui| {
+                    ui.add(Indicator::new(IndicatorState::Connecting));
+                    ui.label(t!(
+                        "新バージョン: %{arg0}",
+                        arg0 = format!("{}", info.version)
+                    ));
+                });
                 ui.end_row();
                 ui.label(&info.notes);
                 ui.end_row();
-                if ui.button(t!("今すぐ更新")).clicked() {
+                if ui.add(Button::new(t!("今すぐ更新"))).clicked() {
                     update::spawn_apply(self.update_status.clone(), info.clone());
                 }
                 ui.end_row();
             }
             UpdateStatus::Downloading(fraction) => {
-                ui.label(t!("ダウンロード中"));
-                ui.add(egui::ProgressBar::new(fraction));
+                ui.horizontal(|ui| {
+                    ui.add(Spinner::new());
+                    ui.label(t!("ダウンロード中"));
+                });
+                ui.add(ProgressBar::new(fraction));
                 ui.end_row();
             }
             UpdateStatus::Installed => {
-                ui.label(t!("更新完了。再起動してください"));
+                ui.horizontal(|ui| {
+                    ui.add(Indicator::new(IndicatorState::On));
+                    ui.label(t!("更新完了。再起動してください"));
+                });
                 ui.end_row();
             }
             UpdateStatus::Error(err) => {
-                ui.label(t!("エラー: %{arg0}", arg0 = format!("{err}")));
+                ui.horizontal(|ui| {
+                    ui.add(Indicator::new(IndicatorState::Off));
+                    ui.label(t!("エラー: %{arg0}", arg0 = format!("{err}")));
+                });
                 ui.end_row();
             }
         }
 
-        if ui.button(t!("今すぐ確認")).clicked() {
+        if ui.add(Button::new(t!("今すぐ確認")).outline()).clicked() {
             update::spawn_check(self.update_status.clone());
         }
         ui.end_row();
