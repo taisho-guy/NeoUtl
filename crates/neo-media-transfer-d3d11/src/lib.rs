@@ -1,17 +1,15 @@
 mod device;
-mod dx12;
 mod fence;
 mod surface_cache;
+mod vulkan_convert;
 
 use ffmpeg_sys_next as sys;
 use windows::Win32::Graphics::Direct3D11::ID3D11Texture2D;
-use windows::Win32::Graphics::Direct3D12::ID3D12Resource;
 use windows::Win32::Graphics::Dxgi::Common::{
     DXGI_FORMAT, DXGI_FORMAT_NV12, DXGI_FORMAT_P010, DXGI_FORMAT_R8_UNORM, DXGI_FORMAT_R8G8_UNORM,
     DXGI_FORMAT_R8G8B8A8_UNORM, DXGI_FORMAT_R16_UNORM, DXGI_FORMAT_R16G16_UNORM,
     DXGI_FORMAT_R16G16B16A16_FLOAT,
 };
-use windows::core::Interface;
 
 use neo_media_core::{
     ColorPrimaries, DecodedHwFrame, MatrixCoefficients, NeoFrame, NeoFramePool, PixelFormat,
@@ -19,10 +17,10 @@ use neo_media_core::{
 };
 
 pub use device::{NeoutlD3d11DeviceCtx, create_av_d3d11va_device_ctx, create_d3d11_device_on_luid};
-pub use dx12::{ColorTags, Dx12RawHandles, SemiPlanarConvertEngine, extract_dx12_raw_handles};
-
-static SEMI_PLANAR_DXIL: &[u8] =
-    include_bytes!(concat!(env!("OUT_DIR"), "/semi_planar_to_rgba.dxil"));
+pub use vulkan_convert::{
+    ColorTags, ConvertRequest, SemiPlanarConvertEngine, VulkanRawHandles,
+    extract_vulkan_raw_handles,
+};
 
 pub struct D3d11DecodedFrame {
     pub av_frame: *mut sys::AVFrame,
@@ -68,6 +66,16 @@ fn plane_view_formats(
     }
 }
 
+fn dxgi_plane_format_to_vk(format: DXGI_FORMAT) -> ash::vk::Format {
+    match format {
+        DXGI_FORMAT_R8_UNORM => ash::vk::Format::R8_UNORM,
+        DXGI_FORMAT_R8G8_UNORM => ash::vk::Format::R8G8_UNORM,
+        DXGI_FORMAT_R16_UNORM => ash::vk::Format::R16_UNORM,
+        DXGI_FORMAT_R16G16_UNORM => ash::vk::Format::R16G16_UNORM,
+        _ => unreachable!("plane_view_formatsが返す値はここに列挙した4種のみ"),
+    }
+}
+
 pub unsafe fn device_from_raw(
     raw: *mut sys::ID3D11Device,
 ) -> windows::Win32::Graphics::Direct3D11::ID3D11Device {
@@ -97,26 +105,16 @@ pub unsafe fn texture_from_av_frame(
 pub fn dx12_adapter_luid(
     wgpu_device: &wgpu::Device,
 ) -> Result<windows::Win32::Foundation::LUID, String> {
-    let handles = unsafe { extract_dx12_raw_handles(wgpu_device) }
-        .ok_or_else(|| "wgpu DX12生ハンドル取得失敗".to_owned())?;
-    unsafe { Ok(handles.device.GetAdapterLuid()) }
+    let luid_bytes = vulkan_convert::dx12_adapter_luid(wgpu_device)
+        .ok_or_else(|| "VkPhysicalDeviceIDProperties.deviceLUID未取得".to_owned())?;
+    Ok(windows::Win32::Foundation::LUID {
+        LowPart: u32::from_ne_bytes(luid_bytes[0..4].try_into().unwrap()),
+        HighPart: i32::from_ne_bytes(luid_bytes[4..8].try_into().unwrap()),
+    })
 }
 
 pub fn query_vram_budget_bytes(wgpu_device: &wgpu::Device) -> Option<u64> {
-    use windows::Win32::Graphics::Dxgi::{
-        CreateDXGIFactory2, DXGI_CREATE_FACTORY_FLAGS, DXGI_MEMORY_SEGMENT_GROUP_LOCAL,
-        DXGI_QUERY_VIDEO_MEMORY_INFO, IDXGIAdapter3, IDXGIFactory4,
-    };
-    let luid = dx12_adapter_luid(wgpu_device).ok()?;
-    unsafe {
-        let factory: IDXGIFactory4 = CreateDXGIFactory2(DXGI_CREATE_FACTORY_FLAGS(0)).ok()?;
-        let adapter: IDXGIAdapter3 = factory.EnumAdapterByLuid(luid).ok()?;
-        let mut info = DXGI_QUERY_VIDEO_MEMORY_INFO::default();
-        adapter
-            .QueryVideoMemoryInfo(0, DXGI_MEMORY_SEGMENT_GROUP_LOCAL, &mut info)
-            .ok()?;
-        Some(info.Budget)
-    }
+    vulkan_convert::query_vram_budget_bytes(wgpu_device)
 }
 
 pub fn is_sw_format_supported(sw_format_i32: i32) -> bool {
@@ -181,13 +179,14 @@ impl DecodedHwFrame for D3d11DecodedFrame {
 }
 
 pub struct D3d11TransferBackend {
-    handles: Dx12RawHandles,
+    handles: VulkanRawHandles,
     engine: SemiPlanarConvertEngine,
     surface_cache_nv12: Option<surface_cache::SurfaceCache>,
     surface_cache_p010: Option<surface_cache::SurfaceCache>,
     d3d11_device: windows::Win32::Graphics::Direct3D11::ID3D11Device,
     ctx4: windows::Win32::Graphics::Direct3D11::ID3D11DeviceContext4,
     coded_size: Size,
+    fence_counter: u64,
 }
 
 unsafe impl Send for D3d11TransferBackend {}
@@ -198,14 +197,15 @@ impl D3d11TransferBackend {
         d3d11_device: windows::Win32::Graphics::Direct3D11::ID3D11Device,
         coded_size: Size,
     ) -> Result<Self, String> {
-        let handles = unsafe { extract_dx12_raw_handles(wgpu_device) }
-            .ok_or_else(|| "wgpu DX12生ハンドル取得失敗".to_owned())?;
-        let engine = unsafe { SemiPlanarConvertEngine::new(&handles, SEMI_PLANAR_DXIL)? };
+        let handles = unsafe { extract_vulkan_raw_handles(wgpu_device) }
+            .ok_or_else(|| "wgpu Vulkan生ハンドル取得失敗".to_owned())?;
+        let engine =
+            SemiPlanarConvertEngine::new(handles.device.clone(), handles.queue_family_index)?;
         let ctx4: windows::Win32::Graphics::Direct3D11::ID3D11DeviceContext4 = unsafe {
             let ctx = d3d11_device
                 .GetImmediateContext()
                 .map_err(|e| format!("ID3D11Device::GetImmediateContext失敗: {e}"))?;
-            ctx.cast().map_err(|e| format!("{e}"))?
+            windows::core::Interface::cast(&ctx).map_err(|e| format!("{e}"))?
         };
         Ok(Self {
             handles,
@@ -215,6 +215,7 @@ impl D3d11TransferBackend {
             d3d11_device,
             ctx4,
             coded_size,
+            fence_counter: 0,
         })
     }
 
@@ -232,11 +233,10 @@ impl D3d11TransferBackend {
                 || cache.size() != (self.coded_size.width, self.coded_size.height)
         });
         if slot.is_none() || stale {
-            let fence_for_cache =
-                fence::CrossApiFence::new(&self.d3d11_device, &self.handles.device)?;
+            let fence_for_cache = fence::CrossApiFence::new(&self.d3d11_device, &self.handles)?;
             *slot = Some(surface_cache::SurfaceCache::new(
                 self.d3d11_device.clone(),
-                self.handles.device.clone(),
+                &self.handles,
                 self.ctx4.clone(),
                 fence_for_cache,
                 format,
@@ -266,12 +266,12 @@ impl TransferBackend for D3d11TransferBackend {
             return Err(TransferError::UnsupportedFormat(PixelFormat::Nv12));
         };
 
-        let d3d12_queue = self.handles.queue.clone();
+        let vk_queue = self.handles.queue;
         let cache = self.cache_for(src_fmt).map_err(TransferError::SyncFailed)?;
 
-        let shared_resource =
-            unsafe { cache.import(&input.d3d11_texture, input.subresource_index, &d3d12_queue) }
-                .map_err(TransferError::SyncFailed)?;
+        let shared = unsafe { cache.import(&input.d3d11_texture, input.subresource_index) }
+            .map_err(TransferError::SyncFailed)?;
+        let fence_semaphore = cache.fence().vk_semaphore();
 
         let width = input.visible_rect.width;
         let height = input.visible_rect.height;
@@ -279,6 +279,10 @@ impl TransferBackend for D3d11TransferBackend {
         let dst_dxgi_format = match dst_pixel_format {
             PixelFormat::Rgba16Float => DXGI_FORMAT_R16G16B16A16_FLOAT,
             _ => DXGI_FORMAT_R8G8B8A8_UNORM,
+        };
+        let dst_vk_format = match dst_dxgi_format {
+            DXGI_FORMAT_R16G16B16A16_FLOAT => ash::vk::Format::R16G16B16A16_SFLOAT,
+            _ => ash::vk::Format::R8G8B8A8_UNORM,
         };
 
         let target_texture = pool
@@ -292,29 +296,31 @@ impl TransferBackend for D3d11TransferBackend {
             }};
         }
 
-        let dst_resource: Option<ID3D12Resource> = unsafe {
+        let dst_image: Option<ash::vk::Image> = unsafe {
             target_texture
-                .as_hal::<wgpu_hal::api::Dx12>()
-                .map(|hal_texture| hal_texture.raw_resource().clone())
+                .as_hal::<wgpu_hal::api::Vulkan>()
+                .map(|hal_texture| hal_texture.raw_handle())
         };
-        let Some(dst_resource) = dst_resource else {
+        let Some(dst_image) = dst_image else {
             release_and_return!(TransferError::CopyFailed(
-                "wgpuテクスチャからID3D12Resource取得失敗".to_owned()
+                "wgpuテクスチャからVkImage取得失敗".to_owned()
             ));
         };
 
-        let convert_result = unsafe {
-            self.engine.convert(dx12::ConvertRequest {
-                src_resource: &shared_resource,
-                y_format: y_fmt,
-                uv_format: uv_fmt,
-                dst_resource: &dst_resource,
-                dst_format: dst_dxgi_format,
-                width,
-                height,
-                tags: color_tags_of(input),
-            })
-        };
+        let convert_result = self.engine.convert(ConvertRequest {
+            src_image: shared.vk_image,
+            y_format: dxgi_plane_format_to_vk(y_fmt),
+            uv_format: dxgi_plane_format_to_vk(uv_fmt),
+            dst_image,
+            dst_format: dst_vk_format,
+            width,
+            height,
+            queue: vk_queue,
+            fence_semaphore,
+            wait_value: shared.wait_value,
+            signal_value: shared.signal_value,
+            tags: color_tags_of(input),
+        });
         if let Err(e) = convert_result {
             release_and_return!(TransferError::CopyFailed(e));
         }
@@ -324,7 +330,7 @@ impl TransferBackend for D3d11TransferBackend {
             Err(e) => return Err(map_pool_error(e)),
         };
 
-        let _ = &self.handles;
+        self.fence_counter = self.fence_counter.wrapping_add(1);
 
         Ok(NeoFrame {
             texture: target_texture,
