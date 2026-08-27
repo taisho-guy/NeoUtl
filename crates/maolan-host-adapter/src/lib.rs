@@ -6,7 +6,7 @@ mod types;
 
 pub use binary_path::default_binary_path;
 pub use crash::{CRASH_THRESHOLD, block_plugin, is_blocked, record_crash};
-pub use registry::{catalog, invalidate};
+pub use registry::{catalog, invalidate, scan_directories};
 pub use types::{HostError, PluginCatalogEntry, PluginFormat, PluginParamInfo};
 
 use process::PluginProcess;

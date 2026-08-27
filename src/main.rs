@@ -103,7 +103,30 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             );
             media::loader::load_all(&media::loader::default_decoders_dir());
             easings::loader::load_all(&easings::loader::default_easings_dir());
-            audio::plugin_registry::load_all(&audio::plugin_registry::default_plugins_dir());
+            match audio::plugin_settings::load_from_disk() {
+                Some(saved) => {
+                    audio::plugin_registry::init_from_cache(
+                        saved.cached_catalog,
+                        &saved.disabled_plugin_ids,
+                    );
+                }
+                None => {
+                    let default_dir = audio::plugin_registry::default_plugins_dir();
+                    let paths = vec![default_dir];
+                    let auto_detect_system = true;
+                    let entries = audio::plugin_registry::rescan(&paths, auto_detect_system);
+                    let saved = ecs::resources::AudioPluginSettingsResource {
+                        scan_paths: paths
+                            .iter()
+                            .map(|p| p.to_string_lossy().to_string())
+                            .collect(),
+                        disabled_plugin_ids: Vec::new(),
+                        cached_catalog: entries,
+                        auto_detect_system,
+                    };
+                    let _ = audio::plugin_settings::save_to_disk(&saved);
+                }
+            }
             let _ = init_done_tx.send(());
         })
         .expect("初期化スレッド起動失敗");

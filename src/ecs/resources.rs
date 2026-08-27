@@ -1,4 +1,5 @@
 use crate::config;
+use maolan_host_adapter::{PluginCatalogEntry, PluginFormat};
 use shipyard::Unique;
 
 #[derive(Clone, Debug, Unique)]
@@ -363,5 +364,114 @@ impl SystemSettingsResource {
             crash_reporting_enabled: config::SYSTEM_DEFAULT_CRASH_REPORTING_ENABLED,
             max_group_chain_depth: config::SYSTEM_DEFAULT_MAX_GROUP_CHAIN_DEPTH,
         }
+    }
+}
+
+fn plugin_format_to_i32(format: PluginFormat) -> i32 {
+    match format {
+        PluginFormat::Vst3 => 0,
+        PluginFormat::Clap => 1,
+        PluginFormat::Lv2 => 2,
+        PluginFormat::Vst2 => 3,
+        PluginFormat::Au => 4,
+        PluginFormat::Sf2 => 5,
+        PluginFormat::Sfz => 6,
+        PluginFormat::Jsfx => 7,
+        PluginFormat::Internal => 8,
+    }
+}
+
+fn plugin_format_from_i32(value: i32) -> PluginFormat {
+    match value {
+        0 => PluginFormat::Vst3,
+        1 => PluginFormat::Clap,
+        2 => PluginFormat::Lv2,
+        3 => PluginFormat::Vst2,
+        4 => PluginFormat::Au,
+        5 => PluginFormat::Sf2,
+        6 => PluginFormat::Sfz,
+        7 => PluginFormat::Jsfx,
+        _ => PluginFormat::Internal,
+    }
+}
+
+#[derive(Clone, Debug, Unique)]
+pub struct AudioPluginSettingsResource {
+    pub scan_paths: Vec<String>,
+    pub disabled_plugin_ids: Vec<String>,
+    pub cached_catalog: Vec<PluginCatalogEntry>,
+    pub auto_detect_system: bool,
+}
+
+impl Default for AudioPluginSettingsResource {
+    fn default() -> Self {
+        Self {
+            scan_paths: Vec::new(),
+            disabled_plugin_ids: Vec::new(),
+            cached_catalog: Vec::new(),
+            auto_detect_system: true,
+        }
+    }
+}
+
+impl AudioPluginSettingsResource {
+    pub fn new() -> Self {
+        Self::default()
+    }
+}
+
+fn plugin_catalog_entry_to_schema(
+    value: &PluginCatalogEntry,
+) -> neoutl_schema::AudioPluginCatalogEntry {
+    neoutl_schema::AudioPluginCatalogEntry {
+        format: plugin_format_to_i32(value.format),
+        name: value.name.clone(),
+        vendor: value.vendor.clone(),
+        plugin_id: value.plugin_id.clone(),
+        path: value.path.to_string_lossy().to_string(),
+    }
+}
+
+fn plugin_catalog_entry_from_schema(
+    value: &neoutl_schema::AudioPluginCatalogEntry,
+) -> PluginCatalogEntry {
+    PluginCatalogEntry {
+        format: plugin_format_from_i32(value.format),
+        name: value.name.clone(),
+        vendor: value.vendor.clone(),
+        plugin_id: value.plugin_id.clone(),
+        path: std::path::PathBuf::from(&value.path),
+    }
+}
+
+impl From<&AudioPluginSettingsResource> for neoutl_schema::AudioPluginSettings {
+    fn from(value: &AudioPluginSettingsResource) -> Self {
+        Self {
+            scan_paths: value.scan_paths.clone(),
+            disabled_plugin_ids: value.disabled_plugin_ids.clone(),
+            cached_catalog: value
+                .cached_catalog
+                .iter()
+                .map(plugin_catalog_entry_to_schema)
+                .collect(),
+            auto_detect_system: value.auto_detect_system,
+        }
+    }
+}
+
+impl TryFrom<&neoutl_schema::AudioPluginSettings> for AudioPluginSettingsResource {
+    type Error = String;
+
+    fn try_from(value: &neoutl_schema::AudioPluginSettings) -> Result<Self, Self::Error> {
+        Ok(Self {
+            scan_paths: value.scan_paths.clone(),
+            disabled_plugin_ids: value.disabled_plugin_ids.clone(),
+            cached_catalog: value
+                .cached_catalog
+                .iter()
+                .map(plugin_catalog_entry_from_schema)
+                .collect(),
+            auto_detect_system: value.auto_detect_system,
+        })
     }
 }

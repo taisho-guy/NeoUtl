@@ -176,6 +176,18 @@ impl SchemaContract for crate::ecs::resources::SystemSettingsResource {
     }
 }
 
+impl SchemaContract for crate::ecs::resources::AudioPluginSettingsResource {
+    type Schema = neoutl_schema::AudioPluginSettings;
+
+    fn to_schema(&self) -> Self::Schema {
+        neoutl_schema::AudioPluginSettings::from(self)
+    }
+
+    fn from_schema(schema: &Self::Schema) -> Result<Self, String> {
+        Self::try_from(schema)
+    }
+}
+
 impl SchemaContract for crate::ecs::resources::SceneMeta {
     type Schema = neoutl_schema::SceneMeta;
 
@@ -229,7 +241,7 @@ mod tests {
     use super::SchemaContract;
     use crate::document::{DocumentModel, ObjectDoc, ObjectPayload};
     use crate::ecs::components::{AudioParams, TextContent};
-    use crate::ecs::resources::{SceneMeta, SystemSettingsResource};
+    use crate::ecs::resources::{AudioPluginSettingsResource, SceneMeta, SystemSettingsResource};
     use crate::ecs::transform::Transform;
     use crate::export::{EncoderBackend, ExportCodec, ExportPreset};
     use crate::shortcuts::{CommandId, KeymapResource, Override, OwnedBinding, Scope};
@@ -277,6 +289,24 @@ mod tests {
         let settings_roundtrip: SystemSettingsResource =
             SchemaContract::from_schema(&settings_schema).unwrap();
         assert_eq!(settings.theme_id, settings_roundtrip.theme_id);
+
+        let plugin_settings = AudioPluginSettingsResource {
+            scan_paths: vec!["/opt/plugins".to_string()],
+            disabled_plugin_ids: vec!["com.example.plugin".to_string()],
+            cached_catalog: Vec::new(),
+            auto_detect_system: true,
+        };
+        let plugin_settings_schema = SchemaContract::to_schema(&plugin_settings);
+        let plugin_settings_roundtrip: AudioPluginSettingsResource =
+            SchemaContract::from_schema(&plugin_settings_schema).unwrap();
+        assert_eq!(
+            plugin_settings.scan_paths,
+            plugin_settings_roundtrip.scan_paths
+        );
+        assert_eq!(
+            plugin_settings.disabled_plugin_ids,
+            plugin_settings_roundtrip.disabled_plugin_ids
+        );
 
         let preset = ExportPreset {
             name: "schema roundtrip".to_string(),

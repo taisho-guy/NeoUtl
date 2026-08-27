@@ -19,3 +19,18 @@ message SystemSettings {
   bool crash_reporting_enabled = 15;
   int32 max_group_chain_depth = 16;
 }
+
+message AudioPluginCatalogEntry {
+  int32 format = 1;
+  string name = 2;
+  string vendor = 3;
+  string plugin_id = 4;
+  string path = 5;
+}
+
+message AudioPluginSettings {
+  repeated string scan_paths = 1;
+  repeated string disabled_plugin_ids = 2;
+  repeated AudioPluginCatalogEntry cached_catalog = 3;
+  bool auto_detect_system = 4;
+}

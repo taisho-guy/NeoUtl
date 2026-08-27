@@ -1,27 +1,42 @@
 pub mod fields;
 
-use crate::ecs::{EcsWorld, resources::SystemSettingsResource};
+use crate::audio::{plugin_registry, plugin_settings};
+use crate::ecs::{
+    EcsWorld,
+    resources::{AudioPluginSettingsResource, SystemSettingsResource},
+};
 use crate::localization::tr;
 use crate::update::{self, UpdateStatus};
 use egui::{Context, Ui};
 use egui_material_icons::{MaterialIcon, icons};
 use elegance::{
-    BuiltInTheme, Button, Indicator, IndicatorState, ProgressBar, SegmentedButton, Spinner,
-    ThemeSwitcher,
+    BuiltInTheme, Button, Indicator, IndicatorState, ProgressBar, SegmentedButton, Spinner, Switch,
+    TextInput, ThemeSwitcher,
 };
 use fields::{choice_field, int_field, toggle_field};
+use maolan_host_adapter::PluginCatalogEntry;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
-const CATEGORIES: [(&str, MaterialIcon); 7] = [
+const CATEGORIES: [(&str, MaterialIcon); 8] = [
     ("一般", icons::ICON_SETTINGS),
     ("外観", icons::ICON_PALETTE),
     ("パフォーマンス", icons::ICON_SPEED),
     ("デコード", icons::ICON_MOVIE),
     ("タイムライン", icons::ICON_VIEW_TIMELINE),
     ("エクスポート", icons::ICON_UPLOAD),
+    ("音声プラグイン", icons::ICON_EXTENSION),
     ("アップデート", icons::ICON_SYSTEM_UPDATE),
 ];
+
+#[derive(Clone, Default)]
+enum ScanStatus {
+    #[default]
+    Idle,
+    Scanning,
+    Done,
+    Error(String),
+}
 
 fn category_label(index: usize) -> &'static str {
     CATEGORIES[index].0
@@ -91,6 +106,10 @@ pub struct SystemSettingsWindow {
     update_status: Arc<Mutex<UpdateStatus>>,
     crash_reporting_enabled: bool,
 
+    audio_plugin_settings: AudioPluginSettingsResource,
+    new_scan_path: String,
+    scan_status: Arc<Mutex<ScanStatus>>,
+
     save_status: String,
 }
 
@@ -112,6 +131,9 @@ impl SystemSettingsWindow {
             update::spawn_check(update_status.clone());
         }
 
+        let audio_plugin_settings = plugin_settings::load_from_disk().unwrap_or_default();
+        plugin_registry::set_disabled(&audio_plugin_settings.disabled_plugin_ids);
+
         Self {
             open: false,
             selected_category: 0,
@@ -132,6 +154,9 @@ impl SystemSettingsWindow {
             check_update_on_startup: s.check_update_on_startup,
             update_status,
             crash_reporting_enabled: s.crash_reporting_enabled,
+            audio_plugin_settings,
+            new_scan_path: String::new(),
+            scan_status: Arc::new(Mutex::new(ScanStatus::Idle)),
             save_status: String::new(),
         }
     }
@@ -145,6 +170,11 @@ impl SystemSettingsWindow {
         let mut s = world.get_system_settings();
         mutate(&mut s);
         world.set_system_settings(s);
+    }
+
+    fn persist_audio_plugin_settings(&self) {
+        let _ = plugin_settings::save_to_disk(&self.audio_plugin_settings);
+        plugin_registry::set_disabled(&self.audio_plugin_settings.disabled_plugin_ids);
     }
 
     fn reload(&mut self, world_holder: &Arc<Mutex<EcsWorld>>) {
@@ -174,6 +204,12 @@ impl SystemSettingsWindow {
         self.export_codec = loaded.export_codec;
         self.check_update_on_startup = loaded.check_update_on_startup;
         self.crash_reporting_enabled = loaded.crash_reporting_enabled;
+
+        if let Some(loaded_plugins) = plugin_settings::load_from_disk() {
+            self.audio_plugin_settings = loaded_plugins;
+            plugin_registry::set_disabled(&self.audio_plugin_settings.disabled_plugin_ids);
+        }
+
         self.save_status = t!("再読込完了");
     }
 
@@ -193,9 +229,11 @@ impl SystemSettingsWindow {
                         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                             if ui.add(Button::new(t!("保存"))).clicked() {
                                 let s = world_holder.lock().unwrap().get_system_settings();
-                                self.save_status = match save_to_disk(&s) {
-                                    Ok(()) => t!("保存完了"),
-                                    Err(_) => t!("保存失敗"),
+                                let plugin_save =
+                                    plugin_settings::save_to_disk(&self.audio_plugin_settings);
+                                self.save_status = match (save_to_disk(&s), plugin_save) {
+                                    (Ok(()), Ok(())) => t!("保存完了"),
+                                    _ => t!("保存失敗"),
                                 };
                             }
                             if ui.add(Button::new(t!("再読込")).outline()).clicked() {
@@ -246,6 +284,7 @@ impl SystemSettingsWindow {
                         3 => self.page_decode(ui, world_holder),
                         4 => self.page_timeline_defaults(ui, world_holder),
                         5 => self.page_export(ui, world_holder),
+                        6 => self.page_audio_plugins(ui),
                         _ => self.page_update(ui, world_holder),
                     });
             });
@@ -413,6 +452,141 @@ impl SystemSettingsWindow {
         if choice_field(ui, "映像コーデック", &codec_options, &mut export_codec) {
             self.export_codec = export_codec;
             self.persist(world_holder, |s| s.export_codec = export_codec);
+        }
+    }
+
+    fn page_audio_plugins(&mut self, ui: &mut egui::Ui) {
+        let mut auto_detect_system = self.audio_plugin_settings.auto_detect_system;
+        if toggle_field(
+            ui,
+            "システムにインストールされたプラグインを自動で検知する",
+            &mut auto_detect_system,
+        ) {
+            self.audio_plugin_settings.auto_detect_system = auto_detect_system;
+            self.persist_audio_plugin_settings();
+        }
+
+        ui.label(t!("走査パス"));
+        ui.end_row();
+
+        let mut remove_index: Option<usize> = None;
+        for (i, path) in self.audio_plugin_settings.scan_paths.iter().enumerate() {
+            ui.label(path);
+            if ui.add(Button::new(t!("削除")).outline()).clicked() {
+                remove_index = Some(i);
+            }
+            ui.end_row();
+        }
+        if let Some(i) = remove_index {
+            self.audio_plugin_settings.scan_paths.remove(i);
+            self.persist_audio_plugin_settings();
+        }
+
+        ui.add_sized(
+            egui::vec2(ui.available_width(), fields::field_height(ui)),
+            TextInput::new(&mut self.new_scan_path),
+        );
+        if ui.add(Button::new(t!("パスを追加"))).clicked() && !self.new_scan_path.is_empty() {
+            self.audio_plugin_settings
+                .scan_paths
+                .push(std::mem::take(&mut self.new_scan_path));
+            self.persist_audio_plugin_settings();
+        }
+        ui.end_row();
+
+        ui.separator();
+        ui.end_row();
+
+        let status = self.scan_status.lock().unwrap().clone();
+        match &status {
+            ScanStatus::Idle => {
+                ui.horizontal(|ui| {
+                    ui.add(Indicator::new(IndicatorState::Off));
+                    ui.label(t!("未走査"));
+                });
+                ui.end_row();
+            }
+            ScanStatus::Scanning => {
+                ui.horizontal(|ui| {
+                    ui.add(Spinner::new());
+                    ui.label(t!("走査中..."));
+                });
+                ui.end_row();
+            }
+            ScanStatus::Done => {
+                ui.horizontal(|ui| {
+                    ui.add(Indicator::new(IndicatorState::On));
+                    ui.label(t!("走査完了"));
+                });
+                ui.end_row();
+            }
+            ScanStatus::Error(err) => {
+                ui.horizontal(|ui| {
+                    ui.add(Indicator::new(IndicatorState::Off));
+                    ui.label(t!("エラー: %{arg0}", arg0 = format!("{err}")));
+                });
+                ui.end_row();
+            }
+        }
+
+        if ui.add(Button::new(t!("プラグインを再走査"))).clicked() {
+            let paths: Vec<PathBuf> = self
+                .audio_plugin_settings
+                .scan_paths
+                .iter()
+                .map(PathBuf::from)
+                .collect();
+            let scan_status = self.scan_status.clone();
+            *scan_status.lock().unwrap() = ScanStatus::Scanning;
+            let disabled_ids = self.audio_plugin_settings.disabled_plugin_ids.clone();
+            let auto_detect_system = self.audio_plugin_settings.auto_detect_system;
+            std::thread::spawn(move || {
+                let entries = plugin_registry::rescan(&paths, auto_detect_system);
+                plugin_registry::set_disabled(&disabled_ids);
+                let saved = AudioPluginSettingsResource {
+                    scan_paths: paths
+                        .iter()
+                        .map(|p| p.to_string_lossy().to_string())
+                        .collect(),
+                    disabled_plugin_ids: disabled_ids,
+                    cached_catalog: entries,
+                    auto_detect_system,
+                };
+                *scan_status.lock().unwrap() = match plugin_settings::save_to_disk(&saved) {
+                    Ok(()) => ScanStatus::Done,
+                    Err(err) => ScanStatus::Error(format!("{err}")),
+                };
+            });
+        }
+        ui.end_row();
+
+        ui.separator();
+        ui.end_row();
+
+        ui.label(t!("検出済みプラグイン"));
+        ui.end_row();
+
+        let catalog: Vec<PluginCatalogEntry> = plugin_registry::get_all_unfiltered();
+        let mut toggled: Option<(String, bool)> = None;
+        for entry in &catalog {
+            let mut enabled = !plugin_registry::is_disabled(&entry.plugin_id);
+            let label = format!("{} ({:?})", entry.name, entry.format);
+            ui.label(&label);
+            if ui.add(Switch::new(&mut enabled, "")).changed() {
+                toggled = Some((entry.plugin_id.clone(), !enabled));
+            }
+            ui.end_row();
+        }
+        if let Some((plugin_id, disabled)) = toggled {
+            let ids = &mut self.audio_plugin_settings.disabled_plugin_ids;
+            if disabled {
+                if !ids.contains(&plugin_id) {
+                    ids.push(plugin_id);
+                }
+            } else {
+                ids.retain(|id| id != &plugin_id);
+            }
+            self.persist_audio_plugin_settings();
         }
     }
 
