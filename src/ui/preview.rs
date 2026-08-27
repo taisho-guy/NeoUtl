@@ -32,6 +32,7 @@ pub struct PreviewPanel {
     total_frames: i32,
     fps: i32,
     session_generation: u64,
+    last_rendered_key: Option<(u64, u64, i32)>,
     pub open_system_settings: bool,
     pub open_project_settings: bool,
     pub open_keybindings: bool,
@@ -54,6 +55,7 @@ impl PreviewPanel {
             total_frames: 0,
             fps: 30,
             session_generation: 0,
+            last_rendered_key: None,
             open_system_settings: false,
             open_project_settings: false,
             open_keybindings: false,
@@ -156,7 +158,6 @@ impl PreviewPanel {
         let engine_holder = app_state::active_engine(state);
         let world = world_holder.lock().unwrap();
         let proj = world.get_project();
-        let (active, captured) = get_active_objects_system(&world);
 
         let mut engine_lock = engine_holder.lock().unwrap();
         if engine_lock.is_none() {
@@ -178,7 +179,14 @@ impl PreviewPanel {
             }
         }
 
-        engine.render(&world, &active, &captured, &proj);
+        let revision = world.revision();
+        let key = (self.session_generation, revision, self.current_frame);
+        let needs_recompose = self.texture_id.is_none() || self.last_rendered_key != Some(key);
+        if needs_recompose {
+            let (active, captured, media_pending) = get_active_objects_system(&world);
+            engine.render(&world, &active, &captured, &proj);
+            self.last_rendered_key = if media_pending { None } else { Some(key) };
+        }
 
         if self.texture_id.is_none() {
             let view = engine

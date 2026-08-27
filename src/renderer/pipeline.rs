@@ -2179,7 +2179,7 @@ impl RenderEngine {
                             target_scene,
                             local_frame,
                         }) => world.get_scene(target_scene).and_then(|scene| {
-                            let (nested, nested_captured) =
+                            let (nested, nested_captured, _media_pending) =
                                 crate::ecs::systems::get_active_objects_system_at(
                                     world,
                                     target_scene,

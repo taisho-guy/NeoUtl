@@ -116,6 +116,7 @@ impl From<&SceneMeta> for SceneSettings {
 pub struct EcsWorld {
     pub world: World,
     selected_ids: std::collections::HashSet<usize>,
+    revision: u64,
 }
 
 impl EcsWorld {
@@ -130,7 +131,16 @@ impl EcsWorld {
         Self {
             world,
             selected_ids: std::collections::HashSet::new(),
+            revision: 0,
         }
+    }
+
+    fn touch(&mut self) {
+        self.revision += 1;
+    }
+
+    pub fn revision(&self) -> u64 {
+        self.revision
     }
 
     pub fn set_selected_ids(&mut self, ids: std::collections::HashSet<usize>) {
@@ -182,6 +192,7 @@ impl EcsWorld {
         }
 
         self.update_total_frames();
+        self.touch();
         id
     }
 
@@ -197,6 +208,7 @@ impl EcsWorld {
         if let Some(entity) = self.find_entity(id) {
             self.world.add_component(entity, shape);
         }
+        self.touch();
         id
     }
 
@@ -212,6 +224,7 @@ impl EcsWorld {
         if let Some(entity) = self.find_entity(id) {
             self.world.add_component(entity, media);
         }
+        self.touch();
         id
     }
 
@@ -228,6 +241,7 @@ impl EcsWorld {
             self.world
                 .add_component(entity, SceneObject { target_scene });
         }
+        self.touch();
         id
     }
 
@@ -243,6 +257,7 @@ impl EcsWorld {
         if let Some(entity) = self.find_entity(id) {
             self.world.add_component(entity, gc);
         }
+        self.touch();
         id
     }
 
@@ -255,6 +270,7 @@ impl EcsWorld {
                 *slot = gc;
             }
         });
+        self.touch();
     }
 
     pub fn set_clip_target(&mut self, object_id: usize, ct: ClipTarget) {
@@ -273,6 +289,7 @@ impl EcsWorld {
         } else {
             self.world.add_component(entity, ct);
         }
+        self.touch();
     }
 
     pub fn get_clip_target(&self, object_id: usize) -> ClipTarget {
@@ -327,6 +344,7 @@ impl EcsWorld {
             self.world.delete_entity(entity);
             self.update_total_frames();
         }
+        self.touch();
     }
 
     pub fn delete_objects(&mut self, ids: &[usize]) {
@@ -345,6 +363,7 @@ impl EcsWorld {
             }
         }
         self.update_total_frames();
+        self.touch();
     }
 
     pub fn update_total_frames(&mut self) {
@@ -361,6 +380,7 @@ impl EcsWorld {
             .run(|mut timeline: UniqueViewMut<TimelineResource>| {
                 timeline.current_frame = frame;
             });
+        self.touch();
     }
 
     pub fn current_frame(&self) -> i32 {
@@ -383,6 +403,7 @@ impl EcsWorld {
             .run(|mut timeline: UniqueViewMut<TimelineResource>| {
                 timeline.zoom_scale = scale.clamp(0.1, 10.0);
             });
+        self.touch();
     }
 
     pub fn zoom(&self) -> f32 {
@@ -393,11 +414,13 @@ impl EcsWorld {
     pub fn set_layer_visible(&mut self, layer: usize, visible: bool) {
         self.world
             .run(|mut states: UniqueViewMut<LayerStates>| states.set_visible(layer, visible));
+        self.touch();
     }
 
     pub fn set_layer_locked(&mut self, layer: usize, locked: bool) {
         self.world
             .run(|mut states: UniqueViewMut<LayerStates>| states.set_locked(layer, locked));
+        self.touch();
     }
 
     pub fn layer_states(&self) -> Vec<(bool, bool)> {
@@ -410,6 +433,7 @@ impl EcsWorld {
             .run(|mut project: UniqueViewMut<ProjectResource>| {
                 project.fps = fps;
             });
+        self.touch();
     }
 
     pub fn set_resolution(&mut self, width: u32, height: u32) {
@@ -428,6 +452,7 @@ impl EcsWorld {
                 project.name = name;
                 project.dir = Some(dir);
             });
+        self.touch();
     }
 
     pub fn set_audio_format(&mut self, sample_rate: u32, channels: u32) {
@@ -436,6 +461,7 @@ impl EcsWorld {
                 project.audio_sample_rate = sample_rate;
                 project.audio_channels = channels;
             });
+        self.touch();
     }
 
     fn apply_scene_resolution(&mut self, width: u32, height: u32, fps: u32) {
@@ -446,6 +472,7 @@ impl EcsWorld {
                 project.fps = fps;
             });
         self.set_camera(Camera::for_resolution(width as f32, height as f32));
+        self.touch();
     }
 
     pub fn get_timeline_objects(&self) -> Vec<TimelineData> {
@@ -594,6 +621,7 @@ impl EcsWorld {
             },
         );
         self.update_total_frames();
+        self.touch();
     }
 
     pub fn resize_object(&mut self, object_id: usize, new_start: i32, new_end: i32) {
@@ -1044,6 +1072,7 @@ impl EcsWorld {
                 }
             },
         );
+        self.touch();
     }
 
     pub fn recompute_global_matrices(&mut self) {
@@ -1075,6 +1104,7 @@ impl EcsWorld {
                 stack.push(effect_id);
             }
         });
+        self.touch();
     }
 
     pub fn reorder_effect(&mut self, object_id: usize, from: usize, to: usize) {
@@ -1101,6 +1131,7 @@ impl EcsWorld {
                 stack.set_enabled(index, enabled);
             }
         });
+        self.touch();
     }
 
     pub fn remove_effect(&mut self, object_id: usize, index: usize) {
@@ -1112,6 +1143,7 @@ impl EcsWorld {
                 stack.remove(index);
             }
         });
+        self.touch();
     }
 
     pub fn set_effect_param(&mut self, object_id: usize, index: usize, key: &str, value: f32) {
@@ -1123,6 +1155,7 @@ impl EcsWorld {
                 stack.set_param_f32(index, key, value);
             }
         });
+        self.touch();
     }
 
     pub fn get_plugin_chain(
@@ -1238,6 +1271,7 @@ impl EcsWorld {
                 stack.set_param_bool(index, key, value);
             }
         });
+        self.touch();
     }
 
     pub fn set_effect_param_text(
@@ -1255,6 +1289,7 @@ impl EcsWorld {
                 stack.set_param_text(index, key, value);
             }
         });
+        self.touch();
     }
 
     pub fn set_effect_param_path(
@@ -1272,6 +1307,7 @@ impl EcsWorld {
                 stack.set_param_path(index, key, value);
             }
         });
+        self.touch();
     }
 
     pub fn set_effect_param_enum(&mut self, object_id: usize, index: usize, key: &str, value: u32) {
@@ -1283,6 +1319,7 @@ impl EcsWorld {
                 stack.set_param_enum(index, key, value);
             }
         });
+        self.touch();
     }
 
     pub fn set_effect_param_track_ref(
@@ -1300,6 +1337,7 @@ impl EcsWorld {
                 stack.set_param_track_ref(index, key, value);
             }
         });
+        self.touch();
     }
 
     pub fn get_effects(&self, object_id: usize) -> Vec<EffectInstance> {
@@ -1327,6 +1365,7 @@ impl EcsWorld {
                 slot.font_size = font_size;
             }
         });
+        self.touch();
     }
 
     pub fn get_shape(&self, object_id: usize) -> Option<ShapeParams> {
@@ -1391,6 +1430,7 @@ impl EcsWorld {
             .unwrap_or_default();
         tracks.set_keyframe(key, frame, value, engine_id, engine_payload);
         self.world.add_component(entity, tracks);
+        self.touch();
     }
 
     pub fn remove_keyframe(&mut self, object_id: usize, key: &str, frame: i32) {
@@ -1402,6 +1442,7 @@ impl EcsWorld {
                 t.remove_keyframe(key, frame);
             }
         });
+        self.touch();
     }
 
     pub fn move_keyframe(
@@ -1453,6 +1494,7 @@ impl EcsWorld {
                 stack.set_keyframe(index, key, frame, value, engine_id, engine_payload);
             }
         });
+        self.touch();
     }
 
     pub fn remove_effect_keyframe(
@@ -1470,6 +1512,7 @@ impl EcsWorld {
                 stack.remove_keyframe(index, key, frame);
             }
         });
+        self.touch();
     }
 
     pub fn get_effect_keyframes(
@@ -1769,5 +1812,6 @@ impl EcsWorld {
             self.apply_scene_resolution(scene.width, scene.height, scene.fps);
         }
         self.update_total_frames();
+        self.touch();
     }
 }
