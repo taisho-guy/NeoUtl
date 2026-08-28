@@ -1,3 +1,0 @@
-LensFlareObject {
-    objectId: "flare"
-}

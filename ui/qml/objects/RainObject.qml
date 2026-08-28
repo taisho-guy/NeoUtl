@@ -1,3 +1,0 @@
-ParticleFieldObject {
-    objectId: "rain"
-}

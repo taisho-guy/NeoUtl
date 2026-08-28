@@ -1,8 +1,0 @@
-<!DOCTYPE RCC>
-<RCC>
-  <qresource prefix="/">
-    <file alias="assets/icon.svg">../assets/icon.svg</file>
-    <file alias="assets/splash.svg">../assets/splash.svg</file>
-    <file>resources/remixicon.ttf</file>
-  </qresource>
-</RCC>
