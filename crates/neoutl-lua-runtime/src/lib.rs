@@ -1,7 +1,12 @@
 use mlua::{Lua, RegistryKey, StdLib, Table, Value as LuaValue};
 use neoutl_effect_lua::LuaEffectSource;
+use neoutl_shared_abi::PluginError;
 use std::path::Path;
 use std::sync::{Arc, Mutex};
+
+fn mlua_err(err: mlua::Error) -> PluginError {
+    PluginError::Runtime(err.to_string())
+}
 
 #[derive(Clone, Debug)]
 pub struct ComputeDef {
@@ -23,47 +28,30 @@ pub struct LuaSystem {
     regs: Arc<Mutex<Registrations>>,
 }
 
-#[derive(Debug)]
-pub enum SystemError {
-    Lua(mlua::Error),
-}
-impl std::fmt::Display for SystemError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Lua(err) => write!(f, "Lua実行エラー: {err}"),
-        }
-    }
-}
-impl std::error::Error for SystemError {}
-impl From<mlua::Error> for SystemError {
-    fn from(err: mlua::Error) -> Self {
-        Self::Lua(err)
-    }
-}
-
 impl LuaSystem {
-    pub fn new() -> Result<Self, SystemError> {
+    pub fn new() -> Result<Self, PluginError> {
         let lua = Lua::new_with(
             StdLib::TABLE | StdLib::STRING | StdLib::MATH,
             mlua::LuaOptions::new(),
-        )?;
+        )
+        .map_err(mlua_err)?;
         let regs = Arc::new(Mutex::new(Registrations::default()));
-        install_system_table(&lua, &regs)?;
+        install_system_table(&lua, &regs).map_err(mlua_err)?;
         Ok(Self { lua, regs })
     }
 
-    pub fn load_script(&self, src: &str, chunk_name: &str) -> Result<(), SystemError> {
-        self.lua.load(src).set_name(chunk_name).exec()?;
+    pub fn load_script(&self, src: &str, chunk_name: &str) -> Result<(), PluginError> {
+        self.lua
+            .load(src)
+            .set_name(chunk_name)
+            .exec()
+            .map_err(mlua_err)?;
         Ok(())
     }
 
-    pub fn load_file(&self, path: &Path) -> Result<(), SystemError> {
-        let src = std::fs::read_to_string(path).map_err(|err| {
-            SystemError::Lua(mlua::Error::RuntimeError(format!(
-                "スクリプト読込失敗 {}: {err}",
-                path.display()
-            )))
-        })?;
+    pub fn load_file(&self, path: &Path) -> Result<(), PluginError> {
+        let src = std::fs::read_to_string(path)
+            .map_err(|err| PluginError::Load(format!("{}: {err}", path.display())))?;
         self.load_script(&src, &path.to_string_lossy())
     }
 
@@ -99,7 +87,7 @@ impl LuaSystem {
         std::mem::take(&mut self.regs.lock().unwrap().computes)
     }
 
-    pub fn run_pre_render_hooks(&self) -> Result<(), SystemError> {
+    pub fn run_pre_render_hooks(&self) -> Result<(), PluginError> {
         let len = self.regs.lock().unwrap().pre_render_hooks.len();
         for i in 0..len {
             let f: mlua::Function = {
@@ -107,14 +95,14 @@ impl LuaSystem {
                 let Some(key) = regs.pre_render_hooks.get(i) else {
                     continue;
                 };
-                self.lua.registry_value(key)?
+                self.lua.registry_value(key).map_err(mlua_err)?
             };
-            f.call::<()>(())?;
+            f.call::<()>(()).map_err(mlua_err)?;
         }
         Ok(())
     }
 
-    pub fn run_post_export_hooks(&self) -> Result<(), SystemError> {
+    pub fn run_post_export_hooks(&self) -> Result<(), PluginError> {
         let len = self.regs.lock().unwrap().post_export_hooks.len();
         for i in 0..len {
             let f: mlua::Function = {
@@ -122,25 +110,25 @@ impl LuaSystem {
                 let Some(key) = regs.post_export_hooks.get(i) else {
                     continue;
                 };
-                self.lua.registry_value(key)?
+                self.lua.registry_value(key).map_err(mlua_err)?
             };
-            f.call::<()>(())?;
+            f.call::<()>(()).map_err(mlua_err)?;
         }
         Ok(())
     }
 
-    fn clear_hooks(&self) -> Result<(), SystemError> {
+    fn clear_hooks(&self) -> Result<(), PluginError> {
         let mut regs = self.regs.lock().unwrap();
         for key in regs.pre_render_hooks.drain(..) {
-            self.lua.remove_registry_value(key)?;
+            self.lua.remove_registry_value(key).map_err(mlua_err)?;
         }
         for key in regs.post_export_hooks.drain(..) {
-            self.lua.remove_registry_value(key)?;
+            self.lua.remove_registry_value(key).map_err(mlua_err)?;
         }
         Ok(())
     }
 
-    pub fn reload_dir(&self, dir: &Path) -> Result<(), SystemError> {
+    pub fn reload_dir(&self, dir: &Path) -> Result<(), PluginError> {
         self.clear_hooks()?;
         {
             let mut regs = self.regs.lock().unwrap();

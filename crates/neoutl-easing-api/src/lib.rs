@@ -1,4 +1,5 @@
-use std::os::raw::{c_char, c_void};
+use neoutl_shared_abi::StrRef;
+use std::os::raw::c_void;
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
@@ -13,8 +14,8 @@ unsafe impl Sync for KeyframeC {}
 
 #[repr(C)]
 pub struct EasingEngineMeta {
-    pub id: *const c_char,
-    pub name: *const c_char,
+    pub id: StrRef,
+    pub name: StrRef,
 }
 unsafe impl Send for EasingEngineMeta {}
 unsafe impl Sync for EasingEngineMeta {}

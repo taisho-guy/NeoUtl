@@ -1,12 +1,11 @@
-pub use neoutl_shared_abi::{Dimensionality, ParamKind, ParamSchema, StrRef, WgslSource};
+pub use neoutl_shared_abi::{Dimensionality, FfiSlice, ParamKind, ParamSchema, StrRef, WgslSource};
 
 #[repr(C)]
 pub struct ObjectMeta {
     pub stable_id: &'static str,
     pub name: &'static str,
     pub dimensionality: Dimensionality,
-    pub property_schema_ptr: *const ParamSchema,
-    pub property_schema_len: usize,
+    pub property_schema: FfiSlice<ParamSchema>,
 }
 unsafe impl Send for ObjectMeta {}
 unsafe impl Sync for ObjectMeta {}

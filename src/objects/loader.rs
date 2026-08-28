@@ -1,6 +1,7 @@
 use arc_swap::ArcSwap;
 use libloading::{Library, Symbol};
 use neoutl_object_api::{ENTRY_SYMBOL, EntryFn, ObjectVTable};
+use neoutl_shared_abi::PluginError;
 use std::{
     collections::HashMap,
     ffi::OsStr,
@@ -110,17 +111,17 @@ pub fn by_stable_id(stable_id: &str) -> Option<Arc<ObjectPlugin>> {
 
 pub const UNRESOLVED_KIND_ID: u32 = u32::MAX;
 
-pub fn reload_one(path: &Path) -> Result<(), String> {
-    let new_plugin = load_one(path).map_err(|e| e.to_string())?;
+pub fn reload_one(path: &Path) -> Result<(), PluginError> {
+    let new_plugin = load_one(path)?;
     let current = registry_swap().load_full();
     let Some(pos) = current
         .iter()
         .position(|p| p.stable_id == new_plugin.stable_id)
     else {
-        return Err(format!(
+        return Err(PluginError::Load(format!(
             "既存プラグイン未検出、新規追加は対象外: {}",
             new_plugin.stable_id
-        ));
+        )));
     };
 
     let kind_id = current
@@ -174,10 +175,11 @@ pub fn default_objects_dir() -> PathBuf {
     exe_dir.join("objects")
 }
 
-fn load_one(path: &Path) -> Result<ObjectPlugin, Box<dyn std::error::Error>> {
+fn load_one(path: &Path) -> Result<ObjectPlugin, PluginError> {
     crate::localization::load_plugin_catalog(path);
-    let lib = unsafe { Library::new(path) }?;
-    let entry: Symbol<EntryFn> = unsafe { lib.get(ENTRY_SYMBOL) }?;
+    let lib = unsafe { Library::new(path) }.map_err(|e| PluginError::Load(e.to_string()))?;
+    let entry: Symbol<EntryFn> =
+        unsafe { lib.get(ENTRY_SYMBOL) }.map_err(|e| PluginError::Load(e.to_string()))?;
     let vtable: &'static ObjectVTable = unsafe { &*entry() };
     let meta = unsafe { &*((vtable.meta)()) };
     Ok(ObjectPlugin {

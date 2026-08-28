@@ -53,8 +53,7 @@ static META: ObjectMeta = ObjectMeta {
     stable_id: "neoutl.object.shape",
     name: "Shape",
     dimensionality: Dimensionality::Both,
-    property_schema_ptr: PARAM_SCHEMA.as_ptr(),
-    property_schema_len: PARAM_SCHEMA.len(),
+    property_schema: neoutl_object_api::FfiSlice::from_static(PARAM_SCHEMA),
 };
 static VTABLE: OnceLock<ObjectVTable> = OnceLock::new();
 

@@ -9,9 +9,9 @@ pub use curve::{
 use neoutl_easing_api::{
     EasingEngineMeta, EasingEngineVTable, EditResultC, EditResultCode, KeyframeC,
 };
+use neoutl_shared_abi::StrRef;
 use serde::{Deserialize, Serialize};
-use std::ffi::{CString, c_void};
-use std::sync::OnceLock;
+use std::ffi::c_void;
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct EasingPayload {
@@ -82,19 +82,13 @@ unsafe fn decode_keyframes(keyframes_ptr: *const KeyframeC, count: usize) -> Vec
         .collect()
 }
 
-static META: OnceLock<(CString, CString, EasingEngineMeta)> = OnceLock::new();
+static META: EasingEngineMeta = EasingEngineMeta {
+    id: StrRef::from_str("neoutl-easing-standard"),
+    name: StrRef::from_str("Standard Easing Engine"),
+};
 
 unsafe extern "C" fn meta() -> *const EasingEngineMeta {
-    let (_, _, m) = META.get_or_init(|| {
-        let id_c = CString::new("neoutl-easing-standard").unwrap();
-        let name_c = CString::new("Standard Easing Engine").unwrap();
-        let m = EasingEngineMeta {
-            id: id_c.as_ptr(),
-            name: name_c.as_ptr(),
-        };
-        (id_c, name_c, m)
-    });
-    m as *const EasingEngineMeta
+    &META
 }
 
 unsafe extern "C" fn evaluate_c(

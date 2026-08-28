@@ -1,7 +1,8 @@
 use libloading::{Library, Symbol};
 use neoutl_easing_api::{ENTRY_SYMBOL, EasingEngineMeta, EasingEngineVTable, EntryFn, KeyframeC};
+use neoutl_shared_abi::PluginError;
 use std::{
-    ffi::{CStr, OsStr},
+    ffi::OsStr,
     path::{Path, PathBuf},
     sync::OnceLock,
 };
@@ -33,6 +34,10 @@ impl EasingPlugin {
     }
 }
 
+fn read_meta_strings(meta: &'static EasingEngineMeta) -> (String, String) {
+    unsafe { (meta.id.as_str().to_owned(), meta.name.as_str().to_owned()) }
+}
+
 static REGISTRY: OnceLock<Vec<EasingPlugin>> = OnceLock::new();
 
 pub fn load_all(easings_dir: &Path) {
@@ -41,12 +46,7 @@ pub fn load_all(easings_dir: &Path) {
 
         let builtin_vtable = unsafe { &*neoutl_easing_standard::neoutl_easing_engine_entry() };
         let meta = unsafe { &*((builtin_vtable.meta)()) };
-        let builtin_id = unsafe { CStr::from_ptr(meta.id) }
-            .to_string_lossy()
-            .into_owned();
-        let builtin_name = unsafe { CStr::from_ptr(meta.name) }
-            .to_string_lossy()
-            .into_owned();
+        let (builtin_id, builtin_name) = read_meta_strings(meta);
         plugins.push(EasingPlugin {
             id: builtin_id,
             name: builtin_name,
@@ -136,17 +136,13 @@ pub fn default_easings_dir() -> PathBuf {
     exe_dir.join("easings")
 }
 
-fn load_one(path: &Path) -> Result<EasingPlugin, Box<dyn std::error::Error>> {
-    let lib = unsafe { Library::new(path) }?;
-    let entry: Symbol<EntryFn> = unsafe { lib.get(ENTRY_SYMBOL) }?;
+fn load_one(path: &Path) -> Result<EasingPlugin, PluginError> {
+    let lib = unsafe { Library::new(path) }.map_err(|e| PluginError::Load(e.to_string()))?;
+    let entry: Symbol<EntryFn> =
+        unsafe { lib.get(ENTRY_SYMBOL) }.map_err(|e| PluginError::Load(e.to_string()))?;
     let vtable: &'static EasingEngineVTable = unsafe { &*entry() };
     let meta: &'static EasingEngineMeta = unsafe { &*((vtable.meta)()) };
-    let id = unsafe { CStr::from_ptr(meta.id) }
-        .to_string_lossy()
-        .into_owned();
-    let name = unsafe { CStr::from_ptr(meta.name) }
-        .to_string_lossy()
-        .into_owned();
+    let (id, name) = read_meta_strings(meta);
     Ok(EasingPlugin {
         id,
         name,

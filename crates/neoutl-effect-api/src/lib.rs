@@ -1,4 +1,4 @@
-pub use neoutl_shared_abi::{ParamKind, StrRef, WgslSource};
+pub use neoutl_shared_abi::{FfiSlice, ParamKind, StrRef, WgslSource};
 pub type EffectParamSchema = neoutl_shared_abi::ParamSchema;
 
 #[repr(C)]
@@ -6,8 +6,7 @@ pub struct EffectMeta {
     pub id: &'static str,
     pub name: &'static str,
     pub category: &'static str,
-    pub param_schema_ptr: *const EffectParamSchema,
-    pub param_schema_len: usize,
+    pub param_schema: FfiSlice<EffectParamSchema>,
 }
 unsafe impl Send for EffectMeta {}
 unsafe impl Sync for EffectMeta {}

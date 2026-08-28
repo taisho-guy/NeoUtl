@@ -43,8 +43,7 @@ static META: EffectMeta = EffectMeta {
     id: "radial_blur",
     name: "RadialBlur",
     category: "Blur",
-    param_schema_ptr: PARAM_SCHEMA.as_ptr(),
-    param_schema_len: PARAM_SCHEMA.len(),
+    param_schema: neoutl_effect_api::FfiSlice::from_static(PARAM_SCHEMA),
 };
 static VTABLE: OnceLock<EffectVTable> = OnceLock::new();
 

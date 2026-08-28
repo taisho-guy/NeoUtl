@@ -1,5 +1,5 @@
 use mlua::{Lua, StdLib, Table, Value as LuaValue};
-use neoutl_shared_abi::{ParamKind, ParamRowOwned};
+use neoutl_shared_abi::{ParamKind, ParamRowOwned, PluginError};
 use std::path::{Path, PathBuf};
 
 #[derive(Clone, Debug)]
@@ -12,31 +12,6 @@ pub struct LuaEffectSource {
     pub script_path: PathBuf,
 }
 
-#[derive(Debug)]
-pub enum LuaEffectError {
-    Lua(mlua::Error),
-    MissingField(&'static str),
-    InvalidField(&'static str),
-    UnknownParamKind(String),
-}
-
-impl std::fmt::Display for LuaEffectError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Lua(err) => write!(f, "Lua実行エラー: {err}"),
-            Self::MissingField(name) => write!(f, "必須フィールド欠落: {name}"),
-            Self::InvalidField(name) => write!(f, "フィールド型不正: {name}"),
-            Self::UnknownParamKind(kind) => write!(f, "未知のparam kind: {kind}"),
-        }
-    }
-}
-impl std::error::Error for LuaEffectError {}
-impl From<mlua::Error> for LuaEffectError {
-    fn from(err: mlua::Error) -> Self {
-        Self::Lua(err)
-    }
-}
-
 fn sandboxed_lua() -> mlua::Result<Lua> {
     Lua::new_with(
         StdLib::TABLE | StdLib::STRING | StdLib::MATH,
@@ -44,19 +19,19 @@ fn sandboxed_lua() -> mlua::Result<Lua> {
     )
 }
 
-pub fn load(path: &Path) -> Result<LuaEffectSource, LuaEffectError> {
-    let src = std::fs::read_to_string(path).map_err(|err| {
-        LuaEffectError::Lua(mlua::Error::RuntimeError(format!(
-            "スクリプト読込失敗 {}: {err}",
-            path.display()
-        )))
-    })?;
-    let lua = sandboxed_lua()?;
+pub fn load(path: &Path) -> Result<LuaEffectSource, PluginError> {
+    let src = std::fs::read_to_string(path)
+        .map_err(|err| PluginError::Load(format!("{}: {err}", path.display())))?;
+    let lua = sandboxed_lua().map_err(|err| PluginError::Runtime(err.to_string()))?;
     let chunk_name = path.to_string_lossy().into_owned();
-    let value: LuaValue = lua.load(&src).set_name(&chunk_name).eval()?;
+    let value: LuaValue = lua
+        .load(&src)
+        .set_name(&chunk_name)
+        .eval()
+        .map_err(|err| PluginError::Runtime(err.to_string()))?;
     let table = match value {
         LuaValue::Table(t) => t,
-        _ => return Err(LuaEffectError::InvalidField("(戻り値はtableであること)")),
+        _ => return Err(PluginError::InvalidField("(戻り値はtableであること)")),
     };
     build_effect_source(&table, path)
 }
@@ -75,44 +50,36 @@ pub fn load_dir(dir: &Path) -> Vec<LuaEffectSource> {
 
     paths
         .into_iter()
-        .filter_map(|path| {
-            if std::fs::read_to_string(&path)
-                .map(|source| source.contains("system."))
-                .unwrap_or(false)
-            {
-                return None;
-            }
-            match load(&path) {
-                Ok(src) => Some(src),
-                Err(err) => {
-                    eprintln!("[NeoUtl] Luaエフェクト読込失敗 {}: {err}", path.display());
-                    None
-                }
+        .filter_map(|path| match load(&path) {
+            Ok(src) => Some(src),
+            Err(err) => {
+                eprintln!("[NeoUtl] Luaエフェクト読込失敗 {}: {err}", path.display());
+                None
             }
         })
         .collect()
 }
 
-pub fn build_effect_source(table: &Table, path: &Path) -> Result<LuaEffectSource, LuaEffectError> {
+pub fn build_effect_source(table: &Table, path: &Path) -> Result<LuaEffectSource, PluginError> {
     let id: String = table
         .get("id")
-        .map_err(|_| LuaEffectError::MissingField("id"))?;
+        .map_err(|_| PluginError::MissingField("id"))?;
     let name: String = table
         .get("name")
-        .map_err(|_| LuaEffectError::MissingField("name"))?;
+        .map_err(|_| PluginError::MissingField("name"))?;
     let category: String = table
         .get("category")
-        .map_err(|_| LuaEffectError::MissingField("category"))?;
+        .map_err(|_| PluginError::MissingField("category"))?;
     let wgsl: String = table
         .get("wgsl")
-        .map_err(|_| LuaEffectError::MissingField("wgsl"))?;
+        .map_err(|_| PluginError::MissingField("wgsl"))?;
     let params_table: Table = table
         .get("params")
-        .map_err(|_| LuaEffectError::MissingField("params"))?;
+        .map_err(|_| PluginError::MissingField("params"))?;
 
     let mut param_schema = Vec::new();
     for pair in params_table.sequence_values::<Table>() {
-        let row = pair.map_err(|_| LuaEffectError::InvalidField("params[i]"))?;
+        let row = pair.map_err(|_| PluginError::InvalidField("params[i]"))?;
         param_schema.push(build_param_row(&row)?);
     }
 
@@ -126,28 +93,45 @@ pub fn build_effect_source(table: &Table, path: &Path) -> Result<LuaEffectSource
     })
 }
 
-fn build_param_row(row: &Table) -> Result<ParamRowOwned, LuaEffectError> {
+fn build_param_row(row: &Table) -> Result<ParamRowOwned, PluginError> {
     let key: String = row
         .get("key")
-        .map_err(|_| LuaEffectError::MissingField("params[i].key"))?;
+        .map_err(|_| PluginError::MissingField("params[i].key"))?;
     let label: String = row.get("label").unwrap_or_else(|_| key.clone());
     let kind_str: String = row
         .get("kind")
-        .map_err(|_| LuaEffectError::MissingField("params[i].kind"))?;
+        .map_err(|_| PluginError::MissingField("params[i].kind"))?;
     let kind = parse_param_kind(&kind_str)?;
-    let min: f32 = row.get("min").unwrap_or(0.0);
-    let max: f32 = row.get("max").unwrap_or(1.0);
-    let step: f32 = row.get("step").unwrap_or(0.01);
-    let default_float: f32 = row.get("default").unwrap_or(0.0);
-    let enum_options: Vec<String> = if kind == ParamKind::Enum {
-        let opts: Table = row
-            .get("options")
-            .map_err(|_| LuaEffectError::MissingField("params[i].options"))?;
-        opts.sequence_values::<String>()
-            .collect::<Result<_, _>>()
-            .map_err(|_| LuaEffectError::InvalidField("params[i].options"))?
-    } else {
-        Vec::new()
+
+    let (min, max, step, default_float, enum_options) = match kind {
+        ParamKind::Float => (
+            row.get("min").unwrap_or(0.0),
+            row.get("max").unwrap_or(1.0),
+            row.get("step").unwrap_or(0.01),
+            row.get("default").unwrap_or(0.0),
+            Vec::new(),
+        ),
+        ParamKind::Bool => (0.0, 1.0, 1.0, row.get("default").unwrap_or(0.0), Vec::new()),
+        ParamKind::Enum => {
+            let opts: Table = row
+                .get("options")
+                .map_err(|_| PluginError::MissingField("params[i].options"))?;
+            let options: Vec<String> =
+                opts.sequence_values::<String>()
+                    .collect::<Result<_, _>>()
+                    .map_err(|_| PluginError::InvalidField("params[i].options"))?;
+            if options.is_empty() {
+                return Err(PluginError::InvalidField("params[i].options"));
+            }
+            (0.0, (options.len() - 1) as f32, 1.0, 0.0, options)
+        }
+        ParamKind::Text
+        | ParamKind::FilePath
+        | ParamKind::Track
+        | ParamKind::Separator
+        | ParamKind::Group
+        | ParamKind::Folder
+        | ParamKind::Color => (0.0, 0.0, 0.0, 0.0, Vec::new()),
     };
 
     Ok(ParamRowOwned {
@@ -162,7 +146,7 @@ fn build_param_row(row: &Table) -> Result<ParamRowOwned, LuaEffectError> {
     })
 }
 
-fn parse_param_kind(s: &str) -> Result<ParamKind, LuaEffectError> {
+fn parse_param_kind(s: &str) -> Result<ParamKind, PluginError> {
     Ok(match s {
         "float" => ParamKind::Float,
         "bool" => ParamKind::Bool,
@@ -174,6 +158,6 @@ fn parse_param_kind(s: &str) -> Result<ParamKind, LuaEffectError> {
         "separator" => ParamKind::Separator,
         "group" => ParamKind::Group,
         "folder" => ParamKind::Folder,
-        other => return Err(LuaEffectError::UnknownParamKind(other.to_owned())),
+        other => return Err(PluginError::Unknown(other.to_owned())),
     })
 }

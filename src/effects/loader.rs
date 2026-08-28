@@ -2,8 +2,9 @@ use arc_swap::ArcSwap;
 use libloading::{Library, Symbol};
 use neoutl_effect_api::{ENTRY_SYMBOL, EffectVTable, EntryFn};
 use neoutl_effect_lua::LuaEffectSource;
-use neoutl_shared_abi::ParamRowOwned;
+use neoutl_shared_abi::{ParamRowOwned, PluginError};
 use std::{
+    collections::HashSet,
     ffi::OsStr,
     path::{Path, PathBuf},
     sync::{Arc, OnceLock},
@@ -48,11 +49,7 @@ impl EffectSource {
         match self {
             Self::Native(p) => {
                 let src = unsafe { (p.vtable.wgsl)() };
-                if src.ptr.is_null() {
-                    &[]
-                } else {
-                    unsafe { std::slice::from_raw_parts(src.ptr, src.len) }
-                }
+                unsafe { src.as_slice() }
             }
             Self::Lua(s) => s.wgsl.as_bytes(),
         }
@@ -62,12 +59,7 @@ impl EffectSource {
         match self {
             Self::Native(p) => {
                 let meta = unsafe { &*((p.vtable.meta)()) };
-                if meta.param_schema_ptr.is_null() || meta.param_schema_len == 0 {
-                    return Vec::new();
-                }
-                let raw = unsafe {
-                    std::slice::from_raw_parts(meta.param_schema_ptr, meta.param_schema_len)
-                };
+                let raw = unsafe { meta.param_schema.as_slice() };
                 raw.iter().map(|s| unsafe { s.to_owned_row() }).collect()
             }
             Self::Lua(s) => s.param_schema.clone(),
@@ -109,24 +101,28 @@ fn registry_swap() -> &'static ArcSwap<Vec<Arc<EffectSource>>> {
     SWAP.get_or_init(|| ArcSwap::new(Arc::new(Vec::new())))
 }
 
+fn push_unique(
+    ids: &mut HashSet<String>,
+    sources: &mut Vec<Arc<EffectSource>>,
+    source: EffectSource,
+) {
+    if ids.insert(source.id().to_owned()) {
+        sources.push(Arc::new(source));
+    } else {
+        eprintln!("{}", t!("[NeoUtl] エフェクトID重複、除外: %{arg0}"));
+    }
+}
+
 pub fn load_all(effects_dir: &Path, scripts_dir: &Path) {
-    let mut ids = std::collections::HashSet::new();
+    let mut ids = HashSet::new();
     let mut sources: Vec<Arc<EffectSource>> = Vec::new();
 
     for plugin in load_native(effects_dir) {
-        if ids.insert(plugin.id.clone()) {
-            sources.push(Arc::new(EffectSource::Native(plugin)));
-        } else {
-            eprintln!("{}", t!("[NeoUtl] エフェクトID重複、除外: %{arg0}"));
-        }
+        push_unique(&mut ids, &mut sources, EffectSource::Native(plugin));
     }
     for lua_source in neoutl_effect_lua::load_dir(scripts_dir) {
         crate::localization::load_plugin_catalog(&lua_source.script_path);
-        if ids.insert(lua_source.id.clone()) {
-            sources.push(Arc::new(EffectSource::Lua(lua_source)));
-        } else {
-            eprintln!("{}", t!("[NeoUtl] エフェクトID重複、除外: %{arg0}"));
-        }
+        push_unique(&mut ids, &mut sources, EffectSource::Lua(lua_source));
     }
 
     sources.sort_by(|a, b| a.id().cmp(b.id()));
@@ -156,14 +152,14 @@ pub fn by_id(id: &str) -> Option<Arc<EffectSource>> {
     registry().iter().find(|p| p.id() == id).cloned()
 }
 
-pub fn reload_one(path: &Path) -> Result<(), String> {
-    let new_plugin = load_one(path).map_err(|e| e.to_string())?;
+pub fn reload_one(path: &Path) -> Result<(), PluginError> {
+    let new_plugin = load_one(path)?;
     let current = registry_swap().load_full();
     let Some(pos) = current.iter().position(|s| s.id() == new_plugin.id) else {
-        return Err(format!(
+        return Err(PluginError::Load(format!(
             "既存エフェクト未検出、新規追加は対象外: {}",
             new_plugin.id
-        ));
+        )));
     };
 
     let id = new_plugin.id.clone();
@@ -194,7 +190,7 @@ pub fn reload_one(path: &Path) -> Result<(), String> {
 
 pub fn reload_lua(sources: Vec<LuaEffectSource>) {
     let current = registry_swap().load_full();
-    let mut ids = std::collections::HashSet::new();
+    let mut ids = HashSet::new();
     let mut next: Vec<Arc<EffectSource>> = Vec::new();
 
     for s in current.iter() {
@@ -203,11 +199,7 @@ pub fn reload_lua(sources: Vec<LuaEffectSource>) {
         }
     }
     for lua_source in sources {
-        if ids.insert(lua_source.id.clone()) {
-            next.push(Arc::new(EffectSource::Lua(lua_source)));
-        } else {
-            eprintln!("{}", t!("[NeoUtl] エフェクトID重複、除外: %{arg0}"));
-        }
+        push_unique(&mut ids, &mut next, EffectSource::Lua(lua_source));
     }
 
     next.sort_by(|a, b| a.id().cmp(b.id()));
@@ -286,10 +278,11 @@ pub fn default_effects_lua_dir() -> PathBuf {
         .unwrap_or_else(|| PathBuf::from("scripts"))
 }
 
-fn load_one(path: &Path) -> Result<EffectPlugin, Box<dyn std::error::Error>> {
+fn load_one(path: &Path) -> Result<EffectPlugin, PluginError> {
     crate::localization::load_plugin_catalog(path);
-    let lib = unsafe { Library::new(path) }?;
-    let entry: Symbol<EntryFn> = unsafe { lib.get(ENTRY_SYMBOL) }?;
+    let lib = unsafe { Library::new(path) }.map_err(|e| PluginError::Load(e.to_string()))?;
+    let entry: Symbol<EntryFn> =
+        unsafe { lib.get(ENTRY_SYMBOL) }.map_err(|e| PluginError::Load(e.to_string()))?;
     let vtable: &'static EffectVTable = unsafe { &*entry() };
     let meta = unsafe { &*((vtable.meta)()) };
     Ok(EffectPlugin {

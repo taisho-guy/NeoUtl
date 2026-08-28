@@ -269,10 +269,10 @@ fn build_pipelines_from_registry(
                 return None;
             }
             let src = unsafe { (plugin.vtable.wgsl)() };
-            if src.ptr.is_null() {
+            if src.is_empty() {
                 return None;
             }
-            let wgsl = unsafe { std::slice::from_raw_parts(src.ptr, src.len) };
+            let wgsl = unsafe { src.as_slice() };
             match build_pipeline(device, layout, wgsl, &plugin.name) {
                 Ok(pipeline) => Some((plugin.kind_id, (pipeline, vertex_count))),
                 Err(err) => {

@@ -2978,6 +2978,7 @@ version = "0.1.0"
 dependencies = [
  "mlua",
  "neoutl-easing-api",
+ "neoutl-shared-abi",
  "serde",
  "serde_json",
 ]
