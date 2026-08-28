@@ -8,9 +8,9 @@ use crate::ecs::resources::{
     ProjectResource, SceneResource, SystemSettingsResource, TimelineResource,
 };
 use crate::ecs::transform::{
-    Camera, DEFAULT_FOV_DEG, GlobalMatrix, Projection, Transform, compute_chained_matrix,
+    Camera, GlobalMatrix, Projection, TargetLayerMode, Transform, compute_chained_matrix,
     compute_global_matrix, compute_mvp, compute_relative_matrix, rescale_for_source,
-    scale_to_pixels,
+    scale_to_pixels, view_space_depth,
 };
 use crate::ecs::types::Value;
 use crate::media::MediaKind;
@@ -58,14 +58,13 @@ pub struct ActiveObject {
     pub compose_source: Option<ComposeSource>,
     pub layer: i32,
     pub clip_target: Option<ClipTargetInfo>,
+    pub zbuffer_depth: Option<f32>,
 }
 
 pub type CapturedObjects = HashMap<EntityId, Vec<ActiveObject>>;
 
-fn projection_for(_kind_id: u32) -> Projection {
-    Projection::Perspective {
-        fov_deg: DEFAULT_FOV_DEG,
-    }
+fn projection_for(_kind_id: u32, fov_deg: f32) -> Projection {
+    Projection::Perspective { fov_deg }
 }
 
 #[derive(Clone, Copy)]
@@ -73,6 +72,7 @@ enum ControllerKind {
     Group {
         generate_framebuffer: bool,
         hide_captured: bool,
+        camera: Option<Camera>,
     },
     Clip {
         mode: ClipMode,
@@ -129,6 +129,37 @@ fn group_only(chain: &[usize], controllers: &[CurtainInfo]) -> Vec<usize> {
         .copied()
         .filter(|&i| matches!(controllers[i].kind, ControllerKind::Group { .. }))
         .collect()
+}
+
+fn resolve_camera(
+    chain_idx: &[usize],
+    controllers: &[CurtainInfo],
+    layer_positions: &HashMap<i32, (f32, f32, f32)>,
+) -> Option<(i32, Camera)> {
+    for &i in chain_idx {
+        if let ControllerKind::Group {
+            camera: Some(cam), ..
+        } = controllers[i].kind
+        {
+            let mut cam = cam;
+            if let TargetLayerMode::Layer(n) = cam.target_layer_mode {
+                if let Some(&(lx, ly, lz)) = layer_positions.get(&n) {
+                    cam.target_x += lx;
+                    cam.target_y += ly;
+                    cam.target_z += lz;
+                }
+            }
+            return Some((controllers[i].layer, cam));
+        }
+    }
+    None
+}
+
+fn zbuffer_sort_key(camera_layer: i32, global: &GlobalMatrix, cam: &Camera) -> f32 {
+    let depth = view_space_depth(global, cam);
+    let span = (cam.far - cam.near).max(1e-3);
+    let normalized = ((depth - cam.near) / span - 0.5).clamp(-0.5, 0.5);
+    camera_layer as f32 + normalized
 }
 
 fn resolve_group_chain(obj_layer: i32, controllers: &[CurtainInfo], max_depth: i32) -> Vec<usize> {
@@ -257,6 +288,7 @@ pub fn get_active_objects_system_at(
                     kind: ControllerKind::Group {
                         generate_framebuffer: gc.generate_framebuffer,
                         hide_captured: gc.hide_captured,
+                        camera: gc.camera,
                     },
                     render_self: true,
                 });
@@ -296,6 +328,22 @@ pub fn get_active_objects_system_at(
                     },
                     render_self: ct.render_self,
                 });
+            }
+
+                                    let mut layer_positions: HashMap<i32, (f32, f32, f32)> = HashMap::new();
+            for (id, (range, scene, layer)) in (&time_ranges, &scene_ids, &layers).iter().with_id()
+            {
+                if scene.0 != active_scene
+                    || current < range.start_frame
+                    || current >= range.end_frame
+                {
+                    continue;
+                }
+                let mut transform = transforms.get(id).copied().unwrap_or_default();
+                if let Ok(kt) = keyframe_tracks.get(id) {
+                    kt.apply(&mut transform, current);
+                }
+                layer_positions.insert(layer.0, (transform.x, transform.y, transform.z));
             }
 
             let mut active = Vec::new();
@@ -381,13 +429,21 @@ pub fn get_active_objects_system_at(
                     group_idx.iter().map(|&i| controllers[i].matrix).collect();
                 let matrix = compute_chained_matrix(&chain_matrices, &local_matrix);
 
+                let active_camera = resolve_camera(&chain_idx, &controllers, &layer_positions);
+                let effective_camera = active_camera.map_or(*camera, |(_, c)| c);
                 let mvp = compute_mvp(
                     &matrix,
-                    &camera,
+                    &effective_camera,
                     project_width,
                     project_height,
-                    projection_for(kind.0),
+                    projection_for(kind.0, effective_camera.fov_deg),
                 );
+                let zbuffer_depth = match active_camera {
+                    Some((camera_layer, cam)) if cam.zbuffer_enabled => {
+                        Some(zbuffer_sort_key(camera_layer, &matrix, &cam))
+                    }
+                    _ => None,
+                };
                 let mut opacity = transform.opacity;
                 for &i in &group_idx {
                     opacity *= controllers[i].opacity;
@@ -431,6 +487,7 @@ pub fn get_active_objects_system_at(
                     compose_source,
                     layer: obj_layer,
                     clip_target,
+                    zbuffer_depth,
                 };
 
                 let fb_pos = chain_idx.iter().position(|&i| {
@@ -453,13 +510,21 @@ pub fn get_active_objects_system_at(
                         .map(|&i| controllers[i].matrix)
                         .collect();
                     let inner_matrix = compute_chained_matrix(&inner_matrices, &local_matrix);
+                    let inner_camera = resolve_camera(inner_chain, &controllers, &layer_positions);
+                    let inner_effective_camera = inner_camera.map_or(*camera, |(_, c)| c);
                     let inner_mvp = compute_mvp(
                         &inner_matrix,
-                        &camera,
+                        &inner_effective_camera,
                         project_width,
                         project_height,
-                        projection_for(kind.0),
+                        projection_for(kind.0, inner_effective_camera.fov_deg),
                     );
+                    let inner_zbuffer_depth = match inner_camera {
+                        Some((camera_layer, cam)) if cam.zbuffer_enabled => {
+                            Some(zbuffer_sort_key(camera_layer, &inner_matrix, &cam))
+                        }
+                        _ => None,
+                    };
                     let mut inner_opacity = transform.opacity;
                     for &i in &inner_group_idx {
                         inner_opacity *= controllers[i].opacity;
@@ -493,6 +558,7 @@ pub fn get_active_objects_system_at(
                         opacity: inner_opacity,
                         effects: inner_effects,
                         clip_target: inner_clip_target,
+                        zbuffer_depth: inner_zbuffer_depth,
                         ..active_object.clone()
                     };
                     captured
@@ -514,13 +580,23 @@ pub fn get_active_objects_system_at(
                             .collect();
                         let stationary_matrix =
                             compute_chained_matrix(&stationary_matrices, &local_matrix);
+                        let stationary_camera =
+                            resolve_camera(&stationary_chain, &controllers, &layer_positions);
+                        let stationary_effective_camera =
+                            stationary_camera.map_or(*camera, |(_, c)| c);
                         let stationary_mvp = compute_mvp(
                             &stationary_matrix,
-                            &camera,
+                            &stationary_effective_camera,
                             project_width,
                             project_height,
-                            projection_for(kind.0),
+                            projection_for(kind.0, stationary_effective_camera.fov_deg),
                         );
+                        let stationary_zbuffer_depth = match stationary_camera {
+                            Some((camera_layer, cam)) if cam.zbuffer_enabled => Some(
+                                zbuffer_sort_key(camera_layer, &stationary_matrix, &cam),
+                            ),
+                            _ => None,
+                        };
                         let mut stationary_opacity = transform.opacity;
                         for &i in &stationary_group_idx {
                             stationary_opacity *= controllers[i].opacity;
@@ -538,6 +614,7 @@ pub fn get_active_objects_system_at(
                             mvp: stationary_mvp,
                             opacity: stationary_opacity,
                             effects: stationary_effects,
+                            zbuffer_depth: stationary_zbuffer_depth,
                             ..active_object
                         });
                     }
@@ -566,13 +643,21 @@ pub fn get_active_objects_system_at(
                     }
                 };
                 let matrix = compute_chained_matrix(&chain_matrices, &own_matrix);
+                let self_camera = resolve_camera(&chain_idx, &controllers, &layer_positions);
+                let self_effective_camera = self_camera.map_or(*camera, |(_, cam)| cam);
                 let mvp = compute_mvp(
                     &matrix,
-                    &camera,
+                    &self_effective_camera,
                     project_width,
                     project_height,
-                    projection_for(kind.0),
+                    projection_for(kind.0, self_effective_camera.fov_deg),
                 );
+                let self_zbuffer_depth = match self_camera {
+                    Some((camera_layer, cam)) if cam.zbuffer_enabled => {
+                        Some(zbuffer_sort_key(camera_layer, &matrix, &cam))
+                    }
+                    _ => None,
+                };
                 let mut opacity = c.opacity;
                 for &i in &group_idx {
                     opacity *= controllers[i].opacity;
@@ -605,6 +690,7 @@ pub fn get_active_objects_system_at(
                             }),
                             layer: c.layer,
                             clip_target: None,
+                            zbuffer_depth: self_zbuffer_depth,
                         });
                     }
                     ControllerKind::Clip { .. } => {
@@ -646,6 +732,7 @@ pub fn get_active_objects_system_at(
                             compose_source: None,
                             layer: c.layer,
                             clip_target: None,
+                            zbuffer_depth: self_zbuffer_depth,
                         };
                         captured
                             .entry(c.entity)
@@ -658,7 +745,11 @@ pub fn get_active_objects_system_at(
                 }
             }
 
-            active.sort_by_key(|o| o.layer);
+            active.sort_by(|a, b| {
+                let ka = a.zbuffer_depth.unwrap_or(a.layer as f32);
+                let kb = b.zbuffer_depth.unwrap_or(b.layer as f32);
+                ka.partial_cmp(&kb).unwrap_or(std::cmp::Ordering::Equal)
+            });
 
             (active, captured)
         },
@@ -883,6 +974,7 @@ mod tests {
             layer_count_up: 0,
             generate_framebuffer: false,
             hide_captured: false,
+            camera: None,
         };
         let gc_id = world.add_group_control_object(0, 30, KIND_GROUP_CONTROL, 0, gc);
         world.set_layer(gc_id, 0);
@@ -913,6 +1005,7 @@ mod tests {
             layer_count_up: 1,
             generate_framebuffer: false,
             hide_captured: false,
+            camera: None,
         };
         let gc_id = world.add_group_control_object(0, 30, KIND_GROUP_CONTROL, 0, gc);
         world.set_layer(gc_id, 5);
@@ -943,6 +1036,7 @@ mod tests {
             layer_count_up: 0,
             generate_framebuffer: true,
             hide_captured: false,
+            camera: None,
         };
         let gc_id = world.add_group_control_object(0, 30, KIND_GROUP_CONTROL, 0, gc);
         world.set_layer(gc_id, 1);
@@ -978,6 +1072,7 @@ mod tests {
             layer_count_up: 0,
             generate_framebuffer: true,
             hide_captured: true,
+            camera: None,
         };
         let gc_id = world.add_group_control_object(0, 30, KIND_GROUP_CONTROL, 0, gc);
         world.set_layer(gc_id, 1);
@@ -1004,6 +1099,7 @@ mod tests {
             layer_count_up: 0,
             generate_framebuffer: false,
             hide_captured: false,
+            camera: None,
         };
         let gc_id = world.add_group_control_object(0, 30, KIND_GROUP_CONTROL, 0, gc);
         world.set_layer(gc_id, 1);
@@ -1096,6 +1192,7 @@ mod tests {
             layer_count_up: 0,
             generate_framebuffer: true,
             hide_captured: false,
+            camera: None,
         };
         let gc_id = world.add_group_control_object(0, 30, KIND_GROUP_CONTROL, 0, gc);
         world.set_layer(gc_id, 2);

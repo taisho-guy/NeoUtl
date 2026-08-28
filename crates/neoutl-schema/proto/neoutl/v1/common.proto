@@ -38,11 +38,33 @@ message ClipTarget {
   bool render_self = 8;
 }
 
+// AviUtl ExEdit2「カメラ制御」パラメータ。GroupControlへ内包される。
+// target_layer_mode: 0=Origin(絶対), 1=CameraRelative(カメラ基準追従), 2=Layer(レイヤー基準)。
+message CameraParams {
+  bool enabled = 1;
+  float pos_x = 2;
+  float pos_y = 3;
+  float pos_z = 4;
+  float target_x = 5;
+  float target_y = 6;
+  float target_z = 7;
+  float near = 8;
+  float far = 9;
+  float tilt_deg = 10;
+  float fov_deg = 11;
+  int32 target_layer_mode = 12;
+  int32 target_layer = 13;
+  bool zbuffer_enabled = 14;
+  float focus_distance = 15;
+  float depth_blur_strength = 16;
+}
+
 message GroupControl {
   uint32 layer_count_down = 1;
   uint32 layer_count_up = 2;
   bool generate_framebuffer = 3;
   bool hide_captured = 4;
+  optional CameraParams camera = 5;
 }
 
 enum TextAlign {

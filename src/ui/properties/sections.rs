@@ -282,6 +282,9 @@ pub fn group_control_section(ui: &mut egui::Ui, world: &mut EcsWorld, id: usize)
         t!("グループ制御"),
     );
     for schema in GROUP_CONTROL_SCHEMA {
+        if !is_visible(schema, |key| gc.get_param(key).unwrap_or(0.0)) {
+            continue;
+        }
         ui.horizontal(|ui| {
             ui.label(effect_param_label(schema.label));
             match schema.kind {
@@ -303,6 +306,22 @@ pub fn group_control_section(ui: &mut egui::Ui, world: &mut EcsWorld, id: usize)
                         .changed()
                     {
                         gc.set_param(schema.key, value.round());
+                        world.set_group_control(id, gc);
+                    }
+                }
+                ParamKind::Enum => {
+                    let mut current = gc.get_param(schema.key).unwrap_or(0.0).round() as usize;
+                    let resp = ui.add(
+                        Select::new((id, schema.key), &mut current).options(
+                            schema
+                                .enum_options
+                                .iter()
+                                .enumerate()
+                                .map(|(i, opt)| (i, *opt)),
+                        ),
+                    );
+                    if resp.changed() {
+                        gc.set_param(schema.key, current as f32);
                         world.set_group_control(id, gc);
                     }
                 }

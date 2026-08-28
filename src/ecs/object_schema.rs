@@ -129,6 +129,8 @@ pub const AUDIO_SCHEMA: &[ParamSchema] = &[
     bool_field("mute", "ミュート"),
 ];
 
+const CAMERA_TARGET_LAYER_MODE_OPTIONS: &[&str] = &["原点", "カメラ基準", "レイヤー基準"];
+
 pub const GROUP_CONTROL_SCHEMA: &[ParamSchema] = &[
     float_fixed("layer_count_down", "対象レイヤー数(下)", 0.0, 100.0),
     float_fixed("layer_count_up", "対象レイヤー数(上)", 0.0, 100.0),
@@ -136,6 +138,76 @@ pub const GROUP_CONTROL_SCHEMA: &[ParamSchema] = &[
     dep(
         bool_field("hide_captured", "補足オブジェクトを描画しない"),
         "generate_framebuffer",
+        1.0,
+    ),
+    bool_field("camera_enabled", "カメラ制御を有効にする"),
+    dep(
+        float_stage("camera_pos_x", "カメラX", Range::StageWidth),
+        "camera_enabled",
+        1.0,
+    ),
+    dep(
+        float_stage("camera_pos_y", "カメラY", Range::StageHeight),
+        "camera_enabled",
+        1.0,
+    ),
+    dep(
+        float_stage("camera_pos_z", "カメラZ", Range::StageDiag),
+        "camera_enabled",
+        1.0,
+    ),
+    dep(
+        float_stage("camera_target_x", "目標X", Range::StageWidth),
+        "camera_enabled",
+        1.0,
+    ),
+    dep(
+        float_stage("camera_target_y", "目標Y", Range::StageHeight),
+        "camera_enabled",
+        1.0,
+    ),
+    dep(
+        float_stage("camera_target_z", "目標Z", Range::StageDiag),
+        "camera_enabled",
+        1.0,
+    ),
+    dep(
+        enum_field(
+            "camera_target_layer_mode",
+            "目標レイヤー",
+            CAMERA_TARGET_LAYER_MODE_OPTIONS,
+        ),
+        "camera_enabled",
+        1.0,
+    ),
+    dep(
+        float_fixed("camera_target_layer", "目標レイヤー番号", -100.0, 100.0),
+        "camera_target_layer_mode",
+        2.0,
+    ),
+    dep(
+        float_fixed("camera_tilt_deg", "傾き", -180.0, 180.0),
+        "camera_enabled",
+        1.0,
+    ),
+    dep(
+        float_fixed("camera_fov_deg", "視野角", 1.0, 179.0),
+        "camera_enabled",
+        1.0,
+    ),
+    dep(
+        bool_field("camera_zbuffer_enabled", "Zバッファを使用"),
+        "camera_enabled",
+        1.0,
+    ),
+    dep(
+        float_fixed("camera_focus_distance", "深度ぼけ基準距離", 0.0, 100000.0),
+        "camera_enabled",
+        1.0,
+    ),
+    dep(
+        float_fixed("camera_depth_blur_strength", "深度ぼけ強度", 0.0, 100.0),
+        "camera_enabled",
         1.0,
     ),
 ];

@@ -72,6 +72,10 @@ impl Default for GlobalMatrix {
     }
 }
 
+pub fn translation_of(m: &GlobalMatrix) -> (f32, f32, f32) {
+    (m.0[12], m.0[13], m.0[14])
+}
+
 pub fn mat4_mul(a: &[f32; 16], b: &[f32; 16]) -> [f32; 16] {
     let mut r = [0.0f32; 16];
     for col in 0..4 {
@@ -214,7 +218,14 @@ pub enum Projection {
 
 pub const DEFAULT_FOV_DEG: f32 = 45.0;
 
-#[derive(Clone, Copy, Debug, Unique)]
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum TargetLayerMode {
+    Origin,
+    CameraRelative,
+    Layer(i32),
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Unique)]
 pub struct Camera {
     pub pos_x: f32,
     pub pos_y: f32,
@@ -224,6 +235,12 @@ pub struct Camera {
     pub target_z: f32,
     pub near: f32,
     pub far: f32,
+    pub tilt_deg: f32,
+    pub fov_deg: f32,
+    pub target_layer_mode: TargetLayerMode,
+    pub zbuffer_enabled: bool,
+    pub focus_distance: f32,
+    pub depth_blur_strength: f32,
 }
 
 impl Camera {
@@ -239,6 +256,12 @@ impl Camera {
             target_z: 0.0,
             near: (pos_z * 0.01).max(0.1),
             far: (pos_z * 100.0).max(project_width.max(project_height) * 10.0),
+            tilt_deg: 0.0,
+            fov_deg: DEFAULT_FOV_DEG,
+            target_layer_mode: TargetLayerMode::Origin,
+            zbuffer_enabled: false,
+            focus_distance: pos_z,
+            depth_blur_strength: 0.0,
         }
     }
 }
@@ -273,8 +296,20 @@ pub fn compute_view_matrix(cam: &Camera) -> [f32; 16] {
     let up = [0.0f32, 1.0, 0.0];
 
     let f = normalize([target[0] - eye[0], target[1] - eye[1], target[2] - eye[2]]);
-    let s = normalize(cross(f, up));
-    let u = cross(s, f);
+    let s0 = normalize(cross(f, up));
+    let u0 = cross(s0, f);
+
+    let (st, ct) = cam.tilt_deg.to_radians().sin_cos();
+    let s = [
+        s0[0] * ct + u0[0] * st,
+        s0[1] * ct + u0[1] * st,
+        s0[2] * ct + u0[2] * st,
+    ];
+    let u = [
+        u0[0] * ct - s0[0] * st,
+        u0[1] * ct - s0[1] * st,
+        u0[2] * ct - s0[2] * st,
+    ];
 
     [
         s[0],
@@ -317,6 +352,12 @@ pub fn compute_perspective_matrix(fov_deg: f32, aspect: f32, near: f32, far: f32
         near * far * range_inv * 2.0,
         0.0,
     ]
+}
+
+pub fn view_space_depth(global: &GlobalMatrix, cam: &Camera) -> f32 {
+    let (x, y, z) = translation_of(global);
+    let view = compute_view_matrix(cam);
+    -(view[2] * x + view[6] * y + view[10] * z + view[14])
 }
 
 pub fn compute_mvp(
