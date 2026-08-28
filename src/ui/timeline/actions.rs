@@ -127,38 +127,47 @@ impl TimelineWindow {
         preview_panel.borrow_mut().refresh_total_frames(state);
     }
 
-    pub(super) fn delete_object(
+    pub(super) fn delete_objects(
         &mut self,
         state: &SharedAppState,
         preview_panel: &Rc<RefCell<PreviewPanel>>,
-        id: i32,
+        ids: &[usize],
     ) {
-        if id < 0 {
+        if ids.is_empty() {
             return;
         }
         app_state::snapshot_before_edit(state);
-        let world_holder = app_state::active_world(state);
-        world_holder.lock().unwrap().delete_object(id as usize);
-        self.selected_ids.remove(&id);
+        {
+            let world_holder = app_state::active_world(state);
+            let mut world = world_holder.lock().unwrap();
+            for &id in ids {
+                world.delete_object(id);
+            }
+        }
+        for &id in ids {
+            self.selected_ids.remove(&(id as i32));
+        }
         preview_panel.borrow_mut().refresh_total_frames(state);
     }
 
-    pub(super) fn split_object_at(
+    pub(super) fn split_objects_at(
         &mut self,
         state: &SharedAppState,
         preview_panel: &Rc<RefCell<PreviewPanel>>,
-        id: i32,
+        ids: &[usize],
         frame: i32,
     ) {
-        if id < 0 {
+        if ids.is_empty() {
             return;
         }
         app_state::snapshot_before_edit(state);
-        let world_holder = app_state::active_world(state);
-        world_holder
-            .lock()
-            .unwrap()
-            .split_object(id as usize, frame);
+        {
+            let world_holder = app_state::active_world(state);
+            let mut world = world_holder.lock().unwrap();
+            for &id in ids {
+                world.split_object(id, frame);
+            }
+        }
         preview_panel.borrow_mut().refresh_total_frames(state);
     }
 

@@ -46,6 +46,7 @@ impl TimelineWindow {
         obj: &TimelineObject,
         locked: bool,
         total_frames: i32,
+        layer_count: i32,
     ) {
         let _ = total_frames;
         let (preview_start, preview_end, preview_layer) = match &self.drag {
@@ -208,7 +209,7 @@ impl TimelineWindow {
                         (kresp.interact_pointer_pos(), &mut self.kdrag)
                     {
                         kdrag.delta_frames =
-                            ((pos.x - kdrag.press.x) / self.zoom_scale).floor() as i32;
+                            ((pos.x - kdrag.press.x) / self.zoom_scale).round() as i32;
                     }
                 }
                 if kresp.drag_stopped() {
@@ -313,52 +314,23 @@ impl TimelineWindow {
             }
         }
         if body_resp.clicked() && self.drag.is_none() {
-            self.select_object(state, &(), obj.id, false);
+            let additive = ui.input(|i| i.modifiers.ctrl || i.modifiers.command);
+            if additive {
+                if self.selected_ids.contains(&obj.id) {
+                    self.selected_ids.remove(&obj.id);
+                } else {
+                    self.selected_ids.insert(obj.id);
+                }
+            } else {
+                self.select_object(state, &(), obj.id, false);
+            }
         }
         if body_resp.secondary_clicked() {
-            self.select_object(state, &(), obj.id, false);
+            if !self.selected_ids.contains(&obj.id) {
+                self.select_object(state, &(), obj.id, false);
+            }
             if let Some(pos) = body_resp.interact_pointer_pos() {
                 self.open_context_menu(ui, state, pos, obj.start_frame, obj.layer, obj.id);
-            }
-        }
-
-        if left_resp.drag_stopped() {
-            if let Some(drag) = self
-                .drag
-                .take_if(|d| d.id == obj.id && d.mode == DragMode::ResizeLeft)
-            {
-                let holder = crate::app_state::active_world(state);
-                holder.lock().unwrap().resize_object(
-                    obj.id as usize,
-                    drag.preview_start,
-                    drag.preview_end,
-                );
-            }
-        }
-        if right_resp.drag_stopped() {
-            if let Some(drag) = self
-                .drag
-                .take_if(|d| d.id == obj.id && d.mode == DragMode::ResizeRight)
-            {
-                let holder = crate::app_state::active_world(state);
-                holder.lock().unwrap().resize_object(
-                    obj.id as usize,
-                    drag.preview_start,
-                    drag.preview_end,
-                );
-            }
-        }
-        if body_resp.drag_stopped() {
-            if let Some(drag) = self
-                .drag
-                .take_if(|d| d.id == obj.id && d.mode == DragMode::Move)
-            {
-                let holder = crate::app_state::active_world(state);
-                holder.lock().unwrap().move_object(
-                    obj.id as usize,
-                    drag.preview_start,
-                    drag.preview_layer,
-                );
             }
         }
 
@@ -370,11 +342,12 @@ impl TimelineWindow {
                             .interact_pointer_pos()
                             .or(ui.ctx().pointer_hover_pos())
                         {
-                            let dx = ((pos.x - drag.press.x) / self.zoom_scale).floor() as i32;
-                            let dy = ((pos.y - drag.press.y) / LAYER_HEIGHT).floor() as i32;
+                            let dx = ((pos.x - drag.press.x) / self.zoom_scale).round() as i32;
+                            let dy = ((pos.y - drag.press.y) / LAYER_HEIGHT).round() as i32;
                             drag.preview_start = (drag.start_frame + dx).max(0);
                             drag.preview_end = drag.preview_start + drag.duration;
-                            drag.preview_layer = (drag.layer + dy).max(0);
+                            let max_layer = (layer_count - 1).max(0);
+                            drag.preview_layer = (drag.layer + dy).clamp(0, max_layer);
                         }
                     }
                     DragMode::ResizeLeft => {
@@ -382,7 +355,7 @@ impl TimelineWindow {
                             .interact_pointer_pos()
                             .or(ui.ctx().pointer_hover_pos())
                         {
-                            let dx = ((pos.x - drag.press.x) / self.zoom_scale).floor() as i32;
+                            let dx = ((pos.x - drag.press.x) / self.zoom_scale).round() as i32;
                             drag.preview_start =
                                 (drag.start_frame + dx).clamp(0, drag.end_frame - 1);
                         }
@@ -392,7 +365,7 @@ impl TimelineWindow {
                             .interact_pointer_pos()
                             .or(ui.ctx().pointer_hover_pos())
                         {
-                            let dx = ((pos.x - drag.press.x) / self.zoom_scale).floor() as i32;
+                            let dx = ((pos.x - drag.press.x) / self.zoom_scale).round() as i32;
                             drag.preview_end = (drag.end_frame + dx).max(drag.start_frame + 1);
                         }
                     }

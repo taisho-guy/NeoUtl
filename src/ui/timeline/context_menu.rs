@@ -5,6 +5,7 @@ use crate::objects::registry;
 use crate::ui::preview::PreviewPanel;
 use crate::ui::types::{ContextMenuItem, ObjectKindItem};
 use egui::{Pos2, Rect, Vec2};
+use egui_material_icons::icons;
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -13,19 +14,19 @@ const ROW_HEIGHT: f32 = 24.0;
 
 fn icon_glyph(icon: &str) -> &'static str {
     match icon {
-        "scissors" => "\u{2702}",
-        "copy" => "\u{2398}",
-        "paste" => "\u{2399}",
-        "trash" => "\u{1F5D1}",
-        "copy-plus" => "\u{29FA}",
-        "circle-plus" => "\u{2295}",
-        "mouse-pointer-click" => "\u{1F5B1}",
-        "list" => "\u{2261}",
-        "grid" => "\u{25A6}",
-        "audio-lines" => "\u{1F50A}",
-        "eye" => "\u{1F441}",
-        "lock" => "\u{1F512}",
-        _ => "\u{25CF}",
+        "scissors" => icons::ICON_CONTENT_CUT.into(),
+        "copy" => icons::ICON_CONTENT_COPY.into(),
+        "paste" => icons::ICON_CONTENT_PASTE.into(),
+        "trash" => icons::ICON_DELETE.into(),
+        "copy-plus" => icons::ICON_LIBRARY_ADD.into(),
+        "circle-plus" => icons::ICON_ADD_CIRCLE.into(),
+        "mouse-pointer-click" => icons::ICON_ADS_CLICK.into(),
+        "list" => icons::ICON_LIST.into(),
+        "grid" => icons::ICON_GRID_ON.into(),
+        "audio-lines" => icons::ICON_GRAPHIC_EQ.into(),
+        "eye" => icons::ICON_VISIBILITY.into(),
+        "lock" => icons::ICON_LOCK.into(),
+        _ => icons::ICON_CIRCLE.into(),
     }
 }
 
@@ -58,7 +59,7 @@ pub(super) fn menu_row(
                 ui.painter().text(
                     egui::pos2(check_x, rect.center().y),
                     egui::Align2::LEFT_CENTER,
-                    "\u{2713}",
+                    <&str>::from(icons::ICON_CHECK),
                     egui::FontId::proportional(13.0),
                     text_color,
                 );
@@ -92,7 +93,7 @@ pub(super) fn menu_row(
             ui.painter().text(
                 egui::pos2(rect.max.x - 10.0, rect.center().y),
                 egui::Align2::RIGHT_CENTER,
-                "\u{203A}",
+                <&str>::from(icons::ICON_CHEVRON_RIGHT),
                 egui::FontId::proportional(13.0),
                 text_color,
             );
@@ -314,8 +315,14 @@ impl TimelineWindow {
         current_frame: i32,
     ) {
         match item.action {
-            0 => self.split_object_at(state, preview_panel, menu.hit_id, current_frame),
-            1 => self.delete_object(state, preview_panel, menu.hit_id),
+            0 => {
+                let ids = self.selection_target_ids(menu.hit_id);
+                self.split_objects_at(state, preview_panel, &ids, current_frame);
+            }
+            1 => {
+                let ids = self.selection_target_ids(menu.hit_id);
+                self.delete_objects(state, preview_panel, &ids);
+            }
             2 => self.add_object_at(state, preview_panel, menu.frame, menu.layer, item.kind),
             3 => self.ripple_mode = !self.ripple_mode,
             5 => {

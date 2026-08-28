@@ -302,17 +302,17 @@ impl TimelineWindow {
             let hit_id = self.selected_ids.iter().next().copied().unwrap_or(-1);
             match cmd {
                 CommandId::DeleteSelected => {
-                    if hit_id >= 0 {
-                        self.delete_object(state, preview_panel, hit_id);
-                    }
+                    let ids: Vec<usize> = self.selected_ids.iter().map(|&id| id as usize).collect();
+                    self.delete_objects(state, preview_panel, &ids);
                 }
                 CommandId::SplitAtPlayhead => {
-                    if hit_id >= 0 {
+                    let ids: Vec<usize> = self.selected_ids.iter().map(|&id| id as usize).collect();
+                    if !ids.is_empty() {
                         let frame = app_state::active_world(state)
                             .lock()
                             .unwrap()
                             .current_frame();
-                        self.split_object_at(state, preview_panel, hit_id, frame);
+                        self.split_objects_at(state, preview_panel, &ids, frame);
                     }
                 }
                 CommandId::Duplicate => self.duplicate_requested(state, preview_panel, hit_id),

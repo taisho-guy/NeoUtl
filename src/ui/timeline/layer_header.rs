@@ -3,6 +3,7 @@ use crate::app_state::SharedAppState;
 use crate::ui::preview::PreviewPanel;
 use crate::ui::types::LayerState;
 use egui::{Pos2, Rect, Sense, Stroke, Vec2};
+use egui_material_icons::icons;
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -125,7 +126,7 @@ impl TimelineWindow {
                 painter.text(
                     Pos2::new(vis_rect.min.x + 2.0, vis_rect.min.y + 2.0),
                     egui::Align2::LEFT_TOP,
-                    "🔒",
+                    <&str>::from(icons::ICON_LOCK),
                     egui::FontId::proportional(9.0),
                     text_locked,
                 );
@@ -134,7 +135,7 @@ impl TimelineWindow {
                 painter.text(
                     Pos2::new(vis_rect.min.x + 2.0, vis_rect.max.y - 12.0),
                     egui::Align2::LEFT_TOP,
-                    "—",
+                    <&str>::from(icons::ICON_VISIBILITY_OFF),
                     egui::FontId::proportional(8.0),
                     text_weak,
                 );

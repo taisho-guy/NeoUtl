@@ -78,6 +78,7 @@ impl TimelineWindow {
                 obj,
                 locked,
                 total_frames,
+                layer_count,
             );
         }
 
