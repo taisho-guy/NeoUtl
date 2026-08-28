@@ -103,8 +103,6 @@ title="鹿児島県立甲南高等学校" class="text-small">鹿児島県立甲�
 <p>多言語化の基礎、アップデート通知機能、マルチプロジェクト機能、クラッシュレポート送信機能等が実装されました。<br>
 現在、0.6に向け、各UIの操作性、アクセシビリティ対応（キーボード操作・スクリーンリーダー）を検証・修正しております。<br>
 今後共、NeoUtlにご期待下さい。<br>
-NeoUtlの開発に参加したい方は<a href=
-"https://codeberg.org/taisho-guy/NeoUtl/issues/new">イシューを作成</a>して自己紹介して頂けると嬉しいです！<br>
 
 <a href=
 "https://codeberg.org/taisho-guy/NeoUtl/src/branch/main/TODO.md">TODO.md</a>では今後のロードマップを、
@@ -119,8 +117,6 @@ NeoUtlの開発に参加したい方は<a href=
 <details>
 <summary><b>開発状況</b></summary>
 <p>2026年度、私は受験生となります。開発に十分な時間を割くことができません。御了承下さい。</p>
-<p>
-2026年8月現在、RAMコピーを排除したデコーダーの実装に全力を注いでいます。TODO.mdやリリースでは開発が止まっているかのように見えますが、全く活発ですからご安心下さい。</p>
 </details>
 </div>
 </div>
@@ -400,14 +396,6 @@ rel="noopener">Shipyard</a></td>
 <span class="text-xsmall">MIT</span></span></td>
 </tr>
 <tr>
-<td><a href=
-"https://github.com/software-mansion/smelter/tree/master/vk-video"
-target="_blank" rel="noopener">gpu-video</a></td>
-<td colspan="2"><span class=
-"text-small">GPUを直接使用した動画のデコード・エンコードを受け持つ映像処理の要です。<br>
-<span class="text-xsmall">MIT / Apache-2.0</span></span></td>
-</tr>
-<tr>
 <td><a href="https://github.com/pdeljanov/Symphonia" target=
 "_blank" rel="noopener">symphonia</a></td>
 <td colspan="2"><span class=
@@ -415,11 +403,11 @@ target="_blank" rel="noopener">gpu-video</a></td>
 <span class="text-xsmall">MPL-2.0</span></span></td>
 </tr>
 <tr>
-<td><a href="https://gstreamer.freedesktop.org/" target="_blank"
-rel="noopener">GStreamer</a></td>
+<td><a href="https://ffmpeg.org/" target="_blank"
+rel="noopener">FFmpeg</a></td>
 <td colspan="2"><span class=
-"text-small">gpu-video未対応のコーデック・コンテナ処理を代替するマルチメディアフレームワークです。<br>
-<span class="text-xsmall">LGPLv2.1+</span></span></td>
+"text-small">動画や音声のデコード、エンコードを司ります。<br>
+<span class="text-xsmall">GPLv3+</span></span></td>
 </tr>
 </tbody>
 </table>
@@ -462,7 +450,7 @@ by <a href="https://codeberg.org/taisho-guy" target="_blank" rel=
 "neoutl-counter">今日: <b>--</b> / 昨日: <b>--</b> / 累計:
 <b>--</b></span> <span class="text-small"><a href=
 "https://spring-fragrance.mints.ne.jp/aviutl/" target="_blank" rel=
-"noopener">AviUtlのお部屋</a></span></div>
+"noopener">AviUtlのお部屋はこちら</a></span></div>
 </footer>
 <script>
   (() => {
@@ -471,8 +459,8 @@ by <a href="https://codeberg.org/taisho-guy" target="_blank" rel=
 
   const PATTERNS = {
     linux: ["linux"],
-    windows: ["win", "msys2", "ucrt"],
-    apple: ["mac", "apple", "darwin"],
+    windows: ["win", "msys2", "ucrt", "msvcrt", "mingw", "cygwin"],
+    apple: ["mac", "apple", "darwin", "xcode"],
   };
   const ARCH_PATTERNS = {
     x86_64: ["x86_64", "amd64", "x86-64", "universal"],
