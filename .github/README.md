@@ -7,14 +7,11 @@
 <a href="https://codeberg.org/taisho-guy/NeoUtl/src/branch/aviqtl">AviQtl</a>
 </p>
 <p align="center">
-    Video editing software aiming to replace and surpass AviUtl. Compatible with Windows, macOS, and Linux.
+NeoUtl: Ever Optimize &mdash; Until Triumphing Liberty.
 </p>
 
-## 開発場所
-
-NeoUtlは[Codeberg](https://codeberg.org/taisho-guy/NeoUtl)で開発されています。イシューやプルリクエストはCodebergでのみお受け致します。
-
-GitHub（本リポジトリ）はミラーです。GitHubではNightlyビルドを公開する予定です。
+> [!IMPORTANT]
+> GitHub（本リポジトリ）はミラーです。NeoUtlは[Codeberg](https://codeberg.org/taisho-guy/NeoUtl)で開発されています。イシューやプルリクエストはCodebergでのみお受け致します。
 
 ## ライセンス
 
