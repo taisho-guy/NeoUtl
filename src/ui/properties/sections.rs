@@ -272,10 +272,15 @@ pub fn audio_section(ui: &mut egui::Ui, world: &mut EcsWorld, id: usize) {
     }
 }
 
+const GROUP_CONTROL_STRUCTURAL_KEYS: &[&str] =
+    &["layer_count_down", "layer_count_up", "camera_target_layer"];
+
 pub fn group_control_section(ui: &mut egui::Ui, world: &mut EcsWorld, id: usize) {
     let Some(mut gc) = world.get_group_control(id) else {
         return;
     };
+    let (clip_start, clip_end) = clip_bounds(world, id);
+    let current_frame = world.current_frame();
     ui.separator();
     ui.colored_label(
         egui::Color32::from_rgb(0x8a, 0xab, 0xff),
@@ -285,17 +290,20 @@ pub fn group_control_section(ui: &mut egui::Ui, world: &mut EcsWorld, id: usize)
         if !is_visible(schema, |key| gc.get_param(key).unwrap_or(0.0)) {
             continue;
         }
-        ui.horizontal(|ui| {
-            ui.label(effect_param_label(schema.label));
-            match schema.kind {
-                ParamKind::Bool => {
+        match schema.kind {
+            ParamKind::Bool => {
+                ui.horizontal(|ui| {
+                    ui.label(effect_param_label(schema.label));
                     let mut b = gc.get_param(schema.key).unwrap_or(0.0) > 0.5;
                     if ui.add(Checkbox::new(&mut b, "")).changed() {
                         gc.set_param(schema.key, if b { 1.0 } else { 0.0 });
                         world.set_group_control(id, gc);
                     }
-                }
-                ParamKind::Float => {
+                });
+            }
+            ParamKind::Float if GROUP_CONTROL_STRUCTURAL_KEYS.contains(&schema.key) => {
+                ui.horizontal(|ui| {
+                    ui.label(effect_param_label(schema.label));
                     let (min, max) = resolve_range(schema.range, 1920.0, 1080.0);
                     let mut value = gc.get_param(schema.key).unwrap_or(0.0);
                     if ui
@@ -308,8 +316,37 @@ pub fn group_control_section(ui: &mut egui::Ui, world: &mut EcsWorld, id: usize)
                         gc.set_param(schema.key, value.round());
                         world.set_group_control(id, gc);
                     }
-                }
-                ParamKind::Enum => {
+                });
+            }
+            ParamKind::Float => {
+                let (min, max) = resolve_range(schema.range, 1920.0, 1080.0);
+                let value = gc.get_param(schema.key).unwrap_or(0.0);
+                let track = world.get_keyframes(id, schema.key);
+                float_row(
+                    ui,
+                    world,
+                    FloatRowCtx {
+                        id_source: (id, "group_control", schema.key),
+                        target: super::easing_editor::TrackTarget::Object {
+                            object_id: id,
+                            key: schema.key.to_string(),
+                        },
+                        label: schema.label,
+                        min,
+                        max,
+                        clip_start,
+                        clip_end,
+                        current_frame,
+                        base_value: value,
+                        track: &track,
+                    },
+                    |w, f, v, e, p| w.set_keyframe(id, schema.key, f, v, e, p),
+                    |w, f| w.remove_keyframe(id, schema.key, f),
+                );
+            }
+            ParamKind::Enum => {
+                ui.horizontal(|ui| {
+                    ui.label(effect_param_label(schema.label));
                     let mut current = gc.get_param(schema.key).unwrap_or(0.0).round() as usize;
                     let resp = ui.add(
                         Select::new((id, schema.key), &mut current).options(
@@ -324,10 +361,10 @@ pub fn group_control_section(ui: &mut egui::Ui, world: &mut EcsWorld, id: usize)
                         gc.set_param(schema.key, current as f32);
                         world.set_group_control(id, gc);
                     }
-                }
-                _ => {}
+                });
             }
-        });
+            _ => {}
+        }
     }
 }
 
