@@ -172,8 +172,15 @@ impl SystemSettingsWindow {
         world.set_system_settings(s);
     }
 
+    fn persistable_audio_plugin_settings(&self) -> AudioPluginSettingsResource {
+        AudioPluginSettingsResource {
+            cached_catalog: plugin_registry::get_all_unfiltered(),
+            ..self.audio_plugin_settings.clone()
+        }
+    }
+
     fn persist_audio_plugin_settings(&self) {
-        let _ = plugin_settings::save_to_disk(&self.audio_plugin_settings);
+        let _ = plugin_settings::save_to_disk(&self.persistable_audio_plugin_settings());
         plugin_registry::set_disabled(&self.audio_plugin_settings.disabled_plugin_ids);
     }
 
@@ -229,8 +236,9 @@ impl SystemSettingsWindow {
                         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                             if ui.add(Button::new(t!("保存"))).clicked() {
                                 let s = world_holder.lock().unwrap().get_system_settings();
-                                let plugin_save =
-                                    plugin_settings::save_to_disk(&self.audio_plugin_settings);
+                                let plugin_save = plugin_settings::save_to_disk(
+                                    &self.persistable_audio_plugin_settings(),
+                                );
                                 self.save_status = match (save_to_disk(&s), plugin_save) {
                                     (Ok(()), Ok(())) => t!("保存完了"),
                                     _ => t!("保存失敗"),
