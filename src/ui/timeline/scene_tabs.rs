@@ -33,8 +33,6 @@ impl TimelineWindow {
                 .pointer
                 .button_double_clicked(egui::PointerButton::Primary)
         });
-        let secondary_clicked =
-            ui.input(|input| input.pointer.button_clicked(egui::PointerButton::Secondary));
 
         let mut switch_target: Option<i32> = None;
         let mut close_target: Option<i32> = None;
@@ -53,19 +51,11 @@ impl TimelineWindow {
         } else {
             None
         };
-        let settings_target = if hovered && secondary_clicked {
-            active_id
-        } else {
-            None
-        };
 
         if let Some(id) = switch_target {
             self.switch_scene_tab(state, preview_panel, id);
         }
         if let Some(id) = rename_target {
-            dialogs.borrow_mut().open_scene_edit(state, id);
-        }
-        if let Some(id) = settings_target {
             dialogs.borrow_mut().open_scene_edit(state, id);
         }
         if let Some(id) = close_target {

@@ -241,6 +241,34 @@ pub(super) fn build_context_menu(
         sep(),
         disabled_submenu_parent(t!("オプション")),
         disabled_submenu_parent(t!("ウィンドウ配置")),
+        sep(),
+        ContextMenuItem {
+            label: t!("シーン設定"),
+            action: 50,
+            kind: -1,
+            enabled: true,
+            icon: "settings".into(),
+            checked: None,
+            submenu: Vec::new(),
+        },
+        ContextMenuItem {
+            label: t!("プロジェクト設定"),
+            action: 51,
+            kind: -1,
+            enabled: true,
+            icon: "settings".into(),
+            checked: None,
+            submenu: Vec::new(),
+        },
+        ContextMenuItem {
+            label: t!("システム設定"),
+            action: 52,
+            kind: -1,
+            enabled: true,
+            icon: "settings".into(),
+            checked: None,
+            submenu: Vec::new(),
+        },
     ]
 }
 

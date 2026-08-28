@@ -267,8 +267,8 @@ impl TimelineWindow {
             );
         });
 
-        self.context_menu_layer(ui, state, preview_panel, current_frame, &kinds);
-        self.layer_menu_layer(ui, state, preview_panel);
+        self.context_menu_layer(ui, state, preview_panel, dialogs, current_frame, &kinds);
+        self.layer_menu_layer(ui, state, preview_panel, dialogs);
     }
 
     pub(super) fn handle_shortcuts(

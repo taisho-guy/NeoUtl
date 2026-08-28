@@ -2,6 +2,7 @@ use super::context_menu::menu_row;
 use super::util::build_layer_menu;
 use super::{MenuState, TimelineWindow};
 use crate::app_state::SharedAppState;
+use crate::ui::dialogs::DialogSet;
 use crate::ui::preview::PreviewPanel;
 use crate::ui::types::{ContextMenuItem, LayerState};
 use egui::{Pos2, Rect, Vec2};
@@ -31,6 +32,7 @@ impl TimelineWindow {
         ui: &mut egui::Ui,
         state: &SharedAppState,
         preview_panel: &Rc<RefCell<PreviewPanel>>,
+        dialogs: &Rc<RefCell<DialogSet>>,
     ) {
         let Some(mut menu) = self.layer_menu.take() else {
             return;
@@ -104,7 +106,7 @@ impl TimelineWindow {
         }
 
         if let Some(item) = fire {
-            self.apply_menu_action(state, preview_panel, &menu, &item, 0);
+            self.apply_menu_action(state, preview_panel, dialogs, &menu, &item, 0);
             keep_open = false;
         }
 

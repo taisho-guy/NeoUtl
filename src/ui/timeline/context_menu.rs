@@ -2,6 +2,7 @@ use super::util::build_context_menu;
 use super::{DragMode, MenuState, TimelineWindow};
 use crate::app_state::{self, SharedAppState};
 use crate::objects::registry;
+use crate::ui::dialogs::DialogSet;
 use crate::ui::preview::PreviewPanel;
 use crate::ui::types::{ContextMenuItem, ObjectKindItem};
 use egui::{Pos2, Rect, Vec2};
@@ -26,6 +27,7 @@ fn icon_glyph(icon: &str) -> &'static str {
         "audio-lines" => icons::ICON_GRAPHIC_EQ.into(),
         "eye" => icons::ICON_VISIBILITY.into(),
         "lock" => icons::ICON_LOCK.into(),
+        "settings" => icons::ICON_SETTINGS.into(),
         _ => icons::ICON_CIRCLE.into(),
     }
 }
@@ -205,6 +207,7 @@ impl TimelineWindow {
         ui: &mut egui::Ui,
         state: &SharedAppState,
         preview_panel: &Rc<RefCell<PreviewPanel>>,
+        dialogs: &Rc<RefCell<DialogSet>>,
         current_frame: i32,
         _kinds: &[ObjectKindItem],
     ) {
@@ -282,7 +285,7 @@ impl TimelineWindow {
         }
 
         if let Some(item) = fire {
-            self.apply_menu_action(state, preview_panel, &menu, &item, current_frame);
+            self.apply_menu_action(state, preview_panel, dialogs, &menu, &item, current_frame);
             keep_open = false;
         }
 
@@ -310,6 +313,7 @@ impl TimelineWindow {
         &mut self,
         state: &SharedAppState,
         preview_panel: &Rc<RefCell<PreviewPanel>>,
+        dialogs: &Rc<RefCell<DialogSet>>,
         menu: &MenuState,
         item: &ContextMenuItem,
         current_frame: i32,
@@ -344,6 +348,15 @@ impl TimelineWindow {
             16 => self.show_waveform = !self.show_waveform,
             40 => self.toggle_layer_locked(state, preview_panel, item.kind),
             41 => self.toggle_layer_visible(state, preview_panel, item.kind),
+            50 => {
+                let scene_id = app_state::active_world(state)
+                    .lock()
+                    .unwrap()
+                    .active_scene();
+                dialogs.borrow_mut().open_scene_edit(state, scene_id);
+            }
+            51 => dialogs.borrow_mut().project_settings.open(state),
+            52 => dialogs.borrow_mut().system_settings.open = true,
             _ => {}
         }
     }
