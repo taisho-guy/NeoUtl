@@ -183,9 +183,9 @@ impl PreviewPanel {
         let key = (self.session_generation, revision, self.current_frame);
         let needs_recompose = self.texture_id.is_none() || self.last_rendered_key != Some(key);
         if needs_recompose {
-            let (active, captured, media_pending) = get_active_objects_system(&world);
+            let (active, captured) = get_active_objects_system(&world);
             engine.render(&world, &active, &captured, &proj);
-            self.last_rendered_key = if media_pending { None } else { Some(key) };
+            self.last_rendered_key = Some(key);
         }
 
         if self.texture_id.is_none() {

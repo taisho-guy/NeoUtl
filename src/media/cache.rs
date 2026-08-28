@@ -489,18 +489,10 @@ impl MediaCache {
                 worker.request(frame_index);
 
                 if let Some(tex) = instance.texture_cache.get(frame_index) {
-                    let _ = device.poll(wgpu::PollType::Wait {
-                        submission_index: None,
-                        timeout: None,
-                    });
                     return Ok(tex);
                 }
 
                 if let Some(tex) = worker.poll_texture(frame_index) {
-                    let _ = device.poll(wgpu::PollType::Wait {
-                        submission_index: None,
-                        timeout: None,
-                    });
                     instance.texture_cache.put(frame_index, tex.clone());
                     instance.last_index = Some(frame_index);
                     return Ok(tex);
@@ -508,17 +500,9 @@ impl MediaCache {
 
                 if let Some(last) = instance.last_index {
                     if let Some(tex) = instance.texture_cache.get(last) {
-                        let _ = device.poll(wgpu::PollType::Wait {
-                            submission_index: None,
-                            timeout: None,
-                        });
                         return Ok(tex);
                     }
                     if let Some(tex) = worker.poll_texture(last) {
-                        let _ = device.poll(wgpu::PollType::Wait {
-                            submission_index: None,
-                            timeout: None,
-                        });
                         instance.texture_cache.put(last, tex.clone());
                         return Ok(tex);
                     }
@@ -547,13 +531,7 @@ impl MediaCache {
     }
 
     pub fn dimensions(&self, path: &Path) -> Result<(u32, u32), String> {
-        let entry = self.entry_existing(path).ok_or_else(|| {
-            t!(
-                "メディアがまだロードされていません: %{arg0}",
-                arg0 = format!("{}", path.display())
-            )
-            .to_string()
-        })?;
+        let entry = self.entry(path);
         let guard = entry.lock().unwrap();
         match &*guard {
             PathEntry::Video(video) => Ok((video.width, video.height)),
@@ -568,14 +546,7 @@ impl MediaCache {
     }
 
     pub fn source_fps(&self, path: &Path) -> Result<f64, String> {
-        let entry = self.entry_existing(path).ok_or_else(|| {
-            t!(
-                "メディアがまだロードされていません: %{arg0}",
-                arg0 = format!("{}", path.display())
-            )
-            .to_string()
-        })?;
-
+        let entry = self.entry(path);
         let guard = entry.lock().unwrap();
 
         match &*guard {

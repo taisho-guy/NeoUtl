@@ -191,7 +191,7 @@ fn is_active_at(range: &TimeRange, scene: &SceneId, active_scene: i32, frame: i3
     scene.0 == active_scene && frame >= range.start_frame && frame < range.end_frame
 }
 
-pub fn get_active_objects_system(world: &EcsWorld) -> (Vec<ActiveObject>, CapturedObjects, bool) {
+pub fn get_active_objects_system(world: &EcsWorld) -> (Vec<ActiveObject>, CapturedObjects) {
     let active_scene = world.active_scene();
     let current = world.current_frame();
     get_active_objects_system_at(world, active_scene, current)
@@ -201,9 +201,8 @@ pub fn get_active_objects_system_at(
     world: &EcsWorld,
     active_scene: i32,
     current: i32,
-) -> (Vec<ActiveObject>, CapturedObjects, bool) {
-    let mut media_pending = false;
-    let result = world.world.run(
+) -> (Vec<ActiveObject>, CapturedObjects) {
+    world.world.run(
         |(_timeline, scenes, project, camera, system_settings): UniqueGroupViews,
          (
             time_ranges,
@@ -334,13 +333,10 @@ pub fn get_active_objects_system_at(
                 let source_frame = media_source.as_ref().map_or(0, |m| {
                     let base = f64::from(current - range.start_frame);
                     let ratio = if matches!(m.kind, MediaKind::Video) {
-                        match crate::media::cache::global().source_fps(&m.path) {
-                            Ok(src_fps) => src_fps / f64::from(project.fps.max(1)),
-                            Err(_) => {
-                                media_pending = true;
-                                1.0
-                            }
-                        }
+                        let src_fps = crate::media::cache::global()
+                            .source_fps(&m.path)
+                            .unwrap_or(f64::from(project.fps.max(1)));
+                        src_fps / f64::from(project.fps.max(1))
                     } else {
                         1.0
                     };
@@ -360,10 +356,7 @@ pub fn get_active_objects_system_at(
                     Some(src) if matches!(src.kind, MediaKind::Video | MediaKind::Image) => {
                         match crate::media::cache::global().dimensions(&src.path) {
                             Ok((w, h)) => rescale_for_source(&matrix, w as f32, h as f32),
-                            Err(_) => {
-                                media_pending = true;
-                                matrix
-                            }
+                            Err(_) => matrix,
                         }
                     }
                     _ => match compose_source {
@@ -669,8 +662,7 @@ pub fn get_active_objects_system_at(
 
             (active, captured)
         },
-    );
-    (result.0, result.1, media_pending)
+    )
 }
 
 type AudioSelectorViews<'v> = (
@@ -786,13 +778,13 @@ mod tests {
 
         world.switch_scene(scene_a);
         world.set_current_frame(0);
-        let (active_a, _captured, _media_pending) = get_active_objects_system(&world);
+        let (active_a, _captured) = get_active_objects_system(&world);
         assert_eq!(active_a.len(), 1);
         assert_eq!(active_a[0].clip_instance, id_a as u64);
 
         world.switch_scene(scene_b);
         world.set_current_frame(0);
-        let (active_b, _captured, _media_pending) = get_active_objects_system(&world);
+        let (active_b, _captured) = get_active_objects_system(&world);
         assert_eq!(active_b.len(), 1);
         assert_eq!(active_b[0].clip_instance, id_b as u64);
     }
@@ -801,7 +793,7 @@ mod tests {
     fn all_kinds_use_perspective_projection() {
         let (mut world, _id) = world_with_object(0, 30);
         world.set_current_frame(0);
-        let (active, _captured, _media_pending) = get_active_objects_system(&world);
+        let (active, _captured) = get_active_objects_system(&world);
         assert_eq!(active.len(), 1);
         assert_ne!(active[0].mvp[15], 0.0);
     }
@@ -815,7 +807,7 @@ mod tests {
         };
         let id = world.add_shape_object(0, 30, KIND_SHAPE, 0, shape);
         world.set_current_frame(0);
-        let (active, _captured, _media_pending) = get_active_objects_system(&world);
+        let (active, _captured) = get_active_objects_system(&world);
         assert_eq!(active.len(), 1);
         assert_eq!(active[0].clip_instance, id as u64);
         assert_eq!(active[0].shape_params.map(|s| s.sides), Some(6));
@@ -833,7 +825,7 @@ mod tests {
         let id1 = world.add_media_object(0, 30, KIND_SHAPE, 0, media.clone());
         let id2 = world.add_media_object(0, 30, KIND_SHAPE, 1, media);
         world.set_current_frame(0);
-        let (active, _captured, _media_pending) = get_active_objects_system(&world);
+        let (active, _captured) = get_active_objects_system(&world);
         assert_eq!(active.len(), 2);
         let instances: Vec<u64> = active.iter().map(|a| a.clip_instance).collect();
         assert_ne!(instances[0], instances[1]);
@@ -855,7 +847,7 @@ mod tests {
             }
         });
         world.set_current_frame(0);
-        let (active, _captured, _media_pending) = get_active_objects_system(&world);
+        let (active, _captured) = get_active_objects_system(&world);
         assert_eq!(active.len(), 1);
         assert_eq!(active[0].effects.len(), 1);
         assert_eq!(active[0].effects[0].0, "test_effect");
@@ -875,7 +867,7 @@ mod tests {
         let child_id = world.add_object(0, 30, KIND_TEXT, 1, Some(TextContent::default()));
         world.set_layer(child_id, 1);
         world.set_current_frame(0);
-        let (active, _captured, _media_pending) = get_active_objects_system(&world);
+        let (active, _captured) = get_active_objects_system(&world);
         let child = active
             .iter()
             .find(|a| a.clip_instance == child_id as u64)
@@ -900,7 +892,7 @@ mod tests {
         let out_of_range = world.add_object(0, 30, KIND_TEXT, 2, Some(TextContent::default()));
         world.set_layer(out_of_range, 2);
         world.set_current_frame(0);
-        let (active, _captured, _media_pending) = get_active_objects_system(&world);
+        let (active, _captured) = get_active_objects_system(&world);
         let in_obj = active
             .iter()
             .find(|a| a.clip_instance == in_range as u64)
@@ -930,7 +922,7 @@ mod tests {
         let out_of_range = world.add_object(0, 30, KIND_TEXT, 2, Some(TextContent::default()));
         world.set_layer(out_of_range, 3);
         world.set_current_frame(0);
-        let (active, _captured, _media_pending) = get_active_objects_system(&world);
+        let (active, _captured) = get_active_objects_system(&world);
         let above_obj = active
             .iter()
             .find(|a| a.clip_instance == above as u64)
@@ -959,7 +951,7 @@ mod tests {
         let out_of_span = world.add_object(0, 30, KIND_TEXT, -1, Some(TextContent::default()));
         world.set_layer(out_of_span, -1);
         world.set_current_frame(0);
-        let (active, captured, _media_pending) = get_active_objects_system(&world);
+        let (active, captured) = get_active_objects_system(&world);
 
         let entity = world.find_entity(gc_id).expect("entity存在前提");
         let captured_list = captured.get(&entity).expect("捕捉対象存在前提");
@@ -992,7 +984,7 @@ mod tests {
         let captured_child = world.add_object(0, 30, KIND_TEXT, 0, Some(TextContent::default()));
         world.set_layer(captured_child, 0);
         world.set_current_frame(0);
-        let (active, captured, _media_pending) = get_active_objects_system(&world);
+        let (active, captured) = get_active_objects_system(&world);
 
         let entity = world.find_entity(gc_id).expect("entity存在前提");
         assert_eq!(captured.get(&entity).map(Vec::len), Some(1));
@@ -1018,7 +1010,7 @@ mod tests {
         let child = world.add_object(0, 30, KIND_TEXT, 0, Some(TextContent::default()));
         world.set_layer(child, 0);
         world.set_current_frame(0);
-        let (active, captured, _media_pending) = get_active_objects_system(&world);
+        let (active, captured) = get_active_objects_system(&world);
 
         assert!(captured.is_empty(), "非FBOグループは捕捉対象を生成しない");
         assert!(active.iter().any(|a| a.clip_instance == child as u64));
@@ -1043,7 +1035,7 @@ mod tests {
         let out_of_range = world.add_object(0, 30, KIND_TEXT, -1, Some(TextContent::default()));
         world.set_layer(out_of_range, -1);
         world.set_current_frame(0);
-        let (active, captured, _media_pending) = get_active_objects_system(&world);
+        let (active, captured) = get_active_objects_system(&world);
 
         let entity = world.find_entity(cc_id).expect("entity存在前提");
         let captured_list = captured.get(&entity).map(Vec::len).unwrap_or(0);
@@ -1085,7 +1077,7 @@ mod tests {
         let child = world.add_object(0, 30, KIND_TEXT, 0, Some(TextContent::default()));
         world.set_layer(child, 0);
         world.set_current_frame(0);
-        let (active, _captured, _media_pending) = get_active_objects_system(&world);
+        let (active, _captured) = get_active_objects_system(&world);
         let child_obj = active
             .iter()
             .find(|a| a.clip_instance == child as u64)
@@ -1121,7 +1113,7 @@ mod tests {
         let leaf = world.add_object(0, 30, KIND_TEXT, 0, Some(TextContent::default()));
         world.set_layer(leaf, 0);
         world.set_current_frame(0);
-        let (active, captured, _media_pending) = get_active_objects_system(&world);
+        let (active, captured) = get_active_objects_system(&world);
 
         let gc_entity = world.find_entity(gc_id).expect("entity存在前提");
         let cc_entity = world.find_entity(cc_id).expect("entity存在前提");

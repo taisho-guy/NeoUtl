@@ -317,8 +317,7 @@ pub fn run(state: &SharedAppState, mut job: ExportJob) -> Result<(), String> {
         let rgba8 = {
             let mut world = world_holder.lock().unwrap();
             world.set_current_frame(frame);
-            let (active, captured, _media_pending) =
-                crate::ecs::systems::get_active_objects_system(&world);
+            let (active, captured) = crate::ecs::systems::get_active_objects_system(&world);
             let project = world.get_project();
             let mut engine_lock = engine_holder.lock().unwrap();
             let Some(engine) = engine_lock.as_mut() else {
