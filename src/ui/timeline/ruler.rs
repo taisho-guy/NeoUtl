@@ -104,13 +104,25 @@ impl TimelineWindow {
             Stroke::new(2.0, accent),
         );
 
-        if response.hovered() {
-            if response.dragged() || response.clicked() {
-                if let Some(pos) = response.interact_pointer_pos() {
-                    let frame = self.px_to_frame(pos.x - body_rect.min.x);
-                    self.seek(state, preview_panel, frame);
-                }
+        if response.dragged() {
+            let press_pos = ui.input(|i| i.pointer.press_origin());
+            let cur_pos = response.interact_pointer_pos();
+            if let (Some(press_pos), Some(cur_pos)) = (press_pos, cur_pos) {
+                let anchor_frame = self.px_to_frame(press_pos.x - body_rect.min.x).max(0);
+                let cur_frame = self.px_to_frame(cur_pos.x - body_rect.min.x).max(0);
+                self.select_range =
+                    Some((anchor_frame.min(cur_frame), anchor_frame.max(cur_frame)));
             }
+        } else if response.double_clicked() {
+            self.select_range = None;
+        } else if response.hovered() && response.clicked() {
+            if let Some(pos) = response.interact_pointer_pos() {
+                let frame = self.px_to_frame(pos.x - body_rect.min.x);
+                self.seek(state, preview_panel, frame);
+            }
+        }
+
+        if response.hovered() {
             let scroll = ui.input(|i| i.smooth_scroll_delta.y);
             if scroll != 0.0 {
                 let anchor_pos = ui.input(|i| i.pointer.hover_pos()).unwrap_or(body_rect.min);

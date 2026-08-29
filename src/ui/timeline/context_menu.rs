@@ -190,6 +190,7 @@ impl TimelineWindow {
             &objects,
             self.show_grid,
             self.show_waveform,
+            self.select_range,
         );
         let _ = ui;
         self.menu = Some(MenuState {
@@ -343,9 +344,24 @@ impl TimelineWindow {
             8 => self.cut_requested(state, preview_panel, menu.hit_id),
             9 => self.copy_requested(state, menu.hit_id),
             10 => self.paste_requested(state, preview_panel),
+            12 => self.cut_selection_range(state, preview_panel),
+            13 => self.cut_selection_range_and_pack(state, preview_panel),
             14 => self.select_object(state, &(), item.kind, false),
             15 => self.show_grid = !self.show_grid,
             16 => self.show_waveform = !self.show_waveform,
+            18 => {
+                let ids = self.selection_target_ids(menu.hit_id);
+                self.pack_left(state, preview_panel, &ids);
+            }
+            19 => {
+                let ids = self.selection_target_ids(menu.hit_id);
+                self.cut_and_pack(state, preview_panel, &ids);
+            }
+            20 => {
+                let ids = self.selection_target_ids(menu.hit_id);
+                self.extract_selection(state, preview_panel, &ids);
+            }
+            53 => self.select_range = None,
             40 => self.toggle_layer_locked(state, preview_panel, item.kind),
             41 => self.toggle_layer_visible(state, preview_panel, item.kind),
             50 => {

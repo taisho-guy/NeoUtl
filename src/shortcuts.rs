@@ -52,6 +52,8 @@ pub enum CommandId {
     ToggleRipple = 34,
     ZoomIn = 35,
     ZoomOut = 36,
+    CutRange = 37,
+    CutRangeAndPack = 38,
 }
 
 pub const ALL_COMMANDS: &[CommandId] = &[
@@ -91,6 +93,8 @@ pub const ALL_COMMANDS: &[CommandId] = &[
     CommandId::ToggleRipple,
     CommandId::ZoomIn,
     CommandId::ZoomOut,
+    CommandId::CutRange,
+    CommandId::CutRangeAndPack,
 ];
 
 pub fn label(id: CommandId) -> &'static str {
@@ -132,6 +136,8 @@ pub fn label(id: CommandId) -> &'static str {
         CommandId::ToggleRipple => "リップル編集切替",
         CommandId::ZoomIn => "拡大",
         CommandId::ZoomOut => "縮小",
+        CommandId::CutRange => "選択範囲を切り取り",
+        CommandId::CutRangeAndPack => "選択範囲を切り取りして詰める",
     }
 }
 
@@ -218,6 +224,11 @@ pub const DEFAULT_KEYMAP: &[(CommandId, Scope, KeyBinding)] = &[
         CommandId::SeekEnd,
         Scope::Timeline,
         bind(false, false, false, "End"),
+    ),
+    (
+        CommandId::CutRangeAndPack,
+        Scope::Timeline,
+        bind(false, true, false, "Delete"),
     ),
     (
         CommandId::ShowTimeline,

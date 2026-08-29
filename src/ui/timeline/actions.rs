@@ -1,11 +1,78 @@
 use super::TimelineWindow;
 use crate::app_state::{self, SharedAppState};
+use crate::ecs::EcsWorld;
 use crate::ecs::components::{GroupControl, MediaSource, ShapeParams, TextContent};
 use crate::localization::tr;
 use crate::objects::registry;
 use crate::ui::preview::PreviewPanel;
 use std::cell::RefCell;
 use std::rc::Rc;
+
+fn trim_object_to_range(world: &mut EcsWorld, id: usize, range_start: i32, range_end: i32) {
+    let Some(target) = world
+        .get_timeline_objects()
+        .iter()
+        .find(|o| o.id as usize == id)
+        .map(|o| (o.start_frame, o.end_frame))
+    else {
+        return;
+    };
+    let (start, end) = target;
+    if start >= range_end || end <= range_start {
+        world.delete_object(id);
+        return;
+    }
+    let mut current_id = id;
+    if start < range_start {
+        if let Some(right_id) = world.split_object(current_id, range_start) {
+            current_id = right_id;
+        }
+    }
+    if end > range_end {
+        if let Some(right_id) = world.split_object(current_id, range_end) {
+            world.delete_object(right_id);
+        }
+    }
+}
+
+fn remove_range_content(world: &mut EcsWorld, range_start: i32, range_end: i32) {
+    let overlapping: Vec<usize> = world
+        .get_timeline_objects()
+        .iter()
+        .filter(|o| o.start_frame < range_end && o.end_frame > range_start)
+        .map(|o| o.id as usize)
+        .collect();
+    let mut to_delete = Vec::with_capacity(overlapping.len());
+    for id in overlapping {
+        let Some((start, end)) = world
+            .get_timeline_objects()
+            .iter()
+            .find(|o| o.id as usize == id)
+            .map(|o| (o.start_frame, o.end_frame))
+        else {
+            continue;
+        };
+        if start >= range_start && end <= range_end {
+            to_delete.push(id);
+            continue;
+        }
+        let mut middle_id = id;
+        if start < range_start {
+            if let Some(right_id) = world.split_object(middle_id, range_start) {
+                middle_id = right_id;
+            } else {
+                continue;
+            }
+        }
+        if end > range_end {
+            world.split_object(middle_id, range_end);
+        }
+        to_delete.push(middle_id);
+    }
+    if !to_delete.is_empty() {
+        world.delete_objects(&to_delete);
+    }
+}
 
 impl TimelineWindow {
     pub(super) fn after_structural_edit(
@@ -301,6 +368,143 @@ impl TimelineWindow {
             self.selected_ids.clear();
             preview_panel.borrow_mut().refresh_total_frames(state);
         }
+    }
+
+    pub(super) fn cut_selection_range(
+        &mut self,
+        state: &SharedAppState,
+        preview_panel: &Rc<RefCell<PreviewPanel>>,
+    ) {
+        let Some((range_start, range_end)) = self.select_range else {
+            return;
+        };
+        app_state::snapshot_before_edit(state);
+        let world_holder = app_state::active_world(state);
+        let mut world = world_holder.lock().unwrap();
+        remove_range_content(&mut world, range_start, range_end);
+        drop(world);
+        preview_panel.borrow_mut().refresh_total_frames(state);
+    }
+
+    pub(super) fn cut_selection_range_and_pack(
+        &mut self,
+        state: &SharedAppState,
+        preview_panel: &Rc<RefCell<PreviewPanel>>,
+    ) {
+        let Some((range_start, range_end)) = self.select_range else {
+            return;
+        };
+        app_state::snapshot_before_edit(state);
+        let world_holder = app_state::active_world(state);
+        let mut world = world_holder.lock().unwrap();
+        remove_range_content(&mut world, range_start, range_end);
+        let shift = range_end - range_start;
+        let followers: Vec<(usize, i32, i32)> = world
+            .get_timeline_objects()
+            .iter()
+            .filter(|o| o.start_frame >= range_end)
+            .map(|o| (o.id as usize, o.start_frame, o.layer))
+            .collect();
+        for (id, start, layer) in followers {
+            world.move_object(id, start - shift, layer);
+        }
+        self.select_range = None;
+        drop(world);
+        preview_panel.borrow_mut().refresh_total_frames(state);
+    }
+
+    pub(super) fn pack_left(
+        &mut self,
+        state: &SharedAppState,
+        preview_panel: &Rc<RefCell<PreviewPanel>>,
+        ids: &[usize],
+    ) {
+        if ids.is_empty() {
+            return;
+        }
+        app_state::snapshot_before_edit(state);
+        let world_holder = app_state::active_world(state);
+        let mut world = world_holder.lock().unwrap();
+        let objects = world.get_timeline_objects();
+        for &id in ids {
+            let Some(target) = objects.iter().find(|o| o.id as usize == id) else {
+                continue;
+            };
+            let prev_end = objects
+                .iter()
+                .filter(|o| o.layer == target.layer && o.id as usize != id)
+                .filter(|o| o.end_frame <= target.start_frame)
+                .map(|o| o.end_frame)
+                .max()
+                .unwrap_or(0);
+            world.move_object(id, prev_end, target.layer);
+        }
+        drop(world);
+        preview_panel.borrow_mut().refresh_total_frames(state);
+    }
+
+    pub(super) fn cut_and_pack(
+        &mut self,
+        state: &SharedAppState,
+        preview_panel: &Rc<RefCell<PreviewPanel>>,
+        ids: &[usize],
+    ) {
+        if ids.is_empty() {
+            return;
+        }
+        app_state::snapshot_before_edit(state);
+        let world_holder = app_state::active_world(state);
+        let mut world = world_holder.lock().unwrap();
+        let removed: Vec<(i32, i32, i32)> = world
+            .get_timeline_objects()
+            .iter()
+            .filter(|o| ids.contains(&(o.id as usize)))
+            .map(|o| (o.start_frame, o.end_frame, o.layer))
+            .collect();
+        let docs = world.cut_objects(ids);
+        drop(world);
+        app_state::set_clipboard(state, docs);
+        let world_holder = app_state::active_world(state);
+        let mut world = world_holder.lock().unwrap();
+        for (start, end, layer) in removed {
+            let shift = end - start;
+            let followers: Vec<(usize, i32)> = world
+                .get_timeline_objects()
+                .iter()
+                .filter(|o| o.layer == layer && o.start_frame >= end)
+                .map(|o| (o.id as usize, o.start_frame))
+                .collect();
+            for (id, follower_start) in followers {
+                world.move_object(id, follower_start - shift, layer);
+            }
+        }
+        for &id in ids {
+            self.selected_ids.remove(&(id as i32));
+        }
+        drop(world);
+        preview_panel.borrow_mut().refresh_total_frames(state);
+    }
+
+    pub(super) fn extract_selection(
+        &mut self,
+        state: &SharedAppState,
+        preview_panel: &Rc<RefCell<PreviewPanel>>,
+        ids: &[usize],
+    ) {
+        let Some((range_start, range_end)) = self.select_range else {
+            return;
+        };
+        if ids.is_empty() {
+            return;
+        }
+        app_state::snapshot_before_edit(state);
+        let world_holder = app_state::active_world(state);
+        let mut world = world_holder.lock().unwrap();
+        for &id in ids {
+            trim_object_to_range(&mut world, id, range_start, range_end);
+        }
+        drop(world);
+        preview_panel.borrow_mut().refresh_total_frames(state);
     }
 
     pub(super) fn close_scene_tab(

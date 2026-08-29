@@ -84,6 +84,7 @@ pub struct TimelineWindow {
     drag: Option<ClipDrag>,
     kdrag: Option<KeyframeDrag>,
     range: Option<RangeSelect>,
+    pub(super) select_range: Option<(i32, i32)>,
     menu: Option<MenuState>,
     layer_menu: Option<MenuState>,
     waveform_cache: HashMap<PathBuf, egui::TextureHandle>,
@@ -105,6 +106,7 @@ impl TimelineWindow {
             drag: None,
             kdrag: None,
             range: None,
+            select_range: None,
             menu: None,
             layer_menu: None,
             waveform_cache: HashMap::new(),
@@ -122,6 +124,7 @@ impl TimelineWindow {
         self.drag = None;
         self.kdrag = None;
         self.range = None;
+        self.select_range = None;
         self.menu = None;
         self.layer_menu = None;
     }
@@ -320,6 +323,10 @@ impl TimelineWindow {
                 CommandId::Copy => self.copy_requested(state, hit_id),
                 CommandId::Paste => self.paste_requested(state, preview_panel),
                 CommandId::ToggleRipple => self.ripple_mode = !self.ripple_mode,
+                CommandId::CutRange => self.cut_selection_range(state, preview_panel),
+                CommandId::CutRangeAndPack => {
+                    self.cut_selection_range_and_pack(state, preview_panel)
+                }
                 CommandId::ZoomIn => self.zoom_scale = (self.zoom_scale * 1.25).min(10.0),
                 CommandId::ZoomOut => self.zoom_scale = (self.zoom_scale * 0.8).max(0.1),
                 CommandId::SeekHome => self.seek(state, preview_panel, 0),

@@ -51,6 +51,20 @@ impl TimelineWindow {
 
         self.handle_background_input(ui, &response, state, preview_panel);
 
+        if let Some((start_frame, end_frame)) = self.select_range {
+            let x0 = rect.min.x + self.frame_to_x(start_frame);
+            let x1 = rect.min.x + self.frame_to_x(end_frame);
+            let band = Rect::from_min_max(Pos2::new(x0, rect.min.y), Pos2::new(x1, rect.max.y));
+            let purple = egui::Color32::from_rgb(160, 90, 220);
+            painter.rect_filled(band, 0.0, purple.gamma_multiply(0.28));
+            painter.rect_stroke(
+                band,
+                0.0,
+                Stroke::new(1.5, purple),
+                egui::StrokeKind::Outside,
+            );
+        }
+
         if let Some(range) = &self.range {
             let a = rect.min + range.anchor.to_vec2();
             let c = rect.min + range.cur.to_vec2();
