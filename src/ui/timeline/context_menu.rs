@@ -5,7 +5,7 @@ use crate::objects::registry;
 use crate::ui::dialogs::DialogSet;
 use crate::ui::preview::PreviewPanel;
 use crate::ui::types::{ContextMenuItem, ObjectKindItem};
-use egui::{Pos2, Rect, Vec2};
+use egui::{Pos2, Rect};
 use egui_material_icons::icons;
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -200,6 +200,7 @@ impl TimelineWindow {
             layer,
             items,
             open_submenu: None,
+            just_opened: true,
         });
     }
 
@@ -221,7 +222,7 @@ impl TimelineWindow {
         let mut fire: Option<ContextMenuItem> = None;
         let mut row_rects: Vec<Rect> = Vec::with_capacity(menu.items.len());
 
-        egui::Area::new(ui.id().with("timeline-context-menu"))
+        let menu_area = egui::Area::new(ui.id().with("timeline-context-menu"))
             .fixed_pos(menu.pos)
             .order(egui::Order::Foreground)
             .show(ui.ctx(), |ui| {
@@ -258,13 +259,16 @@ impl TimelineWindow {
                             }
                         }
                     });
-            });
+            })
+            .response;
+
+        let mut occupied_rect = menu_area.rect;
 
         if let Some(idx) = menu.open_submenu {
             if let (Some(anchor), Some(item)) = (row_rects.get(idx), menu.items.get(idx)) {
                 if !item.submenu.is_empty() {
                     let sub_pos = Pos2::new(anchor.max.x, anchor.min.y);
-                    egui::Area::new(ui.id().with("timeline-context-submenu"))
+                    let submenu_area = egui::Area::new(ui.id().with("timeline-context-submenu"))
                         .fixed_pos(sub_pos)
                         .order(egui::Order::Foreground)
                         .show(ui.ctx(), |ui| {
@@ -280,7 +284,9 @@ impl TimelineWindow {
                                         }
                                     }
                                 });
-                        });
+                        })
+                        .response;
+                    occupied_rect = occupied_rect.union(submenu_area.rect);
                 }
             }
         }
@@ -290,18 +296,16 @@ impl TimelineWindow {
             keep_open = false;
         }
 
-        if ui.input(|i| i.pointer.any_click())
-            && ui.ctx().pointer_hover_pos().map_or(false, |p| {
-                !Rect::from_min_size(
-                    menu.pos,
-                    Vec2::new(
-                        MENU_WIDTH,
-                        menu.items.len() as f32 * (ROW_HEIGHT - 4.0) + 16.0,
-                    ),
-                )
-                .contains(p)
-                    && menu.open_submenu.is_none()
-            })
+        let just_opened = menu.just_opened;
+        menu.just_opened = false;
+
+        if keep_open
+            && !just_opened
+            && ui.input(|i| i.pointer.any_click())
+            && ui
+                .ctx()
+                .pointer_interact_pos()
+                .map_or(false, |p| !occupied_rect.contains(p))
         {
             keep_open = false;
         }

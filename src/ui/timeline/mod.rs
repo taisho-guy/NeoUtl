@@ -70,6 +70,7 @@ struct MenuState {
     layer: i32,
     items: Vec<ContextMenuItem>,
     open_submenu: Option<usize>,
+    just_opened: bool,
 }
 
 pub struct TimelineWindow {
