@@ -193,19 +193,7 @@ pub(super) fn build_context_menu(
         })
         .collect();
 
-    let object_select_submenu: Vec<ContextMenuItem> = objects
-        .iter()
-        .map(|(id, label)| ContextMenuItem {
-            label: label.clone(),
-            action: 14,
-            kind: *id,
-            enabled: true,
-            icon: "mouse-pointer-click".into(),
-            checked: None,
-            submenu: Vec::new(),
-        })
-        .collect();
-    let object_select_enabled = !object_select_submenu.is_empty();
+    let _ = objects;
 
     vec![
         ContextMenuItem {
@@ -217,10 +205,6 @@ pub(super) fn build_context_menu(
             checked: None,
             submenu: media_submenu,
         },
-        disabled_submenu_parent(t!("フィルタオブジェクトを追加")),
-        sep(),
-        disabled_submenu_parent(t!("フィルタ効果を追加")),
-        sep(),
         ContextMenuItem {
             label: t!("貼り付け"),
             action: 10,
@@ -261,17 +245,6 @@ pub(super) fn build_context_menu(
         },
         sep(),
         ContextMenuItem {
-            label: t!("オブジェクト選択"),
-            action: 17,
-            kind: -1,
-            enabled: object_select_enabled,
-            icon: "list".into(),
-            checked: None,
-            submenu: object_select_submenu,
-        },
-        disabled_submenu_parent(t!("プラグイン")),
-        sep(),
-        ContextMenuItem {
             label: t!("グリッド(BPM)の表示"),
             action: 15,
             kind: -1,
@@ -289,9 +262,6 @@ pub(super) fn build_context_menu(
             checked: Some(show_waveform),
             submenu: Vec::new(),
         },
-        sep(),
-        disabled_submenu_parent(t!("オプション")),
-        disabled_submenu_parent(t!("ウィンドウ配置")),
         sep(),
         ContextMenuItem {
             label: t!("シーン設定"),
