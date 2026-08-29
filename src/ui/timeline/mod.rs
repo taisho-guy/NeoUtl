@@ -85,6 +85,7 @@ pub struct TimelineWindow {
     kdrag: Option<KeyframeDrag>,
     range: Option<RangeSelect>,
     pub(super) select_range: Option<(i32, i32)>,
+    select_range_anchor: Option<i32>,
     menu: Option<MenuState>,
     layer_menu: Option<MenuState>,
     waveform_cache: HashMap<PathBuf, egui::TextureHandle>,
@@ -107,6 +108,7 @@ impl TimelineWindow {
             kdrag: None,
             range: None,
             select_range: None,
+            select_range_anchor: None,
             menu: None,
             layer_menu: None,
             waveform_cache: HashMap::new(),
@@ -125,6 +127,7 @@ impl TimelineWindow {
         self.kdrag = None;
         self.range = None;
         self.select_range = None;
+        self.select_range_anchor = None;
         self.menu = None;
         self.layer_menu = None;
     }
