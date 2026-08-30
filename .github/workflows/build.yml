@@ -25,20 +25,20 @@ jobs:
             artifact_name: neoutl-linux-x86_64
             binary_name: NeoUtl
             lua_feature: luajit
-            install_cmd: sudo apt-get update && sudo apt-get install -y --no-install-recommends pkg-config clang cmake ninja-build mold libxkbcommon-dev libwayland-dev libegl1-mesa-dev libudev-dev libasound2-dev libfontconfig1-dev libfreetype6-dev libexpat1-dev libavcodec-dev libavformat-dev libavutil-dev libavfilter-dev libswscale-dev libswresample-dev libva-dev
+            install_cmd: sudo apt-get update && sudo apt-get install -y --no-install-recommends pkg-config clang cmake ninja-build make mold libxkbcommon-dev libwayland-dev libegl1-mesa-dev libudev-dev libasound2-dev libfontconfig1-dev libfreetype6-dev libexpat1-dev libavcodec-dev libavformat-dev libavutil-dev libavfilter-dev libswscale-dev libswresample-dev libva-dev
           - os: ubuntu-24.04-arm
             os_name: Linux(ARM64)
             artifact_name: neoutl-linux-arm64
             binary_name: NeoUtl
             lua_feature: luajit
-            install_cmd: sudo apt-get update && sudo apt-get install -y --no-install-recommends pkg-config clang cmake ninja-build mold libxkbcommon-dev libwayland-dev libegl1-mesa-dev libudev-dev libasound2-dev libfontconfig1-dev libfreetype6-dev libexpat1-dev libavcodec-dev libavformat-dev libavutil-dev libavfilter-dev libswscale-dev libswresample-dev libva-dev
+            install_cmd: sudo apt-get update && sudo apt-get install -y --no-install-recommends pkg-config clang cmake ninja-build make mold libxkbcommon-dev libwayland-dev libegl1-mesa-dev libudev-dev libasound2-dev libfontconfig1-dev libfreetype6-dev libexpat1-dev libavcodec-dev libavformat-dev libavutil-dev libavfilter-dev libswscale-dev libswresample-dev libva-dev
           - os: windows-latest
-            os_name: Windows(x86_64/MSYS2)
+            os_name: Windows(x86_64/MSYS2 CLANG64)
             artifact_name: neoutl-windows-x86_64
             binary_name: NeoUtl.exe
-            rust_target: x86_64-pc-windows-gnu
-            msystem: MINGW64
-            msys_prefix: mingw-w64-x86_64
+            rust_target: x86_64-pc-windows-gnullvm
+            msystem: CLANG64
+            msys_prefix: mingw-w64-clang-x86_64
             lua_feature: luajit
     runs-on: ${{ matrix.os }}
 
@@ -57,11 +57,14 @@ jobs:
           msystem: ${{ matrix.msystem }}
           update: true
           install: >-
-            ${{ matrix.msys_prefix }}-toolchain
+            ${{ matrix.msys_prefix }}-clang
+            ${{ matrix.msys_prefix }}-gcc-compat
             ${{ matrix.msys_prefix }}-rust
             ${{ matrix.msys_prefix }}-pkgconf
             ${{ matrix.msys_prefix }}-cmake
             ${{ matrix.msys_prefix }}-ninja
+            ${{ matrix.msys_prefix }}-make
+            ${{ matrix.msys_prefix }}-vulkan-headers
             ${{ matrix.msys_prefix }}-ffmpeg
             ${{ matrix.msys_prefix }}-luajit
 
@@ -82,6 +85,8 @@ jobs:
         shell: msys2 {0}
         env:
           PKG_CONFIG: pkg-config
+          CC: clang
+          CXX: clang++
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: cargo xtask build --release --lua-feature ${{ matrix.lua_feature }}
 
@@ -115,7 +120,7 @@ jobs:
           cp assets/icon.ico dist/package/
           [ -d target/release/objects ] && cp -r target/release/objects dist/package/
           [ -d target/release/effects ] && cp -r target/release/effects dist/package/
-          ldd target/release/${{ matrix.binary_name }} | awk '{print $3}' | grep -i '/mingw64/bin/' | while read -r dep; do
+          ldd target/release/${{ matrix.binary_name }} | awk '{print $3}' | grep -i '/clang64/bin/' | while read -r dep; do
             cp -n "$dep" dist/package/
           done
           cd dist/package
