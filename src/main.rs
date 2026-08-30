@@ -103,6 +103,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             );
             media::loader::load_all(&media::loader::default_decoders_dir());
             easings::loader::load_all(&easings::loader::default_easings_dir());
+            ui::font_stack::preload_installed_fonts();
             match audio::plugin_settings::load_from_disk() {
                 Some(saved) => {
                     audio::plugin_registry::init_from_cache(
