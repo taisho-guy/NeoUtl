@@ -153,6 +153,37 @@ pub fn text_section(ui: &mut egui::Ui, world: &mut EcsWorld, id: usize) {
     let current_frame = world.current_frame();
     ui.separator();
     ui.colored_label(egui::Color32::from_rgb(0x8a, 0xab, 0xff), t!("テキスト"));
+    ui.label(effect_param_label("フォント候補"));
+    let mut stack = content.font_family_stack.clone();
+    let mut remove_at: Option<usize> = None;
+    let mut updated: Option<Vec<String>> = None;
+    for row in 0..stack.len() {
+        ui.horizontal(|ui| {
+            let mut family = stack[row].clone();
+            if let Some(new_family) =
+                crate::ui::font_stack::font_stack_row(ui, (id, "font_stack", row), &mut family)
+            {
+                stack[row] = new_family;
+                updated = Some(stack.clone());
+            }
+            ui.add_enabled_ui(stack.len() > 1, |ui| {
+                if ui.small_button("✕").clicked() {
+                    remove_at = Some(row);
+                }
+            });
+        });
+    }
+    if let Some(new_stack) = updated {
+        world.set_text_font_stack(id, new_stack);
+    }
+    if let Some(row) = remove_at {
+        stack.remove(row);
+        world.set_text_font_stack(id, stack.clone());
+    }
+    if ui.small_button("+").clicked() {
+        stack.push(String::new());
+        world.set_text_font_stack(id, stack);
+    }
     for schema in TEXT_SCHEMA {
         if !is_visible(schema, |k| content.get_param(k).unwrap_or(0.0)) {
             continue;
@@ -168,21 +199,7 @@ pub fn text_section(ui: &mut egui::Ui, world: &mut EcsWorld, id: usize) {
                     world.set_text(id, content.text.clone(), content.font_size);
                 }
             }
-            ParamKind::Text if schema.key == "font_family" => {
-                ui.horizontal(|ui| {
-                    ui.label(effect_param_label(schema.label));
-                    let width = ui.available_width();
-                    if ui
-                        .add_sized(
-                            [width, 0.0],
-                            egui::TextEdit::singleline(&mut content.font_family),
-                        )
-                        .changed()
-                    {
-                        world.set_text_font_family(id, content.font_family.clone());
-                    }
-                });
-            }
+            ParamKind::Text if schema.key == "font_family" => {}
             ParamKind::Text => {}
             ParamKind::Bool => {
                 ui.horizontal(|ui| {

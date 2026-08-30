@@ -1380,13 +1380,17 @@ impl EcsWorld {
         self.touch();
     }
 
-    pub fn set_text_font_family(&mut self, object_id: usize, font_family: String) {
+    pub fn set_text_font_stack(&mut self, object_id: usize, stack: Vec<String>) {
         let Some(entity) = self.find_entity(object_id) else {
             return;
         };
         self.world.run(|mut texts: ViewMut<TextContent>| {
             if let Ok(mut slot) = (&mut texts).get(entity) {
-                slot.font_family = font_family;
+                slot.font_family_stack = if stack.is_empty() {
+                    vec![String::new()]
+                } else {
+                    stack
+                };
             }
         });
         self.touch();

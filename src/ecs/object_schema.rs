@@ -112,7 +112,6 @@ const TEXT_ALIGN_OPTIONS: &[&str] = &["左寄せ", "中央", "右寄せ"];
 
 pub const TEXT_SCHEMA: &[ParamSchema] = &[
     text_field("text", "本文"),
-    text_field("font_family", "フォント"),
     float_fixed("font_size", "フォントサイズ", 1.0, 500.0),
     bool_field("bold", "太字"),
     bool_field("italic", "斜体"),

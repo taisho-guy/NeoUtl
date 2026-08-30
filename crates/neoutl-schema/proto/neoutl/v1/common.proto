@@ -77,7 +77,7 @@ message TextContent {
   string text = 1;
   float font_size = 2;
   repeated float color = 3;
-  string font_family = 4;
+  repeated string font_family_stack = 4;
   bool bold = 5;
   bool italic = 6;
   TextAlign align = 7;

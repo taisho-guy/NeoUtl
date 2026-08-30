@@ -19,7 +19,7 @@ use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
-use wgpu_text::glyph_brush::ab_glyph::FontArc;
+use wgpu_text::glyph_brush::ab_glyph::{Font, FontArc};
 use wgpu_text::{BrushBuilder, TextBrush};
 
 pub static DEVICE_LOST: AtomicBool = AtomicBool::new(false);
@@ -1704,6 +1704,27 @@ impl RenderEngine {
         Some(font)
     }
 
+    fn resolve_font_stack(
+        &mut self,
+        stack: &[String],
+        text: &str,
+        bold: bool,
+        italic: bool,
+    ) -> Option<FontArc> {
+        let mut fallback: Option<FontArc> = None;
+        for family in stack {
+            let Some(font) = self.resolve_font(family, bold, italic) else {
+                continue;
+            };
+            let covers_all = text.chars().all(|c| c == '\n' || font.glyph_id(c).0 != 0);
+            if covers_all {
+                return Some(font);
+            }
+            fallback = Some(font);
+        }
+        fallback.or_else(|| self.resolve_font("", bold, italic))
+    }
+
     fn apply_text_outline(
         &self,
         target: &TextRenderTarget,
@@ -2405,7 +2426,9 @@ impl RenderEngine {
                 if media_next_index >= MAX_OBJECTS {
                     continue;
                 }
-                let Some(font) = self.resolve_font(&tc.font_family, tc.bold, tc.italic) else {
+                let Some(font) =
+                    self.resolve_font_stack(&tc.font_family_stack, &tc.text, tc.bold, tc.italic)
+                else {
                     continue;
                 };
 

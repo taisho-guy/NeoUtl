@@ -2,6 +2,7 @@ pub mod dialogs;
 pub mod effect_add_dialog;
 pub mod effect_catalog;
 pub mod export_dialog;
+pub mod font_stack;
 pub mod keybindings;
 pub mod launcher;
 pub mod preview;
