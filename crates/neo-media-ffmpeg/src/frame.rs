@@ -1,70 +1,39 @@
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
-use ffmpeg_sys_next as sys;
-use neo_media_core::NeoFramePool;
-
-pub struct OwnedAvFrame {
-    pub(crate) raw: *mut sys::AVFrame,
-}
-
-unsafe impl Send for OwnedAvFrame {}
-unsafe impl Sync for OwnedAvFrame {}
-
-impl Drop for OwnedAvFrame {
-    fn drop(&mut self) {
-        unsafe {
-            if !self.raw.is_null() {
-                sys::av_frame_free(&mut self.raw);
-            }
-        }
-    }
-}
+use neo_media_cache::NeoMediaCache;
+use neo_media_core::PixelFormat;
 
 pub struct GpuFrame {
     pub texture: wgpu::Texture,
     pub width: u32,
     pub height: u32,
-    _keep_alive: Option<Arc<OwnedAvFrame>>,
-    pool_release: Option<Arc<neo_media_cache::NeoMediaCache>>,
-    _pool_owner_token: Option<Arc<neo_media_cache::SlotOwnerToken>>,
+    cache: Arc<NeoMediaCache>,
+    format: PixelFormat,
 }
 
 impl GpuFrame {
-    pub fn new(texture: wgpu::Texture, width: u32, height: u32) -> Self {
-        Self {
-            texture,
-            width,
-            height,
-            _keep_alive: None,
-            pool_release: None,
-            _pool_owner_token: None,
-        }
-    }
-
-    pub fn new_pooled(
+    pub fn new(
         texture: wgpu::Texture,
         width: u32,
         height: u32,
-        cache: Arc<neo_media_cache::NeoMediaCache>,
-        pool_owner_token: Option<Arc<neo_media_cache::SlotOwnerToken>>,
+        cache: Arc<NeoMediaCache>,
+        format: PixelFormat,
     ) -> Self {
         Self {
             texture,
             width,
             height,
-            _keep_alive: None,
-            pool_release: Some(cache),
-            _pool_owner_token: pool_owner_token,
+            cache,
+            format,
         }
     }
 }
 
 impl Drop for GpuFrame {
     fn drop(&mut self) {
-        if let Some(cache) = self.pool_release.take() {
-            cache.release(self.texture.clone());
-        }
+        self.cache
+            .release_free_as(self.format, self.width, self.height, &self.texture);
     }
 }
 
@@ -78,6 +47,23 @@ impl VideoFrame {
 
     pub fn height(&self) -> u32 {
         self.0.height
+    }
+}
+
+#[derive(Clone)]
+pub struct RamFrame {
+    pub bytes: Arc<[u8]>,
+    pub width: u32,
+    pub height: u32,
+}
+
+impl RamFrame {
+    pub fn new(bytes: Arc<[u8]>, width: u32, height: u32) -> Self {
+        Self {
+            bytes,
+            width,
+            height,
+        }
     }
 }
 

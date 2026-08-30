@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicU32, AtomicU64, AtomicUsize, Ordering};
-use std::sync::{Arc, Mutex, Weak};
+use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
 use neo_media_core::{NeoFramePool, PixelFormat, PoolError};
@@ -22,11 +22,9 @@ const SAFETY_RATIO_TIGHTEN_STEP: u32 = 50;
 const SAFETY_RATIO_RELAX_STEP: u32 = 10;
 const BUDGET_PRESSURE_DROP_PERMILLE: u64 = 900;
 
-pub struct SlotOwnerToken(());
-
-fn new_owner_token() -> Arc<SlotOwnerToken> {
-    Arc::new(SlotOwnerToken(()))
-}
+pub const RAM_MIN_CAPACITY: usize = 8;
+const RAM_FALLBACK_CAPACITY_NO_BUDGET: usize = 64;
+const RAM_HARD_CEILING_CAPACITY: usize = 900;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum SlotState {
@@ -40,8 +38,6 @@ struct Slot {
     texture: wgpu::Texture,
     state: SlotState,
     fence: Option<wgpu::SubmissionIndex>,
-    owner: Weak<SlotOwnerToken>,
-    pending_strong: Option<Arc<SlotOwnerToken>>,
     kind_id: u8,
     last_used: u64,
     write_started_at: Option<Instant>,
@@ -50,10 +46,6 @@ struct Slot {
 impl Slot {
     fn matches(&self, texture: &wgpu::Texture) -> bool {
         &self.texture == texture
-    }
-
-    fn is_dead(&self) -> bool {
-        self.owner.strong_count() == 0
     }
 }
 
@@ -244,10 +236,6 @@ impl FormatPool {
             .count()
     }
 
-    fn find_dead_owner_victim(&self) -> Option<usize> {
-        self.slots.iter().position(|s| s.is_dead())
-    }
-
     fn find_over_quota_victim(
         &self,
         requesting_kind: u8,
@@ -275,7 +263,7 @@ impl FormatPool {
     fn acquire_for_write(
         &mut self,
         ctx: AcquireWriteRequest<'_>,
-    ) -> Result<(wgpu::Texture, Arc<SlotOwnerToken>), PoolError> {
+    ) -> Result<wgpu::Texture, PoolError> {
         let AcquireWriteRequest {
             device,
             capacity,
@@ -286,16 +274,13 @@ impl FormatPool {
         } = ctx;
         self.reclaim_completed(device);
         let write_started = Instant::now();
-        let token = new_owner_token();
 
         if let Some(slot) = self.slots.iter_mut().find(|s| s.state == SlotState::Free) {
             slot.state = SlotState::Writing;
-            slot.owner = Arc::downgrade(&token);
-            slot.pending_strong = Some(token.clone());
             slot.kind_id = kind_id;
             slot.last_used = acquire_seq;
             slot.write_started_at = Some(write_started);
-            return Ok((slot.texture.clone(), token));
+            return Ok(slot.texture.clone());
         }
 
         if self.slots.len() < capacity {
@@ -304,24 +289,11 @@ impl FormatPool {
                 texture: texture.clone(),
                 state: SlotState::Writing,
                 fence: None,
-                owner: Arc::downgrade(&token),
-                pending_strong: Some(token.clone()),
                 kind_id,
                 last_used: acquire_seq,
                 write_started_at: Some(write_started),
             });
-            return Ok((texture, token));
-        }
-
-        if let Some(idx) = self.find_dead_owner_victim() {
-            let slot = &mut self.slots[idx];
-            slot.state = SlotState::Writing;
-            slot.owner = Arc::downgrade(&token);
-            slot.pending_strong = Some(token.clone());
-            slot.kind_id = kind_id;
-            slot.last_used = acquire_seq;
-            slot.write_started_at = Some(write_started);
-            return Ok((slot.texture.clone(), token));
+            return Ok(texture);
         }
 
         let reserved_for_kind = quotas
@@ -333,12 +305,10 @@ impl FormatPool {
             if let Some(idx) = self.find_over_quota_victim(kind_id, quotas) {
                 let slot = &mut self.slots[idx];
                 slot.state = SlotState::Writing;
-                slot.owner = Arc::downgrade(&token);
-                slot.pending_strong = Some(token.clone());
                 slot.kind_id = kind_id;
                 slot.last_used = acquire_seq;
                 slot.write_started_at = Some(write_started);
-                return Ok((slot.texture.clone(), token));
+                return Ok(slot.texture.clone());
             }
         }
 
@@ -463,6 +433,7 @@ impl FormatPool {
 }
 
 pub type VramBudgetProvider = dyn Fn() -> Option<u64> + Send + Sync;
+pub type RamBudgetProvider = dyn Fn() -> Option<u64> + Send + Sync;
 
 pub struct NeoMediaCache {
     device: wgpu::Device,
@@ -473,14 +444,27 @@ pub struct NeoMediaCache {
     safety_ratio_permille: AtomicU32,
     acquire_counter: AtomicU64,
     budget_provider: Option<Arc<VramBudgetProvider>>,
+    ram_budget_bytes: AtomicU64,
+    ram_budget_provider: Option<Arc<RamBudgetProvider>>,
+    ram_requery_counter: AtomicU64,
 }
 
 impl NeoMediaCache {
-    pub fn new(device: wgpu::Device, budget_provider: Option<Arc<VramBudgetProvider>>) -> Self {
+    pub fn new(
+        device: wgpu::Device,
+        budget_provider: Option<Arc<VramBudgetProvider>>,
+        ram_budget_provider: Option<Arc<RamBudgetProvider>>,
+    ) -> Self {
         let initial_budget = budget_provider.as_ref().and_then(|p| p()).unwrap_or(0);
         if initial_budget == 0 {
             eprintln!(
                 "[neo-media-cache][診断] 初期VRAM予算取得失敗 フォールバック容量={FALLBACK_CAPACITY_NO_BUDGET}適用中"
+            );
+        }
+        let initial_ram_budget = ram_budget_provider.as_ref().and_then(|p| p()).unwrap_or(0);
+        if initial_ram_budget == 0 {
+            eprintln!(
+                "[neo-media-cache][診断] 初期RAM予算取得失敗 フォールバック容量={RAM_FALLBACK_CAPACITY_NO_BUDGET}適用中"
             );
         }
         Self {
@@ -492,6 +476,9 @@ impl NeoMediaCache {
             safety_ratio_permille: AtomicU32::new(SAFETY_RATIO_PERMILLE_INITIAL),
             acquire_counter: AtomicU64::new(0),
             budget_provider,
+            ram_budget_bytes: AtomicU64::new(initial_ram_budget),
+            ram_budget_provider,
+            ram_requery_counter: AtomicU64::new(0),
         }
     }
 
@@ -541,6 +528,28 @@ impl NeoMediaCache {
         }
     }
 
+    fn maybe_requery_ram_budget(&self) {
+        let seq = self.ram_requery_counter.fetch_add(1, Ordering::Relaxed);
+        if seq % REQUERY_INTERVAL_ACQUIRES != 0 {
+            return;
+        }
+        let Some(provider) = self.ram_budget_provider.as_ref() else {
+            return;
+        };
+        let Some(fresh) = provider() else {
+            eprintln!(
+                "[neo-media-cache][診断] RAM予算取得失敗 acquire_seq={seq} フォールバック容量={RAM_FALLBACK_CAPACITY_NO_BUDGET}適用中"
+            );
+            return;
+        };
+        if fresh == 0 {
+            eprintln!(
+                "[neo-media-cache][診断] RAM予算取得結果0バイト acquire_seq={seq} フォールバック容量={RAM_FALLBACK_CAPACITY_NO_BUDGET}適用中"
+            );
+        }
+        self.ram_budget_bytes.store(fresh, Ordering::Relaxed);
+    }
+
     pub fn effective_capacity(&self, frame_bytes: u64) -> usize {
         let budget = self.vram_budget_bytes.load(Ordering::Relaxed);
         if budget == 0 || frame_bytes == 0 {
@@ -552,6 +561,18 @@ impl NeoMediaCache {
         raw_capacity.clamp(MIN_CAPACITY, HARD_CEILING_CAPACITY)
     }
 
+    pub fn effective_ram_capacity(&self, frame_bytes: u64) -> usize {
+        self.maybe_requery_ram_budget();
+        let budget = self.ram_budget_bytes.load(Ordering::Relaxed);
+        if budget == 0 || frame_bytes == 0 {
+            return RAM_FALLBACK_CAPACITY_NO_BUDGET;
+        }
+        let ratio_permille = self.safety_ratio_permille.load(Ordering::Relaxed) as u64;
+        let usable_bytes = budget.saturating_mul(ratio_permille) / 1000;
+        let raw_capacity = (usable_bytes / frame_bytes) as usize;
+        raw_capacity.clamp(RAM_MIN_CAPACITY, RAM_HARD_CEILING_CAPACITY)
+    }
+
     pub fn acquire_for_write(
         &self,
         format: PixelFormat,
@@ -559,7 +580,6 @@ impl NeoMediaCache {
         height: u32,
     ) -> Result<wgpu::Texture, PoolError> {
         self.acquire_for_write_as(KIND_PLAYBACK, format, width, height)
-            .map(|(texture, _token)| texture)
     }
 
     pub fn acquire_for_write_as(
@@ -568,7 +588,7 @@ impl NeoMediaCache {
         format: PixelFormat,
         width: u32,
         height: u32,
-    ) -> Result<(wgpu::Texture, Arc<SlotOwnerToken>), PoolError> {
+    ) -> Result<wgpu::Texture, PoolError> {
         self.maybe_requery_budget();
         let frame_bytes = bytes_per_frame(format, width, height);
         let capacity = self.effective_capacity(frame_bytes);
@@ -588,21 +608,6 @@ impl NeoMediaCache {
             acquire_seq,
             clip_key_hint: "cache",
         })
-    }
-
-    pub fn owner_token_of(
-        &self,
-        format: PixelFormat,
-        width: u32,
-        height: u32,
-        texture: &wgpu::Texture,
-    ) -> Option<Arc<SlotOwnerToken>> {
-        let mut pools = self.pools.lock().expect("pools mutex poisoned");
-        let pool = pools.get_mut(&(format, width, height))?;
-        pool.slots
-            .iter_mut()
-            .find(|s| s.matches(texture))
-            .and_then(|s| s.pending_strong.take())
     }
 
     pub fn mark_ready(
@@ -642,6 +647,19 @@ impl NeoMediaCache {
         let mut pools = self.pools.lock().expect("pools mutex poisoned");
         if let Some(pool) = pools.get_mut(&(format, width, height)) {
             pool.release_read(texture, submission_index);
+        }
+    }
+
+    pub fn release_free_as(
+        &self,
+        format: PixelFormat,
+        width: u32,
+        height: u32,
+        texture: &wgpu::Texture,
+    ) {
+        let mut pools = self.pools.lock().expect("pools mutex poisoned");
+        if let Some(pool) = pools.get_mut(&(format, width, height)) {
+            pool.release_free(texture);
         }
     }
 }

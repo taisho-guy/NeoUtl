@@ -9,16 +9,10 @@ use std::time::Duration;
 use ffmpeg_sys_next as sys;
 
 use neo_media_cache::NeoMediaCache;
-use neo_media_core::{
-    ColorPrimaries, MatrixCoefficients, Rect, Size, TransferBackend, TransferCharacteristics,
-};
-#[cfg(target_os = "windows")]
-use neo_media_transfer_d3d11::D3d11TransferBackend;
-#[cfg(unix)]
-use neo_media_transfer_vaapi::VaapiTransferBackend;
+use neo_media_core::PixelFormat;
 
-use crate::cache::{GopCache, GopCacheBlock, PooledFrameCache};
-use crate::frame::{GpuFrame, VideoFrame, VideoFrameStore};
+use crate::cache::{GopCache, GopCacheBlock, RamFrameCache, VramPromotionCache};
+use crate::frame::{GpuFrame, RamFrame, VideoFrame, VideoFrameStore};
 use crate::index::{FrameIndex, build_index};
 #[cfg(unix)]
 use crate::vaapi_probe::probe_vaapi_node;
@@ -33,28 +27,17 @@ pub fn shared_wgpu_submit_lock() -> Arc<Mutex<()>> {
         .clone()
 }
 
-fn rgba8_frame_bytes(width: u32, height: u32) -> u64 {
-    width as u64 * height as u64 * 4
+fn rgba16f_frame_bytes(width: u32, height: u32) -> u64 {
+    width as u64 * height as u64 * 8
 }
 
 pub fn set_shared_wgpu_device(device: Arc<wgpu::Device>, queue: Arc<wgpu::Queue>) {
-    #[cfg(unix)]
-    let budget_provider: Option<Arc<neo_media_cache::VramBudgetProvider>> = {
-        let device_for_query = device.clone();
-        Some(Arc::new(move || unsafe {
-            neo_media_transfer_vaapi::query_vram_budget_bytes(&device_for_query)
-        }))
-    };
-    #[cfg(not(unix))]
-    let budget_provider: Option<Arc<neo_media_cache::VramBudgetProvider>> = {
-        let device_for_query = device.clone();
-        Some(Arc::new(move || {
-            neo_media_transfer_d3d11::query_vram_budget_bytes(&device_for_query)
-        }))
-    };
+    let budget_provider: Option<Arc<neo_media_cache::VramBudgetProvider>> = None;
+    let ram_budget_provider: Option<Arc<neo_media_cache::RamBudgetProvider>> = None;
     let _ = SHARED_CACHE.set(Arc::new(NeoMediaCache::new(
         (*device).clone(),
         budget_provider,
+        ram_budget_provider,
     )));
     if let Some(cache) = SHARED_CACHE.get() {
         cache.register_consumer(neo_media_cache::KIND_PLAYBACK, 3);
@@ -88,6 +71,9 @@ fn av_pix_fmt_rgb0() -> i32 {
 fn av_pix_fmt_bgr0() -> i32 {
     pf(sys::AVPixelFormat::AV_PIX_FMT_BGR0)
 }
+fn av_pix_fmt_rgba() -> i32 {
+    pf(sys::AVPixelFormat::AV_PIX_FMT_RGBA)
+}
 fn av_pix_fmt_nv12() -> i32 {
     pf(sys::AVPixelFormat::AV_PIX_FMT_NV12)
 }
@@ -118,17 +104,19 @@ const AV_CODEC_CAP_SLICE_THREADS: i32 = 1 << 13;
 const AV_CODEC_HW_CONFIG_METHOD_HW_DEVICE_CTX: i32 = 0x01;
 const FF_THREAD_FRAME: i32 = 1;
 const FF_THREAD_SLICE: i32 = 2;
+const SWS_BILINEAR: i32 = 2;
+const OWN_CONCURRENT_HW_FRAME_HOLD: i32 = 1;
 
 const GOP_CACHE_CAPACITY: usize = 3;
 const FORWARD_DECODE_THRESHOLD: i64 = 120;
-const POOLED_FRAME_CACHE_MARGIN: usize = 2;
-const HW_DEVICE_TYPE_NAMES: &[&str] = &["cuda", "vaapi", "d3d11va", "dxva2", "videotoolbox"];
+const RAM_FRAME_CACHE_MARGIN: usize = 2;
+const VRAM_PROMOTION_CAPACITY: usize = 4;
 
-fn pooled_frame_cache_capacity(width: u32, height: u32) -> usize {
+fn ram_frame_cache_capacity(width: u32, height: u32) -> usize {
     shared_media_cache()
-        .map(|cache| cache.effective_capacity(rgba8_frame_bytes(width, height)))
-        .unwrap_or(neo_media_cache::MIN_CAPACITY)
-        .saturating_sub(POOLED_FRAME_CACHE_MARGIN)
+        .map(|cache| cache.effective_ram_capacity(rgba16f_frame_bytes(width, height)))
+        .unwrap_or(neo_media_cache::RAM_MIN_CAPACITY)
+        .saturating_sub(RAM_FRAME_CACHE_MARGIN)
         .max(1)
 }
 
@@ -239,7 +227,6 @@ impl Drop for VideoDecoder {
 
 struct HwPixFmtBox {
     pix_fmt: i32,
-    stream_sw_format: i32,
     hw_device_ctx: *mut sys::AVBufferRef,
 }
 
@@ -269,27 +256,30 @@ unsafe fn try_request_hw_frames_ctx(
     ctx: *mut sys::AVCodecContext,
     hw_device_ctx: *mut sys::AVBufferRef,
     hw_pix_fmt: i32,
-    stream_sw_format: i32,
 ) {
     unsafe {
         if hw_device_ctx.is_null() || !(*ctx).hw_frames_ctx.is_null() {
             return;
         }
-        let Some(sw_format) = resolve_hw_sw_format(stream_sw_format) else {
-            return;
-        };
-        let frames_ref = sys::av_hwframe_ctx_alloc(hw_device_ctx);
-        if frames_ref.is_null() {
+        let mut frames_ref: *mut sys::AVBufferRef = ptr::null_mut();
+        let ret = sys::avcodec_get_hw_frames_parameters(
+            ctx,
+            hw_device_ctx,
+            std::mem::transmute::<i32, sys::AVPixelFormat>(hw_pix_fmt),
+            &mut frames_ref,
+        );
+        if ret < 0 || frames_ref.is_null() {
+            eprintln!(
+                "[neoutl-video-decoder][診断] avcodec_get_hw_frames_parameters失敗 ret={ret}"
+            );
             return;
         }
         let frames_ctx = (*frames_ref).data as *mut sys::AVHWFramesContext;
-        (*frames_ctx).format = std::mem::transmute::<i32, sys::AVPixelFormat>(hw_pix_fmt);
-        (*frames_ctx).sw_format = std::mem::transmute::<i32, sys::AVPixelFormat>(sw_format);
-        (*frames_ctx).width = (*ctx).width;
-        (*frames_ctx).height = (*ctx).height;
-        (*frames_ctx).initial_pool_size = 20;
+        (*frames_ctx).initial_pool_size += OWN_CONCURRENT_HW_FRAME_HOLD;
         if sys::av_hwframe_ctx_init(frames_ref) == 0 {
             (*ctx).hw_frames_ctx = sys::av_buffer_ref(frames_ref);
+        } else {
+            eprintln!("[neoutl-video-decoder][診断] av_hwframe_ctx_init失敗(動的算出プール)");
         }
         sys::av_buffer_unref(&mut { frames_ref });
     }
@@ -310,12 +300,7 @@ unsafe extern "C" fn hw_get_format(
         while std::mem::transmute::<sys::AVPixelFormat, i32>(*p) != av_pix_fmt_none() {
             if std::mem::transmute::<sys::AVPixelFormat, i32>(*p) == hw_pix_fmt {
                 if let Some(hw_box) = hw_box {
-                    try_request_hw_frames_ctx(
-                        ctx,
-                        hw_box.hw_device_ctx,
-                        hw_pix_fmt,
-                        hw_box.stream_sw_format,
-                    );
+                    try_request_hw_frames_ctx(ctx, hw_box.hw_device_ctx, hw_pix_fmt);
                 }
                 return *p;
             }
@@ -324,18 +309,6 @@ unsafe extern "C" fn hw_get_format(
         *pixfmts
     }
 }
-
-struct GpuPipeline {
-    wgpu_device: Arc<wgpu::Device>,
-    wgpu_queue: Arc<wgpu::Queue>,
-    cache: Arc<NeoMediaCache>,
-    #[cfg(unix)]
-    backend: VaapiTransferBackend,
-    #[cfg(target_os = "windows")]
-    backend: D3d11TransferBackend,
-}
-
-unsafe impl Send for GpuPipeline {}
 
 struct OpenContext {
     fmt_ctx: *mut sys::AVFormatContext,
@@ -347,7 +320,8 @@ struct OpenContext {
     index: FrameIndex,
     hw_device_ctx: *mut sys::AVBufferRef,
     hw_pix_fmt_box: Option<Box<HwPixFmtBox>>,
-    gpu_pipeline: Option<GpuPipeline>,
+    gpu_device: Option<Arc<wgpu::Device>>,
+    gpu_queue: Option<Arc<wgpu::Queue>>,
     last_good_frame: Option<VideoFrame>,
 }
 
@@ -381,7 +355,6 @@ unsafe fn config_supports_sw_format(
     hw_device_ctx: *mut sys::AVBufferRef,
     config: *const sys::AVCodecHWConfig,
     stream_sw_format: sys::AVPixelFormat,
-    device_type: sys::AVHWDeviceType,
 ) -> bool {
     unsafe {
         let stream_sw_format_i32 = std::mem::transmute::<sys::AVPixelFormat, i32>(stream_sw_format);
@@ -396,20 +369,6 @@ unsafe fn config_supports_sw_format(
             "[neoutl-video-decoder][diag] config_supports_sw_format開始 config_pix_fmt={:?} want_sw_format={target_sw_format}",
             (*config).pix_fmt
         );
-
-        if device_type == sys::AVHWDeviceType::AV_HWDEVICE_TYPE_VAAPI {
-            eprintln!(
-                "[neoutl-video-decoder][diag] VAAPIはprobe段階でvaCreateConfig実検証済みのためFFmpeg制約問い合わせを省略、対応扱い"
-            );
-            return true;
-        }
-
-        if device_type == sys::AVHWDeviceType::AV_HWDEVICE_TYPE_D3D11VA {
-            eprintln!(
-                "[neoutl-video-decoder][diag] D3D11VAはNV12/P010固定のためFFmpeg制約問い合わせを省略、対応扱い"
-            );
-            return true;
-        }
 
         let mut constraints =
             sys::av_hwdevice_get_hwframe_constraints(hw_device_ctx, config as *const c_void);
@@ -445,33 +404,97 @@ unsafe fn config_supports_sw_format(
     }
 }
 
-#[cfg(unix)]
-fn vaapi_render_node_candidates(
-    codec: *const sys::AVCodec,
-    stream_sw_format: sys::AVPixelFormat,
-) -> Vec<CString> {
-    let codec_id = unsafe { (*codec).id };
-    let stream_sw_format_i32 =
-        unsafe { std::mem::transmute::<sys::AVPixelFormat, i32>(stream_sw_format) };
-    let want_10bit = is_10bit_pix_fmt(stream_sw_format_i32);
-    match probe_vaapi_node(codec_id, want_10bit) {
-        Some(node) => {
-            eprintln!(
-                "[neoutl-video-decoder][diag] VAAPIノード確定 path={:?} matched_profile={:?}",
-                node.device_path, node.matched_profile
-            );
-            vec![node.device_path]
-        }
-        None => Vec::new(),
+trait HwAccelProbe: Send + Sync {
+    fn device_type_name(&self) -> &'static str;
+    fn candidate_device_paths(
+        &self,
+        codec_id: sys::AVCodecID,
+        want_10bit: bool,
+    ) -> Vec<Option<CString>>;
+    fn skip_format_query(&self) -> bool {
+        false
     }
 }
 
-#[cfg(not(unix))]
-fn vaapi_render_node_candidates(
-    _codec: *const sys::AVCodec,
-    _stream_sw_format: sys::AVPixelFormat,
-) -> Vec<CString> {
-    Vec::new()
+struct GenericHwAccelProbe {
+    name: &'static str,
+    skip_format_query: bool,
+}
+
+impl HwAccelProbe for GenericHwAccelProbe {
+    fn device_type_name(&self) -> &'static str {
+        self.name
+    }
+
+    fn candidate_device_paths(
+        &self,
+        _codec_id: sys::AVCodecID,
+        _want_10bit: bool,
+    ) -> Vec<Option<CString>> {
+        vec![None]
+    }
+
+    fn skip_format_query(&self) -> bool {
+        self.skip_format_query
+    }
+}
+
+#[cfg(unix)]
+struct VaapiHwAccelProbe;
+
+#[cfg(unix)]
+impl HwAccelProbe for VaapiHwAccelProbe {
+    fn device_type_name(&self) -> &'static str {
+        "vaapi"
+    }
+
+    fn candidate_device_paths(
+        &self,
+        codec_id: sys::AVCodecID,
+        want_10bit: bool,
+    ) -> Vec<Option<CString>> {
+        match probe_vaapi_node(codec_id, want_10bit) {
+            Some(node) => {
+                eprintln!(
+                    "[neoutl-video-decoder][diag] VAAPIノード確定 path={:?} matched_profile={:?}",
+                    node.device_path, node.matched_profile
+                );
+                vec![Some(node.device_path)]
+            }
+            None => Vec::new(),
+        }
+    }
+
+    fn skip_format_query(&self) -> bool {
+        true
+    }
+}
+
+fn build_hw_accel_probes() -> Vec<Box<dyn HwAccelProbe>> {
+    let mut probes: Vec<Box<dyn HwAccelProbe>> = Vec::new();
+    probes.push(Box::new(GenericHwAccelProbe {
+        name: "cuda",
+        skip_format_query: false,
+    }));
+    #[cfg(unix)]
+    probes.push(Box::new(VaapiHwAccelProbe));
+    #[cfg(windows)]
+    {
+        probes.push(Box::new(GenericHwAccelProbe {
+            name: "d3d11va",
+            skip_format_query: true,
+        }));
+        probes.push(Box::new(GenericHwAccelProbe {
+            name: "dxva2",
+            skip_format_query: false,
+        }));
+    }
+    #[cfg(target_os = "macos")]
+    probes.push(Box::new(GenericHwAccelProbe {
+        name: "videotoolbox",
+        skip_format_query: false,
+    }));
+    probes
 }
 
 unsafe fn try_init_hw_device(
@@ -479,7 +502,6 @@ unsafe fn try_init_hw_device(
     stream_sw_format: sys::AVPixelFormat,
     gpu_device: &Option<Arc<wgpu::Device>>,
 ) -> Option<(*mut sys::AVBufferRef, i32)> {
-    #[cfg(not(target_os = "windows"))]
     let _ = gpu_device;
     unsafe {
         sys::av_log_set_level(sys::AV_LOG_DEBUG);
@@ -488,81 +510,21 @@ unsafe fn try_init_hw_device(
             (*codec).id,
             stream_sw_format
         );
-        for name in HW_DEVICE_TYPE_NAMES {
-            let c_name = CString::new(*name).ok()?;
+        let stream_sw_format_i32 = std::mem::transmute::<sys::AVPixelFormat, i32>(stream_sw_format);
+        let want_10bit = is_10bit_pix_fmt(stream_sw_format_i32);
+        let codec_id = (*codec).id;
+        for probe in build_hw_accel_probes() {
+            let name = probe.device_type_name();
+            let c_name = CString::new(name).ok()?;
             let device_type = sys::av_hwdevice_find_type_by_name(c_name.as_ptr());
             if device_type == sys::AVHWDeviceType::AV_HWDEVICE_TYPE_NONE {
                 eprintln!("[neoutl-video-decoder][diag] デバイスタイプ未検出 name={name}");
                 continue;
             }
 
-            let device_paths: Vec<Option<CString>> =
-                if device_type == sys::AVHWDeviceType::AV_HWDEVICE_TYPE_VAAPI {
-                    let nodes = vaapi_render_node_candidates(codec, stream_sw_format);
-                    eprintln!(
-                        "[neoutl-video-decoder][diag] VAAPIノード候補数={} nodes={:?}",
-                        nodes.len(),
-                        nodes
-                            .iter()
-                            .map(|c| c.to_string_lossy())
-                            .collect::<Vec<_>>()
-                    );
-                    if nodes.is_empty() {
-                        continue;
-                    }
-                    nodes.into_iter().map(Some).collect()
-                } else {
-                    vec![None]
-                };
-
-            #[cfg(target_os = "windows")]
-            if device_type == sys::AVHWDeviceType::AV_HWDEVICE_TYPE_D3D11VA {
-                let Some(wgpu_device) = gpu_device.as_ref() else {
-                    eprintln!(
-                        "[neoutl-video-decoder][diag] D3D11VA: wgpu_device未取得のため候補除外"
-                    );
-                    continue;
-                };
-                let Ok(luid) = neo_media_transfer_d3d11::dx12_adapter_luid(wgpu_device) else {
-                    eprintln!("[neoutl-video-decoder][diag] D3D11VA: LUID取得失敗");
-                    continue;
-                };
-                let Ok(d3d11_device) = neo_media_transfer_d3d11::create_d3d11_device_on_luid(luid)
-                else {
-                    eprintln!("[neoutl-video-decoder][diag] D3D11VA: 同一LUIDデバイス生成失敗");
-                    continue;
-                };
-                let Ok(device_ctx) =
-                    neo_media_transfer_d3d11::create_av_d3d11va_device_ctx(&d3d11_device)
-                else {
-                    eprintln!("[neoutl-video-decoder][diag] D3D11VA: av_hwdevice_ctx_init失敗");
-                    continue;
-                };
-                let mut i = 0;
-                loop {
-                    let config = sys::avcodec_get_hw_config(codec, i);
-                    if config.is_null() {
-                        break;
-                    }
-                    let methods = (*config).methods;
-                    let matches_method = (methods & AV_CODEC_HW_CONFIG_METHOD_HW_DEVICE_CTX) != 0;
-                    if matches_method
-                        && (*config).device_type == sys::AVHWDeviceType::AV_HWDEVICE_TYPE_D3D11VA
-                        && config_supports_sw_format(
-                            device_ctx.av_hw_device_ctx,
-                            config,
-                            stream_sw_format,
-                            device_type,
-                        )
-                    {
-                        let hw_device_ctx = sys::av_buffer_ref(device_ctx.av_hw_device_ctx);
-                        return Some((
-                            hw_device_ctx,
-                            std::mem::transmute::<sys::AVPixelFormat, i32>((*config).pix_fmt),
-                        ));
-                    }
-                    i += 1;
-                }
+            let device_paths = probe.candidate_device_paths(codec_id, want_10bit);
+            if device_paths.is_empty() {
+                eprintln!("[neoutl-video-decoder][diag] ノード候補0件 name={name}");
                 continue;
             }
 
@@ -608,12 +570,14 @@ unsafe fn try_init_hw_device(
                             "[neoutl-video-decoder][diag] av_hwdevice_ctx_create結果 name={name} node={path_label} ret={ret}"
                         );
                         if ret == 0 {
-                            let format_ok = config_supports_sw_format(
-                                hw_device_ctx,
-                                config,
-                                stream_sw_format,
-                                device_type,
-                            );
+                            let format_ok = if probe.skip_format_query() {
+                                eprintln!(
+                                    "[neoutl-video-decoder][diag] {name}はprobe段階または固定フォーマット仕様のためFFmpeg制約問い合わせを省略、対応扱い"
+                                );
+                                true
+                            } else {
+                                config_supports_sw_format(hw_device_ctx, config, stream_sw_format)
+                            };
                             eprintln!(
                                 "[neoutl-video-decoder][diag] config_supports_sw_format結果 name={name} node={path_label} format_ok={format_ok}"
                             );
@@ -712,7 +676,6 @@ fn open_input(path: &Path, gpu_device: &Option<Arc<wgpu::Device>>) -> Result<Ope
             hw_device_ctx = created_hw_ctx;
             let boxed = Box::new(HwPixFmtBox {
                 pix_fmt: hw_pix_fmt,
-                stream_sw_format: std::mem::transmute::<sys::AVPixelFormat, i32>(stream_sw_format),
                 hw_device_ctx: created_hw_ctx,
             });
             (*dec_ctx).opaque = boxed.as_ref() as *const HwPixFmtBox as *mut c_void;
@@ -742,7 +705,8 @@ fn open_input(path: &Path, gpu_device: &Option<Arc<wgpu::Device>>) -> Result<Ope
         let width = (*dec_ctx).width.max(0) as u32;
         let height = (*dec_ctx).height.max(0) as u32;
 
-        let gpu_pipeline = build_gpu_pipeline(gpu_device, hw_device_ctx, width, height);
+        let gpu_device_owned = gpu_device.clone();
+        let gpu_queue_owned = shared_wgpu_queue();
 
         if sys::av_seek_frame(fmt_ctx, stream_index, 0, sys::AVSEEK_FLAG_BACKWARD) < 0 {
             sys::av_seek_frame(fmt_ctx, -1, 0, sys::AVSEEK_FLAG_BACKWARD);
@@ -763,64 +727,10 @@ fn open_input(path: &Path, gpu_device: &Option<Arc<wgpu::Device>>) -> Result<Ope
             index,
             hw_device_ctx,
             hw_pix_fmt_box,
-            gpu_pipeline,
+            gpu_device: gpu_device_owned,
+            gpu_queue: gpu_queue_owned,
             last_good_frame: None,
         })
-    }
-}
-
-fn build_gpu_pipeline(
-    gpu_device: &Option<Arc<wgpu::Device>>,
-    hw_device_ctx: *mut sys::AVBufferRef,
-    dec_width: u32,
-    dec_height: u32,
-) -> Option<GpuPipeline> {
-    #[cfg(unix)]
-    let _ = (dec_width, dec_height);
-    let wgpu_device = gpu_device.clone()?;
-    let wgpu_queue = shared_wgpu_queue()?;
-    let cache = shared_media_cache()?;
-    if hw_device_ctx.is_null() {
-        return None;
-    }
-    #[cfg(unix)]
-    {
-        match VaapiTransferBackend::new(&wgpu_device, shared_wgpu_submit_lock()) {
-            Ok(backend) => Some(GpuPipeline {
-                wgpu_device,
-                wgpu_queue,
-                cache,
-                backend,
-            }),
-            Err(e) => {
-                eprintln!("[neoutl-video-decoder] Vulkan相互運用初期化失敗、GPU経路無効: {e}");
-                None
-            }
-        }
-    }
-    #[cfg(target_os = "windows")]
-    {
-        let coded_size = Size {
-            width: dec_width,
-            height: dec_height,
-        };
-        let d3d11_device = unsafe {
-            let device_ctx = (*hw_device_ctx).data as *mut sys::AVHWDeviceContext;
-            let hwctx = (*device_ctx).hwctx as *mut sys::AVD3D11VADeviceContext;
-            neo_media_transfer_d3d11::device_from_raw((*hwctx).device)
-        };
-        match D3d11TransferBackend::new(&wgpu_device, d3d11_device, coded_size) {
-            Ok(backend) => Some(GpuPipeline {
-                wgpu_device,
-                wgpu_queue,
-                cache,
-                backend,
-            }),
-            Err(e) => {
-                eprintln!("[neoutl-video-decoder] D3D12相互運用初期化失敗、GPU経路無効: {e}");
-                None
-            }
-        }
     }
 }
 
@@ -847,217 +757,176 @@ fn seek_to_keyframe(ctx: &mut OpenContext, keyframe_index: i64) {
     }
 }
 
-enum ConvertOutcome {
-    Gpu(VideoFrame),
-    Unsupported(&'static str),
-}
+fn convert_frame(ctx: &mut OpenContext, av_frame: *mut sys::AVFrame) -> Option<RamFrame> {
+    unsafe {
+        let hw_pix_fmt = ctx.hw_pix_fmt_box.as_ref().map(|b| b.pix_fmt);
+        let is_hw_frame = hw_pix_fmt.is_some_and(|fmt| (*av_frame).format == fmt);
 
-fn map_color_primaries(v: sys::AVColorPrimaries) -> ColorPrimaries {
-    match v {
-        sys::AVColorPrimaries::AVCOL_PRI_BT709 => ColorPrimaries::Bt709,
-        sys::AVColorPrimaries::AVCOL_PRI_BT2020 => ColorPrimaries::Bt2020,
-        sys::AVColorPrimaries::AVCOL_PRI_SMPTE170M | sys::AVColorPrimaries::AVCOL_PRI_SMPTE240M => {
-            ColorPrimaries::Smpte170m
-        }
-        _ => ColorPrimaries::Unknown,
-    }
-}
-
-fn map_transfer_characteristics(v: sys::AVColorTransferCharacteristic) -> TransferCharacteristics {
-    match v {
-        sys::AVColorTransferCharacteristic::AVCOL_TRC_BT709 => TransferCharacteristics::Bt709,
-        sys::AVColorTransferCharacteristic::AVCOL_TRC_SMPTE2084 => {
-            TransferCharacteristics::Smpte2084
-        }
-        sys::AVColorTransferCharacteristic::AVCOL_TRC_ARIB_STD_B67 => {
-            TransferCharacteristics::AribStdB67
-        }
-        _ => TransferCharacteristics::Unknown,
-    }
-}
-
-fn map_matrix_coefficients(v: sys::AVColorSpace) -> MatrixCoefficients {
-    match v {
-        sys::AVColorSpace::AVCOL_SPC_BT709 => MatrixCoefficients::Bt709,
-        sys::AVColorSpace::AVCOL_SPC_BT2020_NCL => MatrixCoefficients::Bt2020Ncl,
-        sys::AVColorSpace::AVCOL_SPC_SMPTE170M => MatrixCoefficients::Smpte170m,
-        _ => MatrixCoefficients::Unknown,
-    }
-}
-
-fn is_full_range(v: sys::AVColorRange) -> bool {
-    v == sys::AVColorRange::AVCOL_RANGE_JPEG
-}
-
-fn try_convert_to_gpu(
-    ctx: &mut OpenContext,
-    av_frame: *mut sys::AVFrame,
-    frame_cache: &mut PooledFrameCache,
-) -> ConvertOutcome {
-    let Some(gpu) = ctx.gpu_pipeline.as_mut() else {
-        return ConvertOutcome::Unsupported("GPUパイプライン未初期化(Vulkan相互運用不可)");
-    };
-    let frame_format = unsafe { (*av_frame).format };
-    let Some(hw_pix_fmt_box) = ctx.hw_pix_fmt_box.as_ref() else {
-        return ConvertOutcome::Unsupported("HWデコード非有効(全候補非対応または失敗)");
-    };
-    let hw_pix_fmt = hw_pix_fmt_box.pix_fmt;
-    if frame_format != hw_pix_fmt {
-        return ConvertOutcome::Unsupported("デコード結果がHWサーフェスでない");
-    }
-    let hw_frames_ctx_ref = unsafe { (*ctx.dec_ctx).hw_frames_ctx };
-    if hw_frames_ctx_ref.is_null() {
-        return ConvertOutcome::Unsupported("hw_frames_ctx未設定(sw_format取得不能)");
-    }
-    let sw_format = unsafe {
-        let frames_ctx = (*hw_frames_ctx_ref).data as *mut sys::AVHWFramesContext;
-        (*frames_ctx).sw_format
-    };
-    let sw_format_i32 = unsafe { std::mem::transmute::<sys::AVPixelFormat, i32>(sw_format) };
-    let is_direct_rgba = sw_format_i32 == av_pix_fmt_rgb0() || sw_format_i32 == av_pix_fmt_bgr0();
-
-    let pts = unsafe {
-        if (*av_frame).pts != sys::AV_NOPTS_VALUE {
-            (*av_frame).pts
+        let mut owned_sw_frame: *mut sys::AVFrame = ptr::null_mut();
+        let src_frame: *mut sys::AVFrame = if is_hw_frame {
+            let sw = sys::av_frame_alloc();
+            if sw.is_null() || sys::av_hwframe_transfer_data(sw, av_frame, 0) < 0 {
+                if !sw.is_null() {
+                    sys::av_frame_free(&mut { sw });
+                }
+                eprintln!("[neoutl-video-decoder] av_hwframe_transfer_data失敗、フレームを破棄");
+                return None;
+            }
+            owned_sw_frame = sw;
+            sw
         } else {
-            (*av_frame).pkt_dts
-        }
-    };
-    let progressive = unsafe { (*av_frame).flags & sys::AV_FRAME_FLAG_INTERLACED == 0 };
-
-    let (color_primaries, transfer_characteristics, matrix_coefficients, full_range) = unsafe {
-        (
-            map_color_primaries((*av_frame).color_primaries),
-            map_transfer_characteristics((*av_frame).color_trc),
-            map_matrix_coefficients((*av_frame).colorspace),
-            is_full_range((*av_frame).color_range),
-        )
-    };
-
-    #[cfg(unix)]
-    let input = neo_media_transfer_vaapi::VaapiDecodedFrame {
-        av_frame,
-        src_hw_frames_ctx: hw_frames_ctx_ref,
-        sw_format_i32,
-        is_direct_rgba,
-        coded_size: Size {
-            width: ctx.width,
-            height: ctx.height,
-        },
-        visible_rect: Rect {
-            x: 0,
-            y: 0,
-            width: ctx.width,
-            height: ctx.height,
-        },
-        color_primaries,
-        transfer_characteristics,
-        matrix_coefficients,
-        full_range,
-        pts,
-        duration: 0,
-        progressive,
-    };
-
-    #[cfg(target_os = "windows")]
-    let input = {
-        let _ = is_direct_rgba;
-        let d3d11_texture =
-            match unsafe { neo_media_transfer_d3d11::texture_from_av_frame(av_frame) } {
-                Ok(t) => t,
-                Err(e) => {
-                    eprintln!("[neoutl-video-decoder] D3D11Texture2D取得失敗: {e}");
-                    return ConvertOutcome::Unsupported("D3D11Texture2D取得失敗");
-                }
-            };
-        let subresource_index = unsafe { (*av_frame).data[1] as usize as u32 };
-        neo_media_transfer_d3d11::D3d11DecodedFrame {
-            av_frame,
-            d3d11_texture,
-            subresource_index,
-            sw_format_i32,
-            coded_size: Size {
-                width: ctx.width,
-                height: ctx.height,
-            },
-            visible_rect: Rect {
-                x: 0,
-                y: 0,
-                width: ctx.width,
-                height: ctx.height,
-            },
-            color_primaries,
-            transfer_characteristics,
-            matrix_coefficients,
-            full_range,
-            pts,
-            duration: 0,
-            progressive,
-        }
-    };
-
-    let cache = gpu.cache.clone();
-    let neo_frame =
-        match gpu
-            .backend
-            .transfer(&input, &gpu.wgpu_device, &gpu.wgpu_queue, cache.as_ref())
-        {
-            Ok(f) => f,
-            Err(neo_media_core::TransferError::PoolExhausted) => {
-                if !frame_cache.evict_oldest() {
-                    eprintln!(
-                        "[neoutl-video-decoder] GPUフレーム転送失敗: PoolExhausted(退避対象なし)"
-                    );
-                    return ConvertOutcome::Unsupported("GPUフレーム転送(TransferBackend)失敗");
-                }
-                match gpu.backend.transfer(
-                    &input,
-                    &gpu.wgpu_device,
-                    &gpu.wgpu_queue,
-                    cache.as_ref(),
-                ) {
-                    Ok(f) => f,
-                    Err(e) => {
-                        eprintln!(
-                            "[neoutl-video-decoder] GPUフレーム転送失敗(退避後再試行も失敗): {e:?}"
-                        );
-                        return ConvertOutcome::Unsupported("GPUフレーム転送(TransferBackend)失敗");
-                    }
-                }
-            }
-            Err(e) => {
-                eprintln!("[neoutl-video-decoder] GPUフレーム転送失敗: {e:?}");
-                return ConvertOutcome::Unsupported("GPUフレーム転送(TransferBackend)失敗");
-            }
+            av_frame
         };
 
-    #[cfg(unix)]
-    let dst_pixel_format = neo_media_transfer_vaapi::dst_pixel_format_for(sw_format_i32);
-    #[cfg(target_os = "windows")]
-    let dst_pixel_format = neo_media_transfer_d3d11::dst_pixel_format_for(sw_format_i32);
+        let width = (*src_frame).width.max(0) as u32;
+        let height = (*src_frame).height.max(0) as u32;
+        if width == 0 || height == 0 {
+            if !owned_sw_frame.is_null() {
+                sys::av_frame_free(&mut owned_sw_frame);
+            }
+            return None;
+        }
+        let mut src_format = (*src_frame).format;
+        if src_format == av_pix_fmt_yuvj420p() {
+            src_format = av_pix_fmt_yuv420p();
+        }
 
-    let owner_token =
-        cache.owner_token_of(dst_pixel_format, ctx.width, ctx.height, &neo_frame.texture);
-    let gpu_frame =
-        GpuFrame::new_pooled(neo_frame.texture, ctx.width, ctx.height, cache, owner_token);
-    ConvertOutcome::Gpu(VideoFrame(Arc::new(gpu_frame)))
+        let target_fmt = av_pix_fmt_rgba();
+        let mut converted_frame: *mut sys::AVFrame = ptr::null_mut();
+        let rgba_frame: *mut sys::AVFrame = if src_format == target_fmt {
+            src_frame
+        } else {
+            let sws = sys::sws_getContext(
+                width as i32,
+                height as i32,
+                std::mem::transmute::<i32, sys::AVPixelFormat>(src_format),
+                width as i32,
+                height as i32,
+                std::mem::transmute::<i32, sys::AVPixelFormat>(target_fmt),
+                SWS_BILINEAR,
+                ptr::null_mut(),
+                ptr::null_mut(),
+                ptr::null_mut(),
+            );
+            if sws.is_null() {
+                if !owned_sw_frame.is_null() {
+                    sys::av_frame_free(&mut owned_sw_frame);
+                }
+                eprintln!("[neoutl-video-decoder] sws_getContext失敗、フレームを破棄");
+                return None;
+            }
+            let dst = sys::av_frame_alloc();
+            (*dst).format = target_fmt;
+            (*dst).width = width as i32;
+            (*dst).height = height as i32;
+            if sys::av_frame_get_buffer(dst, 32) != 0 {
+                sys::sws_freeContext(sws);
+                sys::av_frame_free(&mut { dst });
+                if !owned_sw_frame.is_null() {
+                    sys::av_frame_free(&mut owned_sw_frame);
+                }
+                eprintln!("[neoutl-video-decoder] av_frame_get_buffer失敗、フレームを破棄");
+                return None;
+            }
+            sys::sws_scale(
+                sws,
+                (*src_frame).data.as_ptr() as *const *const u8,
+                (*src_frame).linesize.as_ptr(),
+                0,
+                height as i32,
+                (*dst).data.as_mut_ptr(),
+                (*dst).linesize.as_mut_ptr(),
+            );
+            sys::sws_freeContext(sws);
+            converted_frame = dst;
+            dst
+        };
+
+        let linesize = (*rgba_frame).linesize[0] as u32;
+        let data_ptr = (*rgba_frame).data[0];
+        let byte_len = (linesize as usize) * (height as usize);
+        let rgba_bytes = std::slice::from_raw_parts(data_ptr, byte_len);
+
+        let float_pixels = neoutl_color::u8_to_rgba16f(rgba_bytes);
+        let float_bytes: &[u8] = bytemuck::cast_slice(&float_pixels);
+
+        let ram_bytes: Arc<[u8]> = Arc::from(float_bytes);
+
+        if !converted_frame.is_null() {
+            sys::av_frame_free(&mut converted_frame);
+        }
+        if !owned_sw_frame.is_null() {
+            sys::av_frame_free(&mut owned_sw_frame);
+        }
+
+        Some(RamFrame::new(ram_bytes, width, height))
+    }
 }
 
-fn convert_frame(
-    ctx: &mut OpenContext,
-    av_frame: *mut sys::AVFrame,
-    frame_cache: &mut PooledFrameCache,
+fn promote_to_vram(
+    ram: &RamFrame,
+    queue: &wgpu::Queue,
+    cache: &Arc<NeoMediaCache>,
+    vram_cache: &mut VramPromotionCache,
+    frame_index: i64,
 ) -> Option<VideoFrame> {
-    match try_convert_to_gpu(ctx, av_frame, frame_cache) {
-        ConvertOutcome::Gpu(frame) => Some(frame),
-        ConvertOutcome::Unsupported(reason) => {
-            eprintln!(
-                "[neoutl-video-decoder][非対応] GPUデコード経路失敗、フレームを破棄 理由={reason} size={}x{}",
-                ctx.width, ctx.height
-            );
-            None
-        }
+    if let Some(frame) = vram_cache.get(frame_index) {
+        return Some(frame);
     }
+
+    let texture = match cache.acquire_for_write_as(
+        neo_media_cache::KIND_PLAYBACK,
+        PixelFormat::Rgba16Float,
+        ram.width,
+        ram.height,
+    ) {
+        Ok(texture) => texture,
+        Err(err) => {
+            eprintln!(
+                "[neoutl-video-decoder][診断] VRAM層acquire失敗 frame_index={frame_index} err={err:?}"
+            );
+            return None;
+        }
+    };
+
+    queue.write_texture(
+        wgpu::TexelCopyTextureInfo {
+            texture: &texture,
+            mip_level: 0,
+            origin: wgpu::Origin3d::ZERO,
+            aspect: wgpu::TextureAspect::All,
+        },
+        &ram.bytes,
+        wgpu::TexelCopyBufferLayout {
+            offset: 0,
+            bytes_per_row: Some(ram.width * 8),
+            rows_per_image: Some(ram.height),
+        },
+        wgpu::Extent3d {
+            width: ram.width,
+            height: ram.height,
+            depth_or_array_layers: 1,
+        },
+    );
+
+    let submission_index = queue.submit(std::iter::empty());
+    cache.mark_ready(
+        PixelFormat::Rgba16Float,
+        ram.width,
+        ram.height,
+        &texture,
+        submission_index,
+    );
+
+    let video_frame = VideoFrame(Arc::new(GpuFrame::new(
+        texture,
+        ram.width,
+        ram.height,
+        cache.clone(),
+        PixelFormat::Rgba16Float,
+    )));
+    vram_cache.put(frame_index, video_frame.clone());
+    Some(video_frame)
 }
 
 struct WorkerSpawnRequest<F: FnOnce(VideoMeta) + Send + 'static> {
@@ -1111,7 +980,8 @@ fn run_worker<F: FnOnce(VideoMeta) + Send + 'static>(req: WorkerSpawnRequest<F>)
     });
 
     let mut caches = DecodeCaches {
-        frame_cache: PooledFrameCache::new(pooled_frame_cache_capacity(ctx.width, ctx.height)),
+        ram_cache: RamFrameCache::new(ram_frame_cache_capacity(ctx.width, ctx.height)),
+        vram_cache: VramPromotionCache::new(VRAM_PROMOTION_CAPACITY),
         gop_cache: GopCache::new(GOP_CACHE_CAPACITY),
         last_decoded_frame: -1,
     };
@@ -1171,7 +1041,8 @@ fn run_worker<F: FnOnce(VideoMeta) + Send + 'static>(req: WorkerSpawnRequest<F>)
 }
 
 struct DecodeCaches {
-    frame_cache: PooledFrameCache,
+    ram_cache: RamFrameCache,
+    vram_cache: VramPromotionCache,
     gop_cache: GopCache,
     last_decoded_frame: i64,
 }
@@ -1185,7 +1056,8 @@ fn decode_task(
     last_requested_frame: &AtomicI64,
 ) {
     let DecodeCaches {
-        frame_cache,
+        ram_cache,
+        vram_cache,
         gop_cache,
         last_decoded_frame,
     } = caches;
@@ -1193,22 +1065,47 @@ fn decode_task(
         return;
     }
     let target = requested_target.clamp(0, ctx.index.len() - 1);
+    let media_cache = shared_media_cache();
 
-    if let Some(frame) = gop_cache.get(target, frame_cache) {
+    if let Some(frame) = vram_cache.get(target) {
         store.set_frame(clip_key, target, frame.clone());
         ctx.last_good_frame = Some(frame);
         eprintln!(
-            "[neoutl-video-decoder][診断][decode_task終了][gop_cache即応] requested_target={requested_target} target={target}"
+            "[neoutl-video-decoder][診断][decode_task終了][vram_cache即応] requested_target={requested_target} target={target}"
         );
         return;
     }
-    if let Some(frame) = frame_cache.get(target) {
-        store.set_frame(clip_key, target, frame.clone());
-        ctx.last_good_frame = Some(frame);
-        eprintln!(
-            "[neoutl-video-decoder][診断][decode_task終了][frame_cache即応] requested_target={requested_target} target={target}"
-        );
-        return;
+    if let Some(ram_frame) = gop_cache.get(target, ram_cache) {
+        if let (Some(_), Some(queue), Some(cache)) = (
+            ctx.gpu_device.as_ref(),
+            ctx.gpu_queue.as_ref(),
+            media_cache.as_ref(),
+        ) {
+            if let Some(frame) = promote_to_vram(&ram_frame, queue, cache, vram_cache, target) {
+                store.set_frame(clip_key, target, frame.clone());
+                ctx.last_good_frame = Some(frame);
+                eprintln!(
+                    "[neoutl-video-decoder][診断][decode_task終了][gop_cache即応] requested_target={requested_target} target={target}"
+                );
+                return;
+            }
+        }
+    }
+    if let Some(ram_frame) = ram_cache.get(target) {
+        if let (Some(_), Some(queue), Some(cache)) = (
+            ctx.gpu_device.as_ref(),
+            ctx.gpu_queue.as_ref(),
+            media_cache.as_ref(),
+        ) {
+            if let Some(frame) = promote_to_vram(&ram_frame, queue, cache, vram_cache, target) {
+                store.set_frame(clip_key, target, frame.clone());
+                ctx.last_good_frame = Some(frame);
+                eprintln!(
+                    "[neoutl-video-decoder][診断][decode_task終了][ram_cache即応] requested_target={requested_target} target={target}"
+                );
+                return;
+            }
+        }
     }
 
     let key_index = ctx.index.preceding_keyframe(target);
@@ -1290,24 +1187,52 @@ fn decode_task(
             };
             *last_decoded_frame = decoded_index;
 
-            if !frame_cache.contains(decoded_index) {
-                match convert_frame(ctx, av_frame, frame_cache) {
-                    Some(frame) => {
-                        frame_cache.insert(decoded_index, frame.clone());
+            if !ram_cache.contains(decoded_index) {
+                match convert_frame(ctx, av_frame) {
+                    Some(ram_frame) => {
+                        ram_cache.insert(decoded_index, ram_frame.clone());
                         new_gop_block.frame_indices.push(decoded_index);
-                        ctx.last_good_frame = Some(frame.clone());
 
                         if decoded_index == target && !target_dispatched {
-                            store.set_frame(clip_key, decoded_index, frame);
-                            target_dispatched = true;
+                            if let (Some(_), Some(queue), Some(cache)) = (
+                                ctx.gpu_device.as_ref(),
+                                ctx.gpu_queue.as_ref(),
+                                media_cache.as_ref(),
+                            ) {
+                                if let Some(frame) = promote_to_vram(
+                                    &ram_frame,
+                                    queue,
+                                    cache,
+                                    vram_cache,
+                                    decoded_index,
+                                ) {
+                                    ctx.last_good_frame = Some(frame.clone());
+                                    store.set_frame(clip_key, decoded_index, frame);
+                                    target_dispatched = true;
+                                }
+                            } else {
+                                eprintln!(
+                                    "[neoutl-video-decoder][非対応] wgpuデバイス未取得、昇格スキップ"
+                                );
+                            }
                         }
                     }
                     None => {}
                 }
             } else if decoded_index == target && !target_dispatched {
-                if let Some(frame) = frame_cache.get(decoded_index) {
-                    store.set_frame(clip_key, decoded_index, frame.clone());
-                    ctx.last_good_frame = Some(frame);
+                if let Some(ram_frame) = ram_cache.get(decoded_index) {
+                    if let (Some(_), Some(queue), Some(cache)) = (
+                        ctx.gpu_device.as_ref(),
+                        ctx.gpu_queue.as_ref(),
+                        media_cache.as_ref(),
+                    ) {
+                        if let Some(frame) =
+                            promote_to_vram(&ram_frame, queue, cache, vram_cache, decoded_index)
+                        {
+                            ctx.last_good_frame = Some(frame.clone());
+                            store.set_frame(clip_key, decoded_index, frame);
+                        }
+                    }
                 }
                 target_dispatched = true;
             }

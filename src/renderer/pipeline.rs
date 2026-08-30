@@ -61,7 +61,7 @@ pub struct RenderEngine {
     pub depth_texture: wgpu::Texture,
     pub uniform_buffer: wgpu::Buffer,
     pub bind_group: wgpu::BindGroup,
-    font: Option<FontArc>,
+    fonts: HashMap<(String, bool, bool), FontArc>,
     text_targets: HashMap<u64, TextRenderTarget>,
     pub render_width: u32,
     pub render_height: u32,
@@ -102,6 +102,7 @@ pub struct RenderEngine {
 
 struct TextRenderTarget {
     texture: wgpu::Texture,
+    outline_scratch: wgpu::Texture,
     brush: TextBrush,
     width: u32,
     height: u32,
@@ -116,6 +117,7 @@ fn build_text_target(
     let width = width.max(1);
     let height = height.max(1);
     let texture = create_effect_texture(device, width, height);
+    let outline_scratch = create_effect_texture(device, width, height);
     let brush = BrushBuilder::using_font(font.clone()).build(
         device,
         width,
@@ -124,36 +126,39 @@ fn build_text_target(
     );
     TextRenderTarget {
         texture,
+        outline_scratch,
         brush,
         width,
         height,
     }
 }
 
-fn load_font() -> Option<Vec<u8>> {
-    let candidates = [
-        "assets/font.ttf",
-        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
-        "/usr/share/fonts/TTF/DejaVuSans.ttf",
-        "/usr/share/fonts/noto/NotoSans-Regular.ttf",
-        "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
-        "/usr/share/fonts/truetype/noto/NotoSans-Regular.ttf",
-        "/System/Library/Fonts/Supplemental/Arial.ttf",
-        "/System/Library/Fonts/Helvetica.ttc",
-        "C:/Windows/Fonts/arial.ttf",
-        "C:/Windows/Fonts/calibri.ttf",
-    ];
-    for path in &candidates {
-        if let Ok(bytes) = std::fs::read(path) {
-            eprintln!(
-                "{}",
-                t!("[NeoUtl] フォント: %{arg0}", arg0 = format!("{path}"))
-            );
-            return Some(bytes);
-        }
-    }
-    eprintln!("{}", t!("[NeoUtl] フォント未検出: テキスト描画無効"));
-    None
+fn load_font_bytes(family: &str, bold: bool, italic: bool) -> Option<Vec<u8>> {
+    use font_kit::family_name::FamilyName;
+    use font_kit::properties::{Properties, Style, Weight};
+    use font_kit::source::SystemSource;
+    let requested = if family.is_empty() {
+        FamilyName::SansSerif
+    } else {
+        FamilyName::Title(family.to_owned())
+    };
+    let mut properties = Properties::new();
+    properties.weight(if bold { Weight::BOLD } else { Weight::NORMAL });
+    properties.style(if italic { Style::Italic } else { Style::Normal });
+    let source = SystemSource::new();
+    let handle = source
+        .select_best_match(&[requested, FamilyName::SansSerif], &properties)
+        .ok()?;
+    let font = handle.load().ok()?;
+    let data = font.copy_font_data()?;
+    eprintln!(
+        "{}",
+        t!(
+            "[NeoUtl] フォント解決: %{arg0}",
+            arg0 = format!("{family} bold={bold} italic={italic}")
+        )
+    );
+    Some(data.to_vec())
 }
 
 fn create_texture(device: &wgpu::Device, width: u32, height: u32) -> wgpu::Texture {
@@ -1113,8 +1118,6 @@ impl RenderEngine {
             });
         let video_pipeline = build_media_pipeline(&device, &video_pipeline_layout, VIDEO_WGSL);
 
-        let font = load_font().and_then(|f| FontArc::try_from_vec(f).ok());
-
         let (reduce_mean_pipeline, reduce_mean_bind_group_layout) =
             build_reduce_mean_pipeline(&device);
         let reduce_mean_buffer = device.create_buffer(&wgpu::BufferDescriptor {
@@ -1162,7 +1165,7 @@ impl RenderEngine {
             depth_texture,
             uniform_buffer,
             bind_group,
-            font,
+            fonts: HashMap::new(),
             text_targets: HashMap::new(),
             render_width: width,
             render_height: height,
@@ -1688,6 +1691,112 @@ impl RenderEngine {
             rpass.set_bind_group(0, &bind_group, &[offset]);
             rpass.draw(0..6, 0..1);
         }
+    }
+
+    fn resolve_font(&mut self, family: &str, bold: bool, italic: bool) -> Option<FontArc> {
+        let key = (family.to_owned(), bold, italic);
+        if let Some(font) = self.fonts.get(&key) {
+            return Some(font.clone());
+        }
+        let bytes = load_font_bytes(family, bold, italic)?;
+        let font = FontArc::try_from_vec(bytes).ok()?;
+        self.fonts.insert(key, font.clone());
+        Some(font)
+    }
+
+    fn apply_text_outline(
+        &self,
+        target: &TextRenderTarget,
+        tc: &crate::ecs::components::TextContent,
+    ) {
+        let Some(source) = effects::loader::by_id("text_outline") else {
+            return;
+        };
+        let Some(pipeline) = self.effect_pipelines.get("text_outline") else {
+            return;
+        };
+        let values = [
+            tc.outline_width,
+            tc.outline_color[0],
+            tc.outline_color[1],
+            tc.outline_color[2],
+            tc.outline_color[3],
+        ];
+        let uniform_size = (source.uniform_size() as usize).max(16);
+        let mut bytes = vec![0u8; uniform_size];
+        source.pack_uniform(&values, &mut bytes);
+        self.queue
+            .write_buffer(&self.effect_uniform_buffer, 0, &bytes);
+
+        let src_view = target
+            .texture
+            .create_view(&wgpu::TextureViewDescriptor::default());
+        let dst_view = target
+            .outline_scratch
+            .create_view(&wgpu::TextureViewDescriptor::default());
+        let bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("Text Outline BG"),
+            layout: &self.effect_bind_group_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::TextureView(&src_view),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::Sampler(&self.effect_sampler),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 2,
+                    resource: self.effect_uniform_buffer.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 3,
+                    resource: wgpu::BindingResource::TextureView(&self.dummy_map_texture_view),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 4,
+                    resource: wgpu::BindingResource::Sampler(&self.effect_sampler),
+                },
+            ],
+        });
+
+        let mut encoder = self
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("Text Outline Encoder"),
+            });
+        {
+            let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("Text Outline Pass"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: &dst_view,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
+                        store: wgpu::StoreOp::Store,
+                    },
+                    depth_slice: None,
+                })],
+                depth_stencil_attachment: None,
+                timestamp_writes: None,
+                occlusion_query_set: None,
+                multiview_mask: None,
+            });
+            rpass.set_pipeline(pipeline);
+            rpass.set_bind_group(0, &bind_group, &[]);
+            rpass.draw(0..3, 0..1);
+        }
+        encoder.copy_texture_to_texture(
+            target.outline_scratch.as_image_copy(),
+            target.texture.as_image_copy(),
+            wgpu::Extent3d {
+                width: target.width,
+                height: target.height,
+                depth_or_array_layers: 1,
+            },
+        );
+        crate::gpu_shared::locked_submit(&self.queue, [encoder.finish()]);
     }
 
     fn draw_text_pass(&self, rpass: &mut wgpu::RenderPass, clip_instance: u64, offset: u32) {
@@ -2280,7 +2389,7 @@ impl RenderEngine {
         }
 
         let mut text_draws: Vec<(u64, u32, usize)> = Vec::new();
-        if let Some(ref font) = self.font {
+        {
             let mut seen: HashSet<u64> = HashSet::with_capacity(active_objects.len());
             for (obj_index, obj) in active_objects.iter().enumerate() {
                 let Some(plugin) = by_kind_id(obj.kind_id) else {
@@ -2296,8 +2405,12 @@ impl RenderEngine {
                 if media_next_index >= MAX_OBJECTS {
                     continue;
                 }
+                let Some(font) = self.resolve_font(&tc.font_family, tc.bold, tc.italic) else {
+                    continue;
+                };
 
-                let (tex_w, tex_h) = crate::media::text::measure(font, tc);
+                let text_layout = crate::media::text::layout(&font, tc);
+                let (tex_w, tex_h) = (text_layout.width, text_layout.height);
                 seen.insert(obj.clip_instance);
 
                 let needs_rebuild = match self.text_targets.get(&obj.clip_instance) {
@@ -2307,7 +2420,7 @@ impl RenderEngine {
                 if needs_rebuild {
                     self.text_targets.insert(
                         obj.clip_instance,
-                        build_text_target(&self.device, font, tex_w, tex_h),
+                        build_text_target(&self.device, &font, tex_w, tex_h),
                     );
                 }
                 let target = self
@@ -2315,16 +2428,21 @@ impl RenderEngine {
                     .get_mut(&obj.clip_instance)
                     .expect(&t!("直前にinsert済み"));
 
-                let section = crate::media::text::build_section(tc, target.width, target.height);
+                let sections = crate::media::text::build_sections(
+                    tc,
+                    &text_layout,
+                    target.width,
+                    target.height,
+                );
+                let section_refs: Vec<&_> = sections.iter().collect();
                 {
                     let view = target
                         .texture
                         .create_view(&wgpu::TextureViewDescriptor::default());
-                    let _ = target.brush.queue(
-                        self.device.as_ref(),
-                        self.queue.as_ref(),
-                        vec![&section],
-                    );
+                    let _ =
+                        target
+                            .brush
+                            .queue(self.device.as_ref(), self.queue.as_ref(), section_refs);
                     let mut encoder =
                         self.device
                             .create_command_encoder(&wgpu::CommandEncoderDescriptor {
@@ -2351,6 +2469,12 @@ impl RenderEngine {
                         target.brush.draw(&mut glyph_pass);
                     }
                     crate::gpu_shared::locked_submit(&self.queue, [encoder.finish()]);
+                }
+
+                if tc.outline_width > 0.0 {
+                    if let Some(t) = self.text_targets.get(&obj.clip_instance) {
+                        self.apply_text_outline(t, tc);
+                    }
                 }
 
                 let ratio_w = tex_w as f32 / UNIT_SIZE_PX;

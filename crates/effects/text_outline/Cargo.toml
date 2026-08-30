@@ -1,0 +1,15 @@
+[package]
+name    = "neoutl-effect-text-outline"
+version = "0.0.0"
+edition = "2024"
+
+[lib]
+name       = "neoutl_effect_text_outline"
+crate-type = ["cdylib"]
+
+[dependencies]
+rust-i18n.workspace = true
+neoutl-effect-api = { path = "../../neoutl-effect-api" }
+
+[build-dependencies]
+neoutl-effect-shader-build.workspace = true

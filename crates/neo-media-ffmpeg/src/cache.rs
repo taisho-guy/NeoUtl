@@ -1,15 +1,15 @@
 use std::collections::{HashMap, HashSet, VecDeque};
 
-use crate::frame::VideoFrame;
+use crate::frame::{RamFrame, VideoFrame};
 
-pub struct PooledFrameCache {
+struct LruSlotCache<V: Clone> {
     capacity: usize,
     order: VecDeque<i64>,
-    map: HashMap<i64, VideoFrame>,
+    map: HashMap<i64, V>,
 }
 
-impl PooledFrameCache {
-    pub fn new(capacity: usize) -> Self {
+impl<V: Clone> LruSlotCache<V> {
+    fn new(capacity: usize) -> Self {
         Self {
             capacity: capacity.max(1),
             order: VecDeque::new(),
@@ -17,22 +17,22 @@ impl PooledFrameCache {
         }
     }
 
-    pub fn get(&mut self, index: i64) -> Option<VideoFrame> {
-        let frame = self.map.get(&index)?.clone();
+    fn get(&mut self, index: i64) -> Option<V> {
+        let value = self.map.get(&index)?.clone();
         self.order.retain(|&i| i != index);
         self.order.push_back(index);
-        Some(frame)
+        Some(value)
     }
 
-    pub fn contains(&self, index: i64) -> bool {
+    fn contains(&self, index: i64) -> bool {
         self.map.contains_key(&index)
     }
 
-    pub fn insert(&mut self, index: i64, frame: VideoFrame) {
+    fn insert(&mut self, index: i64, value: V) {
         if self.map.remove(&index).is_some() {
             self.order.retain(|&i| i != index);
         }
-        self.map.insert(index, frame);
+        self.map.insert(index, value);
         self.order.push_back(index);
         self.evict_until_within_budget();
     }
@@ -46,15 +46,67 @@ impl PooledFrameCache {
         }
     }
 
-    pub fn evict_oldest(&mut self) -> bool {
+    fn evict_oldest(&mut self) -> bool {
         let Some(oldest) = self.order.pop_front() else {
             return false;
         };
         self.map.remove(&oldest).is_some()
     }
 
-    pub fn is_empty(&self) -> bool {
+    fn is_empty(&self) -> bool {
         self.map.is_empty()
+    }
+}
+
+pub struct RamFrameCache {
+    inner: LruSlotCache<RamFrame>,
+}
+
+impl RamFrameCache {
+    pub fn new(capacity: usize) -> Self {
+        Self {
+            inner: LruSlotCache::new(capacity),
+        }
+    }
+
+    pub fn get(&mut self, index: i64) -> Option<RamFrame> {
+        self.inner.get(index)
+    }
+
+    pub fn contains(&self, index: i64) -> bool {
+        self.inner.contains(index)
+    }
+
+    pub fn insert(&mut self, index: i64, frame: RamFrame) {
+        self.inner.insert(index, frame);
+    }
+
+    pub fn evict_oldest(&mut self) -> bool {
+        self.inner.evict_oldest()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.inner.is_empty()
+    }
+}
+
+pub struct VramPromotionCache {
+    inner: LruSlotCache<VideoFrame>,
+}
+
+impl VramPromotionCache {
+    pub fn new(capacity: usize) -> Self {
+        Self {
+            inner: LruSlotCache::new(capacity),
+        }
+    }
+
+    pub fn get(&mut self, index: i64) -> Option<VideoFrame> {
+        self.inner.get(index)
+    }
+
+    pub fn put(&mut self, index: i64, frame: VideoFrame) {
+        self.inner.insert(index, frame);
     }
 }
 
@@ -78,7 +130,7 @@ impl GopCache {
         }
     }
 
-    pub fn get(&mut self, frame_index: i64, frames: &mut PooledFrameCache) -> Option<VideoFrame> {
+    pub fn get(&mut self, frame_index: i64, frames: &mut RamFrameCache) -> Option<RamFrame> {
         let pos = self.blocks.iter().position(|b| {
             frame_index >= b.start && frame_index <= b.end && b.frame_indices.contains(&frame_index)
         })?;

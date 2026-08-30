@@ -521,12 +521,36 @@ impl ParamAccess for TextContent {
     fn get_param(&self, key: &str) -> Option<f32> {
         Some(match key {
             "font_size" => self.font_size,
+            "bold" => bool_to_f32(self.bold),
+            "italic" => bool_to_f32(self.italic),
+            "align" => self.align as u8 as f32,
+            "line_height" => self.line_height,
+            "outline_width" => self.outline_width,
+            "outline_r" => self.outline_color[0],
+            "outline_g" => self.outline_color[1],
+            "outline_b" => self.outline_color[2],
+            "outline_a" => self.outline_color[3],
             _ => return None,
         })
     }
     fn set_param(&mut self, key: &str, value: f32) -> bool {
         match key {
             "font_size" => self.font_size = value,
+            "bold" => self.bold = value > 0.5,
+            "italic" => self.italic = value > 0.5,
+            "align" => {
+                self.align = match value.round() as i32 {
+                    1 => TextAlign::Center,
+                    2 => TextAlign::Right,
+                    _ => TextAlign::Left,
+                }
+            }
+            "line_height" => self.line_height = value,
+            "outline_width" => self.outline_width = value,
+            "outline_r" => self.outline_color[0] = value,
+            "outline_g" => self.outline_color[1] = value,
+            "outline_b" => self.outline_color[2] = value,
+            "outline_a" => self.outline_color[3] = value,
             _ => return false,
         }
         true

@@ -1368,6 +1368,30 @@ impl EcsWorld {
         self.touch();
     }
 
+    pub fn set_text_param(&mut self, object_id: usize, key: &str, value: f32) {
+        let Some(entity) = self.find_entity(object_id) else {
+            return;
+        };
+        self.world.run(|mut texts: ViewMut<TextContent>| {
+            if let Ok(mut slot) = (&mut texts).get(entity) {
+                ParamAccess::set_param(&mut *slot, key, value);
+            }
+        });
+        self.touch();
+    }
+
+    pub fn set_text_font_family(&mut self, object_id: usize, font_family: String) {
+        let Some(entity) = self.find_entity(object_id) else {
+            return;
+        };
+        self.world.run(|mut texts: ViewMut<TextContent>| {
+            if let Ok(mut slot) = (&mut texts).get(entity) {
+                slot.font_family = font_family;
+            }
+        });
+        self.touch();
+    }
+
     pub fn get_shape(&self, object_id: usize) -> Option<ShapeParams> {
         let entity = self.find_entity(object_id)?;
         self.world

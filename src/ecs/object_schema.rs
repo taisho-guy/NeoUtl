@@ -108,9 +108,21 @@ pub const TRANSFORM_SCHEMA: &[ParamSchema] = &[
     float_fixed("opacity", "不透明度", 0.0, 1.0),
 ];
 
+const TEXT_ALIGN_OPTIONS: &[&str] = &["左寄せ", "中央", "右寄せ"];
+
 pub const TEXT_SCHEMA: &[ParamSchema] = &[
     text_field("text", "本文"),
+    text_field("font_family", "フォント"),
     float_fixed("font_size", "フォントサイズ", 1.0, 500.0),
+    bool_field("bold", "太字"),
+    bool_field("italic", "斜体"),
+    enum_field("align", "文字揃え", TEXT_ALIGN_OPTIONS),
+    float_fixed("line_height", "行間", 0.5, 3.0),
+    float_fixed("outline_width", "縁取り幅", 0.0, 50.0),
+    float_fixed("outline_r", "縁取りR", 0.0, 1.0),
+    float_fixed("outline_g", "縁取りG", 0.0, 1.0),
+    float_fixed("outline_b", "縁取りB", 0.0, 1.0),
+    float_fixed("outline_a", "縁取りA", 0.0, 1.0),
 ];
 
 pub const SHAPE_SCHEMA: &[ParamSchema] = &[

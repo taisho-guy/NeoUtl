@@ -15,8 +15,4 @@ libc = "0.2"
 wgpu = { version = "30", features = ["vulkan-portability"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
-neo-media-transfer-vaapi = { path = "../neo-media-transfer-vaapi" }
 libva = { package = "cros-libva-extended", version = "=0.0.13-extended.2" }
-
-[target.'cfg(target_os = "windows")'.dependencies]
-neo-media-transfer-d3d11 = { path = "../neo-media-transfer-d3d11" }

@@ -91,7 +91,7 @@ impl WindowKind {
     fn size(self) -> (u32, u32) {
         match self {
             Self::Splash => (0, 0),
-            Self::Launcher => (640, 420),
+            Self::Launcher => (860, 640),
             Self::Preview | Self::Timeline | Self::Properties => (720, 540),
             Self::SystemSettings => (720, 540),
             Self::ProjectSettings => (520, 360),
@@ -105,6 +105,7 @@ impl WindowKind {
 
     fn min_size(self) -> Option<(u32, u32)> {
         match self {
+            Self::Launcher => Some((720, 520)),
             Self::EffectAdd => Some((400, 240)),
             Self::SceneSettings => Some((600, 240)),
             Self::SystemSettings => Some((680, 240)),

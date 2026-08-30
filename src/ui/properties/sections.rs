@@ -154,8 +154,11 @@ pub fn text_section(ui: &mut egui::Ui, world: &mut EcsWorld, id: usize) {
     ui.separator();
     ui.colored_label(egui::Color32::from_rgb(0x8a, 0xab, 0xff), t!("テキスト"));
     for schema in TEXT_SCHEMA {
+        if !is_visible(schema, |k| content.get_param(k).unwrap_or(0.0)) {
+            continue;
+        }
         match schema.kind {
-            ParamKind::Text => {
+            ParamKind::Text if schema.key == "text" => {
                 ui.label(effect_param_label(schema.label));
                 let width = ui.available_width();
                 if ui
@@ -164,6 +167,49 @@ pub fn text_section(ui: &mut egui::Ui, world: &mut EcsWorld, id: usize) {
                 {
                     world.set_text(id, content.text.clone(), content.font_size);
                 }
+            }
+            ParamKind::Text if schema.key == "font_family" => {
+                ui.horizontal(|ui| {
+                    ui.label(effect_param_label(schema.label));
+                    let width = ui.available_width();
+                    if ui
+                        .add_sized(
+                            [width, 0.0],
+                            egui::TextEdit::singleline(&mut content.font_family),
+                        )
+                        .changed()
+                    {
+                        world.set_text_font_family(id, content.font_family.clone());
+                    }
+                });
+            }
+            ParamKind::Text => {}
+            ParamKind::Bool => {
+                ui.horizontal(|ui| {
+                    ui.label(effect_param_label(schema.label));
+                    let mut b = content.get_param(schema.key).unwrap_or(0.0) > 0.5;
+                    if ui.add(Checkbox::new(&mut b, "")).changed() {
+                        world.set_text_param(id, schema.key, if b { 1.0 } else { 0.0 });
+                    }
+                });
+            }
+            ParamKind::Enum => {
+                ui.horizontal(|ui| {
+                    ui.label(effect_param_label(schema.label));
+                    let mut idx = content.get_param(schema.key).unwrap_or(0.0).round() as usize;
+                    let resp = ui.add(
+                        Select::new((ui.id(), "text", schema.key), &mut idx).options(
+                            schema
+                                .enum_options
+                                .iter()
+                                .enumerate()
+                                .map(|(i, o)| (i, effect_param_label(o).to_string())),
+                        ),
+                    );
+                    if resp.changed() {
+                        world.set_text_param(id, schema.key, idx as f32);
+                    }
+                });
             }
             ParamKind::Float => {
                 let value = content.get_param(schema.key).unwrap_or(0.0);

@@ -17,8 +17,6 @@ members = [
     "crates/media/image-decoder",
     "crates/neo-media-core",
     "crates/neo-media-cache",
-    "crates/neo-media-transfer-vaapi",
-    "crates/neo-media-transfer-d3d11",
     "crates/neo-media-support",
     "crates/neo-media-ffmpeg",
     "crates/neoutl-effect-shader-build",
@@ -91,6 +89,7 @@ semver = "1"
 tempfile = "3"
 wgpu = "30"
 wgpu_text = "30"
+font-kit = "0.14"
 tokio = { version = "1", features = ["rt-multi-thread", "sync"] }
 shipyard = "0.11"
 rfd = "0.17"

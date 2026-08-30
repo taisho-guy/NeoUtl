@@ -157,11 +157,6 @@ pub fn probe(path: &Path) -> Result<ProbeReport, ProbeFailure> {
         }
 
         let sw_format_i32 = std::mem::transmute::<sys::AVPixelFormat, i32>(stream_sw_format);
-        let is_direct_rgba = sw_format_i32 == pf(sys::AVPixelFormat::AV_PIX_FMT_RGB0)
-            || sw_format_i32 == pf(sys::AVPixelFormat::AV_PIX_FMT_BGR0);
-        if !neo_media_transfer_vaapi::is_sw_format_supported(sw_format, is_direct_rgba) {
-            return Err(ProbeFailure::NeoFrameConversionUnsupported);
-        }
 
         Ok(ProbeReport {
             width,

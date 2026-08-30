@@ -35,6 +35,26 @@ static PARAM_SCHEMA: &[ParamSchema] = &[
         default_float: 0.0,
         enum_options: StrRef::from_str(""),
     },
+    ParamSchema {
+        key: StrRef::from_str("line_height"),
+        label: StrRef::from_str("行間"),
+        kind: ParamKind::Float,
+        min: 0.5,
+        max: 3.0,
+        step: 0.1,
+        default_float: 1.2,
+        enum_options: StrRef::from_str(""),
+    },
+    ParamSchema {
+        key: StrRef::from_str("outline_width"),
+        label: StrRef::from_str("縁取り幅"),
+        kind: ParamKind::Float,
+        min: 0.0,
+        max: 50.0,
+        step: 1.0,
+        default_float: 0.0,
+        enum_options: StrRef::from_str(""),
+    },
 ];
 
 static META: ObjectMeta = ObjectMeta {
