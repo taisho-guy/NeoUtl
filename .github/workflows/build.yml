@@ -21,17 +21,19 @@ jobs:
       matrix:
         include:
           - os: ubuntu-latest
-            os_name: Linux(x86_64)
+            os_name: Linux(x86_64/Arch)
+            container: archlinux:latest
             artifact_name: neoutl-linux-x86_64
             binary_name: NeoUtl
             lua_feature: luajit
-            install_cmd: sudo apt-get update && sudo apt-get install -y --no-install-recommends pkg-config clang cmake ninja-build make mold libxkbcommon-dev libwayland-dev libegl1-mesa-dev libudev-dev libasound2-dev libfontconfig1-dev libfreetype6-dev libexpat1-dev libavcodec-dev libavformat-dev libavutil-dev libavfilter-dev libavdevice-dev libswscale-dev libswresample-dev libva-dev
+            install_cmd: pacman -Syu --noconfirm --needed base-devel clang cmake ninja mold rust pkgconf git zip wayland libxkbcommon mesa alsa-lib fontconfig freetype2 expat ffmpeg libva
           - os: ubuntu-24.04-arm
-            os_name: Linux(ARM64)
+            os_name: Linux(ARM64/Arch)
+            container: archlinux:latest
             artifact_name: neoutl-linux-arm64
             binary_name: NeoUtl
             lua_feature: luajit
-            install_cmd: sudo apt-get update && sudo apt-get install -y --no-install-recommends pkg-config clang cmake ninja-build make mold libxkbcommon-dev libwayland-dev libegl1-mesa-dev libudev-dev libasound2-dev libfontconfig1-dev libfreetype6-dev libexpat1-dev libavcodec-dev libavformat-dev libavutil-dev libavfilter-dev libavdevice-dev libswscale-dev libswresample-dev libva-dev
+            install_cmd: pacman -Syu --noconfirm --needed base-devel clang cmake ninja mold rust pkgconf git zip wayland libxkbcommon mesa alsa-lib fontconfig freetype2 expat ffmpeg libva
           - os: windows-latest
             os_name: Windows(x86_64/MSYS2 CLANG64)
             artifact_name: neoutl-windows-x86_64
@@ -41,6 +43,7 @@ jobs:
             msys_prefix: mingw-w64-clang-x86_64
             lua_feature: luajit
     runs-on: ${{ matrix.os }}
+    container: ${{ matrix.container }}
 
     steps:
       - uses: actions/checkout@v7
@@ -67,10 +70,6 @@ jobs:
             ${{ matrix.msys_prefix }}-ffmpeg
             ${{ matrix.msys_prefix }}-luajit
             make
-
-      - name: Rustツールチェーンセットアップ(Linux)
-        if: runner.os == 'Linux'
-        uses: dtolnay/rust-toolchain@stable
 
       - name: ビルド(Linux)
         if: runner.os == 'Linux'
