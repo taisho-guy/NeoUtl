@@ -43,6 +43,90 @@ NeoUtlはRust言語で実装されています。
 |非同期処理|[tokio](https://tokio.rs/)|
 |デコード・エンコード|[FFmpeg](https://ffmpeg.org/)|
 
+## アーキテクチャ
+
+```mermaid
+flowchart TD
+    subgraph UI["1. ユーザーインターフェース層 (egui / winit)"]
+        UI_Core["UIエンジン / メインループ (src/ui, src/egui_loop.rs)"]
+        Timeline["タイムライン UI (src/ui/timeline/)"]
+        Preview["プレビューウィンドウ (src/ui/preview.rs)"]
+        Dialogs["ダイアログ & エディタ (src/ui/dialogs.rs, project_settings.rs)"]
+        ThemeLoc["テーマ & 多言語化 (src/theme.rs, src/localization.rs)"]
+    end
+
+    subgraph DataState["2. データモデル & 状態管理層"]
+        Document["ドキュメントモデル (Undo/Redo スナップショット) (src/document.rs)"]
+        ECS["Shipyard ECS ワールド (src/ecs/)"]
+        Schema["Protobuf スキーマ (neoutl-schema, src/schema.rs)"]
+        Project["プロジェクトマネージャー (src/project.rs)"]
+    end
+
+    subgraph CoreServices["3. コアサブシステム"]
+        subgraph MediaSubsystem["メディアサブシステム (tokio)"]
+            MediaRuntime["メディアランタイム & ワーカー (src/media/)"]
+            MediaDecoders["デコーダー群 (neo-media-ffmpeg, symphonia, image)"]
+            MediaCache["メディアキャッシュ & 波形 (neo-media-cache, waveform.rs)"]
+        end
+
+        subgraph AudioSubsystem["オーディオサブシステム"]
+            AudioMixer["オーディオミキサー (src/audio/mixer.rs)"]
+            AudioHost["Maolan ホストアダプター (maolan-host-adapter)"]
+            AudioPlayback["Rodio 再生エンジン (rodio)"]
+        end
+
+        subgraph RenderEngine["描画エンジン (wgpu)"]
+            RenderPipeline["描画パイプライン & エフェクトチェーン (src/renderer/)"]
+            SlangShaders["Slang シェーダービルド (neoutl-*-shader-build)"]
+            GPUShared["GPU 共有リソース (src/gpu_shared.rs)"]
+        end
+    end
+
+    subgraph ExtensionLayer["4. プラグイン & 拡張エコシステム"]
+        ObjLoader["オブジェクトローダー & API (src/objects/loader.rs, neoutl-object-api)"]
+        FxLoader["エフェクトローダー & API (src/effects/loader.rs, neoutl-effect-api)"]
+        LuaRuntime["Lua エンジン (neoutl-lua-runtime, neoutl-effect-lua)"]
+        EasingAPI["イージングエンジン (neoutl-easing-api, neoutl-easing-standard)"]
+        HotReload["ホットリロードマネージャー (src/hot_reload.rs)"]
+    end
+
+    subgraph ExportSubsystem["5. エクスポートサブシステム"]
+        ExportEngine["エクスポートパイプライン (src/export.rs)"]
+    end
+
+    %% データフロー接続
+    UI_Core -->|ユーザー操作| Document
+    Document -->|スナップショット変換 / 同期| ECS
+    Project -->|シリアライズ / デシリアライズ| Schema
+    Schema -->|読み込み / 保存| Document
+
+    ECS -->|コンポーネント照会 & 座標変換| RenderPipeline
+    ECS -->|音声ストリームパラメータ| AudioMixer
+    ECS -->|フレーム / 波形の取得要求| MediaRuntime
+
+    MediaRuntime -->|パケットのデコード| MediaDecoders
+    MediaDecoders -->|フレームテクスチャ / キャッシュ| MediaCache
+    MediaCache -->|テクスチャの転送| GPUShared
+
+    AudioMixer -->|ホストプラグインの処理| AudioHost
+    AudioMixer -->|音声のストリーミング再生| AudioPlayback
+
+    RenderPipeline -->|Slangシェーダーの実行| SlangShaders
+    RenderPipeline -->|フレーム描画| Preview
+
+    ObjLoader -->|オブジェクトの登録| ECS
+    FxLoader -->|エフェクトチェーンの適用| RenderPipeline
+    LuaRuntime -->|スクリプトの評価実行| FxLoader
+    EasingAPI -->|補間カーブの計算| ECS
+    HotReload -->|cdylibプラグインの再読み込み| ObjLoader
+    HotReload -->|cdylibプラグインの再読み込み| FxLoader
+
+    ExportEngine -->|ECS状態の読み込み| ECS
+    ExportEngine -->|フレームのレンダリング| RenderPipeline
+    ExportEngine -->|音声のミキシング| AudioMixer
+    ExportEngine -->|出力データのエンコード| MediaDecoders
+```
+
 ## 派生
 
 | プロジェクト | 開発者 | 場所 | エンジン | 状況 |
