@@ -792,6 +792,6 @@ impl KeyframeTracks {
 #[derive(Clone, Debug, Component, Serialize, Deserialize)]
 pub struct MediaSource {
     pub path: std::path::PathBuf,
-    pub kind: crate::media::MediaKind,
+    pub kind: neoutl_media_runtime::MediaKind,
     pub trim_in_frame: i64,
 }

@@ -12,7 +12,7 @@ use neo_media_cache::NeoMediaCache;
 use neo_media_core::PixelFormat;
 
 use crate::cache::{GopCache, GopCacheBlock, RamFrameCache, VramPromotionCache};
-use crate::frame::{GpuFrame, RamFrame, VideoFrame, VideoFrameStore};
+use crate::frame::{GpuFrame, PlaneBuffer, RamFrame, VideoFrame, VideoFrameStore};
 use crate::index::{FrameIndex, build_index};
 #[cfg(unix)]
 use crate::vaapi_probe::probe_vaapi_node;
@@ -757,6 +757,17 @@ fn seek_to_keyframe(ctx: &mut OpenContext, keyframe_index: i64) {
     }
 }
 
+fn copy_plane(data_ptr: *const u8, stride: i32, height: u32) -> PlaneBuffer {
+    let stride = stride.max(0) as u32;
+    let byte_len = (stride as usize) * (height as usize);
+    let bytes: Arc<[u8]> = unsafe { Arc::from(std::slice::from_raw_parts(data_ptr, byte_len)) };
+    PlaneBuffer { bytes, stride }
+}
+
+fn copy_plane_half_height(data_ptr: *const u8, stride: i32, luma_height: u32) -> PlaneBuffer {
+    copy_plane(data_ptr, stride, luma_height.div_ceil(2))
+}
+
 fn convert_frame(ctx: &mut OpenContext, av_frame: *mut sys::AVFrame) -> Option<RamFrame> {
     unsafe {
         let hw_pix_fmt = ctx.hw_pix_fmt_box.as_ref().map(|b| b.pix_fmt);
@@ -791,11 +802,26 @@ fn convert_frame(ctx: &mut OpenContext, av_frame: *mut sys::AVFrame) -> Option<R
             src_format = av_pix_fmt_yuv420p();
         }
 
-        let target_fmt = av_pix_fmt_rgba();
-        let mut converted_frame: *mut sys::AVFrame = ptr::null_mut();
-        let rgba_frame: *mut sys::AVFrame = if src_format == target_fmt {
-            src_frame
+        let result = if src_format == av_pix_fmt_nv12() {
+            let y = copy_plane((*src_frame).data[0], (*src_frame).linesize[0], height);
+            let uv = copy_plane_half_height((*src_frame).data[1], (*src_frame).linesize[1], height);
+            RamFrame::Nv12 {
+                y,
+                uv,
+                width,
+                height,
+            }
+        } else if src_format == av_pix_fmt_p010le() {
+            let y = copy_plane((*src_frame).data[0], (*src_frame).linesize[0], height);
+            let uv = copy_plane_half_height((*src_frame).data[1], (*src_frame).linesize[1], height);
+            RamFrame::P010 {
+                y,
+                uv,
+                width,
+                height,
+            }
         } else {
+            let target_fmt = av_pix_fmt_rgba();
             let sws = sys::sws_getContext(
                 width as i32,
                 height as i32,
@@ -838,28 +864,21 @@ fn convert_frame(ctx: &mut OpenContext, av_frame: *mut sys::AVFrame) -> Option<R
                 (*dst).linesize.as_mut_ptr(),
             );
             sys::sws_freeContext(sws);
-            converted_frame = dst;
-            dst
+            let plane = copy_plane((*dst).data[0], (*dst).linesize[0], height);
+            let mut dst_mut = dst;
+            sys::av_frame_free(&mut dst_mut);
+            RamFrame::Rgba8 {
+                plane,
+                width,
+                height,
+            }
         };
 
-        let linesize = (*rgba_frame).linesize[0] as u32;
-        let data_ptr = (*rgba_frame).data[0];
-        let byte_len = (linesize as usize) * (height as usize);
-        let rgba_bytes = std::slice::from_raw_parts(data_ptr, byte_len);
-
-        let float_pixels = neoutl_color::u8_to_rgba16f(rgba_bytes);
-        let float_bytes: &[u8] = bytemuck::cast_slice(&float_pixels);
-
-        let ram_bytes: Arc<[u8]> = Arc::from(float_bytes);
-
-        if !converted_frame.is_null() {
-            sys::av_frame_free(&mut converted_frame);
-        }
         if !owned_sw_frame.is_null() {
             sys::av_frame_free(&mut owned_sw_frame);
         }
 
-        Some(RamFrame::new(ram_bytes, width, height))
+        Some(result)
     }
 }
 
@@ -874,11 +893,15 @@ fn promote_to_vram(
         return Some(frame);
     }
 
+    let format = ram.pixel_format();
+    let width = ram.width();
+    let height = ram.height();
+
     let texture = match cache.acquire_for_write_as(
         neo_media_cache::KIND_PLAYBACK,
-        PixelFormat::Rgba16Float,
-        ram.width,
-        ram.height,
+        format,
+        width,
+        height,
     ) {
         Ok(texture) => texture,
         Err(err) => {
@@ -889,41 +912,95 @@ fn promote_to_vram(
         }
     };
 
-    queue.write_texture(
-        wgpu::TexelCopyTextureInfo {
-            texture: &texture,
-            mip_level: 0,
-            origin: wgpu::Origin3d::ZERO,
-            aspect: wgpu::TextureAspect::All,
-        },
-        &ram.bytes,
-        wgpu::TexelCopyBufferLayout {
-            offset: 0,
-            bytes_per_row: Some(ram.width * 8),
-            rows_per_image: Some(ram.height),
-        },
-        wgpu::Extent3d {
-            width: ram.width,
-            height: ram.height,
-            depth_or_array_layers: 1,
-        },
-    );
+    match ram {
+        RamFrame::Nv12 {
+            y,
+            uv,
+            width,
+            height,
+        }
+        | RamFrame::P010 {
+            y,
+            uv,
+            width,
+            height,
+        } => {
+            let chroma_height = height.div_ceil(2);
+            queue.write_texture(
+                wgpu::TexelCopyTextureInfo {
+                    texture: &texture,
+                    mip_level: 0,
+                    origin: wgpu::Origin3d::ZERO,
+                    aspect: wgpu::TextureAspect::Plane0,
+                },
+                &y.bytes,
+                wgpu::TexelCopyBufferLayout {
+                    offset: 0,
+                    bytes_per_row: Some(y.stride),
+                    rows_per_image: Some(*height),
+                },
+                wgpu::Extent3d {
+                    width: *width,
+                    height: *height,
+                    depth_or_array_layers: 1,
+                },
+            );
+            queue.write_texture(
+                wgpu::TexelCopyTextureInfo {
+                    texture: &texture,
+                    mip_level: 0,
+                    origin: wgpu::Origin3d::ZERO,
+                    aspect: wgpu::TextureAspect::Plane1,
+                },
+                &uv.bytes,
+                wgpu::TexelCopyBufferLayout {
+                    offset: 0,
+                    bytes_per_row: Some(uv.stride),
+                    rows_per_image: Some(chroma_height),
+                },
+                wgpu::Extent3d {
+                    width: width.div_ceil(2),
+                    height: chroma_height,
+                    depth_or_array_layers: 1,
+                },
+            );
+        }
+        RamFrame::Rgba8 {
+            plane,
+            width,
+            height,
+        } => {
+            queue.write_texture(
+                wgpu::TexelCopyTextureInfo {
+                    texture: &texture,
+                    mip_level: 0,
+                    origin: wgpu::Origin3d::ZERO,
+                    aspect: wgpu::TextureAspect::All,
+                },
+                &plane.bytes,
+                wgpu::TexelCopyBufferLayout {
+                    offset: 0,
+                    bytes_per_row: Some(plane.stride),
+                    rows_per_image: Some(*height),
+                },
+                wgpu::Extent3d {
+                    width: *width,
+                    height: *height,
+                    depth_or_array_layers: 1,
+                },
+            );
+        }
+    }
 
     let submission_index = queue.submit(std::iter::empty());
-    cache.mark_ready(
-        PixelFormat::Rgba16Float,
-        ram.width,
-        ram.height,
-        &texture,
-        submission_index,
-    );
+    cache.mark_ready(format, width, height, &texture, submission_index);
 
     let video_frame = VideoFrame(Arc::new(GpuFrame::new(
         texture,
-        ram.width,
-        ram.height,
+        width,
+        height,
         cache.clone(),
-        PixelFormat::Rgba16Float,
+        format,
     )));
     vram_cache.put(frame_index, video_frame.clone());
     Some(video_frame)

@@ -2,11 +2,11 @@ use crate::ecs::EcsWorld;
 use crate::ecs::audio_plugins::PluginInstanceRef;
 use crate::ecs::components::{AudioParams, MediaSource};
 use crate::ecs::systems::get_active_audio_system;
-use crate::media;
 use maolan_host_adapter::{
     HostError, PluginFormat, PluginHost, PluginParamInfo, default_binary_path,
 };
 use neoutl_media_api::AudioBuffer;
+use neoutl_media_runtime as media;
 use rodio::Source;
 use rodio::stream::{DeviceSinkBuilder, MixerDeviceSink};
 use std::collections::{HashMap, HashSet, VecDeque};

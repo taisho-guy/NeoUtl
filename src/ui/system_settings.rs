@@ -122,8 +122,7 @@ impl SystemSettingsWindow {
         let (easing_engine_ids, easing_engine_names) = easing_engine_ids_and_names();
         let s = world_holder.lock().unwrap().get_system_settings();
 
-        crate::media::runtime::set_worker_threads(s.worker_threads);
-        crate::media::runtime::apply_decode_backend_env(s.decode_backend);
+        neoutl_media_runtime::runtime::set_worker_threads(s.worker_threads);
         crate::theme::restore(&s.theme_id);
 
         let update_status = Arc::new(Mutex::new(UpdateStatus::Idle));
@@ -193,8 +192,7 @@ impl SystemSettingsWindow {
             .lock()
             .unwrap()
             .set_system_settings(loaded.clone());
-        crate::media::runtime::set_worker_threads(loaded.worker_threads);
-        crate::media::runtime::apply_decode_backend_env(loaded.decode_backend);
+        neoutl_media_runtime::runtime::set_worker_threads(loaded.worker_threads);
 
         self.theme_choice = crate::theme::from_id(&loaded.theme_id);
         crate::theme::set(self.theme_choice);
@@ -396,7 +394,7 @@ impl SystemSettingsWindow {
                 s.worker_threads = threads;
                 s.audio_max_block_size = block;
             });
-            crate::media::runtime::set_worker_threads(threads);
+            neoutl_media_runtime::runtime::set_worker_threads(threads);
         }
     }
 
@@ -415,7 +413,6 @@ impl SystemSettingsWindow {
         ) {
             self.decode_backend = decode_backend;
             self.persist(world_holder, |s| s.decode_backend = decode_backend);
-            crate::media::runtime::apply_decode_backend_env(decode_backend);
         }
     }
 

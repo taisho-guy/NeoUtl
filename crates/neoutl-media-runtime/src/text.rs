@@ -1,6 +1,13 @@
-use crate::ecs::components::{TextAlign, TextContent};
 use wgpu_text::glyph_brush::ab_glyph::{Font, FontArc, ScaleFont};
 use wgpu_text::glyph_brush::{HorizontalAlign, Layout, Section, Text, VerticalAlign};
+
+#[repr(u8)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum HAlign {
+    Left,
+    Center,
+    Right,
+}
 
 pub struct TextLayout {
     pub lines: Vec<String>,
@@ -9,10 +16,10 @@ pub struct TextLayout {
     pub line_height_px: f32,
 }
 
-pub fn layout(font: &FontArc, content: &TextContent) -> TextLayout {
-    let scaled = font.as_scaled(content.font_size);
-    let line_height_px = (scaled.ascent() - scaled.descent()) * content.line_height.max(0.01);
-    let lines: Vec<String> = content.text.split('\n').map(|s| s.to_owned()).collect();
+pub fn layout(font: &FontArc, text: &str, font_size: f32, line_height: f32) -> TextLayout {
+    let scaled = font.as_scaled(font_size);
+    let line_height_px = (scaled.ascent() - scaled.descent()) * line_height.max(0.01);
+    let lines: Vec<String> = text.split('\n').map(str::to_owned).collect();
     let width: f32 = lines
         .iter()
         .map(|line| {
@@ -31,15 +38,17 @@ pub fn layout(font: &FontArc, content: &TextContent) -> TextLayout {
 }
 
 pub fn build_sections<'a>(
-    content: &'a TextContent,
+    color: [f32; 4],
+    font_size: f32,
+    align: HAlign,
     text_layout: &'a TextLayout,
     tex_width: u32,
     tex_height: u32,
 ) -> Vec<Section<'a>> {
-    let h_align = match content.align {
-        TextAlign::Left => HorizontalAlign::Left,
-        TextAlign::Center => HorizontalAlign::Center,
-        TextAlign::Right => HorizontalAlign::Right,
+    let h_align = match align {
+        HAlign::Left => HorizontalAlign::Left,
+        HAlign::Center => HorizontalAlign::Center,
+        HAlign::Right => HorizontalAlign::Right,
     };
     let x = match h_align {
         HorizontalAlign::Left => 0.0,
@@ -53,11 +62,7 @@ pub fn build_sections<'a>(
         .map(|(row, line)| {
             let y = row as f32 * text_layout.line_height_px;
             Section::default()
-                .add_text(
-                    Text::new(line)
-                        .with_color(content.color)
-                        .with_scale(content.font_size),
-                )
+                .add_text(Text::new(line).with_color(color).with_scale(font_size))
                 .with_screen_position((x, y))
                 .with_bounds((tex_width as f32, tex_height as f32))
                 .with_layout(

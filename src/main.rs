@@ -22,7 +22,6 @@ mod export;
 mod gpu_shared;
 mod hot_reload;
 mod localization;
-mod media;
 mod objects;
 mod project;
 mod renderer;
@@ -32,57 +31,9 @@ mod splash;
 mod theme;
 mod ui;
 mod update;
-#[cfg(any(target_os = "macos", target_os = "windows"))]
-fn default_gst_plugin_dir() -> Option<std::path::PathBuf> {
-    let exe_dir = std::env::current_exe().ok()?.parent()?.to_path_buf();
-    #[cfg(target_os = "macos")]
-    {
-        let dir = exe_dir.join("../Resources/gstreamer-1.0");
-        return dir.is_dir().then_some(dir);
-    }
-    #[cfg(target_os = "windows")]
-    {
-        let dir = exe_dir.join("lib/gstreamer-1.0");
-        return dir.is_dir().then_some(dir);
-    }
-}
-#[cfg(target_os = "linux")]
-fn default_gst_plugin_dir() -> Option<std::path::PathBuf> {
-    None
-}
-fn gst_registry_cache_path() -> Option<std::path::PathBuf> {
-    let exe_dir = std::env::current_exe().ok()?.parent()?.to_path_buf();
-    let dir = exe_dir.join("gst-registry");
-    std::fs::create_dir_all(&dir).ok()?;
-    Some(dir.join("registry.bin"))
-}
-fn configure_gst_plugin_path() {
+fn configure_decode_runtime() {
     let system_settings = ui::system_settings::load_from_disk().unwrap_or_default();
-    media::runtime::set_worker_threads(system_settings.worker_threads);
-    media::runtime::apply_decode_backend_env(system_settings.decode_backend);
-    unsafe {
-        #[cfg(not(target_os = "linux"))]
-        std::env::set_var("GST_PLUGIN_SYSTEM_PATH_1_0", "");
-        if let Some(registry_path) = gst_registry_cache_path()
-            && let Some(path_str) = registry_path.to_str()
-        {
-            std::env::set_var("GST_REGISTRY_1_0", path_str);
-        }
-    }
-    let Some(dir) = default_gst_plugin_dir() else {
-        return;
-    };
-    let Some(dir_str) = dir.to_str() else {
-        eprintln!(
-            "[NeoUtl] GST_PLUGIN_PATHの解決に失敗（非UTF-8パス）: {}",
-            dir.display()
-        );
-        return;
-    };
-    unsafe {
-        std::env::set_var("GST_PLUGIN_PATH", dir_str);
-    }
-    eprintln!("[NeoUtl] GST_PLUGIN_PATH設定: {dir_str}");
+    neoutl_media_runtime::runtime::set_worker_threads(system_settings.worker_threads);
 }
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     localization::initialize();
@@ -95,13 +46,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     std::thread::Builder::new()
         .name("neoutl-init".into())
         .spawn(move || {
-            configure_gst_plugin_path();
+            configure_decode_runtime();
             objects::load_all(&objects::default_objects_dir());
             effects::load_all(
                 &effects::default_effects_dir(),
                 &effects::default_effects_lua_dir(),
             );
-            media::loader::load_all(&media::loader::default_decoders_dir());
+            neoutl_media_runtime::loader::load_all(
+                &neoutl_media_runtime::loader::default_decoders_dir(),
+            );
             easings::loader::load_all(&easings::loader::default_easings_dir());
             ui::font_stack::preload_installed_fonts();
             match audio::plugin_settings::load_from_disk() {

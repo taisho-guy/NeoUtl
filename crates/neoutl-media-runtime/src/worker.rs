@@ -1,7 +1,4 @@
-use crate::config::{
-    DECODE_PREFETCH_FAIL_THRESHOLD, DECODE_PREFETCH_RADIUS, DECODE_RING_CAPACITY,
-    DECODE_WATCHDOG_TIMEOUT_MS,
-};
+use crate::t;
 use egui_wgpu::wgpu;
 use neoutl_media_api::VideoSource;
 use std::collections::{HashMap, VecDeque};
@@ -11,8 +8,11 @@ use std::sync::{Arc, Condvar, Mutex};
 use std::thread::{self, ThreadId};
 use std::time::Duration;
 
-const PREFETCH_RADIUS: i64 = DECODE_PREFETCH_RADIUS;
-pub(crate) const RING_CAPACITY: usize = DECODE_RING_CAPACITY;
+const PREFETCH_RADIUS: i64 = 8;
+pub(crate) const RING_CAPACITY: usize = neoutl_media_api::VIDEO_TEXTURE_POOL_CAPACITY;
+const _: () = assert!(RING_CAPACITY as i64 > PREFETCH_RADIUS * 2);
+const DECODE_PREFETCH_FAIL_THRESHOLD: i64 = 30;
+const DECODE_WATCHDOG_TIMEOUT_MS: u64 = 5_000;
 
 const SAFE_RING_CAPACITY: usize = {
     let radius_window = (PREFETCH_RADIUS as usize) * 2 + 2;

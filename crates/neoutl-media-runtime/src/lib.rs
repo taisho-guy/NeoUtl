@@ -1,3 +1,13 @@
+#![recursion_limit = "256"]
+rust_i18n::i18n!("../../i18n");
+extern crate rust_i18n;
+macro_rules! t {
+    ($($args:tt)*) => {
+        rust_i18n::t!($($args)*).to_string()
+    };
+}
+pub(crate) use t;
+
 pub mod cache;
 pub mod loader;
 pub mod runtime;

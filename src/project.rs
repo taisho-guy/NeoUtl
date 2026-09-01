@@ -238,7 +238,7 @@ mod tests {
     use crate::document::{MediaSourceDoc, ObjectDoc, ObjectPayload};
     use crate::ecs::components::{AudioParams, ShapeParams, TextContent};
     use crate::ecs::transform::Transform;
-    use crate::media::MediaKind;
+    use neoutl_media_runtime::MediaKind;
     use std::collections::HashMap;
 
     fn sample_object(id: usize, scene_id: i32) -> ObjectDoc {

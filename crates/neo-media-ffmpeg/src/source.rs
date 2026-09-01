@@ -8,7 +8,7 @@ use neoutl_media_api::{MediaKind, MediaMeta, MediaVTable, VideoSource};
 use crate::decoder::{VideoDecoder, VideoMeta};
 use crate::frame::VideoFrameStore;
 
-const FRAME_WAIT_POLL: Duration = Duration::from_millis(2);
+const FRAME_WAIT_TIMEOUT: Duration = Duration::from_secs(5);
 const OPEN_META_TIMEOUT: Duration = Duration::from_secs(5);
 const CLIP_KEY: &str = "ffmpeg_decoder_source";
 
@@ -85,12 +85,10 @@ impl VideoSource for FfmpegVideoSource {
         self.store.invalidate_frame(CLIP_KEY);
         self.decoder.seek_to_frame(frame_index);
 
-        loop {
-            if let Some(frame) = self.store.frame(CLIP_KEY, frame_index) {
-                return Ok(frame.0.texture.clone());
-            }
-            std::thread::sleep(FRAME_WAIT_POLL);
-        }
+        self.store
+            .wait_for_frame(CLIP_KEY, frame_index, FRAME_WAIT_TIMEOUT)
+            .map(|frame| frame.0.texture.clone())
+            .ok_or_else(|| format!("フレーム取得タイムアウト: frame_index={frame_index}"))
     }
 }
 

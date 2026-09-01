@@ -1386,10 +1386,32 @@ impl RenderEngine {
         offset as u32
     }
 
+    const COLOR_MATRIX_BT709: u32 = 1;
+    const COLOR_RANGE_LIMITED: u32 = 0;
+
     fn write_media_uniform_raw(&self, index: u64, mvp: &[f32; 16], opacity: f32) -> u32 {
+        self.write_video_uniform_raw(
+            index,
+            mvp,
+            opacity,
+            Self::COLOR_MATRIX_BT709,
+            Self::COLOR_RANGE_LIMITED,
+        )
+    }
+
+    fn write_video_uniform_raw(
+        &self,
+        index: u64,
+        mvp: &[f32; 16],
+        opacity: f32,
+        color_matrix: u32,
+        color_range: u32,
+    ) -> u32 {
         let mut data = [0u8; MEDIA_UNIFORM_SIZE as usize];
         data[0..64].copy_from_slice(bytemuck::cast_slice(mvp));
         data[64..68].copy_from_slice(&opacity.to_le_bytes());
+        data[68..72].copy_from_slice(&color_matrix.to_le_bytes());
+        data[72..76].copy_from_slice(&color_range.to_le_bytes());
         let offset = index * UNIFORM_STRIDE;
         self.queue
             .write_buffer(&self.media_uniform_buffer, offset, &data);
@@ -2271,7 +2293,7 @@ impl RenderEngine {
         }
         let mut media_frames: Vec<Option<wgpu::Texture>> = Vec::with_capacity(active_objects.len());
         {
-            let cache = crate::media::cache::global();
+            let cache = neoutl_media_runtime::cache::global();
             for obj in active_objects {
                 let stable_id = stable_id_of(obj.kind_id);
                 let is_visual = matches!(stable_id, Some(VIDEO_STABLE_ID | IMAGE_STABLE_ID));
@@ -2432,7 +2454,12 @@ impl RenderEngine {
                     continue;
                 };
 
-                let text_layout = crate::media::text::layout(&font, tc);
+                let text_layout = neoutl_media_runtime::text::layout(
+                    &font,
+                    &tc.text,
+                    tc.font_size,
+                    tc.line_height,
+                );
                 let (tex_w, tex_h) = (text_layout.width, text_layout.height);
                 seen.insert(obj.clip_instance);
 
@@ -2451,8 +2478,21 @@ impl RenderEngine {
                     .get_mut(&obj.clip_instance)
                     .expect(&t!("直前にinsert済み"));
 
-                let sections = crate::media::text::build_sections(
-                    tc,
+                let h_align = match tc.align {
+                    crate::ecs::components::TextAlign::Left => {
+                        neoutl_media_runtime::text::HAlign::Left
+                    }
+                    crate::ecs::components::TextAlign::Center => {
+                        neoutl_media_runtime::text::HAlign::Center
+                    }
+                    crate::ecs::components::TextAlign::Right => {
+                        neoutl_media_runtime::text::HAlign::Right
+                    }
+                };
+                let sections = neoutl_media_runtime::text::build_sections(
+                    tc.color,
+                    tc.font_size,
+                    h_align,
                     &text_layout,
                     target.width,
                     target.height,

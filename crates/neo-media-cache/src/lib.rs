@@ -88,6 +88,7 @@ fn bytes_per_frame(format: PixelFormat, width: u32, height: u32) -> u64 {
         PixelFormat::Rgba8 => pixels * 4,
         PixelFormat::Rgba16Float => pixels * 8,
         PixelFormat::Yuv444 => pixels * 3,
+        PixelFormat::Yuv420p => pixels + pixels / 2,
     }
 }
 
@@ -105,7 +106,7 @@ fn wgpu_texture_format(format: PixelFormat) -> Result<wgpu::TextureFormat, PoolE
         PixelFormat::P010 => Ok(wgpu::TextureFormat::P010),
         PixelFormat::Rgba8 => Ok(wgpu::TextureFormat::Rgba8Unorm),
         PixelFormat::Rgba16Float => Ok(wgpu::TextureFormat::Rgba16Float),
-        PixelFormat::P012 | PixelFormat::P016 | PixelFormat::Yuv444 => {
+        PixelFormat::P012 | PixelFormat::P016 | PixelFormat::Yuv444 | PixelFormat::Yuv420p => {
             Err(PoolError::UnsupportedFormat(format))
         }
     }

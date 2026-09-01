@@ -134,7 +134,7 @@ impl TimelineWindow {
                 let Some(path) = rfd::FileDialog::new().pick_file() else {
                     return;
                 };
-                let Some(kind) = crate::media::detect_kind(&path) else {
+                let Some(kind) = neoutl_media_runtime::detect_kind(&path) else {
                     return;
                 };
                 app_state::snapshot_before_edit(state);

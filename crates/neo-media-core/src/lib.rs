@@ -18,9 +18,20 @@ pub enum PixelFormat {
     P010,
     P012,
     P016,
+    Yuv420p,
     Yuv444,
     Rgba8,
     Rgba16Float,
+}
+
+impl PixelFormat {
+    pub fn plane_count(self) -> usize {
+        match self {
+            PixelFormat::Nv12 | PixelFormat::P010 | PixelFormat::P012 | PixelFormat::P016 => 2,
+            PixelFormat::Yuv420p | PixelFormat::Yuv444 => 3,
+            PixelFormat::Rgba8 | PixelFormat::Rgba16Float => 1,
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

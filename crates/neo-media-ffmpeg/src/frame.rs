@@ -51,18 +51,54 @@ impl VideoFrame {
 }
 
 #[derive(Clone)]
-pub struct RamFrame {
+pub struct PlaneBuffer {
     pub bytes: Arc<[u8]>,
-    pub width: u32,
-    pub height: u32,
+    pub stride: u32,
+}
+
+#[derive(Clone)]
+pub enum RamFrame {
+    Nv12 {
+        y: PlaneBuffer,
+        uv: PlaneBuffer,
+        width: u32,
+        height: u32,
+    },
+    P010 {
+        y: PlaneBuffer,
+        uv: PlaneBuffer,
+        width: u32,
+        height: u32,
+    },
+    Rgba8 {
+        plane: PlaneBuffer,
+        width: u32,
+        height: u32,
+    },
 }
 
 impl RamFrame {
-    pub fn new(bytes: Arc<[u8]>, width: u32, height: u32) -> Self {
-        Self {
-            bytes,
-            width,
-            height,
+    pub fn width(&self) -> u32 {
+        match self {
+            RamFrame::Nv12 { width, .. }
+            | RamFrame::P010 { width, .. }
+            | RamFrame::Rgba8 { width, .. } => *width,
+        }
+    }
+
+    pub fn height(&self) -> u32 {
+        match self {
+            RamFrame::Nv12 { height, .. }
+            | RamFrame::P010 { height, .. }
+            | RamFrame::Rgba8 { height, .. } => *height,
+        }
+    }
+
+    pub fn pixel_format(&self) -> PixelFormat {
+        match self {
+            RamFrame::Nv12 { .. } => PixelFormat::Nv12,
+            RamFrame::P010 { .. } => PixelFormat::P010,
+            RamFrame::Rgba8 { .. } => PixelFormat::Rgba8,
         }
     }
 }
@@ -70,6 +106,7 @@ impl RamFrame {
 pub struct VideoFrameStore {
     frames: Mutex<HashMap<String, (i64, VideoFrame)>>,
     listeners: Mutex<Vec<Box<dyn Fn(&str) + Send + Sync>>>,
+    updated: std::sync::Condvar,
 }
 
 impl VideoFrameStore {
@@ -77,6 +114,7 @@ impl VideoFrameStore {
         Arc::new(Self {
             frames: Mutex::new(HashMap::new()),
             listeners: Mutex::new(Vec::new()),
+            updated: std::sync::Condvar::new(),
         })
     }
 
@@ -88,10 +126,13 @@ impl VideoFrameStore {
     }
 
     pub fn set_frame(&self, key: &str, frame_index: i64, frame: VideoFrame) {
-        self.frames
-            .lock()
-            .expect("frames mutex poisoned")
-            .insert(key.to_owned(), (frame_index, frame));
+        {
+            self.frames
+                .lock()
+                .expect("frames mutex poisoned")
+                .insert(key.to_owned(), (frame_index, frame));
+        }
+        self.updated.notify_all();
         for listener in self
             .listeners
             .lock()
@@ -99,6 +140,40 @@ impl VideoFrameStore {
             .iter()
         {
             listener(key);
+        }
+    }
+
+    pub fn wait_for_frame(
+        &self,
+        key: &str,
+        expected_index: i64,
+        timeout: std::time::Duration,
+    ) -> Option<VideoFrame> {
+        let deadline = std::time::Instant::now() + timeout;
+        let mut guard = self.frames.lock().expect("frames mutex poisoned");
+        loop {
+            if let Some((index, frame)) = guard.get(key)
+                && *index == expected_index
+            {
+                return Some(frame.clone());
+            }
+            let now = std::time::Instant::now();
+            if now >= deadline {
+                return None;
+            }
+            let (next_guard, result) = self
+                .updated
+                .wait_timeout(guard, deadline - now)
+                .expect("frames mutex poisoned");
+            guard = next_guard;
+            if result.timed_out() {
+                if let Some((index, frame)) = guard.get(key)
+                    && *index == expected_index
+                {
+                    return Some(frame.clone());
+                }
+                return None;
+            }
         }
     }
 

@@ -5,7 +5,7 @@ use crate::ecs::components::{
 use crate::ecs::resources::SceneMeta;
 use crate::ecs::transform::Transform;
 use crate::ecs::types::{EffectInstance, Keyframe};
-use crate::media::MediaKind;
+use neoutl_media_runtime::MediaKind;
 use std::collections::HashMap;
 use std::path::PathBuf;
 

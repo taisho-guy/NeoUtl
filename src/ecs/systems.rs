@@ -13,7 +13,7 @@ use crate::ecs::transform::{
     scale_to_pixels, view_space_depth,
 };
 use crate::ecs::types::Value;
-use crate::media::MediaKind;
+use neoutl_media_runtime::MediaKind;
 use neoutl_object_api::UNIT_SIZE_PX;
 use shipyard::{EntityId, Get, IntoIter, UniqueView, View};
 use std::collections::HashMap;
@@ -381,7 +381,7 @@ pub fn get_active_objects_system_at(
                 let source_frame = media_source.as_ref().map_or(0, |m| {
                     let base = f64::from(current - range.start_frame);
                     let ratio = if matches!(m.kind, MediaKind::Video) {
-                        let src_fps = crate::media::cache::global()
+                        let src_fps = neoutl_media_runtime::cache::global()
                             .source_fps(&m.path)
                             .unwrap_or(f64::from(project.fps.max(1)));
                         src_fps / f64::from(project.fps.max(1))
@@ -402,7 +402,7 @@ pub fn get_active_objects_system_at(
                 let matrix = compute_global_matrix(&transform);
                 let local_matrix = match &media_source {
                     Some(src) if matches!(src.kind, MediaKind::Video | MediaKind::Image) => {
-                        match crate::media::cache::global().dimensions(&src.path) {
+                        match neoutl_media_runtime::cache::global().dimensions(&src.path) {
                             Ok((w, h)) => rescale_for_source(&matrix, w as f32, h as f32),
                             Err(_) => matrix,
                         }
@@ -710,7 +710,7 @@ pub fn get_active_objects_system_at(
                                 .get(c.entity)
                                 .map_or(0.0, |r| f64::from(current - r.start_frame));
                             let ratio = if matches!(m.kind, MediaKind::Video) {
-                                crate::media::cache::global()
+                                neoutl_media_runtime::cache::global()
                                     .source_fps(&m.path)
                                     .map_or(1.0, |src_fps| src_fps / f64::from(project.fps.max(1)))
                             } else {
@@ -821,7 +821,7 @@ mod tests {
     use crate::ecs::components::MediaSource;
     use crate::ecs::effects::EffectStack;
     use crate::ecs::types::{EffectInstance, EffectParam, Value};
-    use crate::media::MediaKind;
+    use neoutl_media_runtime::MediaKind;
     use shipyard::ViewMut;
     use std::path::PathBuf;
 

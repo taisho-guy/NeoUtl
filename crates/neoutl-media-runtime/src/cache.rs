@@ -1,6 +1,7 @@
 use super::loader;
 use super::worker::DecodeWorker;
 use super::{MediaKind, detect_kind};
+use crate::t;
 use egui_wgpu::wgpu;
 use neoutl_media_api::{AudioBuffer, ImageSource, VideoSource};
 use std::collections::{HashMap, HashSet, VecDeque};
@@ -325,7 +326,7 @@ impl MediaCache {
             t!("[media-cache] schedule prefetch failure path=%{arg0} reason=%{arg1}")
         );
         super::runtime::handle().spawn_blocking(move || {
-            crate::media::cache::global().handle_prefetch_failure_with_reason(&path, reason);
+            global().handle_prefetch_failure_with_reason(&path, reason);
         });
     }
 
@@ -466,7 +467,7 @@ impl MediaCache {
 
                     let redraw = self.redraw_handle();
                     let on_fail = Arc::new(move |reason: String| {
-                        crate::media::cache::MediaCache::schedule_prefetch_failure_with_reason(
+                        MediaCache::schedule_prefetch_failure_with_reason(
                             fail_path.clone(),
                             reason,
                         );

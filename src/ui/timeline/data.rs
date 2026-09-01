@@ -23,7 +23,7 @@ impl TimelineWindow {
             .as_deref()
             .filter(|_| is_audio)
             .and_then(|path| {
-                crate::media::cache::global()
+                neoutl_media_runtime::cache::global()
                     .load_audio(path)
                     .ok()
                     .map(|audio| {
@@ -64,13 +64,15 @@ impl TimelineWindow {
         if let Some(handle) = self.waveform_cache.get(&key) {
             return Some(handle.clone());
         }
-        let audio = crate::media::cache::global().load_audio(path).ok()?;
-        let asset = crate::media::waveform::get(path).unwrap_or_else(|| {
-            let asset = crate::media::waveform::build(path, &audio);
-            crate::media::waveform::insert(asset.clone());
+        let audio = neoutl_media_runtime::cache::global()
+            .load_audio(path)
+            .ok()?;
+        let asset = neoutl_media_runtime::waveform::get(path).unwrap_or_else(|| {
+            let asset = neoutl_media_runtime::waveform::build(path, &audio);
+            neoutl_media_runtime::waveform::insert(asset.clone());
             asset
         });
-        let peaks = crate::media::waveform::level_for_columns(&asset, 512);
+        let peaks = neoutl_media_runtime::waveform::level_for_columns(&asset, 512);
         let visible_peaks = peaks.as_ref();
         let width = 512usize;
         let height = 48usize;
