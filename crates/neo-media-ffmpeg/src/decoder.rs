@@ -100,6 +100,24 @@ fn av_pix_fmt_yuvj420p() -> i32 {
 }
 
 const AV_CODEC_CAP_FRAME_THREADS: i32 = 1 << 12;
+
+fn av_color_meta_to_uniform(
+    colorspace: sys::AVColorSpace,
+    color_range: sys::AVColorRange,
+) -> (u32, u32) {
+    let color_matrix = match colorspace {
+        sys::AVColorSpace::AVCOL_SPC_BT470BG | sys::AVColorSpace::AVCOL_SPC_SMPTE170M => 0,
+        sys::AVColorSpace::AVCOL_SPC_BT2020_NCL | sys::AVColorSpace::AVCOL_SPC_BT2020_CL => 2,
+        sys::AVColorSpace::AVCOL_SPC_BT709 => 1,
+        _ => 1,
+    };
+    let range = match color_range {
+        sys::AVColorRange::AVCOL_RANGE_JPEG => 1,
+        _ => 0,
+    };
+    (color_matrix, range)
+}
+
 const AV_CODEC_CAP_SLICE_THREADS: i32 = 1 << 13;
 const AV_CODEC_HW_CONFIG_METHOD_HW_DEVICE_CTX: i32 = 0x01;
 const FF_THREAD_FRAME: i32 = 1;
@@ -802,6 +820,9 @@ fn convert_frame(ctx: &mut OpenContext, av_frame: *mut sys::AVFrame) -> Option<R
             src_format = av_pix_fmt_yuv420p();
         }
 
+        let (color_matrix, color_range) =
+            av_color_meta_to_uniform((*src_frame).colorspace, (*src_frame).color_range);
+
         let result = if src_format == av_pix_fmt_nv12() {
             let y = copy_plane((*src_frame).data[0], (*src_frame).linesize[0], height);
             let uv = copy_plane_half_height((*src_frame).data[1], (*src_frame).linesize[1], height);
@@ -810,6 +831,8 @@ fn convert_frame(ctx: &mut OpenContext, av_frame: *mut sys::AVFrame) -> Option<R
                 uv,
                 width,
                 height,
+                color_matrix,
+                color_range,
             }
         } else if src_format == av_pix_fmt_p010le() {
             let y = copy_plane((*src_frame).data[0], (*src_frame).linesize[0], height);
@@ -819,6 +842,30 @@ fn convert_frame(ctx: &mut OpenContext, av_frame: *mut sys::AVFrame) -> Option<R
                 uv,
                 width,
                 height,
+                color_matrix,
+                color_range,
+            }
+        } else if src_format == av_pix_fmt_yuv420p() {
+            let y = copy_plane((*src_frame).data[0], (*src_frame).linesize[0], height);
+            let chroma_height = height.div_ceil(2);
+            let u = copy_plane(
+                (*src_frame).data[1],
+                (*src_frame).linesize[1],
+                chroma_height,
+            );
+            let v = copy_plane(
+                (*src_frame).data[2],
+                (*src_frame).linesize[2],
+                chroma_height,
+            );
+            RamFrame::Yuv420p {
+                y,
+                u,
+                v,
+                width,
+                height,
+                color_matrix,
+                color_range,
             }
         } else {
             let target_fmt = av_pix_fmt_rgba();
@@ -893,6 +940,55 @@ fn promote_to_vram(
         return Some(frame);
     }
 
+    if let RamFrame::Yuv420p {
+        y,
+        u,
+        v,
+        width,
+        height,
+        color_matrix,
+        color_range,
+    } = ram
+    {
+        let Some(device) = shared_wgpu_device() else {
+            eprintln!("[neoutl-video-decoder][診断] YUV420P合成失敗: 共有wgpuデバイス未初期化");
+            return None;
+        };
+        let texture = match crate::colorconv::composite_yuv420p_to_rgba(
+            &device,
+            queue,
+            cache,
+            &y.bytes,
+            y.stride,
+            &u.bytes,
+            u.stride,
+            &v.bytes,
+            v.stride,
+            *width,
+            *height,
+            *color_matrix,
+            *color_range,
+        ) {
+            Ok(texture) => texture,
+            Err(err) => {
+                eprintln!(
+                    "[neoutl-video-decoder][診断] YUV420P合成失敗 frame_index={frame_index} err={err}"
+                );
+                return None;
+            }
+        };
+        let video_frame = VideoFrame(Arc::new(GpuFrame::new(
+            texture,
+            *width,
+            *height,
+            ram.color_meta(),
+            cache.clone(),
+            PixelFormat::Rgba8,
+        )));
+        vram_cache.put(frame_index, video_frame.clone());
+        return Some(video_frame);
+    }
+
     let format = ram.pixel_format();
     let width = ram.width();
     let height = ram.height();
@@ -918,12 +1014,14 @@ fn promote_to_vram(
             uv,
             width,
             height,
+            ..
         }
         | RamFrame::P010 {
             y,
             uv,
             width,
             height,
+            ..
         } => {
             let chroma_height = height.div_ceil(2);
             queue.write_texture(
@@ -990,6 +1088,7 @@ fn promote_to_vram(
                 },
             );
         }
+        RamFrame::Yuv420p { .. } => unreachable!("Yuv420pは関数冒頭で早期returnされる"),
     }
 
     let submission_index = queue.submit(std::iter::empty());
@@ -999,6 +1098,7 @@ fn promote_to_vram(
         texture,
         width,
         height,
+        ram.color_meta(),
         cache.clone(),
         format,
     )));

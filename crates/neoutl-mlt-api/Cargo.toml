@@ -1,0 +1,8 @@
+[package]
+name = "neoutl-mlt-api"
+version = "0.0.0"
+edition = "2024"
+
+[dependencies]
+neoutl-media-api.workspace = true
+wgpu = "30"

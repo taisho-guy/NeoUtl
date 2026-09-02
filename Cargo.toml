@@ -14,6 +14,7 @@ members = [
     "crates/effects/*",
     "crates/neoutl-media-api",
     "crates/neoutl-media-runtime",
+    "crates/neoutl-mlt-api",
     "crates/media/symphonia-decoder",
     "crates/media/image-decoder",
     "crates/neo-media-core",
@@ -43,6 +44,7 @@ neoutl-lua-runtime = { path = "crates/neoutl-lua-runtime" }
 neoutl-easing-api = { path = "crates/neoutl-easing-api" }
 neoutl-media-api = { path = "crates/neoutl-media-api" }
 neoutl-media-runtime = { path = "crates/neoutl-media-runtime" }
+neoutl-mlt-api = { path = "crates/neoutl-mlt-api" }
 neoutl-easing-standard = { path = "crates/easings/neoutl-easing-standard" }
 neoutl-effect-shader-build = { path = "crates/neoutl-effect-shader-build" }
 neoutl-object-shader-build = { path = "crates/neoutl-object-shader-build" }
@@ -73,6 +75,7 @@ neoutl-lua-runtime.workspace = true
 neoutl-easing-api.workspace = true
 neoutl-media-api.workspace = true
 neoutl-media-runtime.workspace = true
+neoutl-mlt-api.workspace = true
 neoutl-easing-standard.workspace = true
 neoutl-schema.workspace = true
 prost.workspace = true

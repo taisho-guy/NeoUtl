@@ -1418,8 +1418,19 @@ impl RenderEngine {
         offset as u32
     }
 
-    fn write_media_uniform(&self, index: u64, obj: &ActiveObject) -> u32 {
-        self.write_media_uniform_raw(index, &obj.mvp, obj.opacity)
+    fn write_media_uniform(
+        &self,
+        index: u64,
+        obj: &ActiveObject,
+        color_meta: neoutl_media_api::ColorMeta,
+    ) -> u32 {
+        self.write_video_uniform_raw(
+            index,
+            &obj.mvp,
+            obj.opacity,
+            color_meta.color_matrix,
+            color_meta.color_range,
+        )
     }
 
     fn ensure_effect_object_target(&mut self, index: usize) -> &wgpu::Texture {
@@ -2292,6 +2303,8 @@ impl RenderEngine {
             return;
         }
         let mut media_frames: Vec<Option<wgpu::Texture>> = Vec::with_capacity(active_objects.len());
+        let mut media_color_metas: Vec<neoutl_media_api::ColorMeta> =
+            Vec::with_capacity(active_objects.len());
         {
             let cache = neoutl_media_runtime::cache::global();
             for obj in active_objects {
@@ -2299,6 +2312,9 @@ impl RenderEngine {
                 let is_visual = matches!(stable_id, Some(VIDEO_STABLE_ID | IMAGE_STABLE_ID));
                 let tex = if is_visual {
                     if let Some(src) = &obj.media_source {
+                        let color_meta =
+                            cache.color_meta_at(&src.path, obj.clip_instance, obj.source_frame);
+                        media_color_metas.push(color_meta);
                         match cache.frame_at(
                             &src.path,
                             obj.clip_instance,
@@ -2323,9 +2339,11 @@ impl RenderEngine {
                             }
                         }
                     } else {
+                        media_color_metas.push(neoutl_media_api::ColorMeta::default());
                         None
                     }
                 } else {
+                    media_color_metas.push(neoutl_media_api::ColorMeta::default());
                     match obj.compose_source {
                         Some(crate::ecs::systems::ComposeSource::NestedScene {
                             target_scene,
@@ -2394,9 +2412,13 @@ impl RenderEngine {
         }
         let mut media_offsets: Vec<Option<u32>> = Vec::with_capacity(active_objects.len());
         let mut media_next_index = 0u64;
-        for (obj, tex) in active_objects.iter().zip(media_frames.iter()) {
+        for ((obj, tex), color_meta) in active_objects
+            .iter()
+            .zip(media_frames.iter())
+            .zip(media_color_metas.iter())
+        {
             if tex.is_some() && media_next_index < MAX_OBJECTS {
-                let offset = self.write_media_uniform(media_next_index, obj);
+                let offset = self.write_media_uniform(media_next_index, obj, *color_meta);
                 media_offsets.push(Some(offset));
                 media_next_index += 1;
             } else {

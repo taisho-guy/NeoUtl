@@ -46,85 +46,227 @@ NeoUtlはRust言語で実装されています。
 ## アーキテクチャ
 
 ```mermaid
-flowchart TD
-    subgraph UI["1. ユーザーインターフェース層 (egui / winit)"]
-        UI_Core["UIエンジン / メインループ (src/ui, src/egui_loop.rs)"]
-        Timeline["タイムライン UI (src/ui/timeline/)"]
-        Preview["プレビューウィンドウ (src/ui/preview.rs)"]
-        Dialogs["ダイアログ & エディタ (src/ui/dialogs.rs, project_settings.rs)"]
-        ThemeLoc["テーマ & 多言語化 (src/theme.rs, src/localization.rs)"]
+flowchart TB
+    subgraph BIN["src/ — バイナリクレート NeoUtl"]
+        MAIN["main.rs<br/>エントリポイント"]
+        APPSTATE["app_state.rs"]
+        DOC["document.rs"]
+        PROJECT["project.rs"]
+        SCHEMA_RS["schema.rs"]
+        EXPORT["export.rs"]
+        CONFIG["config.rs"]
+        HOTRELOAD["hot_reload.rs"]
+        SHORTCUTS["shortcuts.rs"]
+        THEME["theme.rs"]
+        SPLASH["splash.rs"]
+        UPDATE["update.rs"]
+        CRASH["crash_report.rs"]
+        LOCALIZATION["localization.rs"]
+        EGUILOOP["egui_loop.rs"]
+        GPUSHARED["gpu_shared.rs"]
     end
 
-    subgraph DataState["2. データモデル & 状態管理層"]
-        Document["ドキュメントモデル (Undo/Redo スナップショット) (src/document.rs)"]
-        ECS["Shipyard ECS ワールド (src/ecs/)"]
-        Schema["Protobuf スキーマ (neoutl-schema, src/schema.rs)"]
-        Project["プロジェクトマネージャー (src/project.rs)"]
+    subgraph ECS["src/ecs/ — Entity Component System"]
+        ECS_MOD["mod.rs / EcsWorld"]
+        ECS_COMP["components.rs"]
+        ECS_TYPES["types.rs"]
+        ECS_TRANSFORM["transform.rs"]
+        ECS_SYS["systems.rs"]
+        ECS_RES["resources.rs"]
+        ECS_EFFECTS["effects.rs"]
+        ECS_OBJSCHEMA["object_schema.rs"]
+        ECS_AUDIOPLUG["audio_plugins.rs"]
     end
 
-    subgraph CoreServices["3. コアサブシステム"]
-        subgraph MediaSubsystem["メディアサブシステム (tokio)"]
-            MediaRuntime["メディアランタイム & ワーカー (src/media/)"]
-            MediaDecoders["デコーダー群 (neo-media-ffmpeg, symphonia, image)"]
-            MediaCache["メディアキャッシュ & 波形 (neo-media-cache, waveform.rs)"]
-        end
-
-        subgraph AudioSubsystem["オーディオサブシステム"]
-            AudioMixer["オーディオミキサー (src/audio/mixer.rs)"]
-            AudioHost["Maolan ホストアダプター (maolan-host-adapter)"]
-            AudioPlayback["Rodio 再生エンジン (rodio)"]
-        end
-
-        subgraph RenderEngine["描画エンジン (wgpu)"]
-            RenderPipeline["描画パイプライン & エフェクトチェーン (src/renderer/)"]
-            SlangShaders["Slang シェーダービルド (neoutl-*-shader-build)"]
-            GPUShared["GPU 共有リソース (src/gpu_shared.rs)"]
-        end
+    subgraph LOADERS["src/objects, src/effects, src/easings — ローダー"]
+        OBJ_LOADER["objects/loader.rs"]
+        EFFECT_LOADER["effects/loader.rs"]
+        EASING_LOADER["easings/loader.rs"]
+        EASING_REG["easings/registry.rs"]
     end
 
-    subgraph ExtensionLayer["4. プラグイン & 拡張エコシステム"]
-        ObjLoader["オブジェクトローダー & API (src/objects/loader.rs, neoutl-object-api)"]
-        FxLoader["エフェクトローダー & API (src/effects/loader.rs, neoutl-effect-api)"]
-        LuaRuntime["Lua エンジン (neoutl-lua-runtime, neoutl-effect-lua)"]
-        EasingAPI["イージングエンジン (neoutl-easing-api, neoutl-easing-standard)"]
-        HotReload["ホットリロードマネージャー (src/hot_reload.rs)"]
+    subgraph RENDERER["src/renderer/ — GPUレンダリング"]
+        PIPELINE["pipeline.rs<br/>RenderEngine"]
+        SLANG_SHADERS["slang/media*.slang"]
     end
 
-    subgraph ExportSubsystem["5. エクスポートサブシステム"]
-        ExportEngine["エクスポートパイプライン (src/export.rs)"]
+    subgraph UI["src/ui/ — egui UI層"]
+        UI_MOD["mod.rs"]
+        UI_TIMELINE["timeline/*<br/>タイムライン編集"]
+        UI_PROPS["properties/*<br/>プロパティパネル"]
+        UI_PREVIEW["preview.rs"]
+        UI_SETTINGS["system_settings.rs"]
+        UI_PROJSET["project_settings.rs"]
+        UI_SCENESET["scene_settings.rs"]
+        UI_DIALOGS["dialogs.rs / effect_add_dialog.rs"]
+        UI_CATALOG["effect_catalog.rs"]
+        UI_LAUNCHER["launcher.rs"]
+        UI_EXPORTDLG["export_dialog.rs"]
+        UI_KEYBIND["keybindings.rs"]
     end
 
-    %% データフロー接続
-    UI_Core -->|ユーザー操作| Document
-    Document -->|スナップショット変換 / 同期| ECS
-    Project -->|シリアライズ / デシリアライズ| Schema
-    Schema -->|読み込み / 保存| Document
+    subgraph AUDIO["src/audio/ — オーディオ"]
+        AUDIO_MIXER["mixer.rs"]
+        AUDIO_PLUGREG["plugin_registry.rs"]
+        AUDIO_PLUGSET["plugin_settings.rs"]
+    end
 
-    ECS -->|コンポーネント照会 & 座標変換| RenderPipeline
-    ECS -->|音声ストリームパラメータ| AudioMixer
-    ECS -->|フレーム / 波形の取得要求| MediaRuntime
+    subgraph APICRATES["crates/neoutl-*-api — 契約層"]
+        MEDIA_API["neoutl-media-api"]
+        OBJECT_API["neoutl-object-api"]
+        EFFECT_API["neoutl-effect-api"]
+        EASING_API["neoutl-easing-api"]
+        MLT_API["neoutl-mlt-api<br/>Filter trait"]
+        SHARED_ABI["neoutl-shared-abi<br/>プラグインABI"]
+    end
 
-    MediaRuntime -->|パケットのデコード| MediaDecoders
-    MediaDecoders -->|フレームテクスチャ / キャッシュ| MediaCache
-    MediaCache -->|テクスチャの転送| GPUShared
+    subgraph RUNTIME["crates/neoutl-media-runtime — デコード実行基盤"]
+        MR_LOADER["loader.rs"]
+        MR_WORKER["worker.rs<br/>デコードワーカー"]
+        MR_CACHE["cache.rs<br/>テクスチャキャッシュ"]
+        MR_RUNTIME["runtime.rs"]
+        MR_TEXT["text.rs"]
+        MR_WAVE["waveform.rs"]
+    end
 
-    AudioMixer -->|ホストプラグインの処理| AudioHost
-    AudioMixer -->|音声のストリーミング再生| AudioPlayback
+    subgraph MEDIABACK["crates/neo-media-*, media/* — デコーダ実装"]
+        FFMPEG_C["neo-media-ffmpeg<br/>decoder/encoder/vaapi"]
+        SYMPHONIA["media/symphonia-decoder"]
+        IMGDEC["media/image-decoder"]
+        MEDIA_CORE["neo-media-core"]
+        MEDIA_CACHE["neo-media-cache"]
+        MEDIA_SUPPORT["neo-media-support"]
+    end
 
-    RenderPipeline -->|Slangシェーダーの実行| SlangShaders
-    RenderPipeline -->|フレーム描画| Preview
+    subgraph PLUGINHOST["crates/maolan-host-adapter — プラグインホスト"]
+        MH_REGISTRY["registry.rs"]
+        MH_PROCESS["process.rs"]
+        MH_TYPES["types.rs"]
+        MH_CRASH["crash.rs"]
+        MH_BINPATH["binary_path.rs"]
+    end
 
-    ObjLoader -->|オブジェクトの登録| ECS
-    FxLoader -->|エフェクトチェーンの適用| RenderPipeline
-    LuaRuntime -->|スクリプトの評価実行| FxLoader
-    EasingAPI -->|補間カーブの計算| ECS
-    HotReload -->|cdylibプラグインの再読み込み| ObjLoader
-    HotReload -->|cdylibプラグインの再読み込み| FxLoader
+    subgraph OBJECTS_SO["crates/objects/* — オブジェクト .so プラグイン"]
+        OBJ_VIDEO["video"]
+        OBJ_AUDIO["audio"]
+        OBJ_IMAGE["image"]
+        OBJ_TEXT["text"]
+        OBJ_SHAPE["shape"]
+        OBJ_SCENE["scene"]
+        OBJ_GROUP["group_control"]
+    end
 
-    ExportEngine -->|ECS状態の読み込み| ECS
-    ExportEngine -->|フレームのレンダリング| RenderPipeline
-    ExportEngine -->|音声のミキシング| AudioMixer
-    ExportEngine -->|出力データのエンコード| MediaDecoders
+    subgraph EFFECTS_SO["crates/effects/* — エフェクト .so プラグイン(28種)"]
+        EFF_LIST["transform / color_correction / mosaic<br/>motion_blur / lens_blur / radial_blur<br/>directional_blur / border_blur<br/>chromatic_aberration / diffuse_light<br/>drop_shadow / clipping / diagonal_clipping<br/>mask_shape / displacement_map_*<br/>image_loop / pixel_sorter / vibration<br/>text_outline"]
+    end
+
+    subgraph SHADERBUILD["crates/neoutl-*-shader-build — slangビルド支援"]
+        EFFSHADERBUILD["neoutl-effect-shader-build"]
+        OBJSHADERBUILD["neoutl-object-shader-build"]
+    end
+
+    subgraph SCRIPTLUA["crates/neoutl-lua-runtime, neoutl-effect-lua"]
+        LUA_RUNTIME["neoutl-lua-runtime"]
+        EFFECT_LUA["neoutl-effect-lua"]
+    end
+
+    subgraph EASINGSTD["crates/easings/neoutl-easing-standard"]
+        EASING_CURVE["curve.rs"]
+        EASING_SCRIPT["script.rs"]
+    end
+
+    subgraph MISC["crates/neoutl-color, neoutl-schema"]
+        COLOR["neoutl-color"]
+        SCHEMA_PROTO["neoutl-schema<br/>protobuf (document/export/keymap/settings)"]
+    end
+
+    subgraph XTASK["crates/xtask — ビルドツール"]
+        XTASK_MAIN["main.rs"]
+        XTASK_SLANG["slang.rs"]
+        XTASK_DXC["dxc.rs"]
+    end
+
+    MAIN --> APPSTATE
+    MAIN --> ECS_MOD
+    MAIN --> UI_MOD
+    MAIN --> EGUILOOP
+    APPSTATE --> DOC
+    DOC --> PROJECT
+    PROJECT --> SCHEMA_RS
+    SCHEMA_RS --> SCHEMA_PROTO
+    EXPORT --> RUNTIME
+    EXPORT --> PIPELINE
+
+    ECS_MOD --> ECS_COMP
+    ECS_MOD --> ECS_SYS
+    ECS_MOD --> ECS_RES
+    ECS_SYS --> ECS_TRANSFORM
+    ECS_SYS --> ECS_EFFECTS
+    ECS_EFFECTS --> EFFECT_LOADER
+    ECS_OBJSCHEMA --> OBJ_LOADER
+    ECS_AUDIOPLUG --> AUDIO_PLUGREG
+
+    OBJ_LOADER --> PLUGINHOST
+    EFFECT_LOADER --> PLUGINHOST
+    EASING_LOADER --> EASING_REG
+    EASING_REG --> EASINGSTD
+    EASING_REG --> EASING_API
+
+    PLUGINHOST --> MH_REGISTRY
+    MH_REGISTRY --> OBJECTS_SO
+    MH_REGISTRY --> EFFECTS_SO
+    MH_PROCESS --> SHARED_ABI
+    OBJECTS_SO --> OBJECT_API
+    EFFECTS_SO --> EFFECT_API
+    EFFECTS_SO --> SHADERBUILD
+    OBJECTS_SO --> SHADERBUILD
+
+    UI_MOD --> UI_TIMELINE
+    UI_MOD --> UI_PROPS
+    UI_MOD --> UI_PREVIEW
+    UI_MOD --> UI_SETTINGS
+    UI_MOD --> UI_DIALOGS
+    UI_TIMELINE --> ECS_MOD
+    UI_PROPS --> ECS_EFFECTS
+    UI_PREVIEW --> PIPELINE
+    UI_SETTINGS --> CONFIG
+    UI_CATALOG --> EFFECT_LOADER
+
+    PIPELINE --> SLANG_SHADERS
+    PIPELINE --> GPUSHARED
+    PIPELINE --> RUNTIME
+    PIPELINE --> MLT_API
+
+    RUNTIME --> MR_LOADER
+    RUNTIME --> MR_WORKER
+    MR_WORKER --> MR_CACHE
+    MR_LOADER --> MEDIABACK
+    MR_WORKER --> MEDIABACK
+    MR_TEXT --> MEDIA_API
+    MR_WAVE --> MEDIA_API
+
+    FFMPEG_C --> MEDIA_CORE
+    SYMPHONIA --> MEDIA_CORE
+    IMGDEC --> MEDIA_CORE
+    MEDIA_CORE --> MEDIA_CACHE
+    MEDIA_CORE --> MEDIA_SUPPORT
+
+    AUDIO_MIXER --> MEDIABACK
+    AUDIO_PLUGREG --> PLUGINHOST
+
+    EFFECTS_SO --> LUA_RUNTIME
+    EFFECT_LUA --> LUA_RUNTIME
+
+    XTASK_MAIN --> XTASK_SLANG
+    XTASK_MAIN --> XTASK_DXC
+    XTASK_MAIN -.ビルド出力.-> OBJECTS_SO
+    XTASK_MAIN -.ビルド出力.-> EFFECTS_SO
+    XTASK_MAIN -.ビルド出力.-> BIN
+
+    MEDIA_API -.契約.-> MR_LOADER
+    OBJECT_API -.契約.-> OBJ_LOADER
+    EFFECT_API -.契約.-> EFFECT_LOADER
+    MLT_API -.契約.-> RENDERER
 ```
 
 ## 派生

@@ -1,9 +1,10 @@
+use std::cell::Cell;
 use std::path::Path;
 use std::sync::Arc;
 use std::sync::mpsc;
 use std::time::Duration;
 
-use neoutl_media_api::{MediaKind, MediaMeta, MediaVTable, VideoSource};
+use neoutl_media_api::{ColorMeta, MediaKind, MediaMeta, MediaVTable, VideoSource};
 
 use crate::decoder::{VideoDecoder, VideoMeta};
 use crate::frame::VideoFrameStore;
@@ -19,6 +20,7 @@ pub struct FfmpegVideoSource {
     height: u32,
     fps: f64,
     total_frames: i64,
+    last_color_meta: Cell<ColorMeta>,
 }
 
 impl FfmpegVideoSource {
@@ -53,6 +55,7 @@ impl FfmpegVideoSource {
             height: meta.height,
             fps: meta.fps,
             total_frames: meta.total_frames,
+            last_color_meta: Cell::new(ColorMeta::default()),
         })
     }
 }
@@ -85,10 +88,16 @@ impl VideoSource for FfmpegVideoSource {
         self.store.invalidate_frame(CLIP_KEY);
         self.decoder.seek_to_frame(frame_index);
 
-        self.store
+        let frame = self
+            .store
             .wait_for_frame(CLIP_KEY, frame_index, FRAME_WAIT_TIMEOUT)
-            .map(|frame| frame.0.texture.clone())
-            .ok_or_else(|| format!("フレーム取得タイムアウト: frame_index={frame_index}"))
+            .ok_or_else(|| format!("フレーム取得タイムアウト: frame_index={frame_index}"))?;
+        self.last_color_meta.set(frame.0.color_meta);
+        Ok(frame.0.texture.clone())
+    }
+
+    fn last_color_meta(&self) -> ColorMeta {
+        self.last_color_meta.get()
     }
 }
 

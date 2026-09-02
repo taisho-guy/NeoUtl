@@ -2,6 +2,21 @@ pub const DEFAULT_DECODE_CACHE_BYTES: i64 = 512 * 1024 * 1024;
 
 pub const VIDEO_TEXTURE_POOL_CAPACITY: usize = 32;
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ColorMeta {
+    pub color_matrix: u32,
+    pub color_range: u32,
+}
+
+impl Default for ColorMeta {
+    fn default() -> Self {
+        Self {
+            color_matrix: 1,
+            color_range: 0,
+        }
+    }
+}
+
 pub trait VideoSource: Send {
     fn width(&self) -> u32;
     fn height(&self) -> u32;
@@ -14,6 +29,9 @@ pub trait VideoSource: Send {
         device: &wgpu::Device,
         queue: &wgpu::Queue,
     ) -> Result<wgpu::Texture, String>;
+    fn last_color_meta(&self) -> ColorMeta {
+        ColorMeta::default()
+    }
     fn set_output_size(&mut self, _width: u32, _height: u32) {}
 }
 

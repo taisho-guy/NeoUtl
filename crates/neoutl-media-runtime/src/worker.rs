@@ -1,6 +1,5 @@
-use crate::t;
 use egui_wgpu::wgpu;
-use neoutl_media_api::VideoSource;
+use neoutl_media_api::{ColorMeta, VideoSource};
 use std::collections::{HashMap, VecDeque};
 use std::sync::atomic::{AtomicI64, Ordering};
 use std::sync::mpsc::{self, RecvTimeoutError};
@@ -28,7 +27,7 @@ const NONE_SENTINEL: i64 = i64::MIN;
 const DECODE_WATCHDOG_TIMEOUT: Duration = Duration::from_millis(DECODE_WATCHDOG_TIMEOUT_MS);
 
 struct TextureStore {
-    map: HashMap<i64, wgpu::Texture>,
+    map: HashMap<i64, (wgpu::Texture, ColorMeta)>,
     order: VecDeque<i64>,
 }
 
@@ -49,7 +48,7 @@ impl TextureStore {
         self.order.push_back(index);
     }
 
-    fn get(&mut self, index: i64) -> Option<wgpu::Texture> {
+    fn get(&mut self, index: i64) -> Option<(wgpu::Texture, ColorMeta)> {
         let tex = self.map.get(&index).cloned();
         if tex.is_some() {
             self.touch(index);
@@ -57,12 +56,12 @@ impl TextureStore {
         tex
     }
 
-    fn put(&mut self, index: i64, texture: wgpu::Texture) {
+    fn put(&mut self, index: i64, texture: wgpu::Texture, color_meta: ColorMeta) {
         if self.map.contains_key(&index) {
             self.touch(index);
             return;
         }
-        self.map.insert(index, texture);
+        self.map.insert(index, (texture, color_meta));
         self.order.push_back(index);
         while self.order.len() > SAFE_RING_CAPACITY {
             if let Some(evicted) = self.order.pop_front() {
@@ -79,7 +78,7 @@ enum DecodeRequest {
 
 enum DecodeResponse {
     PrefetchDone(i64, Result<(), String>),
-    FrameDone(i64, Result<wgpu::Texture, String>),
+    FrameDone(i64, Result<(wgpu::Texture, ColorMeta), String>),
 }
 
 struct DecodeThreadHandle {
@@ -112,7 +111,8 @@ impl DecodeThreadHandle {
                     DecodeRequest::Full(index) => {
                         let result = decoder
                             .prefetch(index)
-                            .and_then(|()| decoder.frame_gpu(index, &device, &queue));
+                            .and_then(|()| decoder.frame_gpu(index, &device, &queue))
+                            .map(|texture| (texture, decoder.last_color_meta()));
                         if resp_tx
                             .send(DecodeResponse::FrameDone(index, result))
                             .is_err()
@@ -172,7 +172,10 @@ impl DecodeThreadHandle {
         }
     }
 
-    fn frame_gpu_watched(&mut self, frame_index: i64) -> Result<wgpu::Texture, String> {
+    fn frame_gpu_watched(
+        &mut self,
+        frame_index: i64,
+    ) -> Result<(wgpu::Texture, ColorMeta), String> {
         if self.hung {
             return Err(format!(
                 "decoderは既にwatchdogタイムアウトでhung状態 (frame={frame_index})"
@@ -258,8 +261,8 @@ impl DecodeWorker {
                     let result = decode_thread.frame_gpu_watched(index);
                     let mut ok = true;
                     match result {
-                        Ok(tex) => {
-                            store_t.lock().unwrap().put(index, tex);
+                        Ok((tex, color_meta)) => {
+                            store_t.lock().unwrap().put(index, tex, color_meta);
                             *last_error_t.lock().unwrap() = None;
                             if critical {
                                 consecutive_target_fails = 0;
@@ -397,7 +400,11 @@ impl DecodeWorker {
     }
 
     pub fn poll_texture(&self, frame_index: i64) -> Option<wgpu::Texture> {
-        self.store.lock().unwrap().get(frame_index)
+        self.store.lock().unwrap().get(frame_index).map(|(t, _)| t)
+    }
+
+    pub fn poll_color_meta(&self, frame_index: i64) -> Option<ColorMeta> {
+        self.store.lock().unwrap().get(frame_index).map(|(_, m)| m)
     }
 
     pub fn generation(&self) -> u64 {

@@ -1,4 +1,5 @@
 pub mod cache;
+mod colorconv;
 pub mod decoder;
 pub mod encoder;
 pub mod frame;

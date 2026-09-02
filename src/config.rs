@@ -42,8 +42,6 @@ pub const UNDO_HISTORY_LIMIT: usize = 100;
 pub const DECODE_RING_CAPACITY: usize = neoutl_media_api::VIDEO_TEXTURE_POOL_CAPACITY;
 pub const DECODE_PREFETCH_RADIUS: i64 = 8;
 const _: () = assert!(DECODE_RING_CAPACITY as i64 > DECODE_PREFETCH_RADIUS * 2);
-pub const DECODE_PREFETCH_FAIL_THRESHOLD: i64 = 30;
-pub const DECODE_WATCHDOG_TIMEOUT_MS: u64 = 5_000;
 
 pub const MAX_SCENE_OBJECTS: u64 = 512;
 

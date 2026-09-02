@@ -399,6 +399,9 @@ impl SystemSettingsWindow {
     }
 
     fn page_decode(&mut self, ui: &mut egui::Ui, world_holder: &Arc<Mutex<EcsWorld>>) {
+        debug_assert_eq!(crate::config::DECODE_BACKEND_AUTO, 0);
+        debug_assert_eq!(crate::config::DECODE_BACKEND_GPU_FIXED, 1);
+        debug_assert_eq!(crate::config::DECODE_BACKEND_CPU_FIXED, 2);
         let options = [
             "自動".to_string(),
             "GPU固定".to_string(),

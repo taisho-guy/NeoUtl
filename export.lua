@@ -1,31 +1,119 @@
 #!/usr/bin/env luajit
 
+local json = nil
+pcall(function() json = require("cjson") end)
+if not json then
+    pcall(function() json = require("dkjson") end)
+end
+
+local escape_map = {
+    ['"']  = '\\"',
+    ['\\'] = '\\\\',
+    ['\b'] = '\\b',
+    ['\f'] = '\\f',
+    ['\n'] = '\\n',
+    ['\r'] = '\\r',
+    ['\t'] = '\\t'
+}
+
+local function encode_string(s)
+    return '"' .. s:gsub('[%c"\\]', function(c)
+        if escape_map[c] then
+            return escape_map[c]
+        else
+            return string.format("\\u%04x", string.byte(c))
+        end
+    end) .. '"'
+end
+
+local function json_encode_fallback(val)
+    local t = type(val)
+    if t == "nil" then return "null"
+    elseif t == "boolean" then return tostring(val)
+    elseif t == "number" then 
+        if val ~= val or val == math.huge or val == -math.huge then
+            return "null"
+        end
+        return tostring(val)
+    elseif t == "string" then
+        return encode_string(val)
+    elseif t == "table" then
+        local is_array = true
+        local max_i = 0
+        for k, _ in pairs(val) do
+            if type(k) ~= "number" or k < 1 or math.floor(k) ~= k then
+                is_array = false
+                break
+            end
+            if k > max_i then max_i = k end
+        end
+        if is_array then
+            local parts = {}
+            for i = 1, max_i do
+                table.insert(parts, json_encode_fallback(val[i]))
+            end
+            return "[" .. table.concat(parts, ",") .. "]"
+        else
+            local parts = {}
+            for k, v in pairs(val) do
+                table.insert(parts, encode_string(tostring(k)) .. ":" .. json_encode_fallback(v))
+            end
+            return "{" .. table.concat(parts, ",") .. "}"
+        end
+    end
+    return "null"
+end
+
+local function encode_json(val)
+    if json and json.encode then
+        return json.encode(val)
+    else
+        return json_encode_fallback(val)
+    end
+end
+
 local DEFAULT_EXTENSIONS = {
-    ".cpp", ".hpp", ".c", ".h", ".hh", ".hxx", ".cc", ".cxx", ".def",
-    ".vcxproj", ".vcxproj.user", ".filters", ".props", ".targets", ".sln",
-    ".vcproj", ".vdproj", ".cmake",
-    ".py", ".lua", ".sh", ".bash", ".ps1", ".fish", ".bat", ".cmd",
-    ".json", ".ini", ".conf", ".xml", ".yaml", ".yml", ".toml", ".resx",
-    ".nuspec", ".config", ".editorconfig", ".manifest", ".clang-format", ".clang-tidy",
-    ".js", ".jsx", ".ts", ".tsx", ".html", ".htm", ".css", ".sass", ".scss",
-    ".slint", ".qml", ".qrc", ".ui", ".pro", ".pri", ".proto",
-    ".glsl", ".frag", ".vert", ".slang", ".wgsl", ".metal", ".hlsl",
-    ".gitignore", ".md", ".txt", ".rst", ".rs"
+    ".c", ".h", ".cpp", ".hpp", ".cc", ".hh", ".cxx", ".hxx", ".def", ".inl", ".ipp", ".tcc",
+    ".cs", ".csx",
+    ".vcxproj", ".vcxproj.user", ".filters", ".props", ".targets", ".sln", ".vcproj", ".vdproj",
+    ".cmake", ".make", ".mk", ".gradle", ".groovy", ".bazel", ".bzl", ".dockerfile",
+    ".tf", ".tfvars", ".nix", ".m4", ".in", ".pkr.hcl", ".pkr.json",
+    ".py", ".pyw", ".lua", ".sh", ".bash", ".zsh", ".fish", ".ps1", ".psm1", ".psd1", ".bat", ".cmd",
+    ".rb", ".rake", ".pl", ".pm", ".t", ".php", ".phtml",
+    ".rs", ".go", ".swift", ".kt", ".kts", ".java", ".scala", ".sc", ".clj", ".cljs", ".edn",
+    ".zig", ".nim", ".cr", ".d", ".di", ".dart", ".elm", ".ex", ".exs", ".erl", ".hrl",
+    ".hs", ".lhs", ".ocaml", ".ml", ".mli", ".fs", ".fsi", ".fsx", ".v", ".sv", ".vhdl",
+    ".js", ".jsx", ".mjs", ".cjs", ".ts", ".tsx", ".mts", ".cts",
+    ".html", ".htm", ".xhtml", ".vue", ".svelte", ".astro",
+    ".css", ".sass", ".scss", ".less", ".styl", ".wasm", ".wat",
+    ".slint", ".qml", ".qrc", ".ui", ".pro", ".pri", ".xib", ".storyboard",
+    ".glsl", ".frag", ".vert", ".geom", ".comp", ".tesc", ".tese", ".slang", ".wgsl", ".metal", ".hlsl", ".shader",
+    ".json", ".json5", ".jsonc", ".ini", ".conf", ".config", ".xml", ".yaml", ".yml", ".toml", ".csv", ".tsv",
+    ".resx", ".nuspec", ".editorconfig", ".manifest", ".clang-format", ".clang-tidy", ".prettierrc",
+    ".eslintrc", ".babelrc", ".stylelintrc", ".env", ".env.example", ".properties",
+    ".proto", ".graphql", ".gql", ".sql", ".prisma", ".surrealql",
+    ".gitignore", ".gitattributes", ".gitmodules", ".md", ".markdown", ".mdx", ".txt", ".rst", ".adoc",
+    ".tex", ".bib", ".org", ".lic", ".license"
 }
 
 local DEFAULT_FILENAMES = {
-    ["CMakeLists.txt"]=true, ["Makefile"]=true, ["Dockerfile"]=true,
-    ["Vagrantfile"]=true, [".gitignore"]=true, ["LICENSE"]=true, ["README"]=true,
-    ["nuget.config"]=true, ["packages.config"]=true, ["NuGet.Config"]=true
+    ["CMakeLists.txt"]=true, ["Makefile"]=true, ["Dockerfile"]=true, ["docker-compose.yml"]=true, ["docker-compose.yaml"]=true,
+    ["Vagrantfile"]=true, [".gitignore"]=true, [".gitattributes"]=true, [".gitmodules"]=true, [".editorconfig"]=true,
+    ["LICENSE"]=true, ["LICENSE.md"]=true, ["LICENSE.txt"]=true, ["README"]=true, ["README.md"]=true, ["README.txt"]=true,
+    ["nuget.config"]=true, ["packages.config"]=true, ["NuGet.Config"]=true, ["BUILD"]=true, ["WORKSPACE"]=true,
+    ["Procfile"]=true, ["Gemfile"]=true, ["Rakefile"]=true, ["Containerfile"]=true, ["dune"]=true, ["dune-project"]=true
 }
 
 local EXCLUDE_FILES = {
     [".DS_Store"]=true, ["Thumbs.db"]=true, ["package-lock.json"]=true,
-    ["yarn.lock"]=true, ["Icons.js"]=true, ["Cargo.lock"]=true
+    ["yarn.lock"]=true, ["pnpm-lock.yaml"]=true, ["bun.lockb"]=true,
+    ["Cargo.lock"]=true, ["poetry.lock"]=true, ["Pipfile.lock"]=true,
+    ["mix.lock"]=true, ["composer.lock"]=true, ["Icons.js"]=true
 }
 
 local EXCLUDE_DIRS = {
-    "neoutl-wgpu", "Carla"
+    "neoutl-wgpu", "Carla", "node_modules", ".git", ".svn", ".hg", "target", "build", "dist",
+    "out", ".next", ".nuxt", "__pycache__", ".venv", "venv", ".idea", ".vscode"
 }
 
 local IS_WINDOWS = os.getenv("OS") and os.getenv("OS"):match("[Ww]indows") or os.getenv("WINDIR") ~= nil
@@ -108,7 +196,7 @@ local function scan_directory(root_dir, ignore_patterns)
             local rel_path = path
             for _, target in ipairs(EXCLUDE_DIRS) do
                 target = target:gsub("^/+", ""):gsub("/+$", "")
-                if rel_path == target or rel_path:sub(1, #target + 1) == target .. "/" then
+                if rel_path == target or rel_path:sub(1, #target + 1) == target .. "/" or rel_path:find("/" .. target .. "/") then
                     should_exclude = true
                     break
                 end
@@ -172,7 +260,7 @@ local function generate_tree(root_dir, files)
         local rel_path = filepath
         local filename, _ = parse_path(filepath)
 
-        local is_hidden = filename:match("^%.") and filename ~= ".gitignore"
+        local is_hidden = filename:match("^%.") and not DEFAULT_FILENAMES[filename]
         local is_context = filename:find("project_context")
 
         if not is_hidden and not is_context then
@@ -200,14 +288,6 @@ local function should_process(filepath, output_file, allowed_exts)
         return is_text_file(filepath) 
     end
     return false
-end
-
-local function escape_xml(str)
-    return str:gsub("&", "&amp;"):gsub("<", "&lt;"):gsub(">", "&gt;"):gsub('"', "&quot;"):gsub("'", "&apos;")
-end
-
-local function escape_cdata(content)
-    return content:gsub("]]>", "]]]]><![CDATA[>")
 end
 
 local function main()
@@ -241,7 +321,7 @@ local function main()
     end
 
     if not output_file then
-        output_file = "project_context_" .. os.date("%Y%m%d_%H%M%S") .. ".xml"
+        output_file = "project_context_" .. os.date("%Y%m%d_%H%M%S") .. ".json"
     end
 
     root_dir = root_dir:gsub("/+$", "")
@@ -253,25 +333,26 @@ local function main()
     local all_files = scan_directory(root_dir, ignore_patterns)
     local tree_structure = generate_tree(root_dir, all_files)
 
-    local out_f = io.open(output_file, "w")
-    if not out_f then
-        print("[!] Error writing output file: " .. output_file)
-        os.exit(1)
-    end
-
     local project_name = root_dir:match("[^/]+$") or root_dir
     local timestamp = os.date("%Y-%m-%d %H:%M:%S")
 
-    out_f:write('<?xml version="1.0" encoding="UTF-8"?>\n')
-    out_f:write('<project name="' .. escape_xml(project_name) .. '">\n')
-    out_f:write('  <metadata>\n')
-    out_f:write('    <generated_date>' .. escape_xml(timestamp) .. '</generated_date>\n')
-    out_f:write('    <generated_by>export.lua (XML Version)</generated_by>\n')
-    out_f:write('    <structure><![CDATA[\n' .. tree_structure .. '\n]]></structure>\n')
-    out_f:write('  </metadata>\n')
-    out_f:write('  <files>\n')
+    local exported_data = {
+        project = {
+            name = project_name,
+            metadata = {
+                generated_date = timestamp,
+                generated_by = "export.lua (UTF-8 Safe Version)",
+                structure = tree_structure
+            },
+            files = {},
+            summary = {
+                total_processed_files = 0,
+                file_counts = {}
+            }
+        }
+    }
 
-    print("[*] Reading and embedding files into XML...")
+    print("[*] Reading and embedding files into JSON structure...")
     local total_files = 0
     local extension_counts = {}
     local my_filename = parse_path(arg[0] or "")
@@ -287,12 +368,16 @@ local function main()
                     f:close()
 
                     local rel_path = filepath
-                    extension_counts[ext] = (extension_counts[ext] or 0) + 1
+                    local ext_key = ext == "" and "no_ext" or ext
+                    extension_counts[ext_key] = (extension_counts[ext_key] or 0) + 1
                     total_files = total_files + 1
 
-                    out_f:write('    <file path="' .. escape_xml(rel_path) .. '" bytes="' .. #content .. '" extension="' .. escape_xml(ext) .. '">\n')
-                    out_f:write('      <content><![CDATA[' .. escape_cdata(content) .. ']]></content>\n')
-                    out_f:write('    </file>\n')
+                    table.insert(exported_data.project.files, {
+                        path = rel_path,
+                        bytes = #content,
+                        extension = ext,
+                        content = content
+                    })
                 else
                     print("[!] Skipping " .. filepath .. ": Cannot open file")
                 end
@@ -300,21 +385,18 @@ local function main()
         end
     end
 
-    out_f:write('  </files>\n')
-    out_f:write('  <summary>\n')
-    out_f:write('    <total_processed_files>' .. total_files .. '</total_processed_files>\n')
-    out_f:write('    <file_counts>\n')
-    for k, v in pairs(extension_counts) do
-        local tag_name = k == "" and "no_ext" or k:sub(2)
-        tag_name = tag_name:gsub("[^%a%d_]", "_")
-        out_f:write('      <' .. tag_name .. '>' .. v .. '</' .. tag_name .. '>\n')
-    end
-    out_f:write('    </file_counts>\n')
-    out_f:write('  </summary>\n')
-    out_f:write('</project>\n')
+    exported_data.project.summary.total_processed_files = total_files
+    exported_data.project.summary.file_counts = extension_counts
 
+    local out_f = io.open(output_file, "w")
+    if not out_f then
+        print("[!] Error writing output file: " .. output_file)
+        os.exit(1)
+    end
+
+    out_f:write(encode_json(exported_data))
     out_f:close()
-    print("[+] XML export completed: " .. output_file)
+    print("[+] JSON export completed: " .. output_file)
 end
 
 main()

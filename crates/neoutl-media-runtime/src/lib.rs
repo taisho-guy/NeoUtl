@@ -6,7 +6,6 @@ macro_rules! t {
         rust_i18n::t!($($args)*).to_string()
     };
 }
-pub(crate) use t;
 
 pub mod cache;
 pub mod loader;

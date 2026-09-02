@@ -1,9 +1,8 @@
 use super::loader;
 use super::worker::DecodeWorker;
 use super::{MediaKind, detect_kind};
-use crate::t;
 use egui_wgpu::wgpu;
-use neoutl_media_api::{AudioBuffer, ImageSource, VideoSource};
+use neoutl_media_api::{AudioBuffer, ColorMeta, ImageSource, VideoSource};
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, OnceLock};
@@ -417,6 +416,20 @@ impl MediaCache {
         drop(guard);
 
         (self.redraw_handle())();
+    }
+
+    pub fn color_meta_at(&self, path: &Path, instance_key: u64, frame_index: i64) -> ColorMeta {
+        let entry = self.entry(path);
+        let guard = entry.lock().unwrap();
+        match &*guard {
+            PathEntry::Video(video) => video
+                .instances
+                .get(&instance_key)
+                .and_then(|instance| instance.worker.as_ref())
+                .and_then(|worker| worker.poll_color_meta(frame_index))
+                .unwrap_or_default(),
+            _ => ColorMeta::default(),
+        }
     }
 
     pub fn frame_at(

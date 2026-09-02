@@ -15,3 +15,6 @@ wgpu = { version = "30", features = ["vulkan-portability"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 libva = { package = "cros-libva-extended", version = "=0.0.13-extended.2" }
+
+[build-dependencies]
+neoutl-object-shader-build = { path = "../neoutl-object-shader-build" }

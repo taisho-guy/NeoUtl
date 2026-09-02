@@ -8,6 +8,7 @@ pub struct GpuFrame {
     pub texture: wgpu::Texture,
     pub width: u32,
     pub height: u32,
+    pub color_meta: neoutl_media_api::ColorMeta,
     cache: Arc<NeoMediaCache>,
     format: PixelFormat,
 }
@@ -17,6 +18,7 @@ impl GpuFrame {
         texture: wgpu::Texture,
         width: u32,
         height: u32,
+        color_meta: neoutl_media_api::ColorMeta,
         cache: Arc<NeoMediaCache>,
         format: PixelFormat,
     ) -> Self {
@@ -24,6 +26,7 @@ impl GpuFrame {
             texture,
             width,
             height,
+            color_meta,
             cache,
             format,
         }
@@ -63,12 +66,25 @@ pub enum RamFrame {
         uv: PlaneBuffer,
         width: u32,
         height: u32,
+        color_matrix: u32,
+        color_range: u32,
     },
     P010 {
         y: PlaneBuffer,
         uv: PlaneBuffer,
         width: u32,
         height: u32,
+        color_matrix: u32,
+        color_range: u32,
+    },
+    Yuv420p {
+        y: PlaneBuffer,
+        u: PlaneBuffer,
+        v: PlaneBuffer,
+        width: u32,
+        height: u32,
+        color_matrix: u32,
+        color_range: u32,
     },
     Rgba8 {
         plane: PlaneBuffer,
@@ -82,6 +98,7 @@ impl RamFrame {
         match self {
             RamFrame::Nv12 { width, .. }
             | RamFrame::P010 { width, .. }
+            | RamFrame::Yuv420p { width, .. }
             | RamFrame::Rgba8 { width, .. } => *width,
         }
     }
@@ -90,6 +107,7 @@ impl RamFrame {
         match self {
             RamFrame::Nv12 { height, .. }
             | RamFrame::P010 { height, .. }
+            | RamFrame::Yuv420p { height, .. }
             | RamFrame::Rgba8 { height, .. } => *height,
         }
     }
@@ -98,7 +116,32 @@ impl RamFrame {
         match self {
             RamFrame::Nv12 { .. } => PixelFormat::Nv12,
             RamFrame::P010 { .. } => PixelFormat::P010,
+            RamFrame::Yuv420p { .. } => PixelFormat::Yuv420p,
             RamFrame::Rgba8 { .. } => PixelFormat::Rgba8,
+        }
+    }
+
+    pub fn color_meta(&self) -> neoutl_media_api::ColorMeta {
+        match self {
+            RamFrame::Nv12 {
+                color_matrix,
+                color_range,
+                ..
+            }
+            | RamFrame::P010 {
+                color_matrix,
+                color_range,
+                ..
+            }
+            | RamFrame::Yuv420p {
+                color_matrix,
+                color_range,
+                ..
+            } => neoutl_media_api::ColorMeta {
+                color_matrix: *color_matrix,
+                color_range: *color_range,
+            },
+            RamFrame::Rgba8 { .. } => neoutl_media_api::ColorMeta::default(),
         }
     }
 }
