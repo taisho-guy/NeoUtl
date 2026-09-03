@@ -1155,8 +1155,6 @@ fn run_worker<F: FnOnce(VideoMeta) + Send + 'static>(req: WorkerSpawnRequest<F>)
         last_decoded_frame: -1,
     };
 
-    const DEBOUNCE_WINDOW: Duration = Duration::from_millis(16);
-
     let (lock, cvar) = &*shared;
     loop {
         let target = {
@@ -1169,19 +1167,6 @@ fn run_worker<F: FnOnce(VideoMeta) + Send + 'static>(req: WorkerSpawnRequest<F>)
                     return;
                 }
                 guard = cvar.wait(guard).expect("mailbox condvar poisoned");
-            }
-            loop {
-                let before = guard.target_frame;
-                let (g, timeout) = cvar
-                    .wait_timeout(guard, DEBOUNCE_WINDOW)
-                    .expect("mailbox condvar poisoned");
-                guard = g;
-                if guard.stopped {
-                    return;
-                }
-                if timeout.timed_out() || guard.target_frame == before {
-                    break;
-                }
             }
             guard.target_frame.take().expect("target_frame must be set")
         };

@@ -211,6 +211,14 @@ impl VideoFrameStore {
             .is_some_and(|(index, _)| *index == expected_index)
     }
 
+    pub fn any_frame(&self, key: &str) -> Option<VideoFrame> {
+        self.frames
+            .lock()
+            .expect("frames mutex poisoned")
+            .get(key)
+            .map(|(_, frame)| frame.clone())
+    }
+
     pub fn invalidate_frame(&self, key: &str) {
         self.frames
             .lock()

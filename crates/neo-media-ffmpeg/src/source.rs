@@ -10,6 +10,7 @@ use crate::decoder::{VideoDecoder, VideoMeta};
 use crate::frame::VideoFrameStore;
 
 const FRAME_WAIT_TIMEOUT: Duration = Duration::from_secs(5);
+const FRAME_RENDER_BUDGET: Duration = Duration::from_millis(10);
 const OPEN_META_TIMEOUT: Duration = Duration::from_secs(5);
 const CLIP_KEY: &str = "ffmpeg_decoder_source";
 
@@ -85,15 +86,33 @@ impl VideoSource for FfmpegVideoSource {
         _device: &wgpu::Device,
         _queue: &wgpu::Queue,
     ) -> Result<wgpu::Texture, String> {
-        self.store.invalidate_frame(CLIP_KEY);
+        if let Some(frame) = self.store.frame(CLIP_KEY, frame_index) {
+            self.last_color_meta.set(frame.0.color_meta);
+            return Ok(frame.0.texture.clone());
+        }
+
         self.decoder.seek_to_frame(frame_index);
 
-        let frame = self
+        if let Some(frame) = self
             .store
+            .wait_for_frame(CLIP_KEY, frame_index, FRAME_RENDER_BUDGET)
+        {
+            self.last_color_meta.set(frame.0.color_meta);
+            return Ok(frame.0.texture.clone());
+        }
+
+        if let Some(frame) = self.store.any_frame(CLIP_KEY) {
+            self.last_color_meta.set(frame.0.color_meta);
+            return Ok(frame.0.texture.clone());
+        }
+
+        self.store
             .wait_for_frame(CLIP_KEY, frame_index, FRAME_WAIT_TIMEOUT)
-            .ok_or_else(|| format!("フレーム取得タイムアウト: frame_index={frame_index}"))?;
-        self.last_color_meta.set(frame.0.color_meta);
-        Ok(frame.0.texture.clone())
+            .map(|frame| {
+                self.last_color_meta.set(frame.0.color_meta);
+                frame.0.texture.clone()
+            })
+            .ok_or_else(|| format!("フレーム取得タイムアウト: frame_index={frame_index}"))
     }
 
     fn last_color_meta(&self) -> ColorMeta {
