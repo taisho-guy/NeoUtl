@@ -69,20 +69,12 @@ pub enum RamFrame {
         color_matrix: u32,
         color_range: u32,
     },
-    P010 {
+    P0xx {
         y: PlaneBuffer,
         uv: PlaneBuffer,
         width: u32,
         height: u32,
-        color_matrix: u32,
-        color_range: u32,
-    },
-    Yuv420p {
-        y: PlaneBuffer,
-        u: PlaneBuffer,
-        v: PlaneBuffer,
-        width: u32,
-        height: u32,
+        bit_depth: u32,
         color_matrix: u32,
         color_range: u32,
     },
@@ -97,8 +89,7 @@ impl RamFrame {
     pub fn width(&self) -> u32 {
         match self {
             RamFrame::Nv12 { width, .. }
-            | RamFrame::P010 { width, .. }
-            | RamFrame::Yuv420p { width, .. }
+            | RamFrame::P0xx { width, .. }
             | RamFrame::Rgba8 { width, .. } => *width,
         }
     }
@@ -106,8 +97,7 @@ impl RamFrame {
     pub fn height(&self) -> u32 {
         match self {
             RamFrame::Nv12 { height, .. }
-            | RamFrame::P010 { height, .. }
-            | RamFrame::Yuv420p { height, .. }
+            | RamFrame::P0xx { height, .. }
             | RamFrame::Rgba8 { height, .. } => *height,
         }
     }
@@ -115,8 +105,9 @@ impl RamFrame {
     pub fn pixel_format(&self) -> PixelFormat {
         match self {
             RamFrame::Nv12 { .. } => PixelFormat::Nv12,
-            RamFrame::P010 { .. } => PixelFormat::P010,
-            RamFrame::Yuv420p { .. } => PixelFormat::Yuv420p,
+            RamFrame::P0xx { bit_depth: 10, .. } => PixelFormat::P010,
+            RamFrame::P0xx { bit_depth: 12, .. } => PixelFormat::P012,
+            RamFrame::P0xx { .. } => PixelFormat::P016,
             RamFrame::Rgba8 { .. } => PixelFormat::Rgba8,
         }
     }
@@ -128,12 +119,7 @@ impl RamFrame {
                 color_range,
                 ..
             }
-            | RamFrame::P010 {
-                color_matrix,
-                color_range,
-                ..
-            }
-            | RamFrame::Yuv420p {
+            | RamFrame::P0xx {
                 color_matrix,
                 color_range,
                 ..

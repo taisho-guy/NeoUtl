@@ -97,30 +97,34 @@ fn av_pix_fmt_yuvj420p() -> i32 {
     pf(sys::AVPixelFormat::AV_PIX_FMT_YUVJ420P)
 }
 
-const AV_CODEC_CAP_FRAME_THREADS: i32 = 1 << 12;
-
 fn av_color_meta_to_uniform(
     colorspace: sys::AVColorSpace,
     color_range: sys::AVColorRange,
 ) -> (u32, u32) {
     let color_matrix = match colorspace {
         sys::AVColorSpace::AVCOL_SPC_BT470BG | sys::AVColorSpace::AVCOL_SPC_SMPTE170M => 0,
-        sys::AVColorSpace::AVCOL_SPC_BT2020_NCL | sys::AVColorSpace::AVCOL_SPC_BT2020_CL => 2,
         sys::AVColorSpace::AVCOL_SPC_BT709 => 1,
-        _ => 1,
+        sys::AVColorSpace::AVCOL_SPC_BT2020_NCL | sys::AVColorSpace::AVCOL_SPC_BT2020_CL => 2,
+        sys::AVColorSpace::AVCOL_SPC_RGB | sys::AVColorSpace::AVCOL_SPC_UNSPECIFIED => 1,
+        other => {
+            eprintln!(
+                "[neoutl-video-decoder][診断] 未対応AVColorSpace={other:?} BT709へフォールバック"
+            );
+            1
+        }
     };
     let range = match color_range {
         sys::AVColorRange::AVCOL_RANGE_JPEG => 1,
-        _ => 0,
+        sys::AVColorRange::AVCOL_RANGE_MPEG | sys::AVColorRange::AVCOL_RANGE_UNSPECIFIED => 0,
+        other => {
+            eprintln!(
+                "[neoutl-video-decoder][診断] 未対応AVColorRange={other:?} MPEGへフォールバック"
+            );
+            0
+        }
     };
     (color_matrix, range)
 }
-
-const AV_CODEC_CAP_SLICE_THREADS: i32 = 1 << 13;
-const AV_CODEC_HW_CONFIG_METHOD_HW_DEVICE_CTX: i32 = 0x01;
-const FF_THREAD_FRAME: i32 = 1;
-const FF_THREAD_SLICE: i32 = 2;
-const SWS_BILINEAR: i32 = 2;
 
 const GOP_CACHE_CAPACITY: usize = 3;
 const FORWARD_DECODE_THRESHOLD: i64 = 120;
@@ -443,7 +447,8 @@ unsafe fn try_init_hw_device(
                     break;
                 }
                 let methods = (*config).methods;
-                let matches_method = (methods & AV_CODEC_HW_CONFIG_METHOD_HW_DEVICE_CTX) != 0;
+                let matches_method =
+                    (methods & sys::AV_CODEC_HW_CONFIG_METHOD_HW_DEVICE_CTX as i32) != 0;
                 if matches_method && (*config).device_type == device_type {
                     let device_arg = if device_type == sys::AVHWDeviceType::AV_HWDEVICE_TYPE_VAAPI {
                         vaapi_render_node
@@ -559,11 +564,11 @@ fn open_input(path: &Path, gpu_device: &Option<Arc<wgpu::Device>>) -> Result<Ope
             hw_pix_fmt_box = Some(boxed);
         } else {
             let capabilities = (*codec).capabilities;
-            if (capabilities & AV_CODEC_CAP_FRAME_THREADS) != 0 {
-                (*dec_ctx).thread_type = FF_THREAD_FRAME;
+            if (capabilities & sys::AV_CODEC_CAP_FRAME_THREADS as i32) != 0 {
+                (*dec_ctx).thread_type = sys::FF_THREAD_FRAME;
                 (*dec_ctx).thread_count = 0;
-            } else if (capabilities & AV_CODEC_CAP_SLICE_THREADS) != 0 {
-                (*dec_ctx).thread_type = FF_THREAD_SLICE;
+            } else if (capabilities & sys::AV_CODEC_CAP_SLICE_THREADS as i32) != 0 {
+                (*dec_ctx).thread_type = sys::FF_THREAD_SLICE;
                 (*dec_ctx).thread_count = 0;
             }
         }
@@ -643,6 +648,56 @@ fn copy_plane_half_height(data_ptr: *const u8, stride: i32, luma_height: u32) ->
     copy_plane(data_ptr, stride, luma_height.div_ceil(2))
 }
 
+const SWS_BILINEAR: i32 = 2;
+
+unsafe fn sws_convert_frame(
+    src: *mut sys::AVFrame,
+    width: u32,
+    height: u32,
+    src_format: i32,
+    dst_format: i32,
+) -> Option<*mut sys::AVFrame> {
+    unsafe {
+        let sws = sys::sws_getContext(
+            width as i32,
+            height as i32,
+            std::mem::transmute::<i32, sys::AVPixelFormat>(src_format),
+            width as i32,
+            height as i32,
+            std::mem::transmute::<i32, sys::AVPixelFormat>(dst_format),
+            SWS_BILINEAR,
+            ptr::null_mut(),
+            ptr::null_mut(),
+            ptr::null_mut(),
+        );
+        if sws.is_null() {
+            eprintln!("[neoutl-video-decoder] sws_getContext失敗、フレームを破棄");
+            return None;
+        }
+        let dst = sys::av_frame_alloc();
+        (*dst).format = dst_format;
+        (*dst).width = width as i32;
+        (*dst).height = height as i32;
+        if sys::av_frame_get_buffer(dst, 32) != 0 {
+            sys::sws_freeContext(sws);
+            sys::av_frame_free(&mut { dst });
+            eprintln!("[neoutl-video-decoder] av_frame_get_buffer失敗、フレームを破棄");
+            return None;
+        }
+        sys::sws_scale(
+            sws,
+            (*src).data.as_ptr() as *const *const u8,
+            (*src).linesize.as_ptr(),
+            0,
+            height as i32,
+            (*dst).data.as_mut_ptr(),
+            (*dst).linesize.as_mut_ptr(),
+        );
+        sys::sws_freeContext(sws);
+        Some(dst)
+    }
+}
+
 fn convert_frame(ctx: &mut OpenContext, av_frame: *mut sys::AVFrame) -> Option<RamFrame> {
     unsafe {
         let hw_pix_fmt = ctx.hw_pix_fmt_box.as_ref().map(|b| b.pix_fmt);
@@ -691,10 +746,43 @@ fn convert_frame(ctx: &mut OpenContext, av_frame: *mut sys::AVFrame) -> Option<R
                 color_matrix,
                 color_range,
             }
-        } else if src_format == av_pix_fmt_p010le() {
+        } else if src_format == av_pix_fmt_p010le()
+            || src_format == av_pix_fmt_p012le()
+            || src_format == av_pix_fmt_p016le()
+        {
+            let bit_depth: u32 = if src_format == av_pix_fmt_p010le() {
+                10
+            } else if src_format == av_pix_fmt_p012le() {
+                12
+            } else {
+                16
+            };
             let y = copy_plane((*src_frame).data[0], (*src_frame).linesize[0], height);
             let uv = copy_plane_half_height((*src_frame).data[1], (*src_frame).linesize[1], height);
-            RamFrame::P010 {
+            RamFrame::P0xx {
+                y,
+                uv,
+                width,
+                height,
+                bit_depth,
+                color_matrix,
+                color_range,
+            }
+        } else if src_format == av_pix_fmt_yuv420p() {
+            let Some(nv12_frame) =
+                sws_convert_frame(src_frame, width, height, src_format, av_pix_fmt_nv12())
+            else {
+                if !owned_sw_frame.is_null() {
+                    sys::av_frame_free(&mut owned_sw_frame);
+                }
+                return None;
+            };
+            let y = copy_plane((*nv12_frame).data[0], (*nv12_frame).linesize[0], height);
+            let uv =
+                copy_plane_half_height((*nv12_frame).data[1], (*nv12_frame).linesize[1], height);
+            let mut nv12_mut = nv12_frame;
+            sys::av_frame_free(&mut nv12_mut);
+            RamFrame::Nv12 {
                 y,
                 uv,
                 width,
@@ -702,75 +790,19 @@ fn convert_frame(ctx: &mut OpenContext, av_frame: *mut sys::AVFrame) -> Option<R
                 color_matrix,
                 color_range,
             }
-        } else if src_format == av_pix_fmt_yuv420p() {
-            let y = copy_plane((*src_frame).data[0], (*src_frame).linesize[0], height);
-            let chroma_height = height.div_ceil(2);
-            let u = copy_plane(
-                (*src_frame).data[1],
-                (*src_frame).linesize[1],
-                chroma_height,
-            );
-            let v = copy_plane(
-                (*src_frame).data[2],
-                (*src_frame).linesize[2],
-                chroma_height,
-            );
-            RamFrame::Yuv420p {
-                y,
-                u,
-                v,
-                width,
-                height,
-                color_matrix,
-                color_range,
-            }
         } else {
             let target_fmt = av_pix_fmt_rgba();
-            let sws = sys::sws_getContext(
-                width as i32,
-                height as i32,
-                std::mem::transmute::<i32, sys::AVPixelFormat>(src_format),
-                width as i32,
-                height as i32,
-                std::mem::transmute::<i32, sys::AVPixelFormat>(target_fmt),
-                SWS_BILINEAR,
-                ptr::null_mut(),
-                ptr::null_mut(),
-                ptr::null_mut(),
-            );
-            if sws.is_null() {
+            let Some(rgba_frame) =
+                sws_convert_frame(src_frame, width, height, src_format, target_fmt)
+            else {
                 if !owned_sw_frame.is_null() {
                     sys::av_frame_free(&mut owned_sw_frame);
                 }
-                eprintln!("[neoutl-video-decoder] sws_getContext失敗、フレームを破棄");
                 return None;
-            }
-            let dst = sys::av_frame_alloc();
-            (*dst).format = target_fmt;
-            (*dst).width = width as i32;
-            (*dst).height = height as i32;
-            if sys::av_frame_get_buffer(dst, 32) != 0 {
-                sys::sws_freeContext(sws);
-                sys::av_frame_free(&mut { dst });
-                if !owned_sw_frame.is_null() {
-                    sys::av_frame_free(&mut owned_sw_frame);
-                }
-                eprintln!("[neoutl-video-decoder] av_frame_get_buffer失敗、フレームを破棄");
-                return None;
-            }
-            sys::sws_scale(
-                sws,
-                (*src_frame).data.as_ptr() as *const *const u8,
-                (*src_frame).linesize.as_ptr(),
-                0,
-                height as i32,
-                (*dst).data.as_mut_ptr(),
-                (*dst).linesize.as_mut_ptr(),
-            );
-            sys::sws_freeContext(sws);
-            let plane = copy_plane((*dst).data[0], (*dst).linesize[0], height);
-            let mut dst_mut = dst;
-            sys::av_frame_free(&mut dst_mut);
+            };
+            let plane = copy_plane((*rgba_frame).data[0], (*rgba_frame).linesize[0], height);
+            let mut rgba_mut = rgba_frame;
+            sys::av_frame_free(&mut rgba_mut);
             RamFrame::Rgba8 {
                 plane,
                 width,
@@ -797,69 +829,21 @@ fn promote_to_vram(
         return Some(frame);
     }
 
-    if let RamFrame::Yuv420p {
-        y,
-        u,
-        v,
-        width,
-        height,
-        color_matrix,
-        color_range,
-    } = ram
-    {
-        let Some(device) = shared_wgpu_device() else {
-            eprintln!("[neoutl-video-decoder][診断] YUV420P合成失敗: 共有wgpuデバイス未初期化");
-            return None;
-        };
-        let texture = match crate::colorconv::composite_yuv420p_to_rgba(
-            &device,
-            queue,
-            cache,
-            &y.bytes,
-            y.stride,
-            &u.bytes,
-            u.stride,
-            &v.bytes,
-            v.stride,
-            *width,
-            *height,
-            *color_matrix,
-            *color_range,
-        ) {
-            Ok(texture) => texture,
-            Err(err) => {
-                eprintln!(
-                    "[neoutl-video-decoder][診断] YUV420P合成失敗 frame_index={frame_index} err={err}"
-                );
-                return None;
-            }
-        };
-        let video_frame = VideoFrame(Arc::new(GpuFrame::new(
-            texture,
-            *width,
-            *height,
-            ram.color_meta(),
-            cache.clone(),
-            PixelFormat::Rgba8,
-        )));
-        vram_cache.put(frame_index, video_frame.clone());
-        return Some(video_frame);
-    }
-
-    if let RamFrame::P010 {
+    if let RamFrame::P0xx {
         y,
         uv,
         width,
         height,
+        bit_depth,
         color_matrix,
         color_range,
     } = ram
     {
         let Some(device) = shared_wgpu_device() else {
-            eprintln!("[neoutl-video-decoder][診断] P010合成失敗: 共有wgpuデバイス未初期化");
+            eprintln!("[neoutl-video-decoder][診断] P0xx合成失敗: 共有wgpuデバイス未初期化");
             return None;
         };
-        let texture = match crate::colorconv::composite_p010_to_rgba(
+        let texture = match crate::colorconv::composite_p0xx_to_rgba(
             &device,
             queue,
             cache,
@@ -869,13 +853,14 @@ fn promote_to_vram(
             uv.stride,
             *width,
             *height,
+            *bit_depth,
             *color_matrix,
             *color_range,
         ) {
             Ok(texture) => texture,
             Err(err) => {
                 eprintln!(
-                    "[neoutl-video-decoder][診断] P010合成失敗 frame_index={frame_index} err={err}"
+                    "[neoutl-video-decoder][診断] P0xx合成失敗 frame_index={frame_index} err={err}"
                 );
                 return None;
             }
@@ -984,8 +969,7 @@ fn promote_to_vram(
                 },
             );
         }
-        RamFrame::Yuv420p { .. } => unreachable!("Yuv420pは関数冒頭で早期returnされる"),
-        RamFrame::P010 { .. } => unreachable!("P010は関数冒頭で早期returnされる"),
+        RamFrame::P0xx { .. } => unreachable!("P0xxは関数冒頭で早期returnされる"),
     }
 
     let submission_index = queue.submit(std::iter::empty());

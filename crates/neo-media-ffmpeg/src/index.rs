@@ -97,6 +97,32 @@ impl FrameIndex {
 }
 
 pub unsafe fn build_index(fmt_ctx: *mut sys::AVFormatContext, stream_index: i32) -> FrameIndex {
+    let stream = unsafe { *(*fmt_ctx).streams.add(stream_index as usize) };
+    let nb_index_entries = unsafe { sys::avformat_index_get_entries_count(stream) };
+    if nb_index_entries > 0 {
+        return unsafe { build_index_from_avstream(stream, nb_index_entries) };
+    }
+    build_index_by_scan(fmt_ctx, stream_index)
+}
+
+unsafe fn build_index_from_avstream(
+    stream: *mut sys::AVStream,
+    nb_index_entries: i32,
+) -> FrameIndex {
+    let entries: Vec<FrameIndexEntry> = (0..nb_index_entries)
+        .map(|i| {
+            let entry = unsafe { *sys::avformat_index_get_entry(stream, i) };
+            FrameIndexEntry {
+                pts: entry.timestamp,
+                dts: entry.timestamp,
+                is_key: (entry.flags() & sys::AVINDEX_KEYFRAME) != 0,
+            }
+        })
+        .collect();
+    finalize_index(entries)
+}
+
+fn build_index_by_scan(fmt_ctx: *mut sys::AVFormatContext, stream_index: i32) -> FrameIndex {
     let mut entries = Vec::new();
     let pkt = unsafe { sys::av_packet_alloc() };
     loop {
@@ -116,7 +142,10 @@ pub unsafe fn build_index(fmt_ctx: *mut sys::AVFormatContext, stream_index: i32)
         }
     }
     unsafe { sys::av_packet_free(&mut { pkt }) };
+    finalize_index(entries)
+}
 
+fn finalize_index(mut entries: Vec<FrameIndexEntry>) -> FrameIndex {
     entries.sort_by_key(|e| {
         if e.pts != sys::AV_NOPTS_VALUE {
             e.pts

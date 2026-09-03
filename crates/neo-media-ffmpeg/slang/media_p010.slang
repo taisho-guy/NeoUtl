@@ -1,12 +1,16 @@
-// P010(2plane, Y:R16Uint, UV:Rg16Uint)→RGBA8合成専用シェーダー。
+// P0xx系(P010LE/P012LE/P016LE、2plane、Y:R16Uint、UV:Rg16Uint)→RGBA8合成専用シェーダー。
 // R16Unorm/Rg16Unormはwgpu Features::TEXTURE_FORMAT_16BIT_NORM必須のため、
 // 同フィーチャ有効化有無を問わず動作するR16Uint/Rg16Uint(コア仕様、フィーチャ不要)を採用する。
 // Uintテクスチャはtextureフィルタリング(Sampler)非対応のため、
 // Y平面は等倍のためLoadのみ、UV平面(半解像度)は手動バイリニア補間を行う。
+// P010/P012/P016は共通レイアウト（16bit中上位bit_depth bitに有効値、下位は0埋め）のため、
+// bit_depthをuniformで受け取り正規化式を単一シェーダーで共有する。
 struct ColorUniforms
 {
     uint color_matrix; // 0=BT601, 1=BT709, 2=BT2020
     uint color_range;  // 0=Limited, 1=Full
+    uint bit_depth;    // 10, 12, 16のいずれか
+    uint _pad0;
 };
 
 [[vk::binding(0, 0)]] ConstantBuffer<ColorUniforms> uniforms;
@@ -56,17 +60,28 @@ float3 yuv_to_rgb(float y, float u, float v, uint color_matrix)
     return float3(r, g, b);
 }
 
-// P010の格納値は16bit中上位10bitに有効値、下位6bitは0埋め。>>6で10bit値へ正規化する。
+// 格納値は16bit中上位bit_depth bitに有効値、下位(16-bit_depth)bitは0埋め。
+// >>(16-bit_depth)でbit_depth bit値へ正規化し、(2^bit_depth - 1)で除算する。
+uint normalize_shift()
+{
+    return 16u - uniforms.bit_depth;
+}
+
+float normalize_max()
+{
+    return float((1u << uniforms.bit_depth) - 1u);
+}
+
 float load_y_normalized(int2 coord)
 {
     uint raw = plane_y.Load(int3(coord, 0));
-    return float(raw >> 6u) / 1023.0;
+    return float(raw >> normalize_shift()) / normalize_max();
 }
 
 float2 load_uv_normalized(int2 coord)
 {
     uint2 raw = plane_uv.Load(int3(coord, 0));
-    return float2(raw >> 6u) / 1023.0;
+    return float2(raw >> normalize_shift()) / normalize_max();
 }
 
 float2 sample_uv_bilinear(float2 uv_pos, uint uv_width, uint uv_height)
