@@ -1,6 +1,6 @@
 use std::collections::{HashMap, HashSet, VecDeque};
 
-use crate::frame::{RamFrame, VideoFrame};
+use crate::frame::RamFrame;
 
 struct LruSlotCache<V: Clone> {
     capacity: usize,
@@ -87,26 +87,6 @@ impl RamFrameCache {
 
     pub fn is_empty(&self) -> bool {
         self.inner.is_empty()
-    }
-}
-
-pub struct VramPromotionCache {
-    inner: LruSlotCache<VideoFrame>,
-}
-
-impl VramPromotionCache {
-    pub fn new(capacity: usize) -> Self {
-        Self {
-            inner: LruSlotCache::new(capacity),
-        }
-    }
-
-    pub fn get(&mut self, index: i64) -> Option<VideoFrame> {
-        self.inner.get(index)
-    }
-
-    pub fn put(&mut self, index: i64, frame: VideoFrame) {
-        self.inner.insert(index, frame);
     }
 }
 

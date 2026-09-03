@@ -11,7 +11,8 @@ use ffmpeg_sys_next as sys;
 use neo_media_cache::NeoMediaCache;
 use neo_media_core::PixelFormat;
 
-use crate::cache::{GopCache, GopCacheBlock, RamFrameCache, VramPromotionCache};
+use crate::cache::{GopCache, GopCacheBlock, RamFrameCache};
+use crate::colorconv::P0xxGpuResources;
 use crate::frame::{GpuFrame, PlaneBuffer, RamFrame, VideoFrame, VideoFrameStore};
 use crate::index::{FrameIndex, build_index};
 
@@ -129,7 +130,6 @@ fn av_color_meta_to_uniform(
 const GOP_CACHE_CAPACITY: usize = 3;
 const FORWARD_DECODE_THRESHOLD: i64 = 120;
 const RAM_FRAME_CACHE_MARGIN: usize = 2;
-const VRAM_PROMOTION_CAPACITY: usize = 4;
 
 fn ram_frame_cache_capacity(width: u32, height: u32) -> usize {
     shared_media_cache()
@@ -738,11 +738,12 @@ fn convert_frame(ctx: &mut OpenContext, av_frame: *mut sys::AVFrame) -> Option<R
         let result = if src_format == av_pix_fmt_nv12() {
             let y = copy_plane((*src_frame).data[0], (*src_frame).linesize[0], height);
             let uv = copy_plane_half_height((*src_frame).data[1], (*src_frame).linesize[1], height);
-            RamFrame::Nv12 {
+            RamFrame::P0xx {
                 y,
                 uv,
                 width,
                 height,
+                bit_depth: 8,
                 color_matrix,
                 color_range,
             }
@@ -782,11 +783,12 @@ fn convert_frame(ctx: &mut OpenContext, av_frame: *mut sys::AVFrame) -> Option<R
                 copy_plane_half_height((*nv12_frame).data[1], (*nv12_frame).linesize[1], height);
             let mut nv12_mut = nv12_frame;
             sys::av_frame_free(&mut nv12_mut);
-            RamFrame::Nv12 {
+            RamFrame::P0xx {
                 y,
                 uv,
                 width,
                 height,
+                bit_depth: 8,
                 color_matrix,
                 color_range,
             }
@@ -818,137 +820,73 @@ fn convert_frame(ctx: &mut OpenContext, av_frame: *mut sys::AVFrame) -> Option<R
     }
 }
 
-fn promote_to_vram(
+fn compose_output_frame(
     ram: &RamFrame,
     queue: &wgpu::Queue,
     cache: &Arc<NeoMediaCache>,
-    vram_cache: &mut VramPromotionCache,
-    frame_index: i64,
+    p0xx_resources: &mut P0xxGpuResources,
 ) -> Option<VideoFrame> {
-    if let Some(frame) = vram_cache.get(frame_index) {
-        return Some(frame);
-    }
-
-    if let RamFrame::P0xx {
-        y,
-        uv,
-        width,
-        height,
-        bit_depth,
-        color_matrix,
-        color_range,
-    } = ram
-    {
-        let Some(device) = shared_wgpu_device() else {
-            eprintln!("[neoutl-video-decoder][診断] P0xx合成失敗: 共有wgpuデバイス未初期化");
-            return None;
-        };
-        let texture = match crate::colorconv::composite_p0xx_to_rgba(
-            &device,
-            queue,
-            cache,
-            &y.bytes,
-            y.stride,
-            &uv.bytes,
-            uv.stride,
-            *width,
-            *height,
-            *bit_depth,
-            *color_matrix,
-            *color_range,
-        ) {
-            Ok(texture) => texture,
-            Err(err) => {
-                eprintln!(
-                    "[neoutl-video-decoder][診断] P0xx合成失敗 frame_index={frame_index} err={err}"
-                );
-                return None;
-            }
-        };
-        let video_frame = VideoFrame(Arc::new(GpuFrame::new(
-            texture,
-            *width,
-            *height,
-            ram.color_meta(),
-            cache.clone(),
-            PixelFormat::Rgba8,
-        )));
-        vram_cache.put(frame_index, video_frame.clone());
-        return Some(video_frame);
-    }
-
-    let format = ram.pixel_format();
-    let width = ram.width();
-    let height = ram.height();
-
-    let texture = match cache.acquire_for_write_as(
-        neo_media_cache::KIND_PLAYBACK,
-        format,
-        width,
-        height,
-    ) {
-        Ok(texture) => texture,
-        Err(err) => {
-            eprintln!(
-                "[neoutl-video-decoder][診断] VRAM層acquire失敗 frame_index={frame_index} err={err:?}"
-            );
-            return None;
-        }
-    };
-
     match ram {
-        RamFrame::Nv12 {
+        RamFrame::P0xx {
             y,
             uv,
             width,
             height,
-            ..
+            bit_depth,
+            color_matrix,
+            color_range,
         } => {
-            let chroma_height = height.div_ceil(2);
-            queue.write_texture(
-                wgpu::TexelCopyTextureInfo {
-                    texture: &texture,
-                    mip_level: 0,
-                    origin: wgpu::Origin3d::ZERO,
-                    aspect: wgpu::TextureAspect::Plane0,
-                },
+            let Some(device) = shared_wgpu_device() else {
+                eprintln!("[neoutl-video-decoder][診断] P0xx合成失敗: 共有wgpuデバイス未初期化");
+                return None;
+            };
+            let texture = match crate::colorconv::composite_p0xx_to_rgba(
+                p0xx_resources,
+                &device,
+                queue,
+                cache,
                 &y.bytes,
-                wgpu::TexelCopyBufferLayout {
-                    offset: 0,
-                    bytes_per_row: Some(y.stride),
-                    rows_per_image: Some(*height),
-                },
-                wgpu::Extent3d {
-                    width: *width,
-                    height: *height,
-                    depth_or_array_layers: 1,
-                },
-            );
-            queue.write_texture(
-                wgpu::TexelCopyTextureInfo {
-                    texture: &texture,
-                    mip_level: 0,
-                    origin: wgpu::Origin3d::ZERO,
-                    aspect: wgpu::TextureAspect::Plane1,
-                },
+                y.stride,
                 &uv.bytes,
-                wgpu::TexelCopyBufferLayout {
-                    offset: 0,
-                    bytes_per_row: Some(uv.stride),
-                    rows_per_image: Some(chroma_height),
-                },
-                wgpu::Extent3d {
-                    width: width.div_ceil(2),
-                    height: chroma_height,
-                    depth_or_array_layers: 1,
-                },
-            );
+                uv.stride,
+                *width,
+                *height,
+                *bit_depth,
+                *color_matrix,
+                *color_range,
+            ) {
+                Ok(texture) => texture,
+                Err(err) => {
+                    eprintln!("[neoutl-video-decoder][診断] P0xx合成失敗 err={err}");
+                    return None;
+                }
+            };
+            Some(VideoFrame(Arc::new(GpuFrame::new(
+                texture,
+                *width,
+                *height,
+                ram.color_meta(),
+                cache.clone(),
+                PixelFormat::Rgba8,
+            ))))
         }
         RamFrame::Rgba8 {
             plane,
             width,
             height,
         } => {
+            let texture = match cache.acquire_for_write_as(
+                neo_media_cache::KIND_PLAYBACK,
+                PixelFormat::Rgba8,
+                *width,
+                *height,
+            ) {
+                Ok(texture) => texture,
+                Err(err) => {
+                    eprintln!("[neoutl-video-decoder][診断] VRAM acquire失敗 err={err:?}");
+                    return None;
+                }
+            };
             queue.write_texture(
                 wgpu::TexelCopyTextureInfo {
                     texture: &texture,
@@ -968,23 +906,24 @@ fn promote_to_vram(
                     depth_or_array_layers: 1,
                 },
             );
+            let submission_index = queue.submit(std::iter::empty());
+            cache.mark_ready(
+                PixelFormat::Rgba8,
+                *width,
+                *height,
+                &texture,
+                submission_index,
+            );
+            Some(VideoFrame(Arc::new(GpuFrame::new(
+                texture,
+                *width,
+                *height,
+                ram.color_meta(),
+                cache.clone(),
+                PixelFormat::Rgba8,
+            ))))
         }
-        RamFrame::P0xx { .. } => unreachable!("P0xxは関数冒頭で早期returnされる"),
     }
-
-    let submission_index = queue.submit(std::iter::empty());
-    cache.mark_ready(format, width, height, &texture, submission_index);
-
-    let video_frame = VideoFrame(Arc::new(GpuFrame::new(
-        texture,
-        width,
-        height,
-        ram.color_meta(),
-        cache.clone(),
-        format,
-    )));
-    vram_cache.put(frame_index, video_frame.clone());
-    Some(video_frame)
 }
 
 struct WorkerSpawnRequest<F: FnOnce(VideoMeta) + Send + 'static> {
@@ -1039,7 +978,7 @@ fn run_worker<F: FnOnce(VideoMeta) + Send + 'static>(req: WorkerSpawnRequest<F>)
 
     let mut caches = DecodeCaches {
         ram_cache: RamFrameCache::new(ram_frame_cache_capacity(ctx.width, ctx.height)),
-        vram_cache: VramPromotionCache::new(VRAM_PROMOTION_CAPACITY),
+        p0xx_resources: P0xxGpuResources::new(),
         gop_cache: GopCache::new(GOP_CACHE_CAPACITY),
         last_decoded_frame: -1,
     };
@@ -1100,7 +1039,7 @@ fn run_worker<F: FnOnce(VideoMeta) + Send + 'static>(req: WorkerSpawnRequest<F>)
 
 struct DecodeCaches {
     ram_cache: RamFrameCache,
-    vram_cache: VramPromotionCache,
+    p0xx_resources: P0xxGpuResources,
     gop_cache: GopCache,
     last_decoded_frame: i64,
 }
@@ -1115,7 +1054,7 @@ fn decode_task(
 ) {
     let DecodeCaches {
         ram_cache,
-        vram_cache,
+        p0xx_resources,
         gop_cache,
         last_decoded_frame,
     } = caches;
@@ -1125,21 +1064,13 @@ fn decode_task(
     let target = requested_target.clamp(0, ctx.index.len() - 1);
     let media_cache = shared_media_cache();
 
-    if let Some(frame) = vram_cache.get(target) {
-        store.set_frame(clip_key, target, frame.clone());
-        ctx.last_good_frame = Some(frame);
-        eprintln!(
-            "[neoutl-video-decoder][診断][decode_task終了][vram_cache即応] requested_target={requested_target} target={target}"
-        );
-        return;
-    }
     if let Some(ram_frame) = gop_cache.get(target, ram_cache) {
         if let (Some(_), Some(queue), Some(cache)) = (
             ctx.gpu_device.as_ref(),
             ctx.gpu_queue.as_ref(),
             media_cache.as_ref(),
         ) {
-            if let Some(frame) = promote_to_vram(&ram_frame, queue, cache, vram_cache, target) {
+            if let Some(frame) = compose_output_frame(&ram_frame, queue, cache, p0xx_resources) {
                 store.set_frame(clip_key, target, frame.clone());
                 ctx.last_good_frame = Some(frame);
                 eprintln!(
@@ -1155,7 +1086,7 @@ fn decode_task(
             ctx.gpu_queue.as_ref(),
             media_cache.as_ref(),
         ) {
-            if let Some(frame) = promote_to_vram(&ram_frame, queue, cache, vram_cache, target) {
+            if let Some(frame) = compose_output_frame(&ram_frame, queue, cache, p0xx_resources) {
                 store.set_frame(clip_key, target, frame.clone());
                 ctx.last_good_frame = Some(frame);
                 eprintln!(
@@ -1257,13 +1188,9 @@ fn decode_task(
                                 ctx.gpu_queue.as_ref(),
                                 media_cache.as_ref(),
                             ) {
-                                if let Some(frame) = promote_to_vram(
-                                    &ram_frame,
-                                    queue,
-                                    cache,
-                                    vram_cache,
-                                    decoded_index,
-                                ) {
+                                if let Some(frame) =
+                                    compose_output_frame(&ram_frame, queue, cache, p0xx_resources)
+                                {
                                     ctx.last_good_frame = Some(frame.clone());
                                     store.set_frame(clip_key, decoded_index, frame);
                                     target_dispatched = true;
@@ -1285,7 +1212,7 @@ fn decode_task(
                         media_cache.as_ref(),
                     ) {
                         if let Some(frame) =
-                            promote_to_vram(&ram_frame, queue, cache, vram_cache, decoded_index)
+                            compose_output_frame(&ram_frame, queue, cache, p0xx_resources)
                         {
                             ctx.last_good_frame = Some(frame.clone());
                             store.set_frame(clip_key, decoded_index, frame);

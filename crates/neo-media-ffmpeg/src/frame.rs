@@ -61,14 +61,6 @@ pub struct PlaneBuffer {
 
 #[derive(Clone)]
 pub enum RamFrame {
-    Nv12 {
-        y: PlaneBuffer,
-        uv: PlaneBuffer,
-        width: u32,
-        height: u32,
-        color_matrix: u32,
-        color_range: u32,
-    },
     P0xx {
         y: PlaneBuffer,
         uv: PlaneBuffer,
@@ -88,23 +80,19 @@ pub enum RamFrame {
 impl RamFrame {
     pub fn width(&self) -> u32 {
         match self {
-            RamFrame::Nv12 { width, .. }
-            | RamFrame::P0xx { width, .. }
-            | RamFrame::Rgba8 { width, .. } => *width,
+            RamFrame::P0xx { width, .. } | RamFrame::Rgba8 { width, .. } => *width,
         }
     }
 
     pub fn height(&self) -> u32 {
         match self {
-            RamFrame::Nv12 { height, .. }
-            | RamFrame::P0xx { height, .. }
-            | RamFrame::Rgba8 { height, .. } => *height,
+            RamFrame::P0xx { height, .. } | RamFrame::Rgba8 { height, .. } => *height,
         }
     }
 
     pub fn pixel_format(&self) -> PixelFormat {
         match self {
-            RamFrame::Nv12 { .. } => PixelFormat::Nv12,
+            RamFrame::P0xx { bit_depth: 8, .. } => PixelFormat::Nv12,
             RamFrame::P0xx { bit_depth: 10, .. } => PixelFormat::P010,
             RamFrame::P0xx { bit_depth: 12, .. } => PixelFormat::P012,
             RamFrame::P0xx { .. } => PixelFormat::P016,
@@ -114,12 +102,7 @@ impl RamFrame {
 
     pub fn color_meta(&self) -> neoutl_media_api::ColorMeta {
         match self {
-            RamFrame::Nv12 {
-                color_matrix,
-                color_range,
-                ..
-            }
-            | RamFrame::P0xx {
+            RamFrame::P0xx {
                 color_matrix,
                 color_range,
                 ..
