@@ -121,7 +121,6 @@ const AV_CODEC_HW_CONFIG_METHOD_HW_DEVICE_CTX: i32 = 0x01;
 const FF_THREAD_FRAME: i32 = 1;
 const FF_THREAD_SLICE: i32 = 2;
 const SWS_BILINEAR: i32 = 2;
-const OWN_CONCURRENT_HW_FRAME_HOLD: i32 = 1;
 
 const GOP_CACHE_CAPACITY: usize = 3;
 const FORWARD_DECODE_THRESHOLD: i64 = 120;
@@ -243,7 +242,6 @@ impl Drop for VideoDecoder {
 
 struct HwPixFmtBox {
     pix_fmt: i32,
-    hw_device_ctx: *mut sys::AVBufferRef,
 }
 
 fn resolve_hw_sw_format(stream_sw_format: i32) -> Option<i32> {
@@ -268,39 +266,6 @@ fn resolve_hw_sw_format(stream_sw_format: i32) -> Option<i32> {
     }
 }
 
-unsafe fn try_request_hw_frames_ctx(
-    ctx: *mut sys::AVCodecContext,
-    hw_device_ctx: *mut sys::AVBufferRef,
-    hw_pix_fmt: i32,
-) {
-    unsafe {
-        if hw_device_ctx.is_null() || !(*ctx).hw_frames_ctx.is_null() {
-            return;
-        }
-        let mut frames_ref: *mut sys::AVBufferRef = ptr::null_mut();
-        let ret = sys::avcodec_get_hw_frames_parameters(
-            ctx,
-            hw_device_ctx,
-            std::mem::transmute::<i32, sys::AVPixelFormat>(hw_pix_fmt),
-            &mut frames_ref,
-        );
-        if ret < 0 || frames_ref.is_null() {
-            eprintln!(
-                "[neoutl-video-decoder][診断] avcodec_get_hw_frames_parameters失敗 ret={ret}"
-            );
-            return;
-        }
-        let frames_ctx = (*frames_ref).data as *mut sys::AVHWFramesContext;
-        (*frames_ctx).initial_pool_size += OWN_CONCURRENT_HW_FRAME_HOLD;
-        if sys::av_hwframe_ctx_init(frames_ref) == 0 {
-            (*ctx).hw_frames_ctx = sys::av_buffer_ref(frames_ref);
-        } else {
-            eprintln!("[neoutl-video-decoder][診断] av_hwframe_ctx_init失敗(動的算出プール)");
-        }
-        sys::av_buffer_unref(&mut { frames_ref });
-    }
-}
-
 unsafe extern "C" fn hw_get_format(
     ctx: *mut sys::AVCodecContext,
     pixfmts: *const sys::AVPixelFormat,
@@ -315,9 +280,6 @@ unsafe extern "C" fn hw_get_format(
         let mut p = pixfmts;
         while std::mem::transmute::<sys::AVPixelFormat, i32>(*p) != av_pix_fmt_none() {
             if std::mem::transmute::<sys::AVPixelFormat, i32>(*p) == hw_pix_fmt {
-                if let Some(hw_box) = hw_box {
-                    try_request_hw_frames_ctx(ctx, hw_box.hw_device_ctx, hw_pix_fmt);
-                }
                 return *p;
             }
             p = p.add(1);
@@ -589,11 +551,11 @@ fn open_input(path: &Path, gpu_device: &Option<Arc<wgpu::Device>>) -> Result<Ope
             hw_device_ctx = created_hw_ctx;
             let boxed = Box::new(HwPixFmtBox {
                 pix_fmt: hw_pix_fmt,
-                hw_device_ctx: created_hw_ctx,
             });
             (*dec_ctx).opaque = boxed.as_ref() as *const HwPixFmtBox as *mut c_void;
             (*dec_ctx).get_format = Some(hw_get_format);
             (*dec_ctx).hw_device_ctx = sys::av_buffer_ref(hw_device_ctx);
+            (*dec_ctx).extra_hw_frames = 4;
             hw_pix_fmt_box = Some(boxed);
         } else {
             let capabilities = (*codec).capabilities;
