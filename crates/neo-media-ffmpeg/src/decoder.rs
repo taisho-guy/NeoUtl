@@ -14,8 +14,6 @@ use neo_media_core::PixelFormat;
 use crate::cache::{GopCache, GopCacheBlock, RamFrameCache, VramPromotionCache};
 use crate::frame::{GpuFrame, PlaneBuffer, RamFrame, VideoFrame, VideoFrameStore};
 use crate::index::{FrameIndex, build_index};
-#[cfg(unix)]
-use crate::vaapi_probe::probe_vaapi_node;
 
 static SHARED_WGPU: OnceLock<(Arc<wgpu::Device>, Arc<wgpu::Queue>)> = OnceLock::new();
 static SHARED_CACHE: OnceLock<Arc<NeoMediaCache>> = OnceLock::new();
@@ -361,14 +359,6 @@ impl Drop for OpenContext {
     }
 }
 
-#[cfg(unix)]
-fn is_10bit_pix_fmt(stream_sw_format_i32: i32) -> bool {
-    stream_sw_format_i32 == av_pix_fmt_yuv420p10le()
-        || stream_sw_format_i32 == av_pix_fmt_yuv420p12le()
-        || stream_sw_format_i32 == av_pix_fmt_p010le()
-        || stream_sw_format_i32 == av_pix_fmt_p012le()
-}
-
 unsafe fn config_supports_sw_format(
     hw_device_ctx: *mut sys::AVBufferRef,
     config: *const sys::AVCodecHWConfig,
@@ -422,97 +412,33 @@ unsafe fn config_supports_sw_format(
     }
 }
 
-trait HwAccelProbe: Send + Sync {
-    fn device_type_name(&self) -> &'static str;
-    fn candidate_device_paths(
-        &self,
-        codec_id: sys::AVCodecID,
-        want_10bit: bool,
-    ) -> Vec<Option<CString>>;
-    fn skip_format_query(&self) -> bool {
-        false
-    }
-}
+const HW_DEVICE_TYPE_PRIORITY: &[&str] =
+    &["cuda", "vaapi", "d3d11va", "dxva2", "videotoolbox", "qsv"];
 
-struct GenericHwAccelProbe {
-    name: &'static str,
-    skip_format_query: bool,
-}
-
-impl HwAccelProbe for GenericHwAccelProbe {
-    fn device_type_name(&self) -> &'static str {
-        self.name
-    }
-
-    fn candidate_device_paths(
-        &self,
-        _codec_id: sys::AVCodecID,
-        _want_10bit: bool,
-    ) -> Vec<Option<CString>> {
-        vec![None]
-    }
-
-    fn skip_format_query(&self) -> bool {
-        self.skip_format_query
-    }
-}
-
-#[cfg(unix)]
-struct VaapiHwAccelProbe;
-
-#[cfg(unix)]
-impl HwAccelProbe for VaapiHwAccelProbe {
-    fn device_type_name(&self) -> &'static str {
-        "vaapi"
-    }
-
-    fn candidate_device_paths(
-        &self,
-        codec_id: sys::AVCodecID,
-        want_10bit: bool,
-    ) -> Vec<Option<CString>> {
-        match probe_vaapi_node(codec_id, want_10bit) {
-            Some(node) => {
-                eprintln!(
-                    "[neoutl-video-decoder][diag] VAAPIノード確定 path={:?} matched_profile={:?}",
-                    node.device_path, node.matched_profile
-                );
-                vec![Some(node.device_path)]
-            }
-            None => Vec::new(),
+fn available_hw_device_types() -> Vec<sys::AVHWDeviceType> {
+    let mut found: Vec<sys::AVHWDeviceType> = Vec::new();
+    unsafe {
+        let mut t = sys::av_hwdevice_iterate_types(sys::AVHWDeviceType::AV_HWDEVICE_TYPE_NONE);
+        while t != sys::AVHWDeviceType::AV_HWDEVICE_TYPE_NONE {
+            found.push(t);
+            t = sys::av_hwdevice_iterate_types(t);
         }
     }
-
-    fn skip_format_query(&self) -> bool {
-        true
+    let mut ordered: Vec<sys::AVHWDeviceType> = Vec::new();
+    for name in HW_DEVICE_TYPE_PRIORITY {
+        let c_name = CString::new(*name).expect("固定文字列のCString変換失敗");
+        let device_type = unsafe { sys::av_hwdevice_find_type_by_name(c_name.as_ptr()) };
+        if device_type != sys::AVHWDeviceType::AV_HWDEVICE_TYPE_NONE && found.contains(&device_type)
+        {
+            ordered.push(device_type);
+        }
     }
-}
-
-fn build_hw_accel_probes() -> Vec<Box<dyn HwAccelProbe>> {
-    let mut probes: Vec<Box<dyn HwAccelProbe>> = Vec::new();
-    probes.push(Box::new(GenericHwAccelProbe {
-        name: "cuda",
-        skip_format_query: false,
-    }));
-    #[cfg(unix)]
-    probes.push(Box::new(VaapiHwAccelProbe));
-    #[cfg(windows)]
-    {
-        probes.push(Box::new(GenericHwAccelProbe {
-            name: "d3d11va",
-            skip_format_query: true,
-        }));
-        probes.push(Box::new(GenericHwAccelProbe {
-            name: "dxva2",
-            skip_format_query: false,
-        }));
+    for t in found {
+        if !ordered.contains(&t) {
+            ordered.push(t);
+        }
     }
-    #[cfg(target_os = "macos")]
-    probes.push(Box::new(GenericHwAccelProbe {
-        name: "videotoolbox",
-        skip_format_query: false,
-    }));
-    probes
+    ordered
 }
 
 unsafe fn try_init_hw_device(
@@ -522,103 +448,43 @@ unsafe fn try_init_hw_device(
 ) -> Option<(*mut sys::AVBufferRef, i32)> {
     let _ = gpu_device;
     unsafe {
-        sys::av_log_set_level(sys::AV_LOG_DEBUG);
-        eprintln!(
-            "[neoutl-video-decoder][diag] try_init_hw_device開始 codec={:?} stream_sw_format={:?}",
-            (*codec).id,
-            stream_sw_format
-        );
-        let stream_sw_format_i32 = std::mem::transmute::<sys::AVPixelFormat, i32>(stream_sw_format);
-        let want_10bit = is_10bit_pix_fmt(stream_sw_format_i32);
-        let codec_id = (*codec).id;
-        for probe in build_hw_accel_probes() {
-            let name = probe.device_type_name();
-            let c_name = CString::new(name).ok()?;
-            let device_type = sys::av_hwdevice_find_type_by_name(c_name.as_ptr());
-            if device_type == sys::AVHWDeviceType::AV_HWDEVICE_TYPE_NONE {
-                eprintln!("[neoutl-video-decoder][diag] デバイスタイプ未検出 name={name}");
-                continue;
-            }
+        let device_types = available_hw_device_types();
+        eprintln!("[neoutl-video-decoder][diag] 検出HWデバイスタイプ={device_types:?}");
 
-            let device_paths = probe.candidate_device_paths(codec_id, want_10bit);
-            if device_paths.is_empty() {
-                eprintln!("[neoutl-video-decoder][diag] ノード候補0件 name={name}");
-                continue;
-            }
-
-            for device_path in &device_paths {
-                let mut i = 0;
-                loop {
-                    let config = sys::avcodec_get_hw_config(codec, i);
-                    if config.is_null() {
-                        eprintln!(
-                            "[neoutl-video-decoder][diag] avcodec_get_hw_config終端 name={name} config_index={i}"
-                        );
-                        break;
-                    }
-                    let methods = (*config).methods;
-                    let matches_method = (methods & AV_CODEC_HW_CONFIG_METHOD_HW_DEVICE_CTX) != 0;
-                    eprintln!(
-                        "[neoutl-video-decoder][diag] config走査 name={name} index={i} device_type={:?} config_device_type={:?} methods={methods:#x} matches_method={matches_method}",
-                        device_type,
-                        (*config).device_type
-                    );
-                    if matches_method && (*config).device_type == device_type {
-                        let path_ptr = device_path
-                            .as_ref()
-                            .map(|p| p.as_ptr())
-                            .unwrap_or(ptr::null());
-                        let path_label = device_path
-                            .as_ref()
-                            .map(|p| p.to_string_lossy().into_owned())
-                            .unwrap_or_else(|| "既定".to_owned());
-                        eprintln!(
-                            "[neoutl-video-decoder][diag] av_hwdevice_ctx_create呼出 name={name} node={path_label} config_pix_fmt={:?}",
-                            (*config).pix_fmt
-                        );
-                        let mut hw_device_ctx: *mut sys::AVBufferRef = ptr::null_mut();
-                        let ret = sys::av_hwdevice_ctx_create(
-                            &mut hw_device_ctx,
-                            device_type,
-                            path_ptr,
-                            ptr::null_mut(),
-                            0,
-                        );
-                        eprintln!(
-                            "[neoutl-video-decoder][diag] av_hwdevice_ctx_create結果 name={name} node={path_label} ret={ret}"
-                        );
-                        if ret == 0 {
-                            let format_ok = if probe.skip_format_query() {
-                                eprintln!(
-                                    "[neoutl-video-decoder][diag] {name}はprobe段階または固定フォーマット仕様のためFFmpeg制約問い合わせを省略、対応扱い"
-                                );
-                                true
-                            } else {
-                                config_supports_sw_format(hw_device_ctx, config, stream_sw_format)
-                            };
-                            eprintln!(
-                                "[neoutl-video-decoder][diag] config_supports_sw_format結果 name={name} node={path_label} format_ok={format_ok}"
-                            );
-                            if format_ok {
-                                return Some((
-                                    hw_device_ctx,
-                                    std::mem::transmute::<sys::AVPixelFormat, i32>(
-                                        (*config).pix_fmt,
-                                    ),
-                                ));
-                            }
-                            eprintln!(
-                                "[neoutl-video-decoder] HWデバイス({name}, node={path_label})はストリームフォーマット非対応、次候補探索"
-                            );
-                            sys::av_buffer_unref(&mut hw_device_ctx);
-                        } else {
-                            eprintln!(
-                                "[neoutl-video-decoder] HWデバイス初期化失敗 name={name} node={path_label} ret={ret}"
-                            );
-                        }
-                    }
-                    i += 1;
+        for device_type in device_types {
+            let mut i = 0;
+            loop {
+                let config = sys::avcodec_get_hw_config(codec, i);
+                if config.is_null() {
+                    break;
                 }
+                let methods = (*config).methods;
+                let matches_method = (methods & AV_CODEC_HW_CONFIG_METHOD_HW_DEVICE_CTX) != 0;
+                if matches_method && (*config).device_type == device_type {
+                    let mut hw_device_ctx: *mut sys::AVBufferRef = ptr::null_mut();
+                    let ret = sys::av_hwdevice_ctx_create(
+                        &mut hw_device_ctx,
+                        device_type,
+                        ptr::null(),
+                        ptr::null_mut(),
+                        0,
+                    );
+                    eprintln!(
+                        "[neoutl-video-decoder][diag] av_hwdevice_ctx_create device_type={device_type:?} ret={ret}"
+                    );
+                    if ret == 0 {
+                        let format_ok =
+                            config_supports_sw_format(hw_device_ctx, config, stream_sw_format);
+                        if format_ok {
+                            return Some((
+                                hw_device_ctx,
+                                std::mem::transmute::<sys::AVPixelFormat, i32>((*config).pix_fmt),
+                            ));
+                        }
+                        sys::av_buffer_unref(&mut hw_device_ctx);
+                    }
+                }
+                i += 1;
             }
         }
         eprintln!("[neoutl-video-decoder][diag] try_init_hw_device全候補探索終了、HW初期化失敗");
@@ -989,6 +855,52 @@ fn promote_to_vram(
         return Some(video_frame);
     }
 
+    if let RamFrame::P010 {
+        y,
+        uv,
+        width,
+        height,
+        color_matrix,
+        color_range,
+    } = ram
+    {
+        let Some(device) = shared_wgpu_device() else {
+            eprintln!("[neoutl-video-decoder][診断] P010合成失敗: 共有wgpuデバイス未初期化");
+            return None;
+        };
+        let texture = match crate::colorconv::composite_p010_to_rgba(
+            &device,
+            queue,
+            cache,
+            &y.bytes,
+            y.stride,
+            &uv.bytes,
+            uv.stride,
+            *width,
+            *height,
+            *color_matrix,
+            *color_range,
+        ) {
+            Ok(texture) => texture,
+            Err(err) => {
+                eprintln!(
+                    "[neoutl-video-decoder][診断] P010合成失敗 frame_index={frame_index} err={err}"
+                );
+                return None;
+            }
+        };
+        let video_frame = VideoFrame(Arc::new(GpuFrame::new(
+            texture,
+            *width,
+            *height,
+            ram.color_meta(),
+            cache.clone(),
+            PixelFormat::Rgba8,
+        )));
+        vram_cache.put(frame_index, video_frame.clone());
+        return Some(video_frame);
+    }
+
     let format = ram.pixel_format();
     let width = ram.width();
     let height = ram.height();
@@ -1010,13 +922,6 @@ fn promote_to_vram(
 
     match ram {
         RamFrame::Nv12 {
-            y,
-            uv,
-            width,
-            height,
-            ..
-        }
-        | RamFrame::P010 {
             y,
             uv,
             width,
@@ -1089,6 +994,7 @@ fn promote_to_vram(
             );
         }
         RamFrame::Yuv420p { .. } => unreachable!("Yuv420pは関数冒頭で早期returnされる"),
+        RamFrame::P010 { .. } => unreachable!("P010は関数冒頭で早期returnされる"),
     }
 
     let submission_index = queue.submit(std::iter::empty());

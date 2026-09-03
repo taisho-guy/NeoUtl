@@ -103,12 +103,13 @@ struct FormatPool {
 fn wgpu_texture_format(format: PixelFormat) -> Result<wgpu::TextureFormat, PoolError> {
     match format {
         PixelFormat::Nv12 => Ok(wgpu::TextureFormat::NV12),
-        PixelFormat::P010 => Ok(wgpu::TextureFormat::P010),
         PixelFormat::Rgba8 => Ok(wgpu::TextureFormat::Rgba8Unorm),
         PixelFormat::Rgba16Float => Ok(wgpu::TextureFormat::Rgba16Float),
-        PixelFormat::P012 | PixelFormat::P016 | PixelFormat::Yuv444 | PixelFormat::Yuv420p => {
-            Err(PoolError::UnsupportedFormat(format))
-        }
+        PixelFormat::P010
+        | PixelFormat::P012
+        | PixelFormat::P016
+        | PixelFormat::Yuv444
+        | PixelFormat::Yuv420p => Err(PoolError::UnsupportedFormat(format)),
     }
 }
 
@@ -118,6 +119,7 @@ fn texture_usage(format: PixelFormat) -> wgpu::TextureUsages {
             wgpu::TextureUsages::COPY_DST
                 | wgpu::TextureUsages::TEXTURE_BINDING
                 | wgpu::TextureUsages::STORAGE_BINDING
+                | wgpu::TextureUsages::RENDER_ATTACHMENT
         }
         _ => wgpu::TextureUsages::COPY_DST | wgpu::TextureUsages::TEXTURE_BINDING,
     }
@@ -129,6 +131,7 @@ fn hal_texture_uses(format: PixelFormat) -> wgpu::TextureUses {
             wgpu::TextureUses::COPY_DST
                 | wgpu::TextureUses::RESOURCE
                 | wgpu::TextureUses::STORAGE_READ_WRITE
+                | wgpu::TextureUses::COLOR_TARGET
         }
         _ => wgpu::TextureUses::COPY_DST | wgpu::TextureUses::RESOURCE,
     }
