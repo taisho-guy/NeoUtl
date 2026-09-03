@@ -212,6 +212,11 @@ impl NativeWindow {
         egui_extras::install_image_loaders(&ctx);
         crate::theme::install(&ctx);
         install_locale_fonts(&ctx);
+        {
+            let redraw_ctx = ctx.clone();
+            neoutl_media_runtime::cache::global()
+                .set_redraw_handle(std::sync::Arc::new(move || redraw_ctx.request_repaint()));
+        }
         let state = egui_winit::State::new(
             ctx.clone(),
             egui::ViewportId::ROOT,

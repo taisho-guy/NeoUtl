@@ -87,6 +87,7 @@ enum PathEntry {
 pub struct MediaCache {
     entries: Mutex<HashMap<PathBuf, Arc<Mutex<PathEntry>>>>,
     redraw: Mutex<Option<Arc<dyn Fn() + Send + Sync>>>,
+    ready_generation: std::sync::atomic::AtomicU64,
 }
 
 fn ext_of(path: &Path) -> Result<String, String> {
@@ -214,7 +215,18 @@ impl MediaCache {
         Self {
             entries: Mutex::new(HashMap::new()),
             redraw: Mutex::new(None),
+            ready_generation: std::sync::atomic::AtomicU64::new(0),
         }
+    }
+
+    pub fn ready_generation(&self) -> u64 {
+        self.ready_generation
+            .load(std::sync::atomic::Ordering::Acquire)
+    }
+
+    fn bump_ready_generation(&self) {
+        self.ready_generation
+            .fetch_add(1, std::sync::atomic::Ordering::AcqRel);
     }
 
     fn redraw_handle(&self) -> Arc<dyn Fn() + Send + Sync> {
@@ -223,6 +235,18 @@ impl MediaCache {
             .unwrap()
             .clone()
             .unwrap_or_else(|| Arc::new(|| {}))
+    }
+
+    pub fn set_redraw_handle(&self, handle: Arc<dyn Fn() + Send + Sync>) {
+        *self.redraw.lock().unwrap() = Some(handle);
+    }
+
+    fn frame_ready_notifier(&self) -> Arc<dyn Fn() + Send + Sync> {
+        let redraw = self.redraw_handle();
+        Arc::new(move || {
+            global().bump_ready_generation();
+            redraw();
+        })
     }
 
     fn entry(&self, path: &Path) -> Arc<Mutex<PathEntry>> {
@@ -478,7 +502,7 @@ impl MediaCache {
                     let fail_path = path.to_path_buf();
                     let generation = current_gen;
 
-                    let redraw = self.redraw_handle();
+                    let redraw = self.frame_ready_notifier();
                     let on_fail = Arc::new(move |reason: String| {
                         MediaCache::schedule_prefetch_failure_with_reason(
                             fail_path.clone(),

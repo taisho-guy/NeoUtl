@@ -345,11 +345,11 @@ pub fn compute_perspective_matrix(fov_deg: f32, aspect: f32, near: f32, far: f32
         0.0,
         0.0,
         0.0,
-        (near + far) * range_inv,
+        far * range_inv,
         -1.0,
         0.0,
         0.0,
-        near * far * range_inv * 2.0,
+        near * far * range_inv,
         0.0,
     ]
 }

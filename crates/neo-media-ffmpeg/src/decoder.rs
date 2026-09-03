@@ -378,8 +378,7 @@ unsafe fn config_supports_sw_format(
             (*config).pix_fmt
         );
 
-        let mut constraints =
-            sys::av_hwdevice_get_hwframe_constraints(hw_device_ctx, config as *const c_void);
+        let mut constraints = sys::av_hwdevice_get_hwframe_constraints(hw_device_ctx, ptr::null());
         if constraints.is_null() {
             eprintln!(
                 "[neoutl-video-decoder][diag] av_hwdevice_get_hwframe_constraints=NULL(制約問い合わせ失敗) config_pix_fmt={:?} → 非対応扱いとしてフォールバック",
@@ -441,6 +440,18 @@ fn available_hw_device_types() -> Vec<sys::AVHWDeviceType> {
     ordered
 }
 
+fn first_drm_render_node() -> Option<CString> {
+    let dir = std::fs::read_dir("/dev/dri").ok()?;
+    let mut nodes: Vec<String> = dir
+        .filter_map(|e| e.ok())
+        .filter_map(|e| e.file_name().into_string().ok())
+        .filter(|n| n.starts_with("renderD"))
+        .collect();
+    nodes.sort();
+    let name = nodes.into_iter().next()?;
+    CString::new(format!("/dev/dri/{name}")).ok()
+}
+
 unsafe fn try_init_hw_device(
     codec: *const sys::AVCodec,
     stream_sw_format: sys::AVPixelFormat,
@@ -450,6 +461,17 @@ unsafe fn try_init_hw_device(
     unsafe {
         let device_types = available_hw_device_types();
         eprintln!("[neoutl-video-decoder][diag] 検出HWデバイスタイプ={device_types:?}");
+        eprintln!(
+            "[neoutl-video-decoder][diag] env LIBVA_DRIVER_NAME={:?} WAYLAND_DISPLAY={:?} DISPLAY={:?}",
+            std::env::var("LIBVA_DRIVER_NAME"),
+            std::env::var("WAYLAND_DISPLAY"),
+            std::env::var("DISPLAY")
+        );
+        let vaapi_render_node = first_drm_render_node();
+        eprintln!(
+            "[neoutl-video-decoder][diag] vaapi_render_node={:?}",
+            vaapi_render_node.as_ref().map(|c| c.to_string_lossy())
+        );
 
         for device_type in device_types {
             let mut i = 0;
@@ -461,11 +483,18 @@ unsafe fn try_init_hw_device(
                 let methods = (*config).methods;
                 let matches_method = (methods & AV_CODEC_HW_CONFIG_METHOD_HW_DEVICE_CTX) != 0;
                 if matches_method && (*config).device_type == device_type {
+                    let device_arg = if device_type == sys::AVHWDeviceType::AV_HWDEVICE_TYPE_VAAPI {
+                        vaapi_render_node
+                            .as_ref()
+                            .map_or(ptr::null(), |c| c.as_ptr())
+                    } else {
+                        ptr::null()
+                    };
                     let mut hw_device_ctx: *mut sys::AVBufferRef = ptr::null_mut();
                     let ret = sys::av_hwdevice_ctx_create(
                         &mut hw_device_ctx,
                         device_type,
-                        ptr::null(),
+                        device_arg,
                         ptr::null_mut(),
                         0,
                     );

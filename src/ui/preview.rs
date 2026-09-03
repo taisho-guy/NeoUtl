@@ -32,7 +32,7 @@ pub struct PreviewPanel {
     total_frames: i32,
     fps: i32,
     session_generation: u64,
-    last_rendered_key: Option<(u64, u64, i32)>,
+    last_rendered_key: Option<(u64, u64, i32, u64)>,
     pub open_system_settings: bool,
     pub open_project_settings: bool,
     pub open_keybindings: bool,
@@ -180,7 +180,13 @@ impl PreviewPanel {
         }
 
         let revision = world.revision();
-        let key = (self.session_generation, revision, self.current_frame);
+        let media_generation = neoutl_media_runtime::cache::global().ready_generation();
+        let key = (
+            self.session_generation,
+            revision,
+            self.current_frame,
+            media_generation,
+        );
         let needs_recompose = self.texture_id.is_none() || self.last_rendered_key != Some(key);
         if needs_recompose {
             let (active, captured) = get_active_objects_system(&world);
