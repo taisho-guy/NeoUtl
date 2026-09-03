@@ -292,6 +292,145 @@ unsafe extern "C" fn hw_get_format(
     }
 }
 
+struct PacketSlot {
+    packet: *mut sys::AVPacket,
+    eof: bool,
+}
+
+unsafe impl Send for PacketSlot {}
+
+impl Drop for PacketSlot {
+    fn drop(&mut self) {
+        unsafe {
+            if !self.packet.is_null() {
+                sys::av_packet_free(&mut self.packet);
+            }
+        }
+    }
+}
+
+struct PacketQueue {
+    slot: Mutex<Option<PacketSlot>>,
+    not_full: Condvar,
+    not_empty: Condvar,
+}
+
+impl PacketQueue {
+    fn new() -> Self {
+        Self {
+            slot: Mutex::new(None),
+            not_full: Condvar::new(),
+            not_empty: Condvar::new(),
+        }
+    }
+
+    fn push_blocking(&self, item: PacketSlot, stop: &AtomicBool) -> bool {
+        let mut guard = self.slot.lock().expect("packet queue mutex poisoned");
+        loop {
+            if stop.load(Ordering::Acquire) {
+                return false;
+            }
+            if guard.is_none() {
+                break;
+            }
+            let (g, timeout) = self
+                .not_full
+                .wait_timeout(guard, Duration::from_millis(50))
+                .expect("packet queue condvar poisoned");
+            guard = g;
+            let _ = timeout;
+        }
+        *guard = Some(item);
+        self.not_empty.notify_one();
+        true
+    }
+
+    fn pop_blocking(&self, stop: &AtomicBool) -> Option<PacketSlot> {
+        let mut guard = self.slot.lock().expect("packet queue mutex poisoned");
+        loop {
+            if let Some(item) = guard.take() {
+                self.not_full.notify_one();
+                return Some(item);
+            }
+            if stop.load(Ordering::Acquire) {
+                return None;
+            }
+            let (g, timeout) = self
+                .not_empty
+                .wait_timeout(guard, Duration::from_millis(50))
+                .expect("packet queue condvar poisoned");
+            guard = g;
+            let _ = timeout;
+        }
+    }
+
+    fn flush(&self) {
+        let mut guard = self.slot.lock().expect("packet queue mutex poisoned");
+        *guard = None;
+        self.not_full.notify_one();
+    }
+}
+
+struct SeekLock(Mutex<()>);
+
+impl SeekLock {
+    fn new() -> Self {
+        Self(Mutex::new(()))
+    }
+}
+
+struct SendPtr(*mut sys::AVFormatContext);
+unsafe impl Send for SendPtr {}
+
+fn packet_reader_loop(
+    fmt_ctx: *mut sys::AVFormatContext,
+    stream_index: i32,
+    queue: Arc<PacketQueue>,
+    seek_lock: Arc<SeekLock>,
+    stop: Arc<AtomicBool>,
+) {
+    let fmt_ctx = SendPtr(fmt_ctx);
+    loop {
+        if stop.load(Ordering::Acquire) {
+            return;
+        }
+        let pkt = unsafe { sys::av_packet_alloc() };
+        let read_ret = {
+            let _guard = seek_lock.0.lock().expect("seek lock poisoned");
+            unsafe { sys::av_read_frame(fmt_ctx.0, pkt) }
+        };
+        if read_ret < 0 {
+            unsafe { sys::av_packet_free(&mut { pkt }) };
+            let pushed = queue.push_blocking(
+                PacketSlot {
+                    packet: ptr::null_mut(),
+                    eof: true,
+                },
+                &stop,
+            );
+            if !pushed {
+                return;
+            }
+            continue;
+        }
+        if unsafe { (*pkt).stream_index } != stream_index {
+            unsafe { sys::av_packet_free(&mut { pkt }) };
+            continue;
+        }
+        let pushed = queue.push_blocking(
+            PacketSlot {
+                packet: pkt,
+                eof: false,
+            },
+            &stop,
+        );
+        if !pushed {
+            unsafe { sys::av_packet_free(&mut { pkt }) };
+            return;
+        }
+    }
+}
+
 struct OpenContext {
     fmt_ctx: *mut sys::AVFormatContext,
     dec_ctx: *mut sys::AVCodecContext,
@@ -305,12 +444,21 @@ struct OpenContext {
     gpu_device: Option<Arc<wgpu::Device>>,
     gpu_queue: Option<Arc<wgpu::Queue>>,
     last_good_frame: Option<VideoFrame>,
+    packet_queue: Arc<PacketQueue>,
+    seek_lock: Arc<SeekLock>,
+    reader_stop: Arc<AtomicBool>,
+    reader_join: Option<JoinHandle<()>>,
 }
 
 unsafe impl Send for OpenContext {}
 
 impl Drop for OpenContext {
     fn drop(&mut self) {
+        self.reader_stop.store(true, Ordering::Release);
+        self.packet_queue.flush();
+        if let Some(join) = self.reader_join.take() {
+            let _ = join.join();
+        }
         unsafe {
             if !self.dec_ctx.is_null() {
                 sys::avcodec_free_context(&mut self.dec_ctx);
@@ -610,12 +758,20 @@ fn open_input(path: &Path, gpu_device: &Option<Arc<wgpu::Device>>) -> Result<Ope
             gpu_device: gpu_device_owned,
             gpu_queue: gpu_queue_owned,
             last_good_frame: None,
+            packet_queue: Arc::new(PacketQueue::new()),
+            seek_lock: Arc::new(SeekLock::new()),
+            reader_stop: Arc::new(AtomicBool::new(false)),
+            reader_join: None,
         })
     }
 }
 
 fn seek_to_keyframe(ctx: &mut OpenContext, keyframe_index: i64) {
+    let _seek_guard = ctx.seek_lock.0.lock().expect("seek lock poisoned");
+    ctx.packet_queue.flush();
     unsafe {
+        (*ctx.dec_ctx).skip_loop_filter = sys::AVDiscard::AVDISCARD_NONREF;
+
         let seek_pts = ctx.index.pts_at(keyframe_index);
         if sys::avformat_seek_file(
             ctx.fmt_ctx,
@@ -968,6 +1124,22 @@ fn run_worker<F: FnOnce(VideoMeta) + Send + 'static>(req: WorkerSpawnRequest<F>)
         }
     };
 
+    {
+        let fmt_ctx = SendPtr(ctx.fmt_ctx);
+        let stream_index = ctx.stream_index;
+        let queue = ctx.packet_queue.clone();
+        let seek_lock = ctx.seek_lock.clone();
+        let stop = ctx.reader_stop.clone();
+        let join = std::thread::Builder::new()
+            .name("neoutl-packet-reader".into())
+            .spawn(move || {
+                let fmt_ctx = fmt_ctx;
+                packet_reader_loop(fmt_ctx.0, stream_index, queue, seek_lock, stop)
+            })
+            .expect("packet reader thread spawn failed");
+        ctx.reader_join = Some(join);
+    }
+
     is_ready.store(true, Ordering::Release);
     on_ready(VideoMeta {
         total_frames: ctx.index.len(),
@@ -1121,7 +1293,6 @@ fn decode_task(
     let mut target_dispatched = false;
     let mut decode_budget = (gop_end - key_index + 10).max(500);
     let mut eof = false;
-    let pkt = unsafe { sys::av_packet_alloc() };
     let av_frame = unsafe { sys::av_frame_alloc() };
 
     while decode_budget > 0 {
@@ -1129,22 +1300,24 @@ fn decode_task(
 
         let mut send_ret = 0;
         if !eof {
-            let read_ret = unsafe { sys::av_read_frame(ctx.fmt_ctx, pkt) };
-            if read_ret < 0 {
-                eof = true;
+            match ctx.packet_queue.pop_blocking(&ctx.reader_stop) {
+                Some(mut slot) => {
+                    if slot.eof {
+                        eof = true;
+                    } else {
+                        send_ret = unsafe { sys::avcodec_send_packet(ctx.dec_ctx, slot.packet) };
+                        unsafe { sys::av_packet_free(&mut slot.packet) };
+                    }
+                }
+                None => {
+                    eof = true;
+                }
             }
         }
-        unsafe {
-            if eof {
-                send_ret = sys::avcodec_send_packet(ctx.dec_ctx, ptr::null());
-            } else if (*pkt).stream_index == ctx.stream_index {
-                send_ret = sys::avcodec_send_packet(ctx.dec_ctx, pkt);
-            }
-            if !eof {
-                sys::av_packet_unref(pkt);
-            }
+        if eof {
+            send_ret = unsafe { sys::avcodec_send_packet(ctx.dec_ctx, ptr::null()) };
         }
-        if send_ret < 0 && send_ret != averror_eagain() {
+        if send_ret < 0 && !ignore_send_packet_result(send_ret) {
             break;
         }
 
@@ -1235,9 +1408,7 @@ decoded_frame_count={}",
                     gop_cache.put(new_gop_block);
                 }
                 unsafe {
-                    sys::av_packet_unref(pkt);
                     sys::av_frame_free(&mut { av_frame });
-                    sys::av_packet_free(&mut { pkt });
                 }
                 return;
             }
@@ -1258,7 +1429,6 @@ decoded_frame_count={}",
 
     unsafe {
         sys::av_frame_free(&mut { av_frame });
-        sys::av_packet_free(&mut { pkt });
     }
 
     let decoded_count = new_gop_block.frame_indices.len();
@@ -1303,4 +1473,12 @@ fn averror_eagain() -> i32 {
 
 fn averror_eof() -> i32 {
     sys::AVERROR_EOF
+}
+
+fn ignore_send_packet_result(result: i32) -> bool {
+    result >= 0
+        || result == averror_eagain()
+        || result == averror_eof()
+        || result == sys::AVERROR_INVALIDDATA
+        || result == -(libc::EINVAL as i32)
 }
