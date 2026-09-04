@@ -13,7 +13,7 @@ use elegance::{
     BuiltInTheme, Button, Indicator, IndicatorState, ProgressBar, SegmentedButton, Spinner, Switch,
     TextInput, ThemeSwitcher,
 };
-use fields::{choice_field, int_field, sortable_list_field, toggle_field};
+use fields::{choice_field, int_field, toggle_field};
 use maolan_host_adapter::PluginCatalogEntry;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
@@ -309,18 +309,25 @@ impl SystemSettingsWindow {
         egui::CentralPanel::default()
             .frame(egui::Frame::default().inner_margin(egui::Margin::same(16)))
             .show(ui, |ui| {
-                egui::Grid::new("system_settings_page")
-                    .num_columns(2)
-                    .spacing([10.0, 10.0])
-                    .show(ui, |ui| match self.selected_category {
-                        0 => self.page_general(ui, world_holder),
-                        1 => self.page_appearance(ui, world_holder),
-                        2 => self.page_performance(ui, world_holder),
-                        3 => self.page_decode(ui, world_holder),
-                        4 => self.page_timeline_defaults(ui, world_holder),
-                        5 => self.page_export(ui, world_holder),
-                        6 => self.page_audio_plugins(ui),
-                        _ => self.page_update(ui, world_holder),
+                egui::ScrollArea::vertical()
+                    .auto_shrink([false, false])
+                    .show(ui, |ui| {
+                        egui::Grid::new("system_settings_page")
+                            .num_columns(2)
+                            .spacing([10.0, 10.0])
+                            .show(ui, |ui| match self.selected_category {
+                                0 => self.page_general(ui, world_holder),
+                                1 => self.page_appearance(ui, world_holder),
+                                2 => self.page_performance(ui, world_holder),
+                                3 => self.page_decode(ui, world_holder),
+                                4 => self.page_timeline_defaults(ui, world_holder),
+                                5 => self.page_export(ui, world_holder),
+                                6 => self.page_audio_plugins(ui),
+                                _ => self.page_update(ui, world_holder),
+                            });
+                        if self.selected_category == 3 {
+                            self.page_decode_wide(ui, world_holder);
+                        }
                     });
             });
     }
@@ -461,24 +468,36 @@ impl SystemSettingsWindow {
             });
             neo_media_ffmpeg::set_hw_decode_extra_frames(hw_decode_extra_frames);
         }
+    }
 
+    fn page_decode_wide(&mut self, ui: &mut egui::Ui, world_holder: &Arc<Mutex<EcsWorld>>) {
         ui.separator();
-        ui.end_row();
+        ui.add_space(8.0);
+        ui.label(tr("HWデコードバックエンド優先順"));
+        ui.add_space(4.0);
 
         let mut priority = self.hw_device_type_priority.clone();
-        if sortable_list_field(
-            ui,
-            "HWデコードバックエンド優先順",
-            "hw_device_type_priority",
-            &mut priority,
-            hw_backend_display_name,
-        ) {
+        let mut rows: Vec<elegance::SortableItem> = priority
+            .iter()
+            .map(|id| elegance::SortableItem::new(id.clone(), hw_backend_display_name(id)))
+            .collect();
+
+        egui::ScrollArea::vertical()
+            .max_height(320.0)
+            .show(ui, |ui| {
+                elegance::SortableList::new("hw_device_type_priority", &mut rows).show(ui);
+            });
+
+        priority = rows.into_iter().map(|row| row.id).collect();
+        if priority != self.hw_device_type_priority {
             self.hw_device_type_priority = priority.clone();
             self.persist(world_holder, |s| {
                 s.hw_device_type_priority = priority.clone()
             });
             neo_media_ffmpeg::set_hw_device_type_priority(priority);
         }
+
+        ui.add_space(8.0);
         if ui.button(t!("既定順に戻す")).clicked() {
             let defaults = neo_media_ffmpeg::default_hw_device_type_priority();
             self.hw_device_type_priority = defaults.clone();
@@ -487,7 +506,6 @@ impl SystemSettingsWindow {
             });
             neo_media_ffmpeg::set_hw_device_type_priority(defaults);
         }
-        ui.end_row();
     }
 
     fn page_timeline_defaults(&mut self, ui: &mut egui::Ui, world_holder: &Arc<Mutex<EcsWorld>>) {
