@@ -19,6 +19,7 @@ message SystemSettings {
   bool crash_reporting_enabled = 15;
   int32 max_group_chain_depth = 16;
   int32 hw_decode_extra_frames = 17;
+  repeated string hw_device_type_priority = 18;
 }
 
 message AudioPluginCatalogEntry {

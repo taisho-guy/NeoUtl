@@ -1,6 +1,6 @@
 use crate::localization::tr;
 use egui::Ui;
-use elegance::{Select, Slider, Switch, TextInput};
+use elegance::{Select, Slider, SortableItem, SortableList, Switch, TextInput};
 
 pub fn field_height(ui: &Ui) -> f32 {
     ui.text_style_height(&egui::TextStyle::Body) + 2.0 * ui.spacing().button_padding.y
@@ -68,6 +68,32 @@ pub fn choice_field(ui: &mut Ui, label: &str, options: &[String], selected: &mut
             }
         },
     );
+    ui.end_row();
+    changed
+}
+
+pub fn sortable_list_field(
+    ui: &mut Ui,
+    label: &str,
+    id_salt: &str,
+    items: &mut Vec<String>,
+    item_label: impl Fn(&str) -> String,
+) -> bool {
+    field_label(ui, label);
+
+    let before = items.clone();
+    let mut rows: Vec<SortableItem> = items
+        .iter()
+        .map(|id| SortableItem::new(id.clone(), item_label(id)))
+        .collect();
+
+    ui.vertical(|ui| {
+        SortableList::new(ui.id().with(id_salt), &mut rows).show(ui);
+    });
+
+    *items = rows.into_iter().map(|row| row.id).collect();
+    let changed = *items != before;
+
     ui.end_row();
     changed
 }

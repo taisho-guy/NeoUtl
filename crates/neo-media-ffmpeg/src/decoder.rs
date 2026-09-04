@@ -576,7 +576,7 @@ fn mark_hw_device_poisoned(path: &Path, device_type_i32: i32) {
         .insert(device_type_i32);
 }
 
-const HW_DEVICE_TYPE_PRIORITY: &[&str] = &[
+const HW_DEVICE_TYPE_PRIORITY_DEFAULT: &[&str] = &[
     "cuda",
     "qsv",
     "d3d11va",
@@ -592,6 +592,33 @@ const HW_DEVICE_TYPE_PRIORITY: &[&str] = &[
     "vaapi",
 ];
 
+fn hw_device_type_priority_store() -> &'static Mutex<Vec<String>> {
+    static STORE: OnceLock<Mutex<Vec<String>>> = OnceLock::new();
+    STORE.get_or_init(|| {
+        Mutex::new(
+            HW_DEVICE_TYPE_PRIORITY_DEFAULT
+                .iter()
+                .map(|s| s.to_string())
+                .collect(),
+        )
+    })
+}
+
+pub fn default_hw_device_type_priority() -> Vec<String> {
+    HW_DEVICE_TYPE_PRIORITY_DEFAULT
+        .iter()
+        .map(|s| s.to_string())
+        .collect()
+}
+
+pub fn set_hw_device_type_priority(order: Vec<String>) {
+    let valid: Vec<String> = order
+        .into_iter()
+        .filter(|name| HW_DEVICE_TYPE_PRIORITY_DEFAULT.contains(&name.as_str()))
+        .collect();
+    *hw_device_type_priority_store().lock().unwrap() = valid;
+}
+
 fn available_hw_device_types() -> Vec<sys::AVHWDeviceType> {
     let mut found: Vec<sys::AVHWDeviceType> = Vec::new();
     unsafe {
@@ -602,8 +629,8 @@ fn available_hw_device_types() -> Vec<sys::AVHWDeviceType> {
         }
     }
     let mut ordered: Vec<sys::AVHWDeviceType> = Vec::new();
-    for name in HW_DEVICE_TYPE_PRIORITY {
-        let c_name = CString::new(*name).expect("固定文字列のCString変換失敗");
+    for name in hw_device_type_priority_store().lock().unwrap().iter() {
+        let c_name = CString::new(name.as_str()).expect("設定値のCString変換失敗");
         let device_type = unsafe { sys::av_hwdevice_find_type_by_name(c_name.as_ptr()) };
         if device_type != sys::AVHWDeviceType::AV_HWDEVICE_TYPE_NONE && found.contains(&device_type)
         {

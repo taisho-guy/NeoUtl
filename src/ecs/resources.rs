@@ -1,5 +1,6 @@
 use crate::config;
 use maolan_host_adapter::{PluginCatalogEntry, PluginFormat};
+use neo_media_ffmpeg::default_hw_device_type_priority;
 use shipyard::Unique;
 
 #[derive(Clone, Debug, Unique)]
@@ -214,6 +215,7 @@ pub struct SystemSettingsResource {
     pub crash_reporting_enabled: bool,
     pub max_group_chain_depth: i32,
     pub hw_decode_extra_frames: i32,
+    pub hw_device_type_priority: Vec<String>,
 }
 
 impl From<&SystemSettingsResource> for neoutl_schema::SystemSettings {
@@ -236,6 +238,7 @@ impl From<&SystemSettingsResource> for neoutl_schema::SystemSettings {
             crash_reporting_enabled: value.crash_reporting_enabled,
             max_group_chain_depth: value.max_group_chain_depth,
             hw_decode_extra_frames: value.hw_decode_extra_frames,
+            hw_device_type_priority: value.hw_device_type_priority.clone(),
         }
     }
 }
@@ -267,6 +270,11 @@ impl TryFrom<&neoutl_schema::SystemSettings> for SystemSettingsResource {
                 value.hw_decode_extra_frames
             } else {
                 config::SYSTEM_DEFAULT_HW_DECODE_EXTRA_FRAMES
+            },
+            hw_device_type_priority: if value.hw_device_type_priority.is_empty() {
+                default_hw_device_type_priority()
+            } else {
+                value.hw_device_type_priority.clone()
             },
         })
     }
@@ -373,6 +381,7 @@ impl SystemSettingsResource {
             crash_reporting_enabled: config::SYSTEM_DEFAULT_CRASH_REPORTING_ENABLED,
             max_group_chain_depth: config::SYSTEM_DEFAULT_MAX_GROUP_CHAIN_DEPTH,
             hw_decode_extra_frames: config::SYSTEM_DEFAULT_HW_DECODE_EXTRA_FRAMES,
+            hw_device_type_priority: default_hw_device_type_priority(),
         }
     }
 }

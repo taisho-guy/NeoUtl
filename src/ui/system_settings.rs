@@ -13,7 +13,7 @@ use elegance::{
     BuiltInTheme, Button, Indicator, IndicatorState, ProgressBar, SegmentedButton, Spinner, Switch,
     TextInput, ThemeSwitcher,
 };
-use fields::{choice_field, int_field, toggle_field};
+use fields::{choice_field, int_field, sortable_list_field, toggle_field};
 use maolan_host_adapter::PluginCatalogEntry;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
@@ -40,6 +40,25 @@ enum ScanStatus {
 
 fn category_label(index: usize) -> &'static str {
     CATEGORIES[index].0
+}
+
+fn hw_backend_display_name(id: &str) -> String {
+    match id {
+        "cuda" => "CUDA (NVIDIA)".to_owned(),
+        "qsv" => "QSV (Intel)".to_owned(),
+        "d3d11va" => "D3D11VA (Windows)".to_owned(),
+        "d3d12va" => "D3D12VA (Windows)".to_owned(),
+        "dxva2" => "DXVA2 (Windows)".to_owned(),
+        "videotoolbox" => "VideoToolbox (macOS)".to_owned(),
+        "vulkan" => "Vulkan".to_owned(),
+        "opencl" => "OpenCL".to_owned(),
+        "vdpau" => "VDPAU (Linux)".to_owned(),
+        "amf" => "AMF (AMD)".to_owned(),
+        "mediacodec" => "MediaCodec (Android)".to_owned(),
+        "drm" => "DRM (Linux)".to_owned(),
+        "vaapi" => "VAAPI (Linux)".to_owned(),
+        other => other.to_owned(),
+    }
 }
 
 fn settings_path() -> PathBuf {
@@ -98,6 +117,7 @@ pub struct SystemSettingsWindow {
     audio_max_block_size: i32,
     decode_backend: i32,
     hw_decode_extra_frames: i32,
+    hw_device_type_priority: Vec<String>,
     default_snap: bool,
     magnetic_snap_range: i32,
     export_container: i32,
@@ -125,6 +145,7 @@ impl SystemSettingsWindow {
 
         neoutl_media_runtime::runtime::set_worker_threads(s.worker_threads);
         neo_media_ffmpeg::set_hw_decode_extra_frames(s.hw_decode_extra_frames);
+        neo_media_ffmpeg::set_hw_device_type_priority(s.hw_device_type_priority.clone());
         crate::theme::restore(&s.theme_id);
 
         let update_status = Arc::new(Mutex::new(UpdateStatus::Idle));
@@ -149,6 +170,7 @@ impl SystemSettingsWindow {
             audio_max_block_size: s.audio_max_block_size,
             decode_backend: s.decode_backend,
             hw_decode_extra_frames: s.hw_decode_extra_frames,
+            hw_device_type_priority: s.hw_device_type_priority.clone(),
             default_snap: s.default_snap,
             magnetic_snap_range: s.magnetic_snap_range,
             export_container: s.export_container,
@@ -197,6 +219,8 @@ impl SystemSettingsWindow {
             .set_system_settings(loaded.clone());
         neoutl_media_runtime::runtime::set_worker_threads(loaded.worker_threads);
         neo_media_ffmpeg::set_hw_decode_extra_frames(loaded.hw_decode_extra_frames);
+        neo_media_ffmpeg::set_hw_device_type_priority(loaded.hw_device_type_priority.clone());
+        self.hw_device_type_priority = loaded.hw_device_type_priority.clone();
 
         self.theme_choice = crate::theme::from_id(&loaded.theme_id);
         crate::theme::set(self.theme_choice);
@@ -437,6 +461,33 @@ impl SystemSettingsWindow {
             });
             neo_media_ffmpeg::set_hw_decode_extra_frames(hw_decode_extra_frames);
         }
+
+        ui.separator();
+        ui.end_row();
+
+        let mut priority = self.hw_device_type_priority.clone();
+        if sortable_list_field(
+            ui,
+            "HWデコードバックエンド優先順",
+            "hw_device_type_priority",
+            &mut priority,
+            hw_backend_display_name,
+        ) {
+            self.hw_device_type_priority = priority.clone();
+            self.persist(world_holder, |s| {
+                s.hw_device_type_priority = priority.clone()
+            });
+            neo_media_ffmpeg::set_hw_device_type_priority(priority);
+        }
+        if ui.button(t!("既定順に戻す")).clicked() {
+            let defaults = neo_media_ffmpeg::default_hw_device_type_priority();
+            self.hw_device_type_priority = defaults.clone();
+            self.persist(world_holder, |s| {
+                s.hw_device_type_priority = defaults.clone()
+            });
+            neo_media_ffmpeg::set_hw_device_type_priority(defaults);
+        }
+        ui.end_row();
     }
 
     fn page_timeline_defaults(&mut self, ui: &mut egui::Ui, world_holder: &Arc<Mutex<EcsWorld>>) {
