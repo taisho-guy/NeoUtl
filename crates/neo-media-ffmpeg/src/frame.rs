@@ -70,23 +70,43 @@ pub enum RamFrame {
         color_matrix: u32,
         color_range: u32,
     },
+    Yuv420p {
+        y: PlaneBuffer,
+        u: PlaneBuffer,
+        v: PlaneBuffer,
+        width: u32,
+        height: u32,
+        color_matrix: u32,
+        color_range: u32,
+    },
     Rgba8 {
         plane: PlaneBuffer,
         width: u32,
         height: u32,
+        channel_order: ChannelOrder,
     },
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ChannelOrder {
+    Rgba,
+    Bgra,
 }
 
 impl RamFrame {
     pub fn width(&self) -> u32 {
         match self {
-            RamFrame::P0xx { width, .. } | RamFrame::Rgba8 { width, .. } => *width,
+            RamFrame::P0xx { width, .. }
+            | RamFrame::Yuv420p { width, .. }
+            | RamFrame::Rgba8 { width, .. } => *width,
         }
     }
 
     pub fn height(&self) -> u32 {
         match self {
-            RamFrame::P0xx { height, .. } | RamFrame::Rgba8 { height, .. } => *height,
+            RamFrame::P0xx { height, .. }
+            | RamFrame::Yuv420p { height, .. }
+            | RamFrame::Rgba8 { height, .. } => *height,
         }
     }
 
@@ -96,6 +116,7 @@ impl RamFrame {
             RamFrame::P0xx { bit_depth: 10, .. } => PixelFormat::P010,
             RamFrame::P0xx { bit_depth: 12, .. } => PixelFormat::P012,
             RamFrame::P0xx { .. } => PixelFormat::P016,
+            RamFrame::Yuv420p { .. } => PixelFormat::Yuv420p,
             RamFrame::Rgba8 { .. } => PixelFormat::Rgba8,
         }
     }
@@ -103,6 +124,11 @@ impl RamFrame {
     pub fn color_meta(&self) -> neoutl_media_api::ColorMeta {
         match self {
             RamFrame::P0xx {
+                color_matrix,
+                color_range,
+                ..
+            }
+            | RamFrame::Yuv420p {
                 color_matrix,
                 color_range,
                 ..

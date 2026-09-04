@@ -20,6 +20,7 @@ members = [
     "crates/neo-media-core",
     "crates/neo-media-cache",
     "crates/neo-media-support",
+    "crates/neo-media-swscale",
     "crates/neo-media-ffmpeg",
     "crates/neoutl-effect-shader-build",
     "crates/neoutl-object-shader-build",
@@ -48,6 +49,7 @@ neoutl-mlt-api = { path = "crates/neoutl-mlt-api" }
 neoutl-easing-standard = { path = "crates/easings/neoutl-easing-standard" }
 neoutl-effect-shader-build = { path = "crates/neoutl-effect-shader-build" }
 neoutl-object-shader-build = { path = "crates/neoutl-object-shader-build" }
+neo-media-swscale = { path = "crates/neo-media-swscale" }
 toml = "1"
 serde_json = "1"
 rust-i18n = "4"

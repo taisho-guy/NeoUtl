@@ -98,15 +98,7 @@ pub enum DecodeError {
     Eof,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum TransferError {
-    UnsupportedFormat(PixelFormat),
-    PoolExhausted,
-    SyncFailed(String),
-    CopyFailed(String),
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum PoolError {
     UnsupportedFormat(PixelFormat),
     Exhausted,
@@ -141,18 +133,4 @@ pub trait NeoFramePool: Send + Sync {
         device: &wgpu::Device,
         texture: wgpu::Texture,
     ) -> Result<wgpu::Texture, PoolError>;
-}
-
-pub trait TransferBackend: Send {
-    type Input: DecodedHwFrame;
-
-    fn source_backend(&self) -> SourceBackend;
-
-    fn transfer(
-        &mut self,
-        input: &Self::Input,
-        device: &wgpu::Device,
-        queue: &wgpu::Queue,
-        pool: &dyn NeoFramePool,
-    ) -> Result<NeoFrame, TransferError>;
 }

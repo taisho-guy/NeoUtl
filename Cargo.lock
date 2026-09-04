@@ -2918,11 +2918,13 @@ dependencies = [
 name = "neo-media-ffmpeg"
 version = "0.0.0"
 dependencies = [
+ "bytemuck",
  "ffmpeg-sys-next",
  "libc",
  "neo-media-cache",
  "neo-media-core",
  "neo-media-support",
+ "neo-media-swscale",
  "neoutl-color",
  "neoutl-media-api",
  "neoutl-object-shader-build",
@@ -2935,6 +2937,14 @@ version = "0.0.0"
 dependencies = [
  "ffmpeg-sys-next",
  "libc",
+ "neo-media-core",
+]
+
+[[package]]
+name = "neo-media-swscale"
+version = "0.1.0"
+dependencies = [
+ "bytemuck",
  "neo-media-core",
 ]
 

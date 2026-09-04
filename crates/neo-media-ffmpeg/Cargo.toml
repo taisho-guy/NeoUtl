@@ -9,6 +9,8 @@ neoutl-color = { path = "../neoutl-color" }
 neo-media-core = { path = "../neo-media-core" }
 neo-media-cache = { path = "../neo-media-cache" }
 neo-media-support = { path = "../neo-media-support" }
+neo-media-swscale.workspace = true
+bytemuck.workspace = true
 ffmpeg-sys-next = { version = "9", features = ["swscale"] }
 libc = "0.2"
 wgpu = { version = "30", features = ["vulkan-portability"] }

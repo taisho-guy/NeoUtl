@@ -13,7 +13,7 @@ use neo_media_core::PixelFormat;
 
 use crate::cache::{GopCache, GopCacheBlock, RamFrameCache};
 use crate::colorconv::P0xxGpuResources;
-use crate::frame::{GpuFrame, PlaneBuffer, RamFrame, VideoFrame, VideoFrameStore};
+use crate::frame::{ChannelOrder, GpuFrame, PlaneBuffer, RamFrame, VideoFrame, VideoFrameStore};
 use crate::index::{FrameIndex, build_index};
 
 static SHARED_WGPU: OnceLock<(Arc<wgpu::Device>, Arc<wgpu::Queue>)> = OnceLock::new();
@@ -813,56 +813,6 @@ fn copy_plane_half_height(data_ptr: *const u8, stride: i32, luma_height: u32) ->
     copy_plane(data_ptr, stride, luma_height.div_ceil(2))
 }
 
-const SWS_BILINEAR: i32 = 2;
-
-unsafe fn sws_convert_frame(
-    src: *mut sys::AVFrame,
-    width: u32,
-    height: u32,
-    src_format: i32,
-    dst_format: i32,
-) -> Option<*mut sys::AVFrame> {
-    unsafe {
-        let sws = sys::sws_getContext(
-            width as i32,
-            height as i32,
-            std::mem::transmute::<i32, sys::AVPixelFormat>(src_format),
-            width as i32,
-            height as i32,
-            std::mem::transmute::<i32, sys::AVPixelFormat>(dst_format),
-            SWS_BILINEAR,
-            ptr::null_mut(),
-            ptr::null_mut(),
-            ptr::null_mut(),
-        );
-        if sws.is_null() {
-            eprintln!("[neoutl-video-decoder] sws_getContext失敗、フレームを破棄");
-            return None;
-        }
-        let dst = sys::av_frame_alloc();
-        (*dst).format = dst_format;
-        (*dst).width = width as i32;
-        (*dst).height = height as i32;
-        if sys::av_frame_get_buffer(dst, 32) != 0 {
-            sys::sws_freeContext(sws);
-            sys::av_frame_free(&mut { dst });
-            eprintln!("[neoutl-video-decoder] av_frame_get_buffer失敗、フレームを破棄");
-            return None;
-        }
-        sys::sws_scale(
-            sws,
-            (*src).data.as_ptr() as *const *const u8,
-            (*src).linesize.as_ptr(),
-            0,
-            height as i32,
-            (*dst).data.as_mut_ptr(),
-            (*dst).linesize.as_mut_ptr(),
-        );
-        sys::sws_freeContext(sws);
-        Some(dst)
-    }
-}
-
 fn convert_frame(ctx: &mut OpenContext, av_frame: *mut sys::AVFrame) -> Option<RamFrame> {
     unsafe {
         let hw_pix_fmt = ctx.hw_pix_fmt_box.as_ref().map(|b| b.pix_fmt);
@@ -935,46 +885,59 @@ fn convert_frame(ctx: &mut OpenContext, av_frame: *mut sys::AVFrame) -> Option<R
                 color_range,
             }
         } else if src_format == av_pix_fmt_yuv420p() {
-            let Some(nv12_frame) =
-                sws_convert_frame(src_frame, width, height, src_format, av_pix_fmt_nv12())
-            else {
-                if !owned_sw_frame.is_null() {
-                    sys::av_frame_free(&mut owned_sw_frame);
-                }
-                return None;
-            };
-            let y = copy_plane((*nv12_frame).data[0], (*nv12_frame).linesize[0], height);
-            let uv =
-                copy_plane_half_height((*nv12_frame).data[1], (*nv12_frame).linesize[1], height);
-            let mut nv12_mut = nv12_frame;
-            sys::av_frame_free(&mut nv12_mut);
-            RamFrame::P0xx {
+            let chroma_height = height.div_ceil(2);
+            let y = copy_plane((*src_frame).data[0], (*src_frame).linesize[0], height);
+            let u = copy_plane(
+                (*src_frame).data[1],
+                (*src_frame).linesize[1],
+                chroma_height,
+            );
+            let v = copy_plane(
+                (*src_frame).data[2],
+                (*src_frame).linesize[2],
+                chroma_height,
+            );
+            RamFrame::Yuv420p {
                 y,
-                uv,
+                u,
+                v,
                 width,
                 height,
-                bit_depth: 8,
                 color_matrix,
                 color_range,
             }
-        } else {
-            let target_fmt = av_pix_fmt_rgba();
-            let Some(rgba_frame) =
-                sws_convert_frame(src_frame, width, height, src_format, target_fmt)
-            else {
-                if !owned_sw_frame.is_null() {
-                    sys::av_frame_free(&mut owned_sw_frame);
-                }
-                return None;
-            };
-            let plane = copy_plane((*rgba_frame).data[0], (*rgba_frame).linesize[0], height);
-            let mut rgba_mut = rgba_frame;
-            sys::av_frame_free(&mut rgba_mut);
+        } else if src_format == av_pix_fmt_rgba() {
+            let plane = copy_plane((*src_frame).data[0], (*src_frame).linesize[0], height);
             RamFrame::Rgba8 {
                 plane,
                 width,
                 height,
+                channel_order: ChannelOrder::Rgba,
             }
+        } else if src_format == av_pix_fmt_rgb0() {
+            let plane = copy_plane((*src_frame).data[0], (*src_frame).linesize[0], height);
+            RamFrame::Rgba8 {
+                plane,
+                width,
+                height,
+                channel_order: ChannelOrder::Rgba,
+            }
+        } else if src_format == av_pix_fmt_bgr0() {
+            let plane = copy_plane((*src_frame).data[0], (*src_frame).linesize[0], height);
+            RamFrame::Rgba8 {
+                plane,
+                width,
+                height,
+                channel_order: ChannelOrder::Bgra,
+            }
+        } else {
+            eprintln!(
+                "[neoutl-video-decoder][診断] 未対応pixel_format={src_format} CPUフォールバック廃止のため破棄"
+            );
+            if !owned_sw_frame.is_null() {
+                sys::av_frame_free(&mut owned_sw_frame);
+            }
+            return None;
         };
 
         if !owned_sw_frame.is_null() {
@@ -989,7 +952,7 @@ fn compose_output_frame(
     ram: &RamFrame,
     queue: &wgpu::Queue,
     cache: &Arc<NeoMediaCache>,
-    p0xx_resources: &mut P0xxGpuResources,
+    p0xx_resources: &mut Option<P0xxGpuResources>,
 ) -> Option<VideoFrame> {
     match ram {
         RamFrame::P0xx {
@@ -1005,8 +968,9 @@ fn compose_output_frame(
                 eprintln!("[neoutl-video-decoder][診断] P0xx合成失敗: 共有wgpuデバイス未初期化");
                 return None;
             };
+            let resources = p0xx_resources.get_or_insert_with(|| P0xxGpuResources::new(&device));
             let texture = match crate::colorconv::composite_p0xx_to_rgba(
-                p0xx_resources,
+                resources,
                 &device,
                 queue,
                 cache,
@@ -1035,10 +999,56 @@ fn compose_output_frame(
                 PixelFormat::Rgba8,
             ))))
         }
+        RamFrame::Yuv420p {
+            y,
+            u,
+            v,
+            width,
+            height,
+            color_matrix,
+            color_range,
+        } => {
+            let Some(device) = shared_wgpu_device() else {
+                eprintln!("[neoutl-video-decoder][診断] Yuv420p合成失敗: 共有wgpuデバイス未初期化");
+                return None;
+            };
+            let resources = p0xx_resources.get_or_insert_with(|| P0xxGpuResources::new(&device));
+            let texture = match crate::colorconv::composite_yuv420p_to_rgba(
+                resources,
+                &device,
+                queue,
+                cache,
+                &y.bytes,
+                y.stride,
+                &u.bytes,
+                u.stride,
+                &v.bytes,
+                v.stride,
+                *width,
+                *height,
+                *color_matrix,
+                *color_range,
+            ) {
+                Ok(texture) => texture,
+                Err(err) => {
+                    eprintln!("[neoutl-video-decoder][診断] Yuv420p合成失敗 err={err}");
+                    return None;
+                }
+            };
+            Some(VideoFrame(Arc::new(GpuFrame::new(
+                texture,
+                *width,
+                *height,
+                ram.color_meta(),
+                cache.clone(),
+                PixelFormat::Rgba8,
+            ))))
+        }
         RamFrame::Rgba8 {
             plane,
             width,
             height,
+            channel_order,
         } => {
             let texture = match cache.acquire_for_write_as(
                 neo_media_cache::KIND_PLAYBACK,
@@ -1052,6 +1062,16 @@ fn compose_output_frame(
                     return None;
                 }
             };
+            let upload_bytes: std::borrow::Cow<[u8]> = match channel_order {
+                ChannelOrder::Rgba => std::borrow::Cow::Borrowed(&plane.bytes),
+                ChannelOrder::Bgra => {
+                    let mut swapped = plane.bytes.to_vec();
+                    for px in swapped.chunks_exact_mut(4) {
+                        px.swap(0, 2);
+                    }
+                    std::borrow::Cow::Owned(swapped)
+                }
+            };
             queue.write_texture(
                 wgpu::TexelCopyTextureInfo {
                     texture: &texture,
@@ -1059,7 +1079,7 @@ fn compose_output_frame(
                     origin: wgpu::Origin3d::ZERO,
                     aspect: wgpu::TextureAspect::All,
                 },
-                &plane.bytes,
+                upload_bytes.as_ref(),
                 wgpu::TexelCopyBufferLayout {
                     offset: 0,
                     bytes_per_row: Some(plane.stride),
@@ -1159,7 +1179,7 @@ fn run_worker<F: FnOnce(VideoMeta) + Send + 'static>(req: WorkerSpawnRequest<F>)
 
     let mut caches = DecodeCaches {
         ram_cache: RamFrameCache::new(ram_frame_cache_capacity(ctx.width, ctx.height)),
-        p0xx_resources: P0xxGpuResources::new(),
+        p0xx_resources: None,
         gop_cache: GopCache::new(GOP_CACHE_CAPACITY),
         last_decoded_frame: -1,
     };
@@ -1205,7 +1225,7 @@ fn run_worker<F: FnOnce(VideoMeta) + Send + 'static>(req: WorkerSpawnRequest<F>)
 
 struct DecodeCaches {
     ram_cache: RamFrameCache,
-    p0xx_resources: P0xxGpuResources,
+    p0xx_resources: Option<P0xxGpuResources>,
     gop_cache: GopCache,
     last_decoded_frame: i64,
 }
