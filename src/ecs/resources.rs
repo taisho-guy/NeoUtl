@@ -213,6 +213,7 @@ pub struct SystemSettingsResource {
     pub check_update_on_startup: bool,
     pub crash_reporting_enabled: bool,
     pub max_group_chain_depth: i32,
+    pub hw_decode_extra_frames: i32,
 }
 
 impl From<&SystemSettingsResource> for neoutl_schema::SystemSettings {
@@ -234,6 +235,7 @@ impl From<&SystemSettingsResource> for neoutl_schema::SystemSettings {
             check_update_on_startup: value.check_update_on_startup,
             crash_reporting_enabled: value.crash_reporting_enabled,
             max_group_chain_depth: value.max_group_chain_depth,
+            hw_decode_extra_frames: value.hw_decode_extra_frames,
         }
     }
 }
@@ -259,6 +261,13 @@ impl TryFrom<&neoutl_schema::SystemSettings> for SystemSettingsResource {
             check_update_on_startup: value.check_update_on_startup,
             crash_reporting_enabled: value.crash_reporting_enabled,
             max_group_chain_depth: value.max_group_chain_depth,
+            hw_decode_extra_frames: if value.hw_decode_extra_frames
+                >= config::HW_DECODE_EXTRA_FRAMES_MIN
+            {
+                value.hw_decode_extra_frames
+            } else {
+                config::SYSTEM_DEFAULT_HW_DECODE_EXTRA_FRAMES
+            },
         })
     }
 }
@@ -363,6 +372,7 @@ impl SystemSettingsResource {
             check_update_on_startup: config::SYSTEM_DEFAULT_CHECK_UPDATE_ON_STARTUP,
             crash_reporting_enabled: config::SYSTEM_DEFAULT_CRASH_REPORTING_ENABLED,
             max_group_chain_depth: config::SYSTEM_DEFAULT_MAX_GROUP_CHAIN_DEPTH,
+            hw_decode_extra_frames: config::SYSTEM_DEFAULT_HW_DECODE_EXTRA_FRAMES,
         }
     }
 }

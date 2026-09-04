@@ -27,13 +27,6 @@ jobs:
             binary_name: NeoUtl
             lua_feature: luajit
             install_cmd: pacman -Syu --noconfirm --needed base-devel clang cmake ninja mold rust pkgconf git zip wayland libxkbcommon mesa alsa-lib fontconfig freetype2 expat ffmpeg libva
-          - os: ubuntu-24.04-arm
-            os_name: Linux(ARM64/Arch)
-            container: archlinux:latest
-            artifact_name: neoutl-linux-arm64
-            binary_name: NeoUtl
-            lua_feature: luajit
-            install_cmd: pacman -Syu --noconfirm --needed base-devel clang cmake ninja mold rust pkgconf git zip wayland libxkbcommon mesa alsa-lib fontconfig freetype2 expat ffmpeg libva
           - os: windows-latest
             os_name: Windows(x86_64/MSYS2 CLANG64)
             artifact_name: neoutl-windows-x86_64
@@ -161,5 +154,4 @@ jobs:
           body: ""
           files: |
             dist/neoutl-linux-x86_64/neoutl-linux-x86_64.zip
-            dist/neoutl-linux-arm64/neoutl-linux-arm64.zip
             dist/neoutl-windows-x86_64/neoutl-windows-x86_64.zip

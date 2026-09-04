@@ -6,7 +6,10 @@ pub mod frame;
 pub mod index;
 mod source;
 
-pub use decoder::{VideoDecoder, VideoMeta, set_shared_wgpu_device, shared_wgpu_submit_lock};
+pub use decoder::{
+    VideoDecoder, VideoMeta, set_hw_decode_extra_frames, set_shared_wgpu_device,
+    shared_wgpu_submit_lock,
+};
 pub use encoder::{EncoderBackend, EncoderCodec, EncoderConfig, VideoEncoder, is_hw_encoder_name};
 pub use frame::{GpuFrame, VideoFrame, VideoFrameStore};
 pub use index::{FrameIndex, FrameIndexEntry, build_index};

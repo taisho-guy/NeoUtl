@@ -19,6 +19,15 @@ use crate::index::{FrameIndex, build_index};
 static SHARED_WGPU: OnceLock<(Arc<wgpu::Device>, Arc<wgpu::Queue>)> = OnceLock::new();
 static SHARED_CACHE: OnceLock<Arc<NeoMediaCache>> = OnceLock::new();
 static SHARED_QUEUE_SUBMIT_LOCK: OnceLock<Arc<Mutex<()>>> = OnceLock::new();
+static HW_DECODE_EXTRA_FRAMES: std::sync::atomic::AtomicI32 = std::sync::atomic::AtomicI32::new(16);
+
+pub fn set_hw_decode_extra_frames(count: i32) {
+    HW_DECODE_EXTRA_FRAMES.store(count, std::sync::atomic::Ordering::Release);
+}
+
+fn hw_decode_extra_frames() -> i32 {
+    HW_DECODE_EXTRA_FRAMES.load(std::sync::atomic::Ordering::Acquire)
+}
 
 pub fn shared_wgpu_submit_lock() -> Arc<Mutex<()>> {
     SHARED_QUEUE_SUBMIT_LOCK
@@ -708,7 +717,7 @@ fn open_input(path: &Path, gpu_device: &Option<Arc<wgpu::Device>>) -> Result<Ope
             (*dec_ctx).opaque = boxed.as_ref() as *const HwPixFmtBox as *mut c_void;
             (*dec_ctx).get_format = Some(hw_get_format);
             (*dec_ctx).hw_device_ctx = sys::av_buffer_ref(hw_device_ctx);
-            (*dec_ctx).extra_hw_frames = 4;
+            (*dec_ctx).extra_hw_frames = hw_decode_extra_frames();
             hw_pix_fmt_box = Some(boxed);
         } else {
             let capabilities = (*codec).capabilities;

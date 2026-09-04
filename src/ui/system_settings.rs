@@ -97,6 +97,7 @@ pub struct SystemSettingsWindow {
     worker_threads: i32,
     audio_max_block_size: i32,
     decode_backend: i32,
+    hw_decode_extra_frames: i32,
     default_snap: bool,
     magnetic_snap_range: i32,
     export_container: i32,
@@ -123,6 +124,7 @@ impl SystemSettingsWindow {
         let s = world_holder.lock().unwrap().get_system_settings();
 
         neoutl_media_runtime::runtime::set_worker_threads(s.worker_threads);
+        neo_media_ffmpeg::set_hw_decode_extra_frames(s.hw_decode_extra_frames);
         crate::theme::restore(&s.theme_id);
 
         let update_status = Arc::new(Mutex::new(UpdateStatus::Idle));
@@ -146,6 +148,7 @@ impl SystemSettingsWindow {
             worker_threads: s.worker_threads,
             audio_max_block_size: s.audio_max_block_size,
             decode_backend: s.decode_backend,
+            hw_decode_extra_frames: s.hw_decode_extra_frames,
             default_snap: s.default_snap,
             magnetic_snap_range: s.magnetic_snap_range,
             export_container: s.export_container,
@@ -193,6 +196,7 @@ impl SystemSettingsWindow {
             .unwrap()
             .set_system_settings(loaded.clone());
         neoutl_media_runtime::runtime::set_worker_threads(loaded.worker_threads);
+        neo_media_ffmpeg::set_hw_decode_extra_frames(loaded.hw_decode_extra_frames);
 
         self.theme_choice = crate::theme::from_id(&loaded.theme_id);
         crate::theme::set(self.theme_choice);
@@ -203,6 +207,7 @@ impl SystemSettingsWindow {
         self.worker_threads = loaded.worker_threads;
         self.audio_max_block_size = loaded.audio_max_block_size;
         self.decode_backend = loaded.decode_backend;
+        self.hw_decode_extra_frames = loaded.hw_decode_extra_frames;
         self.default_snap = loaded.default_snap;
         self.magnetic_snap_range = loaded.magnetic_snap_range;
         self.export_container = loaded.export_container;
@@ -416,6 +421,21 @@ impl SystemSettingsWindow {
         ) {
             self.decode_backend = decode_backend;
             self.persist(world_holder, |s| s.decode_backend = decode_backend);
+        }
+
+        let mut hw_decode_extra_frames = self.hw_decode_extra_frames;
+        if int_field(
+            ui,
+            "HWデコードサーフェス予備数",
+            &mut hw_decode_extra_frames,
+            crate::config::HW_DECODE_EXTRA_FRAMES_MIN,
+            crate::config::HW_DECODE_EXTRA_FRAMES_MAX,
+        ) {
+            self.hw_decode_extra_frames = hw_decode_extra_frames;
+            self.persist(world_holder, |s| {
+                s.hw_decode_extra_frames = hw_decode_extra_frames
+            });
+            neo_media_ffmpeg::set_hw_decode_extra_frames(hw_decode_extra_frames);
         }
     }
 
