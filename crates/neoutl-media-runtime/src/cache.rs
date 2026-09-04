@@ -417,7 +417,9 @@ impl MediaCache {
             (failed_plugins, old_workers)
         };
 
-        drop(old_workers);
+        for worker in old_workers {
+            worker.stop_and_join();
+        }
 
         let result = open_video_excluding(path, &failed_plugins);
 
@@ -497,7 +499,9 @@ impl MediaCache {
                     Some(w) => w.generation() != current_gen,
                 };
                 if worker_needs_refresh {
-                    instance.worker = None;
+                    if let Some(stale) = instance.worker.take() {
+                        stale.stop_and_join();
+                    }
                     let decoder = if let Some(d) =
                         spare_decoder.or_else(|| instance.pending_decoder.take())
                     {

@@ -1,11 +1,33 @@
 use egui_wgpu::wgpu;
 use neoutl_media_api::{ColorMeta, VideoSource};
 use std::collections::{HashMap, VecDeque};
+use std::sync::atomic::AtomicU64;
 use std::sync::atomic::{AtomicI64, Ordering};
 use std::sync::mpsc::{self, RecvTimeoutError};
 use std::sync::{Arc, Condvar, Mutex};
-use std::thread::{self, ThreadId};
+use std::thread;
 use std::time::Duration;
+
+static NEXT_WORKER_TOKEN: AtomicU64 = AtomicU64::new(1);
+
+thread_local! {
+    static ACTIVE_WORKER_TOKEN: std::cell::Cell<Option<u64>> = const { std::cell::Cell::new(None) };
+}
+
+struct ActiveWorkerTokenGuard;
+
+impl ActiveWorkerTokenGuard {
+    fn enter(token: u64) -> Self {
+        ACTIVE_WORKER_TOKEN.with(|c| c.set(Some(token)));
+        Self
+    }
+}
+
+impl Drop for ActiveWorkerTokenGuard {
+    fn drop(&mut self) {
+        ACTIVE_WORKER_TOKEN.with(|c| c.set(None));
+    }
+}
 
 const PREFETCH_RADIUS: i64 = 8;
 pub(crate) const RING_CAPACITY: usize = neoutl_media_api::VIDEO_TEXTURE_POOL_CAPACITY;
@@ -82,8 +104,9 @@ enum DecodeResponse {
 }
 
 struct DecodeThreadHandle {
-    req_tx: mpsc::Sender<DecodeRequest>,
+    req_tx: Option<mpsc::Sender<DecodeRequest>>,
     resp_rx: mpsc::Receiver<DecodeResponse>,
+    join: Option<thread::JoinHandle<()>>,
     hung: bool,
 }
 
@@ -96,7 +119,7 @@ impl DecodeThreadHandle {
         let (req_tx, req_rx) = mpsc::channel::<DecodeRequest>();
         let (resp_tx, resp_rx) = mpsc::channel::<DecodeResponse>();
 
-        thread::spawn(move || {
+        let join = thread::spawn(move || {
             while let Ok(req) = req_rx.recv() {
                 match req {
                     DecodeRequest::PrefetchOnly(index) => {
@@ -133,8 +156,9 @@ impl DecodeThreadHandle {
         });
 
         Self {
-            req_tx,
+            req_tx: Some(req_tx),
             resp_rx,
+            join: Some(join),
             hung: false,
         }
     }
@@ -145,8 +169,11 @@ impl DecodeThreadHandle {
                 "decoderはhung状態のためprefetch不可 (frame={frame_index})"
             ));
         }
-        if self
-            .req_tx
+        let Some(req_tx) = self.req_tx.as_ref() else {
+            self.hung = true;
+            return Err(format!("decode thread終了済み (frame={frame_index})"));
+        };
+        if req_tx
             .send(DecodeRequest::PrefetchOnly(frame_index))
             .is_err()
         {
@@ -181,7 +208,11 @@ impl DecodeThreadHandle {
                 "decoderは既にwatchdogタイムアウトでhung状態 (frame={frame_index})"
             ));
         }
-        if self.req_tx.send(DecodeRequest::Full(frame_index)).is_err() {
+        let Some(req_tx) = self.req_tx.as_ref() else {
+            self.hung = true;
+            return Err(format!("decode thread終了済み (frame={frame_index})"));
+        };
+        if req_tx.send(DecodeRequest::Full(frame_index)).is_err() {
             self.hung = true;
             return Err(format!("decode thread消失 (frame={frame_index})"));
         }
@@ -209,6 +240,15 @@ impl DecodeThreadHandle {
     }
 }
 
+impl Drop for DecodeThreadHandle {
+    fn drop(&mut self) {
+        self.req_tx = None;
+        if let Some(join) = self.join.take() {
+            let _ = join.join();
+        }
+    }
+}
+
 pub struct DecodeWorker {
     generation: u64,
     requested: Arc<AtomicI64>,
@@ -217,7 +257,7 @@ pub struct DecodeWorker {
     last_error: Arc<Mutex<Option<String>>>,
 
     task: Option<tokio::task::JoinHandle<()>>,
-    worker_thread_id: Arc<Mutex<Option<ThreadId>>>,
+    worker_token: u64,
 }
 
 impl DecodeWorker {
@@ -233,19 +273,18 @@ impl DecodeWorker {
         let signal = Arc::new((Mutex::new(false), Condvar::new()));
         let store = Arc::new(Mutex::new(TextureStore::new()));
         let last_error = Arc::new(Mutex::new(None));
-        let worker_thread_id = Arc::new(Mutex::new(None));
+        let worker_token = NEXT_WORKER_TOKEN.fetch_add(1, Ordering::Relaxed);
         let exact_queue = Arc::new(Mutex::new(VecDeque::new()));
 
         let requested_t = requested.clone();
         let signal_t = signal.clone();
         let store_t = store.clone();
         let last_error_t = last_error.clone();
-        let worker_thread_id_t = worker_thread_id.clone();
         let on_fail_t = on_fail.clone();
         let exact_queue_t = exact_queue.clone();
 
         let task = super::runtime::handle().spawn_blocking(move || {
-            *worker_thread_id_t.lock().unwrap() = Some(std::thread::current().id());
+            let _token_guard = ActiveWorkerTokenGuard::enter(worker_token);
 
             let total_frames_t = decoder.total_frames();
             let mut decode_thread = DecodeThreadHandle::spawn(decoder, device, queue);
@@ -388,7 +427,7 @@ impl DecodeWorker {
             store,
             last_error,
             task: Some(task),
-            worker_thread_id,
+            worker_token,
         }
     }
 
@@ -414,6 +453,27 @@ impl DecodeWorker {
     pub fn take_last_error(&self) -> Option<String> {
         self.last_error.lock().unwrap().take()
     }
+
+    pub fn stop_and_join(mut self) {
+        self.requested.store(STOP_SENTINEL, Ordering::Release);
+        let (lock, cvar) = &*self.signal;
+        *lock.lock().unwrap() = true;
+        cvar.notify_one();
+
+        if let Some(task) = self.task.take() {
+            let is_self = ACTIVE_WORKER_TOKEN.with(|c| c.get()) == Some(self.worker_token);
+            if is_self {
+                eprintln!(
+                    "[decode-worker] stop_and_join自スレッドから呼び出し、同期待機不可のためabortへ縮退"
+                );
+                task.abort();
+                return;
+            }
+            super::runtime::handle().block_on(async move {
+                let _ = task.await;
+            });
+        }
+    }
 }
 
 impl Drop for DecodeWorker {
@@ -424,10 +484,9 @@ impl Drop for DecodeWorker {
         cvar.notify_one();
 
         if let Some(task) = self.task.take() {
-            let current = std::thread::current().id();
-            let worker = *self.worker_thread_id.lock().unwrap();
+            let is_self = ACTIVE_WORKER_TOKEN.with(|c| c.get()) == Some(self.worker_token);
 
-            if worker == Some(current) {
+            if is_self {
                 task.abort();
                 return;
             }

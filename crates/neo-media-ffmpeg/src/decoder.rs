@@ -1,5 +1,6 @@
+use std::collections::{HashMap, HashSet};
 use std::ffi::{CString, c_void};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::ptr;
 use std::sync::atomic::{AtomicBool, AtomicI64, Ordering};
 use std::sync::{Arc, Condvar, Mutex, OnceLock};
@@ -457,6 +458,9 @@ struct OpenContext {
     seek_lock: Arc<SeekLock>,
     reader_stop: Arc<AtomicBool>,
     reader_join: Option<JoinHandle<()>>,
+    hw_device_type: i32,
+    source_path: PathBuf,
+    hw_poisoned: bool,
 }
 
 unsafe impl Send for OpenContext {}
@@ -467,6 +471,17 @@ impl Drop for OpenContext {
         self.packet_queue.flush();
         if let Some(join) = self.reader_join.take() {
             let _ = join.join();
+        }
+        if self.hw_poisoned {
+            eprintln!(
+                "[neoutl-video-decoder][診断][hw_poisoned] dec_ctx/hw_device_ctx解放省略（ドライバクラッシュ回避、意図的リーク）"
+            );
+            unsafe {
+                if !self.fmt_ctx.is_null() {
+                    sys::avformat_close_input(&mut self.fmt_ctx);
+                }
+            }
+            return;
         }
         unsafe {
             if !self.dec_ctx.is_null() {
@@ -534,8 +549,48 @@ unsafe fn config_supports_sw_format(
     }
 }
 
-const HW_DEVICE_TYPE_PRIORITY: &[&str] =
-    &["cuda", "vaapi", "d3d11va", "dxva2", "videotoolbox", "qsv"];
+fn poisoned_hw_registry() -> &'static Mutex<HashMap<PathBuf, HashSet<i32>>> {
+    static REGISTRY: OnceLock<Mutex<HashMap<PathBuf, HashSet<i32>>>> = OnceLock::new();
+    REGISTRY.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+fn poisoned_hw_types_for(path: &Path) -> HashSet<i32> {
+    poisoned_hw_registry()
+        .lock()
+        .unwrap()
+        .get(path)
+        .cloned()
+        .unwrap_or_default()
+}
+
+fn mark_hw_device_poisoned(path: &Path, device_type_i32: i32) {
+    eprintln!(
+        "[neoutl-video-decoder][診断][hw_poisoned登録] path={} device_type={device_type_i32}",
+        path.display()
+    );
+    poisoned_hw_registry()
+        .lock()
+        .unwrap()
+        .entry(path.to_path_buf())
+        .or_default()
+        .insert(device_type_i32);
+}
+
+const HW_DEVICE_TYPE_PRIORITY: &[&str] = &[
+    "cuda",
+    "qsv",
+    "d3d11va",
+    "d3d12va",
+    "dxva2",
+    "videotoolbox",
+    "vulkan",
+    "opencl",
+    "vdpau",
+    "amf",
+    "mediacodec",
+    "drm",
+    "vaapi",
+];
 
 fn available_hw_device_types() -> Vec<sys::AVHWDeviceType> {
     let mut found: Vec<sys::AVHWDeviceType> = Vec::new();
@@ -579,11 +634,17 @@ unsafe fn try_init_hw_device(
     codec: *const sys::AVCodec,
     stream_sw_format: sys::AVPixelFormat,
     gpu_device: &Option<Arc<wgpu::Device>>,
-) -> Option<(*mut sys::AVBufferRef, i32)> {
+    excluded_device_types: &HashSet<i32>,
+) -> Option<(*mut sys::AVBufferRef, i32, i32)> {
     let _ = gpu_device;
     unsafe {
         let device_types = available_hw_device_types();
         eprintln!("[neoutl-video-decoder][diag] 検出HWデバイスタイプ={device_types:?}");
+        if !excluded_device_types.is_empty() {
+            eprintln!(
+                "[neoutl-video-decoder][diag] poison済みのため除外するdevice_type={excluded_device_types:?}"
+            );
+        }
         eprintln!(
             "[neoutl-video-decoder][diag] env LIBVA_DRIVER_NAME={:?} WAYLAND_DISPLAY={:?} DISPLAY={:?}",
             std::env::var("LIBVA_DRIVER_NAME"),
@@ -597,6 +658,11 @@ unsafe fn try_init_hw_device(
         );
 
         for device_type in device_types {
+            if excluded_device_types.contains(&std::mem::transmute::<sys::AVHWDeviceType, i32>(
+                device_type,
+            )) {
+                continue;
+            }
             let mut i = 0;
             loop {
                 let config = sys::avcodec_get_hw_config(codec, i);
@@ -632,6 +698,7 @@ unsafe fn try_init_hw_device(
                             return Some((
                                 hw_device_ctx,
                                 std::mem::transmute::<sys::AVPixelFormat, i32>((*config).pix_fmt),
+                                std::mem::transmute::<sys::AVHWDeviceType, i32>(device_type),
                             ));
                         }
                         sys::av_buffer_unref(&mut hw_device_ctx);
@@ -703,14 +770,17 @@ fn open_input(path: &Path, gpu_device: &Option<Arc<wgpu::Device>>) -> Result<Ope
 
         let mut hw_device_ctx: *mut sys::AVBufferRef = ptr::null_mut();
         let mut hw_pix_fmt_box: Option<Box<HwPixFmtBox>> = None;
+        let mut hw_device_type_i32: i32 = 0;
 
         let stream_sw_format =
             std::mem::transmute::<i32, sys::AVPixelFormat>((*(*stream).codecpar).format);
 
-        if let Some((created_hw_ctx, hw_pix_fmt)) =
-            try_init_hw_device(codec, stream_sw_format, gpu_device)
+        let excluded = poisoned_hw_types_for(path);
+        if let Some((created_hw_ctx, hw_pix_fmt, device_type_i32)) =
+            try_init_hw_device(codec, stream_sw_format, gpu_device, &excluded)
         {
             hw_device_ctx = created_hw_ctx;
+            hw_device_type_i32 = device_type_i32;
             let boxed = Box::new(HwPixFmtBox {
                 pix_fmt: hw_pix_fmt,
             });
@@ -771,6 +841,9 @@ fn open_input(path: &Path, gpu_device: &Option<Arc<wgpu::Device>>) -> Result<Ope
             seek_lock: Arc::new(SeekLock::new()),
             reader_stop: Arc::new(AtomicBool::new(false)),
             reader_join: None,
+            hw_poisoned: false,
+            hw_device_type: hw_device_type_i32,
+            source_path: path.to_path_buf(),
         })
     }
 }
@@ -1345,6 +1418,14 @@ fn decode_task(
                 break;
             }
             if recv_ret < 0 {
+                if !ctx.hw_device_ctx.is_null() {
+                    ctx.hw_poisoned = true;
+                    mark_hw_device_poisoned(&ctx.source_path, ctx.hw_device_type);
+                    eprintln!(
+                        "[neoutl-video-decoder][診断][hw_poisoned検出] recv_ret={recv_ret} target={target} hwaccel致命的エラー、以後dec_ctx解放を禁止、backend={}除外登録",
+                        ctx.hw_device_type
+                    );
+                }
                 break;
             }
 
