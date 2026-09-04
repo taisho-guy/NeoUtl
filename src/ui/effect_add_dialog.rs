@@ -1,5 +1,6 @@
 use crate::localization::tr;
 use crate::ui::types::CatalogRow;
+use crate::ui::ui_ext::UiExt;
 use egui::Ui;
 use elegance::{Button, SegmentedControl, TextInput};
 
@@ -40,19 +41,18 @@ impl EffectAddDialog {
         let mut confirmed_id = None;
         let mut close_clicked = false;
 
-        egui::Panel::bottom("add_effect_footer")
-            .frame(egui::Frame::default().inner_margin(4.0))
-            .show(ui, |ui| {
+        egui::Panel::bottom("add_effect_footer").show(ui, |ui| {
+            ui.footer_bar(|ui| {
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     if ui.add(Button::new(t!("閉じる"))).clicked() {
                         close_clicked = true;
                     }
                 });
             });
+        });
 
-        egui::CentralPanel::default()
-            .frame(egui::Frame::default().inner_margin(4.0))
-            .show(ui, |ui| {
+        egui::CentralPanel::default().show(ui, |ui| {
+            ui.page_content(|ui| {
                 ui.horizontal(|ui| {
                     ui.label(t!("検索:"));
                     let hint = t!("エフェクト名を検索…").to_string();
@@ -118,6 +118,7 @@ impl EffectAddDialog {
                         }
                     });
             });
+        });
 
         if confirmed_id.is_some() || close_clicked {
             self.close();

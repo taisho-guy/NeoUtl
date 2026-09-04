@@ -4,6 +4,7 @@ use crate::project;
 use crate::ui::system_settings::fields::{
     choice_field, float_field, int_field, name_field, toggle_field,
 };
+use crate::ui::ui_ext::UiExt;
 use egui::{Context, Ui};
 
 pub struct SceneSettingsWindow {
@@ -143,15 +144,13 @@ impl SceneSettingsWindow {
         } else {
             t!("シーン設定")
         };
-        let section_color = egui::Color32::from_rgb(0x8a, 0xab, 0xff);
         let mut confirmed = false;
         let mut close_requested = false;
 
         ctx.send_viewport_cmd(egui::ViewportCommand::Title(title));
 
-        egui::Panel::bottom("add_scene_footer")
-            .frame(egui::Frame::default().inner_margin(4.0))
-            .show(ui, |ui| {
+        egui::Panel::bottom("add_scene_footer").show(ui, |ui| {
+            ui.footer_bar(|ui| {
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     if ui.button(t!("OK")).clicked() {
                         confirmed = true;
@@ -161,73 +160,69 @@ impl SceneSettingsWindow {
                     }
                 });
             });
+        });
 
         egui::CentralPanel::default().show(ui, |ui| {
-            ui.group(|ui| {
-                ui.colored_label(section_color, t!("基本設定"));
-                egui::Grid::new("scene_settings_basic")
-                    .num_columns(2)
-                    .show(ui, |ui| {
-                        name_field(ui, "シーン名:", &mut self.scene_name);
-                        int_field(ui, "幅:", &mut self.scene_width, 1, 8000);
-                        int_field(ui, "高さ:", &mut self.scene_height, 1, 8000);
-                        float_field(ui, "FPS:", &mut self.scene_fps);
-                    });
-            });
-
-            ui.group(|ui| {
-                ui.colored_label(section_color, t!("編集とスナップ"));
-                ui.set_width(ui.available_width());
-                egui::Grid::new("scene_settings_snap")
-                    .num_columns(2)
-                    .show(ui, |ui| {
-                        toggle_field(ui, "スナップを有効にする", &mut self.enable_snap);
-                        int_field(
-                            ui,
-                            "磁力スナップ範囲:",
-                            &mut self.magnetic_snap_range,
-                            1,
-                            100,
-                        );
-                        let grid_mode_options = [
-                            "自動 (秒/フレーム)".to_string(),
-                            "BPM (音楽)".to_string(),
-                            "フレーム数固定".to_string(),
-                        ];
-                        choice_field(
-                            ui,
-                            "グリッドモード:",
-                            &grid_mode_options,
-                            &mut self.grid_mode,
-                        );
-                    });
-            });
-
-            if self.grid_mode == 1 {
-                ui.group(|ui| {
-                    ui.colored_label(section_color, t!("BPM設定"));
-                    ui.set_width(ui.available_width());
-                    egui::Grid::new("scene_settings_bpm")
+            ui.page_content(|ui| {
+                ui.section(t!("基本設定"), |ui| {
+                    egui::Grid::new("scene_settings_basic")
                         .num_columns(2)
                         .show(ui, |ui| {
-                            float_field(ui, "BPM:", &mut self.grid_bpm);
-                            int_field(ui, "拍子 (分割数):", &mut self.grid_subdivision, 1, 32);
-                            float_field(ui, "オフセット (秒):", &mut self.grid_offset);
+                            name_field(ui, "シーン名:", &mut self.scene_name);
+                            int_field(ui, "幅:", &mut self.scene_width, 1, 8000);
+                            int_field(ui, "高さ:", &mut self.scene_height, 1, 8000);
+                            float_field(ui, "FPS:", &mut self.scene_fps);
                         });
                 });
-            }
 
-            if self.grid_mode == 2 {
-                ui.group(|ui| {
-                    ui.colored_label(section_color, t!("フレーム設定"));
-                    ui.set_width(ui.available_width());
-                    egui::Grid::new("scene_settings_frame")
+                ui.section(t!("編集とスナップ"), |ui| {
+                    egui::Grid::new("scene_settings_snap")
                         .num_columns(2)
                         .show(ui, |ui| {
-                            int_field(ui, "間隔 (Frames):", &mut self.grid_interval, 1, 1000);
+                            toggle_field(ui, "スナップを有効にする", &mut self.enable_snap);
+                            int_field(
+                                ui,
+                                "磁力スナップ範囲:",
+                                &mut self.magnetic_snap_range,
+                                1,
+                                100,
+                            );
+                            let grid_mode_options = [
+                                "自動 (秒/フレーム)".to_string(),
+                                "BPM (音楽)".to_string(),
+                                "フレーム数固定".to_string(),
+                            ];
+                            choice_field(
+                                ui,
+                                "グリッドモード:",
+                                &grid_mode_options,
+                                &mut self.grid_mode,
+                            );
                         });
                 });
-            }
+
+                if self.grid_mode == 1 {
+                    ui.section(t!("BPM設定"), |ui| {
+                        egui::Grid::new("scene_settings_bpm")
+                            .num_columns(2)
+                            .show(ui, |ui| {
+                                float_field(ui, "BPM:", &mut self.grid_bpm);
+                                int_field(ui, "拍子 (分割数):", &mut self.grid_subdivision, 1, 32);
+                                float_field(ui, "オフセット (秒):", &mut self.grid_offset);
+                            });
+                    });
+                }
+
+                if self.grid_mode == 2 {
+                    ui.section(t!("フレーム設定"), |ui| {
+                        egui::Grid::new("scene_settings_frame")
+                            .num_columns(2)
+                            .show(ui, |ui| {
+                                int_field(ui, "間隔 (Frames):", &mut self.grid_interval, 1, 1000);
+                            });
+                    });
+                }
+            });
         });
 
         if confirmed {

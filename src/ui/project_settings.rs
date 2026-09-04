@@ -1,6 +1,7 @@
 use crate::app_state::{self, SharedAppState};
 use crate::project;
 use crate::ui::system_settings::fields::{choice_field, name_field};
+use crate::ui::ui_ext::UiExt;
 use egui::{Context, Ui};
 
 pub struct ProjectSettingsWindow {
@@ -69,9 +70,8 @@ impl ProjectSettingsWindow {
         let mut confirmed = false;
         let mut close_requested = false;
 
-        egui::Panel::bottom("project_setting_footer")
-            .frame(egui::Frame::default().inner_margin(4.0))
-            .show(ui, |ui| {
+        egui::Panel::bottom("project_setting_footer").show(ui, |ui| {
+            ui.footer_bar(|ui| {
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     if ui.button(t!("OK")).clicked() {
                         confirmed = true;
@@ -81,57 +81,58 @@ impl ProjectSettingsWindow {
                     }
                 })
             });
+        });
 
         egui::CentralPanel::default().show(ui, |ui| {
-            ui.group(|ui| {
-                ui.colored_label(egui::Color32::from_rgb(0x8a, 0xab, 0xff), t!("基本設定"));
-                egui::Grid::new("project_settings_basic")
-                    .num_columns(2)
-                    .show(ui, |ui| {
-                        name_field(ui, "プロジェクト名:", &mut self.project_name);
-                    });
-            });
+            ui.page_content(|ui| {
+                ui.section(t!("基本設定"), |ui| {
+                    egui::Grid::new("project_settings_basic")
+                        .num_columns(2)
+                        .show(ui, |ui| {
+                            name_field(ui, "プロジェクト名:", &mut self.project_name);
+                        });
+                });
 
-            ui.group(|ui| {
-                ui.set_width(ui.available_width());
-                ui.colored_label(
-                    egui::Color32::from_rgb(0x8a, 0xab, 0xff),
-                    t!("音声フォーマット"),
-                );
-                egui::Grid::new("project_settings_audio")
-                    .num_columns(2)
-                    .show(ui, |ui| {
-                        let sample_rate_options = [
-                            "44100 Hz".to_string(),
-                            "48000 Hz".to_string(),
-                            "96000 Hz".to_string(),
-                        ];
-                        let mut sample_rate_index = match self.audio_sample_rate {
-                            44100 => 0,
-                            96000 => 2,
-                            _ => 1,
-                        };
-                        if choice_field(
-                            ui,
-                            "サンプルレート:",
-                            &sample_rate_options,
-                            &mut sample_rate_index,
-                        ) {
-                            self.audio_sample_rate = match sample_rate_index {
-                                0 => 44100,
-                                2 => 96000,
-                                _ => 48000,
+                ui.section(t!("音声フォーマット"), |ui| {
+                    egui::Grid::new("project_settings_audio")
+                        .num_columns(2)
+                        .show(ui, |ui| {
+                            let sample_rate_options = [
+                                "44100 Hz".to_string(),
+                                "48000 Hz".to_string(),
+                                "96000 Hz".to_string(),
+                            ];
+                            let mut sample_rate_index = match self.audio_sample_rate {
+                                44100 => 0,
+                                96000 => 2,
+                                _ => 1,
                             };
-                        }
+                            if choice_field(
+                                ui,
+                                "サンプルレート:",
+                                &sample_rate_options,
+                                &mut sample_rate_index,
+                            ) {
+                                self.audio_sample_rate = match sample_rate_index {
+                                    0 => 44100,
+                                    2 => 96000,
+                                    _ => 48000,
+                                };
+                            }
 
-                        let channel_options =
-                            ["モノラル (1ch)".to_string(), "ステレオ (2ch)".to_string()];
-                        let mut channel_index = if self.audio_channels == 1 { 0 } else { 1 };
-                        if choice_field(ui, "チャンネル数:", &channel_options, &mut channel_index)
-                        {
-                            self.audio_channels = if channel_index == 0 { 1 } else { 2 };
-                        }
-                    });
+                            let channel_options =
+                                ["モノラル (1ch)".to_string(), "ステレオ (2ch)".to_string()];
+                            let mut channel_index = if self.audio_channels == 1 { 0 } else { 1 };
+                            if choice_field(
+                                ui,
+                                "チャンネル数:",
+                                &channel_options,
+                                &mut channel_index,
+                            ) {
+                                self.audio_channels = if channel_index == 0 { 1 } else { 2 };
+                            }
+                        });
+                });
             });
         });
 

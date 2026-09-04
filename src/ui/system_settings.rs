@@ -6,6 +6,7 @@ use crate::ecs::{
     resources::{AudioPluginSettingsResource, SystemSettingsResource},
 };
 use crate::localization::tr;
+use crate::ui::ui_ext::{self, Density, UiExt, page_title};
 use crate::update::{self, UpdateStatus};
 use egui::{Context, Ui};
 use egui_material_icons::{MaterialIcon, icons};
@@ -131,6 +132,7 @@ pub struct SystemSettingsWindow {
     new_scan_path: String,
     scan_status: Arc<Mutex<ScanStatus>>,
 
+    compact_ui: bool,
     save_status: String,
 }
 
@@ -181,6 +183,7 @@ impl SystemSettingsWindow {
             audio_plugin_settings,
             new_scan_path: String::new(),
             scan_status: Arc::new(Mutex::new(ScanStatus::Idle)),
+            compact_ui: ui_ext::density() == Density::Compact,
             save_status: String::new(),
         }
     }
@@ -252,9 +255,8 @@ impl SystemSettingsWindow {
             return;
         }
 
-        egui::Panel::bottom("system_setting_footer")
-            .frame(egui::Frame::default().inner_margin(4.0))
-            .show(ui, |ui| {
+        egui::Panel::bottom("system_setting_footer").show(ui, |ui| {
+            ui.footer_bar(|ui| {
                 ui.allocate_ui_with_layout(
                     egui::vec2(ui.available_width(), fields::field_height(ui)),
                     egui::Layout::left_to_right(egui::Align::Center),
@@ -277,17 +279,11 @@ impl SystemSettingsWindow {
                         });
                     },
                 )
-            });
+            })
+        });
 
-        egui::Panel::left("system_settings_categories")
-            .frame(
-                egui::Frame::default()
-                    .fill(ui.visuals().faint_bg_color)
-                    .inner_margin(egui::Margin::symmetric(8, 12)),
-            )
-            .show(ui, |ui| {
-                ui.set_width(150.0);
-
+        egui::Panel::left("system_settings_categories").show(ui, |ui| {
+            ui.sidebar(|ui| {
                 ui.with_layout(egui::Layout::top_down_justified(egui::Align::LEFT), |ui| {
                     let widgets = &mut ui.style_mut().visuals.widgets;
                     widgets.inactive.bg_stroke = egui::Stroke::NONE;
@@ -300,15 +296,17 @@ impl SystemSettingsWindow {
                         self.category_item(ui, i as i32, label, icon);
                     }
                 })
-            });
-        egui::Panel::top("system_setting_header")
-            .frame(egui::Frame::default().inner_margin(egui::Margin::symmetric(16, 12)))
-            .show(ui, |ui| {
-                ui.heading(tr(category_label(self.selected_category as usize)));
-            });
-        egui::CentralPanel::default()
-            .frame(egui::Frame::default().inner_margin(egui::Margin::same(16)))
-            .show(ui, |ui| {
+            })
+        });
+        egui::Panel::top("system_setting_header").show(ui, |ui| {
+            ui.header_bar(|ui| {
+                ui.heading(page_title(tr(category_label(
+                    self.selected_category as usize,
+                ))));
+            })
+        });
+        egui::CentralPanel::default().show(ui, |ui| {
+            ui.page_content(|ui| {
                 egui::ScrollArea::vertical()
                     .auto_shrink([false, false])
                     .show(ui, |ui| {
@@ -330,6 +328,7 @@ impl SystemSettingsWindow {
                         }
                     });
             });
+        });
     }
 
     fn category_item(&mut self, ui: &mut Ui, index: i32, label: &str, icon: &MaterialIcon) {
@@ -403,6 +402,16 @@ impl SystemSettingsWindow {
             {
                 self.persist(world_holder, |s| s.easing_engine_id.clone_from(&id));
             }
+        }
+
+        let mut compact_ui = self.compact_ui;
+        if toggle_field(ui, "コンパクト表示", &mut compact_ui) {
+            self.compact_ui = compact_ui;
+            ui_ext::set_density(if compact_ui {
+                Density::Compact
+            } else {
+                Density::Comfortable
+            });
         }
     }
 

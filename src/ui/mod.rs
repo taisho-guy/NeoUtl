@@ -12,6 +12,7 @@ pub mod scene_settings;
 pub mod system_settings;
 pub mod timeline;
 pub mod types;
+pub mod ui_ext;
 
 use crate::app_state::{AppState, ProjectSession};
 use crate::egui_loop::PreviewSlot;
