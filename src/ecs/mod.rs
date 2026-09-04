@@ -329,6 +329,17 @@ impl EcsWorld {
         );
     }
 
+    fn release_media_instance(&self, entity: shipyard::EntityId) {
+        self.world.run(
+            |media_sources: View<MediaSource>, object_ids: View<ObjectId>| {
+                if let (Ok(src), Ok(obj_id)) = (media_sources.get(entity), object_ids.get(entity)) {
+                    neoutl_media_runtime::cache::global()
+                        .release_instance(&src.path, obj_id.0 as u64);
+                }
+            },
+        );
+    }
+
     pub fn delete_object(&mut self, id: usize) {
         let mut target_entity = None;
         self.world.run(|object_ids: View<ObjectId>| {
@@ -341,6 +352,7 @@ impl EcsWorld {
         });
 
         if let Some(entity) = target_entity {
+            self.release_media_instance(entity);
             self.world.delete_entity(entity);
             self.update_total_frames();
         }
@@ -359,6 +371,7 @@ impl EcsWorld {
                 }
             });
             if let Some(entity) = target_entity {
+                self.release_media_instance(entity);
                 self.world.delete_entity(entity);
             }
         }
@@ -1642,6 +1655,7 @@ impl EcsWorld {
                 }
             });
         for entity in removed_entities {
+            self.release_media_instance(entity);
             self.world.delete_entity(entity);
         }
         self.world.run(|mut scenes: UniqueViewMut<SceneResource>| {

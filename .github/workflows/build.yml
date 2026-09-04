@@ -62,6 +62,7 @@ jobs:
             ${{ matrix.msys_prefix }}-vulkan-headers
             ${{ matrix.msys_prefix }}-ffmpeg
             ${{ matrix.msys_prefix }}-luajit
+            zip
             make
 
       - name: ビルド(Linux)

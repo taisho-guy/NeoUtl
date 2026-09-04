@@ -343,6 +343,20 @@ impl MediaCache {
         map.get(path).cloned()
     }
 
+    pub fn release_instance(&self, path: &Path, instance_key: u64) {
+        let Some(entry) = self.entry_existing(path) else {
+            return;
+        };
+        let removed = {
+            let mut guard = entry.lock().unwrap();
+            let PathEntry::Video(video) = &mut *guard else {
+                return;
+            };
+            video.instances.remove(&instance_key)
+        };
+        drop(removed);
+    }
+
     pub fn schedule_prefetch_failure_with_reason(path: PathBuf, reason: String) {
         eprintln!(
             "{}",
