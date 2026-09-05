@@ -13,8 +13,7 @@ message SystemSettings {
   int32 decode_backend = 9;
   bool default_snap = 10;
   int32 magnetic_snap_range = 11;
-  int32 export_container = 12;
-  int32 export_codec = 13;
+  reserved 12, 13;
   bool check_update_on_startup = 14;
   bool crash_reporting_enabled = 15;
   int32 max_group_chain_depth = 16;

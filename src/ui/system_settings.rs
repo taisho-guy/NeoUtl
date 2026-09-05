@@ -6,12 +6,12 @@ use crate::ecs::{
     resources::{AudioPluginSettingsResource, SystemSettingsResource},
 };
 use crate::localization::tr;
-use crate::ui::ui_ext::{self, Density, UiExt, page_title};
+use crate::ui::ui_ext::{self, UiExt, page_title};
 use crate::update::{self, UpdateStatus};
 use egui::{Context, Ui};
 use egui_material_icons::{MaterialIcon, icons};
 use elegance::{
-    BuiltInTheme, Button, Indicator, IndicatorState, ProgressBar, SegmentedButton, Spinner, Switch,
+    Accent, BuiltInTheme, Button, Indicator, IndicatorState, ProgressBar, Spinner, Switch,
     TextInput, ThemeSwitcher,
 };
 use fields::{choice_field, int_field, toggle_field};
@@ -19,13 +19,12 @@ use maolan_host_adapter::PluginCatalogEntry;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
-const CATEGORIES: [(&str, MaterialIcon); 8] = [
+const CATEGORIES: [(&str, MaterialIcon); 7] = [
     ("一般", icons::ICON_SETTINGS),
     ("外観", icons::ICON_PALETTE),
     ("パフォーマンス", icons::ICON_SPEED),
     ("デコード", icons::ICON_MOVIE),
     ("タイムライン", icons::ICON_VIEW_TIMELINE),
-    ("エクスポート", icons::ICON_UPLOAD),
     ("音声プラグイン", icons::ICON_EXTENSION),
     ("アップデート", icons::ICON_SYSTEM_UPDATE),
 ];
@@ -121,8 +120,6 @@ pub struct SystemSettingsWindow {
     hw_device_type_priority: Vec<String>,
     default_snap: bool,
     magnetic_snap_range: i32,
-    export_container: i32,
-    export_codec: i32,
 
     check_update_on_startup: bool,
     update_status: Arc<Mutex<UpdateStatus>>,
@@ -132,7 +129,6 @@ pub struct SystemSettingsWindow {
     new_scan_path: String,
     scan_status: Arc<Mutex<ScanStatus>>,
 
-    compact_ui: bool,
     save_status: String,
 }
 
@@ -175,15 +171,12 @@ impl SystemSettingsWindow {
             hw_device_type_priority: s.hw_device_type_priority.clone(),
             default_snap: s.default_snap,
             magnetic_snap_range: s.magnetic_snap_range,
-            export_container: s.export_container,
-            export_codec: s.export_codec,
             check_update_on_startup: s.check_update_on_startup,
             update_status,
             crash_reporting_enabled: s.crash_reporting_enabled,
             audio_plugin_settings,
             new_scan_path: String::new(),
             scan_status: Arc::new(Mutex::new(ScanStatus::Idle)),
-            compact_ui: ui_ext::density() == Density::Compact,
             save_status: String::new(),
         }
     }
@@ -237,8 +230,6 @@ impl SystemSettingsWindow {
         self.hw_decode_extra_frames = loaded.hw_decode_extra_frames;
         self.default_snap = loaded.default_snap;
         self.magnetic_snap_range = loaded.magnetic_snap_range;
-        self.export_container = loaded.export_container;
-        self.export_codec = loaded.export_codec;
         self.check_update_on_startup = loaded.check_update_on_startup;
         self.crash_reporting_enabled = loaded.crash_reporting_enabled;
 
@@ -282,22 +273,21 @@ impl SystemSettingsWindow {
             })
         });
 
-        egui::Panel::left("system_settings_categories").show(ui, |ui| {
-            ui.sidebar(|ui| {
+        egui::Panel::left("system_settings_categories")
+            .resizable(false)
+            .default_size(ui_ext::density().sidebar_panel_width())
+            .frame(
+                ui_ext::density()
+                    .sidebar_frame(elegance::Theme::current(ui.ctx()).palette.input_bg),
+            )
+            .show(ui, |ui| {
                 ui.with_layout(egui::Layout::top_down_justified(egui::Align::LEFT), |ui| {
-                    let widgets = &mut ui.style_mut().visuals.widgets;
-                    widgets.inactive.bg_stroke = egui::Stroke::NONE;
-                    widgets.hovered.bg_stroke = egui::Stroke::NONE;
-                    widgets.active.bg_stroke = egui::Stroke::NONE;
-                    widgets.hovered.expansion = 0.0;
-                    widgets.active.expansion = 0.0;
-
                     for (i, (label, icon)) in CATEGORIES.iter().enumerate() {
                         self.category_item(ui, i as i32, label, icon);
+                        ui.add_space(4.0);
                     }
                 })
-            })
-        });
+            });
         egui::Panel::top("system_setting_header").show(ui, |ui| {
             ui.header_bar(|ui| {
                 ui.heading(page_title(tr(category_label(
@@ -319,8 +309,7 @@ impl SystemSettingsWindow {
                                 2 => self.page_performance(ui, world_holder),
                                 3 => self.page_decode(ui, world_holder),
                                 4 => self.page_timeline_defaults(ui, world_holder),
-                                5 => self.page_export(ui, world_holder),
-                                6 => self.page_audio_plugins(ui),
+                                5 => self.page_audio_plugins(ui),
                                 _ => self.page_update(ui, world_holder),
                             });
                         if self.selected_category == 3 {
@@ -342,9 +331,48 @@ impl SystemSettingsWindow {
         let mark = if has_update { " ●" } else { "" };
         let text = format!("{}  {}{mark}", icon.codepoint, tr(label));
 
-        let mut on = active;
-        if ui.add(SegmentedButton::new(&mut on, text)).changed() && on {
+        let theme = elegance::Theme::current(ui.ctx());
+        let p = &theme.palette;
+        let size = egui::vec2(ui.available_width(), 32.0);
+        let (rect, response) = ui.allocate_exact_size(size, egui::Sense::click());
+        if response.clicked() {
             self.selected_category = index;
+        }
+        if ui.is_rect_visible(rect) {
+            let hovered = response.hovered();
+            let fill = if active {
+                p.accent_fill(Accent::Green)
+            } else if hovered {
+                egui::Color32::from_rgba_unmultiplied(
+                    p.text_muted.r(),
+                    p.text_muted.g(),
+                    p.text_muted.b(),
+                    15,
+                )
+            } else {
+                p.input_bg
+            };
+            ui.painter().rect(
+                rect,
+                egui::CornerRadius::same(theme.control_radius as u8 + 2),
+                fill,
+                egui::Stroke::NONE,
+                egui::StrokeKind::Inside,
+            );
+            let text_color = if active {
+                egui::Color32::WHITE
+            } else if hovered {
+                p.text_muted
+            } else {
+                p.text_faint
+            };
+            ui.painter().text(
+                egui::pos2(rect.left() + 12.0, rect.center().y),
+                egui::Align2::LEFT_CENTER,
+                text,
+                egui::FontId::proportional(theme.typography.button),
+                text_color,
+            );
         }
     }
 
@@ -402,16 +430,6 @@ impl SystemSettingsWindow {
             {
                 self.persist(world_holder, |s| s.easing_engine_id.clone_from(&id));
             }
-        }
-
-        let mut compact_ui = self.compact_ui;
-        if toggle_field(ui, "コンパクト表示", &mut compact_ui) {
-            self.compact_ui = compact_ui;
-            ui_ext::set_density(if compact_ui {
-                Density::Compact
-            } else {
-                Density::Comfortable
-            });
         }
     }
 
@@ -536,28 +554,6 @@ impl SystemSettingsWindow {
                 s.default_snap = snap;
                 s.magnetic_snap_range = range;
             });
-        }
-    }
-
-    fn page_export(&mut self, ui: &mut egui::Ui, world_holder: &Arc<Mutex<EcsWorld>>) {
-        let container_options = ["MP4".to_string(), "MOV".to_string(), "MKV".to_string()];
-        let codec_options = ["H.264".to_string(), "HEVC".to_string(), "AV1".to_string()];
-
-        let mut export_container = self.export_container;
-        if choice_field(
-            ui,
-            "コンテナ形式",
-            &container_options,
-            &mut export_container,
-        ) {
-            self.export_container = export_container;
-            self.persist(world_holder, |s| s.export_container = export_container);
-        }
-
-        let mut export_codec = self.export_codec;
-        if choice_field(ui, "映像コーデック", &codec_options, &mut export_codec) {
-            self.export_codec = export_codec;
-            self.persist(world_holder, |s| s.export_codec = export_codec);
         }
     }
 

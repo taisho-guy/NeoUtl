@@ -1,29 +1,15 @@
 use egui::{Color32, Frame, Margin, RichText, Ui};
-use std::sync::Mutex;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
-pub enum Density {
-    #[default]
-    Comfortable,
-    Compact,
-}
-
-static DENSITY: Mutex<Density> = Mutex::new(Density::Comfortable);
+pub struct Density;
 
 pub fn density() -> Density {
-    *DENSITY.lock().unwrap()
-}
-
-pub fn set_density(value: Density) {
-    *DENSITY.lock().unwrap() = value;
+    Density
 }
 
 impl Density {
     fn scale(self) -> f32 {
-        match self {
-            Density::Comfortable => 1.0,
-            Density::Compact => 0.7,
-        }
+        1.0
     }
 
     fn px(self, base: f32) -> i8 {
@@ -50,8 +36,22 @@ impl Density {
         12.0 * self.scale()
     }
 
-    pub fn sidebar_width(self) -> f32 {
+    pub fn sidebar_content_width(self) -> f32 {
         150.0 * self.scale()
+    }
+
+    pub fn sidebar_panel_width(self) -> f32 {
+        let m = self.sidebar_margin();
+        self.sidebar_content_width() + f32::from(m.left) + f32::from(m.right)
+    }
+
+    pub fn sidebar_frame(self, fill: Color32) -> Frame {
+        Frame::default()
+            .fill(fill)
+            .corner_radius(self.px(10.0) as u8)
+            .stroke(egui::Stroke::NONE)
+            .inner_margin(self.sidebar_margin())
+            .outer_margin(Margin::same(self.px(8.0)))
     }
 }
 
@@ -71,8 +71,6 @@ pub trait UiExt {
     fn header_bar<R>(&mut self, add_contents: impl FnOnce(&mut Ui) -> R) -> R;
 
     fn footer_bar<R>(&mut self, add_contents: impl FnOnce(&mut Ui) -> R) -> R;
-
-    fn sidebar<R>(&mut self, add_contents: impl FnOnce(&mut Ui) -> R) -> R;
 
     fn section<R>(
         &mut self,
@@ -100,19 +98,6 @@ impl UiExt for Ui {
         Frame::default()
             .inner_margin(density().footer_margin())
             .show(self, add_contents)
-            .inner
-    }
-
-    fn sidebar<R>(&mut self, add_contents: impl FnOnce(&mut Ui) -> R) -> R {
-        let bg = self.visuals().faint_bg_color;
-        let width = density().sidebar_width();
-        Frame::default()
-            .fill(bg)
-            .inner_margin(density().sidebar_margin())
-            .show(self, |ui| {
-                ui.set_width(width);
-                add_contents(ui)
-            })
             .inner
     }
 
