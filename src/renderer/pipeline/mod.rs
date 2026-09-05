@@ -56,6 +56,9 @@ const MAX_EFFECT_UNIFORM_SIZE: u64 = config::MAX_EFFECT_UNIFORM_BYTES;
 const MEDIA_UNIFORM_SIZE: u64 = 80;
 static MEDIA_WGSL: &str = include_str!(concat!(env!("OUT_DIR"), "/media.wgsl"));
 static VIDEO_WGSL: &str = include_str!(concat!(env!("OUT_DIR"), "/media_video.wgsl"));
+static COMPOSITE_WGSL: &str = include_str!("wgsl/composite.wgsl");
+static CLIP_COMPOSITE_WGSL: &str = include_str!("wgsl/clip_composite.wgsl");
+static REDUCE_MEAN_WGSL: &str = include_str!("wgsl/reduce_mean.wgsl");
 pub struct RenderEngine {
     pub device: Arc<wgpu::Device>,
     pub queue: Arc<wgpu::Queue>,
@@ -194,7 +197,8 @@ impl RenderEngine {
                 bind_group_layouts: &[Some(&composite_bind_group_layout)],
                 immediate_size: 0,
             });
-        let composite_pipeline = build_composite_pipeline(&device, &composite_pipeline_layout);
+        let composite_pipeline =
+            build_composite_pipeline(&device, &composite_pipeline_layout, COMPOSITE_WGSL);
 
         let clip_composite_bind_group_layout = create_clip_composite_bind_group_layout(&device);
         let clip_composite_pipeline_layout =
@@ -203,8 +207,11 @@ impl RenderEngine {
                 bind_group_layouts: &[Some(&clip_composite_bind_group_layout)],
                 immediate_size: 0,
             });
-        let clip_composite_pipeline =
-            build_clip_composite_pipeline(&device, &clip_composite_pipeline_layout);
+        let clip_composite_pipeline = build_clip_composite_pipeline(
+            &device,
+            &clip_composite_pipeline_layout,
+            CLIP_COMPOSITE_WGSL,
+        );
         let clip_uniform_buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("Clip Uniform Buffer"),
             size: 16,
@@ -245,7 +252,7 @@ impl RenderEngine {
         let video_pipeline = build_media_pipeline(&device, &video_pipeline_layout, VIDEO_WGSL);
 
         let (reduce_mean_pipeline, reduce_mean_bind_group_layout) =
-            build_reduce_mean_pipeline(&device);
+            build_reduce_mean_pipeline(&device, REDUCE_MEAN_WGSL);
         let reduce_mean_buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("Reduce Mean Accumulator"),
             size: 20,

@@ -1,7 +1,5 @@
 use super::*;
 
-use super::bind_layouts::{CLIP_COMPOSITE_WGSL, COMPOSITE_WGSL};
-
 pub(super) fn try_create_shader_module(
     device: &wgpu::Device,
     wgsl: &[u8],
@@ -155,29 +153,9 @@ pub(super) fn build_effect_pipelines_from_registry(
         .collect()
 }
 
-const REDUCE_MEAN_WGSL: &str = r#"
-@group(0) @binding(0) var src_tex: texture_2d<f32>;
-@group(0) @binding(1) var<storage, read_write> acc: array<atomic<u32>, 5>;
-
-const SCALE: f32 = 1000000.0;
-
-@compute @workgroup_size(8, 8)
-fn cs_main(@builtin(global_invocation_id) gid: vec3<u32>) {
-    let dims = textureDimensions(src_tex);
-    if (gid.x >= dims.x || gid.y >= dims.y) {
-        return;
-    }
-    let c = textureLoad(src_tex, vec2<i32>(gid.xy), 0);
-    atomicAdd(&acc[0], u32(clamp(c.r, 0.0, 1.0) * SCALE));
-    atomicAdd(&acc[1], u32(clamp(c.g, 0.0, 1.0) * SCALE));
-    atomicAdd(&acc[2], u32(clamp(c.b, 0.0, 1.0) * SCALE));
-    atomicAdd(&acc[3], u32(clamp(c.a, 0.0, 1.0) * SCALE));
-    atomicAdd(&acc[4], 1u);
-}
-"#;
-
 pub(super) fn build_reduce_mean_pipeline(
     device: &wgpu::Device,
+    wgsl: &'static str,
 ) -> (wgpu::ComputePipeline, wgpu::BindGroupLayout) {
     let bgl = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
         label: Some("Reduce Mean BGL"),
@@ -211,7 +189,7 @@ pub(super) fn build_reduce_mean_pipeline(
     });
     let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
         label: Some("Reduce Mean Shader"),
-        source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(REDUCE_MEAN_WGSL)),
+        source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(wgsl)),
     });
     let pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
         label: Some("Reduce Mean Pipeline"),
@@ -255,10 +233,11 @@ pub(super) fn build_lua_compute_pipelines(
 pub(super) fn build_composite_pipeline(
     device: &wgpu::Device,
     layout: &wgpu::PipelineLayout,
+    wgsl: &'static str,
 ) -> wgpu::RenderPipeline {
     let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
         label: Some("Composite"),
-        source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(COMPOSITE_WGSL)),
+        source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(wgsl)),
     });
     device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
         label: Some("Composite"),
@@ -300,10 +279,11 @@ pub(super) fn build_composite_pipeline(
 pub(super) fn build_clip_composite_pipeline(
     device: &wgpu::Device,
     layout: &wgpu::PipelineLayout,
+    wgsl: &'static str,
 ) -> wgpu::RenderPipeline {
     let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
         label: Some("Clip Composite"),
-        source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(CLIP_COMPOSITE_WGSL)),
+        source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(wgsl)),
     });
     device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
         label: Some("Clip Composite"),
