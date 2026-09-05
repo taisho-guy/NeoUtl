@@ -1,0 +1,12 @@
+mod audio_params;
+mod audio_plugins;
+mod core;
+mod effects;
+mod keyframes;
+mod object_crud;
+mod scene;
+mod serialize;
+mod settings;
+mod text_shape;
+mod timeline;
+mod transform;
