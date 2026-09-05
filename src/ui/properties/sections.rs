@@ -22,6 +22,7 @@ pub(super) struct FloatRowCtx<'a, S: std::hash::Hash + Copy + std::fmt::Debug> {
     pub current_frame: i32,
     pub base_value: f32,
     pub track: &'a [crate::ecs::types::Keyframe],
+    pub button_w: f32,
 }
 
 pub(super) fn float_row<S: std::hash::Hash + Copy + std::fmt::Debug>(
@@ -42,9 +43,10 @@ pub(super) fn float_row<S: std::hash::Hash + Copy + std::fmt::Debug>(
         current_frame,
         base_value,
         track,
+        button_w,
     } = ctx;
     let segment = resolve_segment(track, clip_start, clip_end, current_frame, base_value);
-    let outcome = property_row(ui, id_source, label, segment, min, max);
+    let outcome = property_row(ui, id_source, label, segment, min, max, button_w);
     if outcome.label_clicked {
         super::easing_editor::toggle(target, label);
     }
@@ -100,6 +102,13 @@ pub fn transform_section(ui: &mut egui::Ui, world: &mut EcsWorld, id: usize) {
     };
     let (clip_start, clip_end) = clip_bounds(world, id);
     let current_frame = world.current_frame();
+    let button_w = super::row::button_column_width(
+        ui,
+        TRANSFORM_SCHEMA
+            .iter()
+            .filter(|s| s.kind == ParamKind::Float)
+            .map(|s| effect_param_label(s.label)),
+    );
     for schema in TRANSFORM_SCHEMA {
         let Some(value) = transform.get_param(schema.key) else {
             continue;
@@ -135,6 +144,7 @@ pub fn transform_section(ui: &mut egui::Ui, world: &mut EcsWorld, id: usize) {
                         current_frame,
                         base_value: value,
                         track: &track,
+                        button_w,
                     },
                     |w, f, v, e, p| w.set_keyframe(id, schema.key, f, v, e, p),
                     |w, f| w.remove_keyframe(id, schema.key, f),
@@ -151,6 +161,13 @@ pub fn text_section(ui: &mut egui::Ui, world: &mut EcsWorld, id: usize) {
     };
     let (clip_start, clip_end) = clip_bounds(world, id);
     let current_frame = world.current_frame();
+    let button_w = super::row::button_column_width(
+        ui,
+        TEXT_SCHEMA
+            .iter()
+            .filter(|s| s.kind == ParamKind::Float)
+            .map(|s| effect_param_label(s.label)),
+    );
     ui.separator();
     ui.colored_label(egui::Color32::from_rgb(0x8a, 0xab, 0xff), t!("テキスト"));
     ui.label(effect_param_label("フォント候補"));
@@ -249,6 +266,7 @@ pub fn text_section(ui: &mut egui::Ui, world: &mut EcsWorld, id: usize) {
                         current_frame,
                         base_value: value,
                         track: &track,
+                        button_w,
                     },
                     |w, f, v, e, p| w.set_keyframe(id, schema.key, f, v, e, p),
                     |w, f| w.remove_keyframe(id, schema.key, f),
@@ -265,6 +283,13 @@ pub fn shape_section(ui: &mut egui::Ui, world: &mut EcsWorld, id: usize) {
     };
     let (clip_start, clip_end) = clip_bounds(world, id);
     let current_frame = world.current_frame();
+    let button_w = super::row::button_column_width(
+        ui,
+        SHAPE_SCHEMA
+            .iter()
+            .filter(|s| s.kind == ParamKind::Float)
+            .map(|s| effect_param_label(s.label)),
+    );
     ui.separator();
     ui.colored_label(egui::Color32::from_rgb(0x8a, 0xab, 0xff), t!("図形"));
     for schema in SHAPE_SCHEMA {
@@ -288,6 +313,7 @@ pub fn shape_section(ui: &mut egui::Ui, world: &mut EcsWorld, id: usize) {
                 current_frame,
                 base_value: value,
                 track: &track,
+                button_w,
             },
             |w, f, v, e, p| w.set_keyframe(id, schema.key, f, v, e, p),
             |w, f| w.remove_keyframe(id, schema.key, f),
@@ -344,6 +370,15 @@ pub fn group_control_section(ui: &mut egui::Ui, world: &mut EcsWorld, id: usize)
     };
     let (clip_start, clip_end) = clip_bounds(world, id);
     let current_frame = world.current_frame();
+    let button_w = super::row::button_column_width(
+        ui,
+        GROUP_CONTROL_SCHEMA
+            .iter()
+            .filter(|s| {
+                s.kind == ParamKind::Float && !GROUP_CONTROL_STRUCTURAL_KEYS.contains(&s.key)
+            })
+            .map(|s| effect_param_label(s.label)),
+    );
     ui.separator();
     ui.colored_label(
         egui::Color32::from_rgb(0x8a, 0xab, 0xff),
@@ -402,6 +437,7 @@ pub fn group_control_section(ui: &mut egui::Ui, world: &mut EcsWorld, id: usize)
                         current_frame,
                         base_value: value,
                         track: &track,
+                        button_w,
                     },
                     |w, f, v, e, p| w.set_keyframe(id, schema.key, f, v, e, p),
                     |w, f| w.remove_keyframe(id, schema.key, f),

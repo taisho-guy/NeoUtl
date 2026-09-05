@@ -200,6 +200,10 @@ pub fn effects_section(
                     if inst.param_info.is_empty() {
                         ui.small(t!("(パラメータ情報がありません)"));
                     } else {
+                        let button_w = super::row::button_column_width(
+                            ui,
+                            inst.param_info.iter().map(|info| info.name.clone()),
+                        );
                         for info in &inst.param_info {
                             let val = inst.params.get(&info.id).copied().unwrap_or(info.default);
                             let segment = super::segment::Segment {
@@ -215,6 +219,7 @@ pub fn effects_section(
                                 segment,
                                 info.min as f32,
                                 info.max as f32,
+                                button_w,
                             );
                             if let Some(v) = outcome.start_value {
                                 world.set_audio_plugin_param(id, index, info.id, v as f64);
@@ -260,6 +265,13 @@ pub fn effects_section(
                     return;
                 };
                 let schema = param_schema(&source);
+                let button_w = super::row::button_column_width(
+                    ui,
+                    schema
+                        .iter()
+                        .filter(|s| matches!(s.kind, ParamKind::Float | ParamKind::Color))
+                        .map(|s| effect_param_label(&s.label)),
+                );
                 let mut collapsed = false;
 
                 for s in &schema {
@@ -325,6 +337,7 @@ pub fn effects_section(
                                     current_frame,
                                     base_value: base,
                                     track: &track,
+                                    button_w,
                                 },
                                 move |w, f, v, e, p| {
                                     w.set_effect_keyframe(id, index, &key_set, f, v, e, p)

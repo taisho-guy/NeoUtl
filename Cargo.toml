@@ -62,7 +62,7 @@ prost-build = "0.14"
 
 [package]
 name = "NeoUtl"
-version = "0.6.0"
+version = "0.7.3"
 edition = "2024"
 
 [dependencies]

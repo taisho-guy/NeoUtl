@@ -43,6 +43,20 @@ impl RowOutcome {
     }
 }
 
+pub fn button_column_width(ui: &egui::Ui, labels: impl Iterator<Item = String>) -> f32 {
+    let font_id = egui::TextStyle::Button.resolve(ui.style());
+    let pad = ui.spacing().button_padding;
+    labels
+        .map(|label| {
+            ui.painter()
+                .layout_no_wrap(label, font_id.clone(), egui::Color32::WHITE)
+                .size()
+                .x
+                + pad.x * 2.0
+        })
+        .fold(0.0_f32, f32::max)
+}
+
 pub fn property_row(
     ui: &mut egui::Ui,
     id_source: impl std::hash::Hash + std::fmt::Debug,
@@ -50,6 +64,7 @@ pub fn property_row(
     segment: Segment,
     min: f32,
     max: f32,
+    button_w: f32,
 ) -> RowOutcome {
     let id = ui.make_persistent_id(id_source);
     let (mut left_active, mut right_active) = take_active(id);
@@ -59,13 +74,12 @@ pub fn property_row(
     let mut end_v = segment.end_value;
 
     const BOX_W: f32 = 70.0;
-    const BUTTON_W: f32 = 100.0;
     const ROW_HEIGHT: f32 = 22.0;
     const SLIDER_MIN_W: f32 = 60.0;
 
     let button_text = effect_param_label(label);
     let spacing = ui.spacing().item_spacing.x;
-    let fixed_w = BOX_W * 2.0 + BUTTON_W + spacing * 4.0;
+    let fixed_w = BOX_W * 2.0 + button_w + spacing * 4.0;
     let slider_w = ((ui.available_width() - fixed_w) / 2.0).max(SLIDER_MIN_W);
 
     ui.horizontal(|ui| {
@@ -95,7 +109,7 @@ pub fn property_row(
 
         if ui
             .add_sized(
-                [BUTTON_W, ROW_HEIGHT],
+                [button_w, ROW_HEIGHT],
                 Button::new(button_text).size(ButtonSize::Small),
             )
             .clicked()
