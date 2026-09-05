@@ -14,6 +14,64 @@ pub struct ProjectMeta {
     pub height: u32,
     pub audio_sample_rate: u32,
     pub audio_channels: u32,
+    pub modified: SystemTime,
+}
+
+pub fn format_date(t: SystemTime) -> String {
+    let secs = t.duration_since(UNIX_EPOCH).map_or(0, |d| d.as_secs());
+    let days = secs / 86_400;
+    let (y, m, d) = civil_from_days(days as i64);
+    format!("{y:04}/{m:02}/{d:02}")
+}
+
+fn civil_from_days(z: i64) -> (i64, u32, u32) {
+    let z = z + 719_468;
+    let era = if z >= 0 { z } else { z - 146_096 } / 146_097;
+    let doe = (z - era * 146_097) as u64;
+    let yoe = (doe - doe / 1_460 + doe / 36_524 - doe / 146_096) / 365;
+    let y = yoe as i64 + era * 400;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let d = (doy - (153 * mp + 2) / 5 + 1) as u32;
+    let m = if mp < 10 { mp + 3 } else { mp - 9 } as u32;
+    (if m <= 2 { y + 1 } else { y }, m, d)
+}
+
+fn copy_dir_recursive(src: &Path, dst: &Path) -> std::io::Result<()> {
+    std::fs::create_dir_all(dst)?;
+    for entry in std::fs::read_dir(src)? {
+        let entry = entry?;
+        let target = dst.join(entry.file_name());
+        if entry.path().is_dir() {
+            copy_dir_recursive(&entry.path(), &target)?;
+        } else {
+            std::fs::copy(entry.path(), &target)?;
+        }
+    }
+    Ok(())
+}
+
+pub fn delete_project(dir: &Path) -> std::io::Result<()> {
+    std::fs::remove_dir_all(dir)
+}
+
+pub fn copy_project(dir: &Path) -> std::io::Result<ProjectMeta> {
+    let source_name = load_project(dir).map(|m| m.name).unwrap_or_default();
+    let base_dir = projects_dir();
+    let mut copy_name = format!("{source_name}_copy");
+    let mut target = base_dir.join(sanitize_dir_name(&copy_name));
+    let mut suffix = 2;
+    while target.exists() {
+        copy_name = format!("{source_name}_copy{suffix}");
+        target = base_dir.join(sanitize_dir_name(&copy_name));
+        suffix += 1;
+    }
+    copy_dir_recursive(dir, &target)?;
+    if let Some(mut doc) = load_document(&target) {
+        doc.project_name = copy_name;
+        save_document(&target, &doc)?;
+    }
+    load_project(&target).ok_or_else(|| std::io::Error::other("プロジェクトの複製に失敗しました"))
 }
 
 pub fn projects_dir() -> PathBuf {
@@ -73,6 +131,9 @@ fn read_file(dir: &Path) -> Option<neoutl_schema::DocumentModel> {
 pub fn load_project(dir: &Path) -> Option<ProjectMeta> {
     let file = read_file(dir)?;
     let active_scene = file.scenes.iter().find(|s| s.id == file.active_scene);
+    let modified = std::fs::metadata(meta_path(dir))
+        .and_then(|m| m.modified())
+        .unwrap_or(UNIX_EPOCH);
     Some(ProjectMeta {
         name: file.project_name,
         dir: dir.to_path_buf(),
@@ -81,6 +142,7 @@ pub fn load_project(dir: &Path) -> Option<ProjectMeta> {
         height: active_scene.map_or(1080, |s| s.height),
         audio_sample_rate: file.audio_sample_rate,
         audio_channels: file.audio_channels,
+        modified,
     })
 }
 
@@ -134,6 +196,7 @@ pub fn create_project(
         height,
         audio_sample_rate,
         audio_channels,
+        modified: SystemTime::now(),
     };
     let doc = DocumentModel {
         project_name: meta.name.clone(),

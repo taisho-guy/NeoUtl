@@ -74,7 +74,7 @@ impl WindowKind {
     fn title(self) -> &'static str {
         match self {
             Self::Splash => "NeoUtl",
-            Self::Launcher => "NeoUtl - プロジェクト",
+            Self::Launcher => "NeoUtl - プロジェクトランチャー",
             Self::Preview => "NeoUtl",
             Self::Timeline => "NeoUtl - 拡張編集",
             Self::Properties => "NeoUtl - オブジェクト設定",
@@ -343,6 +343,9 @@ impl EguiMainWindow {
         init_rx: std::sync::mpsc::Receiver<()>,
         wake_proxy: EventLoopProxy<AppWakeEvent>,
     ) -> Self {
+        if let Some(loaded) = crate::ui::system_settings::load_from_disk() {
+            crate::theme::restore(&loaded.theme_id);
+        }
         Self {
             gpu,
             slot,
