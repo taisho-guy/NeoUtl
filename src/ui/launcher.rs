@@ -77,54 +77,69 @@ impl LauncherPanel {
         let mut result = None;
         Card::new().heading(t!("新規プロジェクト")).show(ui, |ui| {
             ui.set_width(ui.available_width());
+            let muted = Theme::current(ui.ctx()).palette.text_muted;
             ui.horizontal(|ui| {
-                ui.add(
-                    egui::DragValue::new(&mut self.fps)
-                        .range(1..=240)
-                        .suffix(" fps"),
-                );
-                ui.add(
-                    egui::DragValue::new(&mut self.width)
-                        .range(16..=7680)
-                        .suffix(" px"),
-                );
-                ui.add(
-                    egui::DragValue::new(&mut self.height)
-                        .range(16..=7680)
-                        .suffix(" px"),
-                );
-                ui.add(
-                    egui::DragValue::new(&mut self.sample_rate)
-                        .range(8000..=192000)
-                        .suffix(" Hz"),
-                );
-                ui.add(
-                    egui::DragValue::new(&mut self.channels)
-                        .range(1..=8)
-                        .suffix(" ch"),
-                );
+                ui.vertical(|ui| {
+                    ui.colored_label(muted, t!("映像"));
+                    ui.horizontal(|ui| {
+                        ui.add(
+                            egui::DragValue::new(&mut self.fps)
+                                .range(1..=240)
+                                .suffix(" fps"),
+                        );
+                        ui.add(
+                            egui::DragValue::new(&mut self.width)
+                                .range(16..=7680)
+                                .suffix(" px"),
+                        );
+                        ui.add(
+                            egui::DragValue::new(&mut self.height)
+                                .range(16..=7680)
+                                .suffix(" px"),
+                        );
+                    });
+                });
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Min), |ui| {
+                    ui.vertical(|ui| {
+                        ui.colored_label(muted, t!("音声"));
+                        ui.horizontal(|ui| {
+                            ui.add(
+                                egui::DragValue::new(&mut self.channels)
+                                    .range(1..=8)
+                                    .suffix(" ch"),
+                            );
+                            ui.add(
+                                egui::DragValue::new(&mut self.sample_rate)
+                                    .range(8000..=192000)
+                                    .suffix(" Hz"),
+                            );
+                        });
+                    });
+                });
             });
             ui.add_space(8.0);
-            ui.colored_label(Theme::current(ui.ctx()).palette.text_muted, t!("名前"));
+            ui.colored_label(muted, t!("名前"));
             ui.add_space(4.0);
             ui.horizontal(|ui| {
-                ui.add(TextInput::new(&mut self.name).desired_width(ui.available_width() - 140.0));
-                if ui.add(Button::new(t!("作成して開く"))).clicked() {
-                    match project::create_project(
-                        &self.name,
-                        self.fps,
-                        self.width,
-                        self.height,
-                        self.sample_rate,
-                        self.channels,
-                    ) {
-                        Ok(meta) => {
-                            self.status.clear();
-                            result = Some(meta);
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    if ui.add(Button::new(t!("作成して開く"))).clicked() {
+                        match project::create_project(
+                            &self.name,
+                            self.fps,
+                            self.width,
+                            self.height,
+                            self.sample_rate,
+                            self.channels,
+                        ) {
+                            Ok(meta) => {
+                                self.status.clear();
+                                result = Some(meta);
+                            }
+                            Err(err) => self.status = err.to_string(),
                         }
-                        Err(err) => self.status = err.to_string(),
                     }
-                }
+                    ui.add(TextInput::new(&mut self.name).desired_width(ui.available_width()));
+                });
             });
             if !self.status.is_empty() {
                 ui.add_space(6.0);
@@ -246,13 +261,15 @@ impl LauncherPanel {
                     p.text_muted,
                 );
             }
-            if response.double_clicked() {
-                self.pending_open = Some(item.dir.clone());
-            } else if response.clicked() && self.selection_mode {
-                if is_selected {
-                    self.selected.remove(&item.dir);
+            if response.clicked() {
+                if self.selection_mode {
+                    if is_selected {
+                        self.selected.remove(&item.dir);
+                    } else {
+                        self.selected.insert(item.dir.clone());
+                    }
                 } else {
-                    self.selected.insert(item.dir.clone());
+                    self.pending_open = Some(item.dir.clone());
                 }
             }
         });
