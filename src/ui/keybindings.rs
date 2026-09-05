@@ -56,6 +56,7 @@ pub struct KeybindingsWindow {
     save_status: String,
     conflict_message: String,
     capturing: Option<CommandId>,
+    pending_binding: Option<OwnedBinding>,
 }
 
 impl KeybindingsWindow {
@@ -66,6 +67,7 @@ impl KeybindingsWindow {
             save_status: String::new(),
             conflict_message: String::new(),
             capturing: None,
+            pending_binding: None,
         }
     }
 
@@ -86,28 +88,56 @@ impl KeybindingsWindow {
         self.sync();
     }
 
+    fn cancel_capture(&mut self) {
+        self.capturing = None;
+        self.pending_binding = None;
+    }
+
+    pub fn set_open(&mut self, open: bool) {
+        self.open = open;
+        if !open {
+            self.cancel_capture();
+        }
+    }
+
     pub fn show(&mut self, ctx: &Context, ui: &mut Ui) {
         if !self.open {
             return;
         }
 
         if let Some(command) = self.capturing {
-            let binding = ctx.input(|i| {
+            let (newly_pressed, released) = ctx.input(|i| {
                 let modifiers = i.modifiers;
-                i.events.iter().find_map(|e| match e {
-                    egui::Event::Key {
-                        key, pressed: true, ..
-                    } => Some(OwnedBinding {
-                        ctrl: modifiers.ctrl,
-                        shift: modifiers.shift,
-                        alt: modifiers.alt,
-                        key: key.name().to_string(),
-                    }),
-                    _ => None,
-                })
+                let mut newly_pressed = None;
+                let mut released = None;
+                for e in &i.events {
+                    let egui::Event::Key { key, pressed, .. } = e else {
+                        continue;
+                    };
+                    let name = key.name();
+                    if *pressed {
+                        newly_pressed = Some(OwnedBinding {
+                            ctrl: modifiers.ctrl,
+                            shift: modifiers.shift,
+                            alt: modifiers.alt,
+                            key: name.to_string(),
+                        });
+                    } else if self
+                        .pending_binding
+                        .as_ref()
+                        .is_some_and(|b| b.key.eq_ignore_ascii_case(name))
+                    {
+                        released = self.pending_binding.clone();
+                    }
+                }
+                (newly_pressed, released)
             });
-            if let Some(binding) = binding {
+            if let Some(binding) = newly_pressed {
+                self.pending_binding = Some(binding);
+            }
+            if let Some(binding) = released {
                 self.capturing = None;
+                self.pending_binding = None;
                 self.apply_capture(command, binding);
             }
         }
@@ -117,36 +147,64 @@ impl KeybindingsWindow {
                 ui.colored_label(egui::Color32::RED, &self.conflict_message);
             }
 
-            egui::ScrollArea::vertical().show(ui, |ui| {
-                egui::Grid::new("keybindings_rows")
-                    .num_columns(4)
-                    .striped(true)
-                    .show(ui, |ui| {
-                        for row in self.rows.clone() {
-                            ui.label(&row.label);
-                            ui.label(&row.scope_label);
+            egui::ScrollArea::vertical()
+                .auto_shrink([false, false])
+                .show(ui, |ui| {
+                    let row_height = 24.0;
+                    let key_btn_w = 130.0;
+                    let reset_btn_w = 90.0;
 
-                            let capturing = self.capturing == Some(row.command);
-                            let text = if capturing {
-                                t!("入力待ち…")
-                            } else {
-                                row.key_display.clone()
-                            };
-                            if ui.button(text).clicked() {
-                                self.capturing = Some(row.command);
-                            }
+                    for (i, row) in self.rows.clone().into_iter().enumerate() {
+                        let fill = if i % 2 == 1 {
+                            ui.visuals().faint_bg_color
+                        } else {
+                            egui::Color32::TRANSPARENT
+                        };
+                        egui::Frame::default().fill(fill).show(ui, |ui| {
+                            ui.set_width(ui.available_width());
+                            ui.horizontal(|ui| {
+                                ui.label(&row.label);
+                                ui.label(&row.scope_label);
 
-                            if ui.button(t!("既定へ")).clicked() {
-                                shortcuts::active_keymap()
-                                    .lock()
-                                    .unwrap()
-                                    .reset_to_default(row.command);
-                                self.sync();
-                            }
-                            ui.end_row();
-                        }
-                    });
-            });
+                                ui.with_layout(
+                                    egui::Layout::right_to_left(egui::Align::Center),
+                                    |ui| {
+                                        if ui
+                                            .add_sized(
+                                                [reset_btn_w, row_height],
+                                                egui::Button::new(t!("既定へ")),
+                                            )
+                                            .clicked()
+                                        {
+                                            shortcuts::active_keymap()
+                                                .lock()
+                                                .unwrap()
+                                                .reset_to_default(row.command);
+                                            self.sync();
+                                        }
+
+                                        let capturing = self.capturing == Some(row.command);
+                                        let text = if capturing {
+                                            t!("入力待ち…")
+                                        } else {
+                                            row.key_display.clone()
+                                        };
+                                        if ui
+                                            .add_sized(
+                                                [key_btn_w, row_height],
+                                                egui::Button::new(text),
+                                            )
+                                            .clicked()
+                                        {
+                                            self.capturing = Some(row.command);
+                                            self.pending_binding = None;
+                                        }
+                                    },
+                                );
+                            });
+                        });
+                    }
+                });
 
             ui.separator();
             ui.horizontal(|ui| {

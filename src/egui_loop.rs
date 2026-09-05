@@ -434,7 +434,7 @@ impl EguiMainWindow {
             WindowKind::SystemSettings => p.dialogs.borrow_mut().system_settings.open = open,
             WindowKind::ProjectSettings => p.dialogs.borrow_mut().project_settings.open = open,
             WindowKind::SceneSettings => p.dialogs.borrow_mut().scene_settings.open = open,
-            WindowKind::Keybindings => p.dialogs.borrow_mut().keybindings.open = open,
+            WindowKind::Keybindings => p.dialogs.borrow_mut().keybindings.set_open(open),
             WindowKind::Export => p.dialogs.borrow_mut().export_dialog.open = open,
             WindowKind::EffectAdd => p.properties.borrow_mut().effect_add.open = open,
             WindowKind::EasingEditor => {
