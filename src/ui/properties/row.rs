@@ -44,8 +44,9 @@ impl RowOutcome {
 }
 
 pub fn button_column_width(ui: &egui::Ui, labels: impl Iterator<Item = String>) -> f32 {
-    let font_id = egui::TextStyle::Button.resolve(ui.style());
-    let pad = ui.spacing().button_padding;
+    let theme = elegance::Theme::current(ui.ctx());
+    let font_id = egui::FontId::proportional(ButtonSize::Small.font_size(&theme));
+    let pad = ButtonSize::Small.padding(&theme);
     labels
         .map(|label| {
             ui.painter()
@@ -74,8 +75,11 @@ pub fn property_row(
     let mut end_v = segment.end_value;
 
     const BOX_W: f32 = 70.0;
-    const ROW_HEIGHT: f32 = 22.0;
     const SLIDER_MIN_W: f32 = 60.0;
+
+    let theme = elegance::Theme::current(ui.ctx());
+    let row_height =
+        ButtonSize::Small.font_size(&theme) + 2.0 * ButtonSize::Small.padding(&theme).y;
 
     let button_text = effect_param_label(label);
     let spacing = ui.spacing().item_spacing.x;
@@ -86,11 +90,11 @@ pub fn property_row(
         ui.spacing_mut().slider_width = slider_w;
 
         let slider_l = ui.add_sized(
-            [slider_w, ROW_HEIGHT],
+            [slider_w, row_height],
             Slider::new(&mut start_v, min..=max).show_value(false),
         );
         let box_l = ui.add_sized(
-            [BOX_W, ROW_HEIGHT],
+            [BOX_W, row_height],
             egui::DragValue::new(&mut start_v)
                 .range(min..=max)
                 .speed(step),
@@ -108,9 +112,10 @@ pub fn property_row(
         }
 
         if ui
-            .add_sized(
-                [button_w, ROW_HEIGHT],
-                Button::new(button_text).size(ButtonSize::Small),
+            .add(
+                Button::new(button_text)
+                    .size(ButtonSize::Small)
+                    .min_width(button_w),
             )
             .clicked()
         {
@@ -118,13 +123,13 @@ pub fn property_row(
         }
 
         let box_r = ui.add_sized(
-            [BOX_W, ROW_HEIGHT],
+            [BOX_W, row_height],
             egui::DragValue::new(&mut end_v)
                 .range(min..=max)
                 .speed(step),
         );
         let slider_r = ui.add_sized(
-            [slider_w, ROW_HEIGHT],
+            [slider_w, row_height],
             Slider::new(&mut end_v, min..=max).show_value(false),
         );
         if box_r.changed() || slider_r.changed() {
