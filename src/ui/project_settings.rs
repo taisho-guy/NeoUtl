@@ -1,14 +1,17 @@
 use crate::app_state::{self, SharedAppState};
 use crate::project;
-use crate::ui::system_settings::fields::{choice_field, name_field};
+use crate::ui::system_settings::fields::name_field;
 use crate::ui::ui_ext::UiExt;
 use egui::{Context, Ui};
 
 pub struct ProjectSettingsWindow {
     pub open: bool,
     project_name: String,
-    audio_sample_rate: i32,
-    audio_channels: i32,
+    fps: u32,
+    width: u32,
+    height: u32,
+    audio_sample_rate: u32,
+    audio_channels: u32,
 }
 
 impl ProjectSettingsWindow {
@@ -16,6 +19,9 @@ impl ProjectSettingsWindow {
         Self {
             open: false,
             project_name: "Project".into(),
+            fps: 30,
+            width: 1920,
+            height: 1080,
             audio_sample_rate: 48000,
             audio_channels: 2,
         }
@@ -28,15 +34,18 @@ impl ProjectSettingsWindow {
         drop(world);
 
         self.project_name = project.name;
-        self.audio_sample_rate = project.audio_sample_rate as i32;
-        self.audio_channels = project.audio_channels as i32;
+        self.fps = project.fps;
+        self.width = project.width;
+        self.height = project.height;
+        self.audio_sample_rate = project.audio_sample_rate;
+        self.audio_channels = project.audio_channels;
         self.open = true;
     }
 
     fn confirm(&mut self, state: &SharedAppState) {
         let name = self.project_name.clone();
-        let sample_rate = self.audio_sample_rate.max(1) as u32;
-        let channels = self.audio_channels.clamp(1, 8) as u32;
+        let sample_rate = self.audio_sample_rate.max(1);
+        let channels = self.audio_channels.clamp(1, 8);
 
         let world_holder = app_state::active_world(state);
         app_state::snapshot_before_edit(state);
@@ -46,6 +55,8 @@ impl ProjectSettingsWindow {
             .dir
             .unwrap_or_else(project::projects_dir);
         world.set_project_meta(name.clone(), dir);
+        world.set_fps(self.fps);
+        world.set_resolution(self.width, self.height);
         world.set_audio_format(sample_rate, channels);
         let _ = project::save_from_world(&world);
         drop(world);
@@ -93,45 +104,39 @@ impl ProjectSettingsWindow {
                         });
                 });
 
-                ui.section(t!("音声フォーマット"), |ui| {
-                    egui::Grid::new("project_settings_audio")
-                        .num_columns(2)
-                        .show(ui, |ui| {
-                            let sample_rate_options = [
-                                "44100 Hz".to_string(),
-                                "48000 Hz".to_string(),
-                                "96000 Hz".to_string(),
-                            ];
-                            let mut sample_rate_index = match self.audio_sample_rate {
-                                44100 => 0,
-                                96000 => 2,
-                                _ => 1,
-                            };
-                            if choice_field(
-                                ui,
-                                "サンプルレート:",
-                                &sample_rate_options,
-                                &mut sample_rate_index,
-                            ) {
-                                self.audio_sample_rate = match sample_rate_index {
-                                    0 => 44100,
-                                    2 => 96000,
-                                    _ => 48000,
-                                };
-                            }
+                ui.section(t!("映像フォーマット"), |ui| {
+                    ui.horizontal(|ui| {
+                        ui.add(
+                            egui::DragValue::new(&mut self.fps)
+                                .range(1..=240)
+                                .suffix(" fps"),
+                        );
+                        ui.add(
+                            egui::DragValue::new(&mut self.width)
+                                .range(16..=7680)
+                                .suffix(" px"),
+                        );
+                        ui.add(
+                            egui::DragValue::new(&mut self.height)
+                                .range(16..=7680)
+                                .suffix(" px"),
+                        );
+                    });
+                });
 
-                            let channel_options =
-                                ["モノラル (1ch)".to_string(), "ステレオ (2ch)".to_string()];
-                            let mut channel_index = if self.audio_channels == 1 { 0 } else { 1 };
-                            if choice_field(
-                                ui,
-                                "チャンネル数:",
-                                &channel_options,
-                                &mut channel_index,
-                            ) {
-                                self.audio_channels = if channel_index == 0 { 1 } else { 2 };
-                            }
-                        });
+                ui.section(t!("音声フォーマット"), |ui| {
+                    ui.horizontal(|ui| {
+                        ui.add(
+                            egui::DragValue::new(&mut self.audio_channels)
+                                .range(1..=8)
+                                .suffix(" ch"),
+                        );
+                        ui.add(
+                            egui::DragValue::new(&mut self.audio_sample_rate)
+                                .range(8000..=192000)
+                                .suffix(" Hz"),
+                        );
+                    });
                 });
             });
         });
