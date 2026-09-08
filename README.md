@@ -2,12 +2,23 @@
 
 [公式サイト](https://neoutl.taisho-guy.org) / [Codeberg](https://codeberg.org/taisho-guy/NeoUtl) / [Wiki](https://codeberg.org/taisho-guy/NeoUtl/wiki/Home) / [AviQtl](https://codeberg.org/taisho-guy/NeoUtl/src/branch/aviqtl)
 
-<a href="https://zulip.com" style="display: flex; align-items: center; gap: 10px; text-decoration: none; color: inherit;">
-  <img src="https://raw.githubusercontent.com/zulip/zulip/refs/heads/main/static/images/logo/zulip-icon-circle.svg" width="32" height="32" alt="Zulip">
+<a href="https://zulipchat.com" style="text-decoration: none; color: inherit;">
+  <img src="https://raw.githubusercontent.com/zulip/zulip/refs/heads/main/static/images/logo/zulip-icon-circle.svg" width="32" height="32" align="middle" alt="Zulip">
   <span><b>Zulip is an organized team chat app designed for efficient communication.</b></span>
 </a>
 
-
+<a href="https://zulipchat.com" style="text-decoration: none; color: inherit;">
+  <table border="0" cellpadding="0" cellspacing="0" style="border: none; background: transparent;">
+    <tr style="border: none; background: transparent;">
+      <td style="border: none; padding-right: 10px; valign: middle;">
+        <img src="https://raw.githubusercontent.com/zulip/zulip/refs/heads/main/static/images/logo/zulip-icon-circle.svg" width="32" height="32" alt="Zulip">
+      </td>
+      <td style="border: none; valign: middle;">
+        <span><b>Zulip is an organized team chat app designed for efficient communication.</b></span>
+      </td>
+    </tr>
+  </table>
+</a>
 
 ## NeoUtlとは
 
