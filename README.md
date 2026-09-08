@@ -1,20 +1,6 @@
 # NeoUtl: Ever Optimize &mdash; Until Triumphing Liberty.
 
-[公式サイト](https://neoutl.taisho-guy.org) / [Codeberg](https://codeberg.org/taisho-guy/NeoUtl) / [Wiki](https://codeberg.org/taisho-guy/NeoUtl/wiki/Home) / [AviQtl](https://codeberg.org/taisho-guy/NeoUtl/src/branch/aviqtl)
-
-<a href="https://zulipchat.com" style="text-decoration: none; color: inherit;">
-  <table border="0" cellpadding="0" cellspacing="0" style="display: inline-table; border: none; background: transparent; margin: 0; padding: 0;">
-    <tr style="border: none; background: transparent;">
-      <td style="border: none; padding: 0 10px 0 0; background: transparent; vertical-align: middle;">
-        <img src="https://raw.githubusercontent.com/zulip/zulip/refs/heads/main/static/images/logo/zulip-icon-circle.svg" width="32" height="32" alt="Zulip">
-      </td>
-      <td style="border: none; padding: 0; background: transparent; vertical-align: middle;">
-        <span><b>Zulip is an organized team chat app designed for efficient communication.</b></span>
-      </td>
-    </tr>
-  </table>
-</a>
-
+[公式サイト](https://neoutl.taisho-guy.org) / [Codeberg](https://codeberg.org/taisho-guy/NeoUtl) / [Zulip](https://taisho-guy.zulipchat.com/join/lz2ljlwmnz2xridgihuprspg/) / [Wiki](https://codeberg.org/taisho-guy/NeoUtl/wiki/Home) / [AviQtl](https://codeberg.org/taisho-guy/NeoUtl/src/branch/aviqtl)
 
 ## NeoUtlとは
 
@@ -22,6 +8,8 @@ AviUtl ExEdit0ライクな動画編集ソフトウェアです。LinuxやWindows
 
 <img src="assets/screenshot.webp"/>
 
+## コミュニティに参加しましょう！
+[Zulip](https://zulip.com)は、効率的なコミュニケーションのために設計された、組織的なチームチャットアプリです。[こちら](https://taisho-guy.zulipchat.com/join/lz2ljlwmnz2xridgihuprspg/)から招待を受け取り、NeoUtlの開発者やユーザーと繋がることが出来ます。デスクトップやモバイル向けに[Zulipアプリ](https://zulip.com/apps/)も提供されております。
 ## ロードマップ
 
 [TODO.md](https://codeberg.org/taisho-guy/NeoUtl/src/branch/main/TODO.md)をご確認下さい。
