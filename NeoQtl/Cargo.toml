@@ -1,0 +1,24 @@
+[package]
+name = "NeoQtl"
+version = "0.0.0"
+edition = "2024"
+
+[dependencies]
+cxx = "1"
+cxx-qt-lib = { version = "0.10", features = ["qt_full"] }
+wgpu = "30"
+pollster = "1"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+ash = "0.38"
+
+[target.'cfg(target_os = "windows")'.dependencies]
+windows = { version = "0.62", features = ["Win32_Graphics_Direct3D12"] }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+metal = "0.33"
+objc = "0.2"
+
+[build-dependencies]
+cxx-build = "1"
+cxx-qt-build = "0.10"

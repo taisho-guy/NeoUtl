@@ -26,7 +26,7 @@ members = [
     "crates/neoutl-effect-shader-build",
     "crates/neoutl-object-shader-build",
     "crates/xtask",
-    "crates/maolan-host-adapter",
+    "crates/maolan-host-adapter", "NeoQtl",
 ]
 exclude = ["neoutl-wgpu"]
 resolver = "2"
