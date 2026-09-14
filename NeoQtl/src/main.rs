@@ -31,6 +31,7 @@ mod schema;
 mod shortcuts;
 pub mod system_settings;
 mod theme;
+pub mod ui;
 mod update;
 
 use cxx_qt_lib::{QByteArray, QGuiApplication, QQmlApplicationEngine, QUrl};
@@ -102,7 +103,7 @@ fn main() {
 
     let mut application = QGuiApplication::new();
     let mut engine = QQmlApplicationEngine::new();
-    let url = QUrl::from_encoded(&QByteArray::from("qrc:/NeoQtl/qml/Main.qml"));
+    let url = QUrl::from_encoded(&QByteArray::from("qrc:/NeoQtl/src/ui/qml/AppRoot.qml"));
     engine.pin_mut().load(&url);
 
     let _ = init_done_rx.recv();

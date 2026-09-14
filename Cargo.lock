@@ -12,6 +12,7 @@ dependencies = [
  "cc",
  "cxx",
  "cxx-build",
+ "cxx-qt",
  "cxx-qt-build",
  "cxx-qt-lib",
  "font-kit",

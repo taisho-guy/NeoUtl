@@ -32,7 +32,7 @@ fn find_qt6_tool(name: &str) -> PathBuf {
 }
 
 fn main() {
-    println!("cargo:rerun-if-changed=qml");
+    println!("cargo:rerun-if-changed=src/ui/qml");
     println!("cargo:rerun-if-changed=assets/themes");
     println!("cargo:rerun-if-changed=src/renderer/slang/media.slang");
     println!("cargo:rerun-if-changed=src/renderer/slang/media_video.slang");
@@ -65,7 +65,7 @@ fn main() {
     let qml_cache_dir = out_dir.join("qmlcache");
     fs::create_dir_all(&qml_cache_dir).expect("Failed to create qmlcache dir");
 
-    let qrc_path = PathBuf::from("qml/qml.qrc")
+    let qrc_path = PathBuf::from("src/ui/qml/qml.qrc")
         .canonicalize()
         .expect("Failed to canonicalize qml.qrc");
     let qmlcachegen = find_qt6_tool("qmlcachegen");
@@ -82,7 +82,7 @@ fn main() {
     assert!(status.success(), "qmlcachegen filter failed");
 
     let mut qml_files = Vec::new();
-    collect_qml_files(Path::new("qml"), &mut qml_files);
+    collect_qml_files(Path::new("src/ui/qml"), &mut qml_files);
 
     let mut generated_cpp_files = Vec::new();
     for qml in &qml_files {

@@ -1,0 +1,23 @@
+<!DOCTYPE RCC><RCC version="1.0">
+    <qresource prefix="/NeoQtl/src/ui/qml">
+        <file>qmldir</file>
+        <file>AppRoot.qml</file>
+        <file>LauncherWindow.qml</file>
+        <file>PreviewWindow.qml</file>
+        <file>TimelineWindow.qml</file>
+        <file>PropertiesWindow.qml</file>
+        <file>Theme.qml</file>
+        <file>Components/qmldir</file>
+        <file>Components/NeoButton.qml</file>
+        <file>Components/NeoCard.qml</file>
+        <file>Components/NeoNumberInput.qml</file>
+        <file>Components/NeoTextInput.qml</file>
+        <file>Dialogs/EasingEditorDialog.qml</file>
+        <file>Dialogs/EffectAddDialog.qml</file>
+        <file>Dialogs/ExportDialog.qml</file>
+        <file>Dialogs/KeybindingsDialog.qml</file>
+        <file>Dialogs/ProjectSettingsDialog.qml</file>
+        <file>Dialogs/SceneSettingsDialog.qml</file>
+        <file>Dialogs/SystemSettingsDialog.qml</file>
+    </qresource>
+</RCC>

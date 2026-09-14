@@ -5,6 +5,7 @@ edition = "2024"
 
 [dependencies]
 cxx = "1"
+cxx-qt = "0.10"
 cxx-qt-lib = { version = "0.10", features = ["qt_full"] }
 neoutl-shared-abi = { path = "../crates/neoutl-shared-abi" }
 neoutl-color = { path = "../crates/neoutl-color" }
