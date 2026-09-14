@@ -15,6 +15,9 @@ struct RenderContext {
     queue: wgpu::Queue,
     backend_tag: u8,
     target: Option<wgpu::Texture>,
+    target_width: u32,
+    target_height: u32,
+    engine: Option<crate::renderer::RenderEngine>,
 }
 
 static CONTEXTS: Mutex<Option<HashMap<usize, RenderContext>>> = Mutex::new(None);
@@ -211,6 +214,7 @@ pub fn wgpu_renderer_bind_device(context_id: usize, handles: NativeDeviceHandles
         _ => None,
     };
     let Some((device, queue)) = bound else { return };
+    let engine = crate::renderer::RenderEngine::new(device.clone(), queue.clone(), 1920, 1080);
     contexts().as_mut().unwrap().insert(
         context_id,
         RenderContext {
@@ -218,6 +222,9 @@ pub fn wgpu_renderer_bind_device(context_id: usize, handles: NativeDeviceHandles
             queue,
             backend_tag: handles.backend,
             target: None,
+            target_width: 1920,
+            target_height: 1080,
+            engine: Some(engine),
         },
     );
 }
@@ -308,6 +315,13 @@ pub fn wgpu_renderer_bind_texture(context_id: usize, texture: NativeTextureHandl
     };
 
     ctx.target = wrapped;
+    ctx.target_width = texture.width.max(1) as u32;
+    ctx.target_height = texture.height.max(1) as u32;
+    if let Some(engine) = ctx.engine.as_mut() {
+        if engine.render_width != ctx.target_width || engine.render_height != ctx.target_height {
+            engine.resize_render_target(ctx.target_width, ctx.target_height);
+        }
+    }
 }
 
 pub fn wgpu_renderer_render(context_id: usize) {
@@ -321,18 +335,19 @@ pub fn wgpu_renderer_render(context_id: usize) {
 
     let view = target.create_view(&Default::default());
     let mut encoder = ctx.device.create_command_encoder(&Default::default());
+
     {
         let _pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-            label: Some("neoqtl-rhi-pass"),
+            label: Some("neoqtl-rhi-clear-pass"),
             color_attachments: &[Some(wgpu::RenderPassColorAttachment {
                 view: &view,
                 depth_slice: None,
                 resolve_target: None,
                 ops: wgpu::Operations {
                     load: wgpu::LoadOp::Clear(wgpu::Color {
-                        r: 0.2,
-                        g: 0.02,
-                        b: 0.8,
+                        r: 0.05,
+                        g: 0.07,
+                        b: 0.12,
                         a: 1.0,
                     }),
                     store: wgpu::StoreOp::Store,
@@ -344,6 +359,41 @@ pub fn wgpu_renderer_render(context_id: usize) {
             multiview_mask: None,
         });
     }
+
+    if let Some(engine) = ctx.engine.as_mut() {
+        let state = crate::app_state::global();
+        let world_arc = crate::app_state::active_world(state);
+        let world = world_arc.lock().unwrap();
+        let (active, captured) = crate::ecs::systems::get_active_objects_system(&world);
+        let proj = world.get_project();
+
+        engine.render(&world, &active, &captured, &proj);
+
+        let copy_width = ctx.target_width.min(engine.render_width);
+        let copy_height = ctx.target_height.min(engine.render_height);
+        if copy_width > 0 && copy_height > 0 && engine.texture.format() == target.format() {
+            encoder.copy_texture_to_texture(
+                wgpu::TexelCopyTextureInfo {
+                    texture: &engine.texture,
+                    mip_level: 0,
+                    origin: wgpu::Origin3d::ZERO,
+                    aspect: wgpu::TextureAspect::All,
+                },
+                wgpu::TexelCopyTextureInfo {
+                    texture: target,
+                    mip_level: 0,
+                    origin: wgpu::Origin3d::ZERO,
+                    aspect: wgpu::TextureAspect::All,
+                },
+                wgpu::Extent3d {
+                    width: copy_width,
+                    height: copy_height,
+                    depth_or_array_layers: 1,
+                },
+            );
+        }
+    }
+
     ctx.queue.submit(Some(encoder.finish()));
 }
 

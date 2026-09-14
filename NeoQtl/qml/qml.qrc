@@ -1,5 +1,12 @@
 <!DOCTYPE RCC><RCC version="1.0">
     <qresource prefix="/NeoQtl/qml">
         <file>Main.qml</file>
+        <file>PreviewPanel.qml</file>
+        <file>TimelinePanel.qml</file>
+        <file>PropertiesPanel.qml</file>
+        <file>Dialogs/ProjectSettingsDialog.qml</file>
+        <file>Dialogs/ExportDialog.qml</file>
+        <file>Dialogs/EffectAddDialog.qml</file>
+        <file>Dialogs/SystemSettingsDialog.qml</file>
     </qresource>
 </RCC>

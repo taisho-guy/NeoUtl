@@ -36,7 +36,7 @@ pub fn register() {
     ffi::register_wgpu_rhi_item();
 }
 
-pub use crate::renderer::{
+pub use crate::rhi_bridge::{
     wgpu_renderer_bind_device, wgpu_renderer_bind_texture, wgpu_renderer_create,
     wgpu_renderer_destroy, wgpu_renderer_render,
 };
