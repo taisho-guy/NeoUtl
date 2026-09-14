@@ -24,6 +24,9 @@ protected:
 private:
     std::size_t rust_context_id_;
     bool device_bound_;
+    quint64 bound_texture_object_ = 0;
+    int bound_texture_width_ = 0;
+    int bound_texture_height_ = 0;
 };
 
 void register_wgpu_rhi_item();

@@ -164,8 +164,8 @@ fn bind_dx12(h: &NativeDeviceHandles) -> Option<(wgpu::Device, wgpu::Queue)> {
     use std::mem::ManuallyDrop;
     use wgpu::hal::api::Dx12;
     use wgpu::hal::dx12 as hal_dx12;
-    use windows::core::Interface;
     use windows::Win32::Graphics::Direct3D12::{ID3D12CommandQueue, ID3D12Device};
+    use windows::core::Interface;
 
     let borrowed_device: ManuallyDrop<ID3D12Device> =
         ManuallyDrop::new(unsafe { Interface::from_raw(h.device as *mut core::ffi::c_void) });
@@ -286,10 +286,11 @@ pub fn wgpu_renderer_bind_texture(context_id: usize, texture: NativeTextureHandl
         #[cfg(target_os = "windows")]
         BACKEND_DX12 => unsafe {
             use std::mem::ManuallyDrop;
-            use windows::core::Interface;
             use windows::Win32::Graphics::Direct3D12::ID3D12Resource;
-            let borrowed: ManuallyDrop<ID3D12Resource> =
-                ManuallyDrop::new(Interface::from_raw(texture.object as *mut core::ffi::c_void));
+            use windows::core::Interface;
+            let borrowed: ManuallyDrop<ID3D12Resource> = ManuallyDrop::new(Interface::from_raw(
+                texture.object as *mut core::ffi::c_void,
+            ));
             let raw: ID3D12Resource = (*borrowed).clone();
             let hal_texture = ctx
                 .device

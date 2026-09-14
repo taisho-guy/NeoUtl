@@ -61,8 +61,9 @@ ApplicationWindow {
                     onClicked: root.playing = !root.playing
                 }
                 Slider {
+                    id: seekSlider
                     Layout.fillWidth: true
-                    value: root.seekPosition
+                    Binding on value { value: root.seekPosition; when: !seekSlider.pressed }
                     onMoved: root.seekPosition = value
                 }
                 Label {

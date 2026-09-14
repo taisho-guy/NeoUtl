@@ -71,13 +71,27 @@ void WgpuRhiRenderer::render(QRhiCommandBuffer *) {
     if (!color) return;
 
     const QRhiTexture::NativeTexture native = color->nativeTexture();
-    NativeTextureHandle texture{};
-    texture.object = native.object;
-    texture.layout_or_state = static_cast<quint32>(native.layout);
-    texture.width = color->pixelSize().width();
-    texture.height = color->pixelSize().height();
+    const int width = color->pixelSize().width();
+    const int height = color->pixelSize().height();
 
-    wgpu_renderer_bind_texture(rust_context_id_, texture);
+    const bool changed = native.object != bound_texture_object_
+        || width != bound_texture_width_
+        || height != bound_texture_height_;
+
+    if (changed) {
+        NativeTextureHandle texture{};
+        texture.object = native.object;
+        texture.layout_or_state = static_cast<quint32>(native.layout);
+        texture.width = width;
+        texture.height = height;
+
+        wgpu_renderer_bind_texture(rust_context_id_, texture);
+
+        bound_texture_object_ = native.object;
+        bound_texture_width_ = width;
+        bound_texture_height_ = height;
+    }
+
     wgpu_renderer_render(rust_context_id_);
     update();
 }

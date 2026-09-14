@@ -1,9 +1,15 @@
+# 成果物
 /target
+
+# Slang
+/slang
+
+# 参考にしているプロジェクト
 /aviutl2_sdk
 /AviQtl
-/slang
 /aviutl-plugin-curve_editor
 /mlt
 /dxc
 /ffmpeg
 /NiVE3
+/wgpu-py
