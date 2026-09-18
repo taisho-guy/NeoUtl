@@ -1,15 +1,29 @@
 # NeoUtl: Ever Optimize &mdash; Until Triumphing Liberty.
 
-[公式サイト](https://neoutl.taisho-guy.org) / [Codeberg](https://codeberg.org/taisho-guy/NeoUtl) / [Zulip](https://taisho-guy.zulipchat.com/join/lz2ljlwmnz2xridgihuprspg/) / [Wiki](https://codeberg.org/taisho-guy/NeoUtl/wiki/Home) / [AviQtl](https://codeberg.org/taisho-guy/NeoUtl/src/branch/aviqtl)
-
 > [!IMPORTANT]
 > 本リポジトリ（GitHub）は[Codeberg](https://codeberg.org/taisho-guy/NeoUtl)のミラーです。イシューやプルリクエスト等はCodebergにてお受けしております。
 
+[公式サイト](https://neoutl.taisho-guy.org) / [Codeberg](https://codeberg.org/taisho-guy/NeoUtl) / [Zulip](https://taisho-guy.zulipchat.com/join/lz2ljlwmnz2xridgihuprspg/) / [Wiki](https://codeberg.org/taisho-guy/NeoUtl/wiki/Home) / [AviQtl](https://codeberg.org/taisho-guy/NeoUtl/src/branch/aviqtl)
+
 ## NeoUtlとは
 
-AviUtl ExEdit0ライクな動画編集ソフトウェアです。LinuxやWindowsで動作します。macOSも将来的にサポートする予定です。
+AviUtl ExEdit0ライクな動画編集ソフトウェアです。LinuxやWindowsで動作します。macOSも将来的にサポートする予定です。現在はプレアルファです。
 
 <img src="../assets/screenshot.webp"/>
+
+> [!IMPORTANT]
+> ## NeoQtlプロジェクトの始動について
+> NeoUtlのGUI（egui）をAviQtlのGUI（QML）に置き換えるプロジェクトを開始しました。NeoUtlとAviQtlの折衷「NeoQtl」として、基礎を組んでいる最中です。NeoQtlは`main`ブランチ内の`NeoQtl`ディレクトリにございます。NeoQtlに成功した場合、プロジェクトはNeoQtlとして再出発し、公式サイトやリポジトリのURLが変わる可能性がございます。
+> 
+> ### なぜ今更QMLを採用するのか
+> 旧AviQtlプロジェクトにおいて、Qt Quick 3Dの限界（Compute Shaderを扱えない等）に直面した為、NeoUtlとしてゼロから再設計された本プロジェクトですが、これにより、本プロジェクトはAviQtlには無かった新たな問題に向き合うことになりました。それは、動画編集ソフトに最適な、統一的で多機能、wgpuと相性の良いGUIの選択肢が極めて少ないことです。消去法的にGUIを選定・採用した結果、個人的にあまり満足の行かない結果となってしまいました。
+>
+> AviQtlのレンダラー部分を除く純粋なGUI部分のみを抽出し、Rustとwgpuで固められたNeoUtlのロジックに噛み合わせる妙案を思いついたので、取り組んでいるところです。完全な成功を収められるかは未だ不明ですが、見込みはあります。
+> 
+> ### 今後のロードマップ
+> 大学入試対策がいよいよ本格化して参りました。AviQtl時代の膨大なQMLの遺産を移植する作業は一触即発には終わりません。入試が上手く言った場合、年内にはNeoQtlを立ち上げるつもりです。入試が上手く行かなかった場合は来年までお待ち下さい⋯⋯。
+>
+> AviQtlのソースコードは今後も一切更新しません。NeoQtlに取り込まれたコードは変更される場合がございます。NeoUtlのソースコードは、緊急性を要する場合は変更しようと考えております。基本的にはNeoQtl一筋です。
 
 ## コミュニティに参加しましょう！
 [Zulip](https://zulip.com)は、効率的なコミュニケーションのために設計された、組織的なチームチャットアプリです。[こちら](https://taisho-guy.zulipchat.com/join/lz2ljlwmnz2xridgihuprspg/)から招待を受け取り、NeoUtlの開発者やユーザーと繋がることが出来ます。デスクトップやモバイル向けに[Zulipアプリ](https://zulip.com/apps/)も提供されております。
