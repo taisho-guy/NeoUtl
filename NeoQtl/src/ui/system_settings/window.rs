@@ -9,16 +9,6 @@ use crate::ecs::{
 use crate::update::UpdateStatus;
 use std::sync::{Arc, Mutex};
 
-pub const CATEGORIES: &[&str] = &[
-    "一般",
-    "外観",
-    "パフォーマンス",
-    "デコード",
-    "タイムライン",
-    "音声プラグイン",
-    "アップデート",
-];
-
 pub struct SystemSettingsWindow {
     pub open: bool,
     pub selected_category: i32,
@@ -44,7 +34,7 @@ pub struct SystemSettingsWindow {
 
     pub audio_plugin_settings: AudioPluginSettingsResource,
     pub new_scan_path: String,
-    pub scan_status: Arc<Mutex<ScanStatus>>,
+    pub(super) scan_status: Arc<Mutex<ScanStatus>>,
 
     pub save_status: String,
 }

@@ -238,7 +238,7 @@ impl TimelineWindow {
         preview_panel.borrow_mut().refresh_total_frames(state);
     }
 
-    pub(super) fn keyframe_moved(
+    pub fn keyframe_moved(
         &mut self,
         state: &SharedAppState,
         id: i32,

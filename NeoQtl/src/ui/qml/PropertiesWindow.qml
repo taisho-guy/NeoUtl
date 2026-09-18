@@ -25,8 +25,7 @@ Window {
         { name: "ColorCorrection", enabled: true },
         { name: "DropShadow", enabled: true }
     ]
-
-        property real posX: 0.0
+    property real posX: 0.0
     property real posY: 0.0
     property real posZ: 0.0
     property real scaleX: 100.0

@@ -26,30 +26,6 @@ fn sep() -> ContextMenuItem {
     }
 }
 
-fn disabled_leaf(label: String, action: i32) -> ContextMenuItem {
-    ContextMenuItem {
-        label,
-        action,
-        kind: -1,
-        enabled: false,
-        icon: String::new(),
-        checked: None,
-        submenu: Vec::new(),
-    }
-}
-
-fn disabled_submenu_parent(label: String) -> ContextMenuItem {
-    ContextMenuItem {
-        label,
-        action: 17,
-        kind: -1,
-        enabled: false,
-        icon: String::new(),
-        checked: None,
-        submenu: Vec::new(),
-    }
-}
-
 pub fn build_context_menu(
     hit_id: i32,
     clipboard_empty: bool,

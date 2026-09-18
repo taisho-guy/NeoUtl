@@ -1,4 +1,4 @@
-use crate::shortcuts::{self, ALL_COMMANDS, CommandId, OwnedBinding, Scope};
+use crate::shortcuts::{self, ALL_COMMANDS, OwnedBinding, Scope};
 
 fn scope_label(s: Scope) -> String {
     match s {

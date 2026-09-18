@@ -6,6 +6,9 @@ import "../Components"
 
 Window {
     id: dialog
+
+    function open() { visible = true }
+    function close() { visible = false }
     width: 580
     height: 460
     title: "NeoUtl - イージング編集"

@@ -6,6 +6,9 @@ import "../Components"
 
 Window {
     id: dialog
+
+    function open() { visible = true }
+    function close() { visible = false }
     width: 520
     height: 360
     title: "プロジェクト設定"

@@ -84,19 +84,32 @@ fn main() {
     let mut qml_files = Vec::new();
     collect_qml_files(Path::new("src/ui/qml"), &mut qml_files);
 
+    let qml_only: Vec<_> = qml_files
+        .iter()
+        .filter(|p| p.extension().and_then(|e| e.to_str()) == Some("qml"))
+        .cloned()
+        .collect();
+    run_qmllint(&qml_only);
+
     let mut generated_cpp_files = Vec::new();
     for qml in &qml_files {
-        let abs_qml = qml.canonicalize().expect("Failed to canonicalize QML file");
+        let abs_qml = qml
+            .canonicalize()
+            .expect("Failed to canonicalize QML/JS file");
         let stem = abs_qml
             .file_stem()
             .and_then(|s| s.to_str())
             .unwrap_or("item");
+        let ext = abs_qml
+            .extension()
+            .and_then(|s| s.to_str())
+            .unwrap_or("qml");
         let parent_name = abs_qml
             .parent()
             .and_then(|p| p.file_name())
             .and_then(|s| s.to_str())
             .unwrap_or("");
-        let cpp_name = format!("{parent_name}_{stem}_qml.cpp");
+        let cpp_name = format!("{parent_name}_{stem}_{ext}.cpp");
         let out_cpp = qml_cache_dir.join(cpp_name);
 
         let status = Command::new(&qmlcachegen)
@@ -158,13 +171,17 @@ extern "C" void ensure_qml_aot_cache_registered() {{
     let mut builder = cxx_qt_build::CxxQtBuilder::new()
         .qt_module("Quick")
         .qt_module("Qml")
-        .cpp_file("include/wgpu_rhi_item.h")
-        .file("src/ffi.rs");
+        .cpp_file("src/ui/timeline/bridge_qt.h")
+        .cpp_file("include/app_main.h")
+        .file("src/ffi.rs")
+        .file("src/ui/timeline/bridge/timeline_bridge.rs");
 
     builder = unsafe {
         builder.cc_builder(move |cc| {
-            cc.file("src/wgpu_rhi_item.cpp")
+            cc.file("src/app_main.cpp")
+                .file("src/ui/timeline/bridge_qt.cpp")
                 .include("include")
+                .include("src/ui/timeline")
                 .include(format!("{gui_private_include}/QtGui/{qt_version}"))
                 .include(format!("{gui_private_include}/QtGui/{qt_version}/QtGui"))
                 .flag_if_supported("-std=c++17");
@@ -176,6 +193,45 @@ extern "C" void ensure_qml_aot_cache_registered() {{
     };
 
     builder.build();
+
+    println!("cargo:rustc-link-lib=static:+whole-archive=cxx-qt-cxxqt-generated");
+    println!("cargo:rustc-link-lib=static:+whole-archive=cxx-qt-lib-cxxqt-generated");
+}
+
+fn run_qmllint(qml_files: &[PathBuf]) {
+    let qmllint = find_qt6_tool("qmllint");
+    if !qmllint.is_file() {
+        println!(
+            "cargo:warning=qmllint not found, skipping static QML check (path tried: {})",
+            qmllint.display()
+        );
+        return;
+    }
+
+    let qml_root = Path::new("src/ui/qml")
+        .canonicalize()
+        .expect("Failed to canonicalize src/ui/qml");
+
+    for qml in qml_files {
+        let abs_qml = qml.canonicalize().expect("Failed to canonicalize QML file");
+        let output = Command::new(&qmllint)
+            .arg("-I")
+            .arg(&qml_root)
+            .arg("--silent")
+            .arg(&abs_qml)
+            .output()
+            .expect("Failed to run qmllint");
+        if !output.status.success() {
+            println!(
+                "cargo:warning=qmllint warning on {}: {}",
+                abs_qml.display(),
+                String::from_utf8_lossy(&output.stderr)
+                    .lines()
+                    .next()
+                    .unwrap_or("diagnostic")
+            );
+        }
+    }
 }
 
 fn collect_qml_files(dir: &Path, out: &mut Vec<PathBuf>) {
@@ -184,7 +240,10 @@ fn collect_qml_files(dir: &Path, out: &mut Vec<PathBuf>) {
             let path = entry.path();
             if path.is_dir() {
                 collect_qml_files(&path, out);
-            } else if path.extension().and_then(|e| e.to_str()) == Some("qml") {
+            } else if matches!(
+                path.extension().and_then(|e| e.to_str()),
+                Some("qml") | Some("js")
+            ) {
                 out.push(path);
             }
         }

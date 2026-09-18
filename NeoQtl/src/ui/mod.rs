@@ -15,8 +15,7 @@ pub mod types;
 pub mod ui_ext;
 
 use crate::app_state::{self, AppState, ProjectSession, SharedAppState};
-use crate::gpu_shared::SharedGpu;
-use crate::project::{self, ProjectMeta};
+use crate::project::ProjectMeta;
 use dialogs::DialogSet;
 use launcher::LauncherPanel;
 use preview::{LegacyWindows, PreviewPanel};

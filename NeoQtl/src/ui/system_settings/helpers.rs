@@ -5,32 +5,6 @@ use std::path::PathBuf;
 pub(super) enum ScanStatus {
     #[default]
     Idle,
-    Scanning,
-    Done,
-    Error(String),
-}
-
-pub(super) fn category_label(index: usize) -> &'static str {
-    super::window::CATEGORIES[index]
-}
-
-pub(super) fn hw_backend_display_name(id: &str) -> String {
-    match id {
-        "cuda" => "CUDA (NVIDIA)".to_owned(),
-        "qsv" => "QSV (Intel)".to_owned(),
-        "d3d11va" => "D3D11VA (Windows)".to_owned(),
-        "d3d12va" => "D3D12VA (Windows)".to_owned(),
-        "dxva2" => "DXVA2 (Windows)".to_owned(),
-        "videotoolbox" => "VideoToolbox (macOS)".to_owned(),
-        "vulkan" => "Vulkan".to_owned(),
-        "opencl" => "OpenCL".to_owned(),
-        "vdpau" => "VDPAU (Linux)".to_owned(),
-        "amf" => "AMF (AMD)".to_owned(),
-        "mediacodec" => "MediaCodec (Android)".to_owned(),
-        "drm" => "DRM (Linux)".to_owned(),
-        "vaapi" => "VAAPI (Linux)".to_owned(),
-        other => other.to_owned(),
-    }
 }
 
 pub(super) fn settings_path() -> PathBuf {

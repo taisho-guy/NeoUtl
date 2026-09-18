@@ -7,7 +7,6 @@ pub mod track;
 
 use crate::app_state::{self, SharedAppState};
 use crate::ui::effect_add_dialog::EffectAddDialog;
-use crate::ui::effect_catalog::EffectCatalogState;
 
 pub struct PropertiesPanel {
     pub open: bool,

@@ -5,7 +5,8 @@ Rectangle {
     id: card
 
     property string heading: ""
-    default property alias content: innerColumn.data
+    default
+    property alias content: innerColumn.data
 
     color: Theme.card
     border.color: Theme.border

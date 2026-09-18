@@ -1,7 +1,6 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
-import NeoQtl 1.0
 import "./Components"
 
 Window {
@@ -106,9 +105,11 @@ Window {
             color: Theme.bgDark
             clip: true
 
-            WgpuRhiItem {
-                id: wgpuItem
+            Rectangle {
+                id: previewSurfaceArea
+                objectName: "previewSurfaceArea"
                 anchors.fill: parent
+                color: "#000000"
             }
 
                         Rectangle {

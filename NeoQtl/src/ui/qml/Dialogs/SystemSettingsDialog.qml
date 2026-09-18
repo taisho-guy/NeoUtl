@@ -6,6 +6,9 @@ import "../Components"
 
 Window {
     id: dialog
+
+    function open() { visible = true }
+    function close() { visible = false }
     width: 720
     height: 540
     title: "NeoUtl - システム設定"

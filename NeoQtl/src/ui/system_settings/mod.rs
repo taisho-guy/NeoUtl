@@ -7,5 +7,4 @@ mod page_performance;
 mod page_timeline;
 mod window;
 
-pub(crate) use helpers::load_from_disk;
 pub use window::SystemSettingsWindow;

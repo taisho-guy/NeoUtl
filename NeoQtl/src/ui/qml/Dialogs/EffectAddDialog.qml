@@ -6,6 +6,9 @@ import "../Components"
 
 Window {
     id: dialog
+
+    function open() { visible = true }
+    function close() { visible = false }
     width: 420
     height: 560
     title: "エフェクト追加"
@@ -27,10 +30,10 @@ Window {
         { id: "clipping", name: "クリッピング", category: "変形" },
         { id: "transform", name: "トランスフォーム", category: "変形" }
     ]
-
     property string searchText: ""
     property string categoryFilter: "全て"
-    readonly property var categories: ["全て", "ぼかし", "色調整", "描画", "特殊効果", "変形"]
+    readonly
+    property var categories: ["全て", "ぼかし", "色調整", "描画", "特殊効果", "変形"]
 
     ColumnLayout {
         anchors.fill: parent

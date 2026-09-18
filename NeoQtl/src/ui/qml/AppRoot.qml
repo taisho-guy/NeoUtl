@@ -18,7 +18,6 @@ QtObject {
 
         onRequestSystemSettings: systemSettingsDialog.open()
     }
-
     property PreviewWindow previewWindow: PreviewWindow {
         id: previewWindow
         visible: false
@@ -32,23 +31,23 @@ QtObject {
         onOpenPropertiesRequested: propertiesWindow.visible = true
 
                 onSeekRequested: (frame) => {
-            timelineWindow.currentFrame = frame
+            TimelineBridge.seek(frame)
         }
         onTogglePlayRequested: {
-            timelineWindow.isPlaying = !timelineWindow.isPlaying
         }
     }
 
     property TimelineWindow timelineWindow: TimelineWindow {
         id: timelineWindow
         visible: false
-
-        onSeekRequested: (frame) => {
-            previewWindow.currentFrame = frame
-        }
-
-        onClipSelected: (clipId) => {
-            propertiesWindow.targetObjectId = clipId
+    }
+    property Connections propertiesSelectionSync: Connections {
+        target: TimelineBridge
+        function onClipsChanged() {
+            var selected = TimelineBridge.clips.filter(function(c) { return c.selected; })
+            if (selected.length === 1) {
+                propertiesWindow.targetObjectId = selected[0].id
+            }
         }
     }
 
@@ -59,15 +58,13 @@ QtObject {
         onOpenEffectAddRequested: effectAddDialog.open()
         onOpenEasingEditorRequested: (paramKey) => easingEditorDialog.open()
     }
-
-        property SystemSettingsDialog systemSettingsDialog: SystemSettingsDialog {
+    property SystemSettingsDialog systemSettingsDialog: SystemSettingsDialog {
         id: systemSettingsDialog
     }
 
     property ProjectSettingsDialog projectSettingsDialog: ProjectSettingsDialog {
         id: projectSettingsDialog
     }
-
     property SceneSettingsDialog sceneSettingsDialog: SceneSettingsDialog {
         id: sceneSettingsDialog
     }
@@ -75,7 +72,6 @@ QtObject {
     property KeybindingsDialog keybindingsDialog: KeybindingsDialog {
         id: keybindingsDialog
     }
-
     property ExportDialog exportDialog: ExportDialog {
         id: exportDialog
     }
@@ -83,7 +79,6 @@ QtObject {
     property EffectAddDialog effectAddDialog: EffectAddDialog {
         id: effectAddDialog
     }
-
     property EasingEditorDialog easingEditorDialog: EasingEditorDialog {
         id: easingEditorDialog
     }

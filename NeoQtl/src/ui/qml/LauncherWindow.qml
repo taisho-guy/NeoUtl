@@ -20,7 +20,8 @@ Window {
     property bool selectionMode: false
     property var selectedDirs: []
     property int sortIndex: 0
-    readonly property var sortLabels: ["並べ替え：名前 ↑", "並べ替え：名前 ↓", "並べ替え：更新日時 ↑", "並べ替え：更新日時 ↓"]
+    readonly
+    property var sortLabels: ["並べ替え：名前 ↑", "並べ替え：名前 ↓", "並べ替え：更新日時 ↑", "並べ替え：更新日時 ↓"]
 
         property var projectList: [
         { name: "Sample Project", dir: "/sample/path", width: 1920, height: 1080, fps: 30, modified: "2026-09-14 12:00" }

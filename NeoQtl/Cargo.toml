@@ -48,18 +48,9 @@ rust-i18n = "4"
 ureq = { version = "3", features = ["json", "_tls"] }
 zip = "8"
 maolan-host-adapter = { path = "../crates/maolan-host-adapter" }
+winit = { version = "0.30", features = ["rwh_06", "x11"] }
+raw-window-handle = "0.6"
 
-[target.'cfg(target_os = "linux")'.dependencies]
-ash = "0.38"
-wgpu-hal = { version = "30", features = ["vulkan"] }
-
-[target.'cfg(target_os = "windows")'.dependencies]
-windows = { version = "0.62", features = ["Win32_Graphics_Direct3D12"] }
-wgpu-hal = { version = "30", features = ["dx12"] }
-
-[target.'cfg(target_os = "macos")'.dependencies]
-metal = "0.33"
-objc = "0.2"
 
 [build-dependencies]
 cxx-build = "1"

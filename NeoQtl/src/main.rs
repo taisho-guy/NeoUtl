@@ -26,15 +26,13 @@ mod localization;
 mod objects;
 mod project;
 mod renderer;
-mod rhi_bridge;
 mod schema;
 mod shortcuts;
 pub mod system_settings;
 mod theme;
 pub mod ui;
 mod update;
-
-use cxx_qt_lib::{QByteArray, QGuiApplication, QQmlApplicationEngine, QUrl};
+pub mod winit_wgpu_layer;
 
 unsafe extern "C" {
     fn ensure_qml_aot_cache_registered();
@@ -99,15 +97,8 @@ fn main() {
         })
         .expect("初期化スレッド起動失敗");
 
-    ffi::register();
-
-    let mut application = QGuiApplication::new();
-    let mut engine = QQmlApplicationEngine::new();
-    let url = QUrl::from_encoded(&QByteArray::from("qrc:/NeoQtl/src/ui/qml/AppRoot.qml"));
-    engine.pin_mut().load(&url);
-
     let _ = init_done_rx.recv();
 
-    application.pin_mut().exec();
+    ffi::run("qrc:/qt/qml/AviQtl/ui/qml/AppRoot.qml");
     project::finish_runtime_session();
 }
