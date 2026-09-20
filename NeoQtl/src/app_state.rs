@@ -30,18 +30,6 @@ impl History {
         }
         self.redo_stack.clear();
     }
-
-    fn undo(&mut self, current: DocumentModel) -> Option<DocumentModel> {
-        let prev = self.undo_stack.pop()?;
-        self.redo_stack.push(current);
-        Some(prev)
-    }
-
-    fn redo(&mut self, current: DocumentModel) -> Option<DocumentModel> {
-        let next = self.redo_stack.pop()?;
-        self.undo_stack.push(current);
-        Some(next)
-    }
 }
 
 pub struct ProjectSession {
@@ -164,6 +152,11 @@ pub fn activate_session_by_dir(
     Ok(())
 }
 
+pub fn settings_world(state: &SharedAppState) -> Arc<Mutex<EcsWorld>> {
+    let s = state.lock().unwrap();
+    s.sessions[0].world.clone()
+}
+
 pub fn open_project_session(state: &SharedAppState, dir: &std::path::Path) -> Result<(), String> {
     if activate_session_by_dir(state, dir).is_ok() {
         return Ok(());
@@ -202,9 +195,13 @@ pub fn new_project_session(state: &SharedAppState) -> std::io::Result<()> {
     Ok(())
 }
 
-pub fn settings_world(state: &SharedAppState) -> Arc<Mutex<EcsWorld>> {
-    let s = state.lock().unwrap();
-    s.sessions[0].world.clone()
+pub fn set_clipboard(state: &SharedAppState, docs: Vec<ObjectDoc>) {
+    let mut s = state.lock().unwrap();
+    s.clipboard = docs;
+}
+
+pub fn clipboard(state: &SharedAppState) -> Vec<ObjectDoc> {
+    state.lock().unwrap().clipboard.clone()
 }
 
 pub fn snapshot_before_edit(state: &SharedAppState) {
@@ -250,75 +247,6 @@ pub fn autosave_if_due(state: &SharedAppState) {
     }
 }
 
-pub fn save_all(state: &SharedAppState) {
-    let mut s = state.lock().unwrap();
-    for session in &mut s.sessions {
-        let world = session.world.lock().unwrap();
-        if let Err(err) = crate::project::save_from_world(&world) {
-            report_io_error("[NeoUtl] プロジェクト保存失敗", &err);
-        } else {
-            session.dirty = false;
-        }
-    }
-}
-
-pub fn save_active(state: &SharedAppState) -> bool {
-    let world_holder = active_world(state);
-    let result = {
-        let world = world_holder.lock().unwrap();
-        crate::project::save_from_world(&world)
-    };
-    if let Err(err) = &result {
-        report_io_error("[NeoUtl] プロジェクト保存失敗", err);
-    }
-    if result.is_ok() {
-        let mut s = state.lock().unwrap();
-        let active = s.active;
-        s.sessions[active].dirty = false;
-        s.sessions[active].last_autosave = Instant::now();
-    }
-    result.is_ok()
-}
-
-pub fn undo_active(state: &SharedAppState) -> bool {
-    let world_holder = active_world(state);
-    let current = world_holder.lock().unwrap().to_document();
-    let restored = {
-        let mut s = state.lock().unwrap();
-        let active = s.active;
-        s.sessions[active].history.undo(current)
-    };
-    let Some(doc) = restored else {
-        return false;
-    };
-    let mut world = world_holder.lock().unwrap();
-    world.load_document(&doc);
-    let _ = project::save_from_world(&world);
-    true
-}
-
-pub fn redo_active(state: &SharedAppState) -> bool {
-    let world_holder = active_world(state);
-    let current = world_holder.lock().unwrap().to_document();
-    let restored = {
-        let mut s = state.lock().unwrap();
-        let active = s.active;
-        s.sessions[active].history.redo(current)
-    };
-    let Some(doc) = restored else {
-        return false;
-    };
-    let mut world = world_holder.lock().unwrap();
-    world.load_document(&doc);
-    let _ = project::save_from_world(&world);
-    true
-}
-
-pub fn active_project_window_title(state: &SharedAppState) -> String {
-    let s = state.lock().unwrap();
-    format!("NeoUtl - {}", s.sessions[s.active].meta.name)
-}
-
 pub fn save_session(state: &SharedAppState, index: usize) -> bool {
     let world_holder = {
         let s = state.lock().unwrap();
@@ -354,15 +282,6 @@ pub fn close_session(state: &SharedAppState, index: usize) -> Result<(), String>
         s.active -= 1;
     }
     Ok(())
-}
-
-pub fn set_clipboard(state: &SharedAppState, docs: Vec<crate::document::ObjectDoc>) {
-    let mut s = state.lock().unwrap();
-    s.clipboard = docs;
-}
-
-pub fn clipboard(state: &SharedAppState) -> Vec<crate::document::ObjectDoc> {
-    state.lock().unwrap().clipboard.clone()
 }
 
 static GLOBAL_APP_STATE: std::sync::OnceLock<SharedAppState> = std::sync::OnceLock::new();

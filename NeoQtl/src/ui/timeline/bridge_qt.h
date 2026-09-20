@@ -59,3 +59,4 @@ Q_SIGNALS:
 };
 
 void register_timeline_bridge(QQmlApplicationEngine &engine);
+TimelineBridge* timeline_bridge_instance();

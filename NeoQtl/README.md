@@ -9,4 +9,3 @@ cd NeoUtl/NeoQtl
 cargo xtask build --release
 ./target/release/NeoQtl
 ```
-

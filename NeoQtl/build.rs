@@ -172,15 +172,19 @@ extern "C" void ensure_qml_aot_cache_registered() {{
         .qt_module("Quick")
         .qt_module("Qml")
         .cpp_file("src/ui/timeline/bridge_qt.h")
+        .cpp_file("src/ui/workspace_qt.h")
         .cpp_file("include/app_main.h")
         .file("src/ffi.rs")
-        .file("src/ui/timeline/bridge/timeline_bridge.rs");
+        .file("src/ui/timeline/bridge/timeline_bridge.rs")
+        .file("src/ui/workspace_bridge.rs");
 
     builder = unsafe {
         builder.cc_builder(move |cc| {
             cc.file("src/app_main.cpp")
                 .file("src/ui/timeline/bridge_qt.cpp")
+                .file("src/ui/workspace_qt.cpp")
                 .include("include")
+                .include("src/ui")
                 .include("src/ui/timeline")
                 .include(format!("{gui_private_include}/QtGui/{qt_version}"))
                 .include(format!("{gui_private_include}/QtGui/{qt_version}/QtGui"))

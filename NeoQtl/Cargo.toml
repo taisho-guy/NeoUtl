@@ -51,10 +51,8 @@ maolan-host-adapter = { path = "../crates/maolan-host-adapter" }
 winit = { version = "0.30", features = ["rwh_06", "x11"] }
 raw-window-handle = "0.6"
 
-
 [build-dependencies]
 cxx-build = "1"
 cxx-qt-build = "0.10"
 neoutl-object-shader-build = { path = "../crates/neoutl-object-shader-build" }
 cc = "1"
-

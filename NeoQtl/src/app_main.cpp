@@ -1,5 +1,6 @@
 #include "app_main.h"
 #include "bridge_qt.h"
+#include "workspace_qt.h"
 
 #include <QtGui/QGuiApplication>
 #include <QtGui/QWindow>
@@ -51,6 +52,7 @@ void run_qt_application(rust::Str qml_url) {
 
     QQmlApplicationEngine engine;
     register_timeline_bridge(engine);
+    register_workspace_bridge(engine);
 
     void* nativeWindowHandle = launch_winit_wgpu_layer();
     QWindow* foreignWindow = nullptr;

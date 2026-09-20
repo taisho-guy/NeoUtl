@@ -13,6 +13,7 @@ pub mod system_settings;
 pub mod timeline;
 pub mod types;
 pub mod ui_ext;
+pub mod workspace_bridge;
 
 use crate::app_state::{self, AppState, ProjectSession, SharedAppState};
 use crate::project::ProjectMeta;

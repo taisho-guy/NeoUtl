@@ -154,7 +154,11 @@ bool TimelineBridge::removeScene(int sceneId) {
     return ok;
 }
 
-void register_timeline_bridge(QQmlApplicationEngine &engine) {
+TimelineBridge* timeline_bridge_instance() {
     static TimelineBridge instance;
-    engine.rootContext()->setContextProperty(QStringLiteral("TimelineBridge"), &instance);
+    return &instance;
+}
+
+void register_timeline_bridge(QQmlApplicationEngine &engine) {
+    engine.rootContext()->setContextProperty(QStringLiteral("TimelineBridge"), timeline_bridge_instance());
 }
