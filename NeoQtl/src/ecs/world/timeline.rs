@@ -72,9 +72,12 @@ impl EcsWorld {
     }
 
     pub fn get_timeline_objects(&self) -> Vec<TimelineData> {
+        self.get_scene_objects(self.active_scene())
+    }
+
+    pub fn get_scene_objects(&self, scene_id: i32) -> Vec<TimelineData> {
         self.world.run(
-            |scenes: UniqueView<SceneResource>,
-             object_ids: View<ObjectId>,
+            |object_ids: View<ObjectId>,
              time_ranges: View<TimeRange>,
              kind_ids: View<KindId>,
              layers: View<Layer>,
@@ -82,14 +85,13 @@ impl EcsWorld {
              media: View<MediaSource>,
              group_controls: View<GroupControl>,
              clip_targets: View<ClipTarget>| {
-                let active = scenes.active_scene;
                 let mut objs = Vec::new();
                 for (_entity, (id, range, kind, layer, scene)) in
                     (&object_ids, &time_ranges, &kind_ids, &layers, &scene_ids)
                         .iter()
                         .with_id()
                 {
-                    if scene.0 != active {
+                    if scene.0 != scene_id {
                         continue;
                     }
                     let (curtain_down, curtain_up) = group_controls

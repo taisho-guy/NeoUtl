@@ -84,6 +84,24 @@ fn main() {
     let mut qml_files = Vec::new();
     collect_qml_files(Path::new("src/ui/qml"), &mut qml_files);
 
+    let qml_root = Path::new("src/ui/qml");
+    verify_bridge_surface(
+        qml_root,
+        Path::new("src/ui/timeline/bridge_qt.h"),
+        "Workspace.currentTimeline",
+    );
+    verify_bridge_surface(
+        qml_root,
+        Path::new("src/ui/timeline/bridge_qt.h"),
+        "TimelineBridge",
+    );
+    verify_bridge_surface(qml_root, Path::new("src/ui/workspace_qt.h"), "Workspace");
+    verify_bridge_surface(
+        qml_root,
+        Path::new("src/ui/settings_manager_qt.h"),
+        "SettingsManager",
+    );
+
     let qml_only: Vec<_> = qml_files
         .iter()
         .filter(|p| p.extension().and_then(|e| e.to_str()) == Some("qml"))
@@ -173,6 +191,7 @@ extern "C" void ensure_qml_aot_cache_registered() {{
         .qt_module("Qml")
         .cpp_file("src/ui/timeline/bridge_qt.h")
         .cpp_file("src/ui/workspace_qt.h")
+        .cpp_file("src/ui/settings_manager_qt.h")
         .cpp_file("include/app_main.h")
         .file("src/ffi.rs")
         .file("src/ui/timeline/bridge/timeline_bridge.rs")
@@ -181,6 +200,7 @@ extern "C" void ensure_qml_aot_cache_registered() {{
     builder = unsafe {
         builder.cc_builder(move |cc| {
             cc.file("src/app_main.cpp")
+                .file("src/ui/settings_manager_qt.cpp")
                 .file("src/ui/timeline/bridge_qt.cpp")
                 .file("src/ui/workspace_qt.cpp")
                 .include("include")
@@ -200,6 +220,68 @@ extern "C" void ensure_qml_aot_cache_registered() {{
 
     println!("cargo:rustc-link-lib=static:+whole-archive=cxx-qt-cxxqt-generated");
     println!("cargo:rustc-link-lib=static:+whole-archive=cxx-qt-lib-cxxqt-generated");
+}
+
+fn declared_members(header_src: &str) -> Vec<String> {
+    let mut out = Vec::new();
+    for line in header_src.lines() {
+        let line = line.trim();
+        if let Some(rest) = line.strip_prefix("Q_PROPERTY(") {
+            if let Some(name) = rest.split_whitespace().nth(1) {
+                out.push(name.trim_start_matches('*').to_string());
+            }
+        } else if let Some(pos) = line.find("Q_INVOKABLE ") {
+            let tail = &line[pos + "Q_INVOKABLE ".len()..];
+            if let Some(paren) = tail.find('(') {
+                if let Some(name) = tail[..paren].rsplit([' ', '*', '&']).next() {
+                    out.push(name.to_string());
+                }
+            }
+        }
+    }
+    out
+}
+
+fn referenced_members(qml_root: &Path, receiver: &str) -> Vec<String> {
+    let mut files = Vec::new();
+    collect_qml_files(qml_root, &mut files);
+    let prefix = format!("{receiver}.");
+    let mut out = Vec::new();
+    for file in files {
+        let Ok(text) = fs::read_to_string(&file) else {
+            continue;
+        };
+        let mut rest = text.as_str();
+        while let Some(pos) = rest.find(&prefix) {
+            rest = &rest[pos + prefix.len()..];
+            let len = rest
+                .find(|c: char| !c.is_ascii_alphanumeric() && c != '_')
+                .unwrap_or(rest.len());
+            if len > 0 {
+                out.push(rest[..len].to_string());
+            }
+            rest = &rest[len..];
+        }
+    }
+    out.sort();
+    out.dedup();
+    out
+}
+
+fn verify_bridge_surface(qml_root: &Path, header_path: &Path, receiver: &str) {
+    let header = fs::read_to_string(header_path)
+        .unwrap_or_else(|_| panic!("{}読込失敗", header_path.display()));
+    let declared = declared_members(&header);
+    let missing: Vec<String> = referenced_members(qml_root, receiver)
+        .into_iter()
+        .filter(|m| !declared.contains(m))
+        .collect();
+    assert!(
+        missing.is_empty(),
+        "{receiver}未実装メンバ {}件: {}",
+        missing.len(),
+        missing.join(", ")
+    );
 }
 
 fn run_qmllint(qml_files: &[PathBuf]) {

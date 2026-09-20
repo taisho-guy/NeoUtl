@@ -1,6 +1,7 @@
 #include "app_main.h"
 #include "bridge_qt.h"
 #include "workspace_qt.h"
+#include "settings_manager_qt.h"
 
 #include <QtGui/QGuiApplication>
 #include <QtGui/QWindow>
@@ -53,6 +54,7 @@ void run_qt_application(rust::Str qml_url) {
     QQmlApplicationEngine engine;
     register_timeline_bridge(engine);
     register_workspace_bridge(engine);
+    register_settings_manager_bridge(engine);
 
     void* nativeWindowHandle = launch_winit_wgpu_layer();
     QWindow* foreignWindow = nullptr;
@@ -79,10 +81,11 @@ void run_qt_application(rust::Str qml_url) {
     }
 
     if (foreignWindow) {
-        auto *hostWindow = qobject_cast<QQuickWindow *>(engine.rootObjects().first());
-        QQuickItem *surfaceArea = hostWindow
-            ? hostWindow->findChild<QQuickItem *>("previewSurfaceArea")
+        QObject *rootObject = engine.rootObjects().isEmpty() ? nullptr : engine.rootObjects().first();
+        QQuickItem *surfaceArea = rootObject
+            ? rootObject->findChild<QQuickItem *>("previewSurfaceArea")
             : nullptr;
+        QQuickWindow *hostWindow = surfaceArea ? surfaceArea->window() : nullptr;
 
         if (hostWindow && surfaceArea) {
             embedForeignWindow(foreignWindow, hostWindow, surfaceArea);

@@ -1,6 +1,7 @@
 #include "workspace_qt.h"
 #include "bridge_qt.h"
 #include "NeoQtl/src/ui/workspace_bridge.cxx.h"
+#include "NeoQtl/src/ui/timeline/bridge/timeline_bridge.cxx.h"
 
 #include <QtQml/qqml.h>
 #include <QtQml/QQmlContext>
@@ -26,10 +27,21 @@ void WorkspaceBridge::setCurrentIndex(int index) {
     neoqtl::workspace_set_current_index(index);
     Q_EMIT currentIndexChanged();
     Q_EMIT tabsChanged();
+    Q_EMIT currentTimelineChanged();
+    Q_EMIT currentSceneIdChanged();
 }
 
 QObject *WorkspaceBridge::currentTimeline() const {
     return timeline_bridge_instance();
+}
+
+int WorkspaceBridge::currentSceneId() const {
+    for (const auto &s : neoqtl::timeline_scene_tabs()) {
+        if (s.active) {
+            return s.id;
+        }
+    }
+    return -1;
 }
 
 bool WorkspaceBridge::newProject() {

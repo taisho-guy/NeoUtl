@@ -217,8 +217,6 @@ impl EcsWorld {
             .run(|targets: View<ClipTarget>| targets.get(entity).copied().unwrap_or_default())
     }
 
-    #[cfg(test)]
-
     pub fn set_layer(&mut self, object_id: usize, layer: i32) {
         let Some(entity) = self.find_entity(object_id) else {
             return;
@@ -228,6 +226,7 @@ impl EcsWorld {
                 *slot = Layer(layer);
             }
         });
+        self.touch();
     }
 
     pub(crate) fn release_media_instance(&self, entity: shipyard::EntityId) {
