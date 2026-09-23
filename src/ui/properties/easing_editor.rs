@@ -5,7 +5,7 @@ use crate::infra::localization::effect_param_label;
 use egui_material_icons::icons;
 use kurbo::{CubicBez, ParamCurve, Point as KPoint};
 use neoutl_easing_standard::{
-    CurveKind, CurveSegment, EasingPayload, ease, encode_payload, parse_payload,
+    ApplyMode, CurveKind, CurveSegment, EasingPayload, ease, encode_payload, parse_payload,
 };
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -28,6 +28,8 @@ struct EditorState {
     label: String,
     selected_frame: Option<i32>,
     dragging: Option<usize>,
+    selected_point: Option<usize>,
+    search: String,
 }
 
 static ACTIVE: Mutex<Option<EditorState>> = Mutex::new(None);
@@ -47,6 +49,8 @@ pub fn toggle(target: TrackTarget, label: &str) {
             label: label.to_owned(),
             selected_frame: None,
             dragging: None,
+            selected_point: None,
+            search: String::new(),
         })
     };
 }
@@ -141,6 +145,7 @@ fn ensure_endpoint_keyframes(world: &mut EcsWorld, target: &TrackTarget, track: 
         TrackTarget::Object { object_id, .. } | TrackTarget::Effect { object_id, .. } => *object_id,
     };
     let (start, end) = clip_bounds(world, object_id);
+    let end = end.max(start + 1);
     let fallback = base_value(world, target);
     let engine = "neoutl-easing-standard".to_owned();
     let payload = encode_payload(&EasingPayload::linear());
@@ -174,11 +179,14 @@ fn default_for(name: &str) -> CurveKind {
     }
 }
 
+const CATEGORY_LABELS: [&str; 5] = ["標準", "振動", "バウンス", "スクリプト", "頂点"];
+
 fn category_index(kind: &CurveKind) -> usize {
     match kind {
         CurveKind::Elastic { .. } => 1,
         CurveKind::Bounce { .. } => 2,
         CurveKind::Script { .. } => 3,
+        CurveKind::Normal { .. } => 4,
         _ => 0,
     }
 }
@@ -188,6 +196,7 @@ fn category_default(index: usize) -> CurveKind {
         1 => CurveKind::default_elastic(),
         2 => CurveKind::default_bounce(),
         3 => CurveKind::default_script(),
+        4 => CurveKind::default_normal(),
         _ => CurveKind::default_bezier(),
     }
 }
@@ -349,6 +358,43 @@ fn merge_boundary(segments: &mut Vec<CurveSegment>, boundary_index: usize) {
     segments.remove(boundary_index + 1);
 }
 
+fn reset_point(kind: &mut CurveKind, point_ref: PointRef) -> bool {
+    match (kind, point_ref) {
+        (CurveKind::Bezier { handle_left, .. }, PointRef::BezierLeft) => {
+            *handle_left = [0.42, 0.0];
+            true
+        }
+        (CurveKind::Bezier { handle_right, .. }, PointRef::BezierRight) => {
+            *handle_right = [0.58, 1.0];
+            true
+        }
+        (CurveKind::Bounce { cor, period, .. }, PointRef::BounceHandle) => {
+            *cor = 0.6;
+            *period = 0.5;
+            true
+        }
+        (CurveKind::Elastic { amplitude, .. }, PointRef::ElasticAmp) => {
+            *amplitude = 1.0;
+            true
+        }
+        (
+            CurveKind::Elastic {
+                frequency, decay, ..
+            },
+            PointRef::ElasticFreqDecay,
+        ) => {
+            *frequency = 5.0;
+            *decay = 6.0;
+            true
+        }
+        (CurveKind::Normal { segments }, PointRef::NormalBoundary(i)) => {
+            merge_boundary(segments, i);
+            true
+        }
+        _ => false,
+    }
+}
+
 pub fn show(ctx: &egui::Context, ui: &mut egui::Ui, world: &mut EcsWorld) -> bool {
     show_curve_editor_layout(ctx, ui, world)
 }
@@ -410,11 +456,15 @@ fn sample_segment(payload: &EasingPayload, resolution: usize) -> Vec<[f32; 2]> {
 }
 
 fn show_curve_editor_layout(ctx: &egui::Context, ui: &mut egui::Ui, world: &mut EcsWorld) -> bool {
-    let Some((target, label, selected_frame)) = ACTIVE
-        .lock()
-        .unwrap()
-        .as_ref()
-        .map(|s| (s.target.clone(), s.label.clone(), s.selected_frame))
+    let Some((target, label, selected_frame, mut search)) =
+        ACTIVE.lock().unwrap().as_ref().map(|s| {
+            (
+                s.target.clone(),
+                s.label.clone(),
+                s.selected_frame,
+                s.search.clone(),
+            )
+        })
     else {
         return false;
     };
@@ -426,6 +476,7 @@ fn show_curve_editor_layout(ctx: &egui::Context, ui: &mut egui::Ui, world: &mut 
     let mut close_requested = false;
     let mut curve_changed = false;
     let mut prev_kf_requested = false;
+    let mut next_kf_requested = false;
     let mut add_kf_requested = false;
 
     let visuals = ctx.style_of(ctx.theme()).visuals.clone();
@@ -436,6 +487,10 @@ fn show_curve_editor_layout(ctx: &egui::Context, ui: &mut egui::Ui, world: &mut 
         .and_then(|frame| track.iter().find(|k| k.frame == frame))
         .map(|k| parse_payload(&k.engine_payload))
         .unwrap_or_else(EasingPayload::linear);
+    if matches!(active_payload.kind, CurveKind::Linear) {
+        active_payload.kind = CurveKind::default_bezier();
+        curve_changed = true;
+    }
 
     ui.horizontal(|ui| {
         if ui
@@ -461,6 +516,7 @@ fn show_curve_editor_layout(ctx: &egui::Context, ui: &mut egui::Ui, world: &mut 
             .clicked()
         {
             active_payload = EasingPayload::linear();
+            active_payload.kind = CurveKind::default_bezier();
             curve_changed = true;
         }
         ui.separator();
@@ -468,11 +524,8 @@ fn show_curve_editor_layout(ctx: &egui::Context, ui: &mut egui::Ui, world: &mut 
             let category = category_index(&active_payload.kind);
             let mut new_category = category;
             ui.add(
-                elegance::Select::new(("curve_mode", &target), &mut new_category).options(
-                    ["標準", "振動", "バウンス", "スクリプト"]
-                        .into_iter()
-                        .enumerate(),
-                ),
+                elegance::Select::new(("curve_mode", &target), &mut new_category)
+                    .options(CATEGORY_LABELS.into_iter().enumerate()),
             );
             if new_category != category {
                 active_payload.kind = category_default(new_category);
@@ -494,6 +547,13 @@ fn show_curve_editor_layout(ctx: &egui::Context, ui: &mut egui::Ui, world: &mut 
             .unwrap_or(1);
         ui.label(format!("{position}"));
         if ui
+            .small_button(icons::ICON_CHEVRON_RIGHT)
+            .on_hover_text("次のキーフレーム")
+            .clicked()
+        {
+            next_kf_requested = true;
+        }
+        if ui
             .small_button(icons::ICON_ADD)
             .on_hover_text("キーフレーム追加")
             .clicked()
@@ -503,9 +563,22 @@ fn show_curve_editor_layout(ctx: &egui::Context, ui: &mut egui::Ui, world: &mut 
         ui.add_space(4.0);
         ui.label(egui::RichText::new(effect_param_label(&label)).weak());
     });
+
+    let selected_point_initial = ACTIVE
+        .lock()
+        .unwrap()
+        .as_ref()
+        .and_then(|s| s.selected_point);
     ui.horizontal(|ui| {
+        let reversible = matches!(
+            active_payload.kind,
+            CurveKind::Bounce { .. } | CurveKind::Elastic { .. }
+        );
         if ui
-            .small_button(format!("{} 反転", <&str>::from(icons::ICON_SWAP_HORIZ)))
+            .add_enabled(
+                reversible,
+                egui::Button::new(format!("{} 反転", <&str>::from(icons::ICON_SWAP_HORIZ))),
+            )
             .clicked()
         {
             match &mut active_payload.kind {
@@ -515,6 +588,32 @@ fn show_curve_editor_layout(ctx: &egui::Context, ui: &mut egui::Ui, world: &mut 
             }
             curve_changed = true;
         }
+        ui.separator();
+        ui.label("補間モード");
+        const MODES: [ApplyMode; 3] = [
+            ApplyMode::Normal,
+            ApplyMode::IgnoreMidPoint,
+            ApplyMode::Interpolate,
+        ];
+        let current_mode = MODES
+            .iter()
+            .position(|m| *m == active_payload.apply_mode)
+            .unwrap_or(0);
+        let mut new_mode = current_mode;
+        ui.add(
+            elegance::Select::new(("apply_mode", &target), &mut new_mode)
+                .options(MODES.iter().map(|m| m.label()).enumerate()),
+        );
+        if new_mode != current_mode {
+            active_payload.apply_mode = MODES[new_mode];
+            curve_changed = true;
+        }
+        ui.separator();
+        let status = match selected_point_initial {
+            Some(i) => format!("選択中の頂点: {}", i + 1),
+            None => "頂点未選択".to_owned(),
+        };
+        ui.label(egui::RichText::new(status).weak());
     });
 
     ui.separator();
@@ -527,7 +626,7 @@ fn show_curve_editor_layout(ctx: &egui::Context, ui: &mut egui::Ui, world: &mut 
         });
         let selected_index = selected
             .and_then(|frame| track.windows(2).position(|w| w[0].frame == frame))
-            .unwrap_or(0);
+            .unwrap_or_else(|| track.len().saturating_sub(2));
 
         let (rect, response) = graph_ui.allocate_exact_size(
             egui::vec2(graph_ui.available_width(), 330.0),
@@ -566,7 +665,13 @@ fn show_curve_editor_layout(ctx: &egui::Context, ui: &mut egui::Ui, world: &mut 
         }
 
         let control_pts = control_points(&active_payload.kind);
-        let dragging = ACTIVE.lock().unwrap().as_ref().and_then(|s| s.dragging);
+        let (dragging, selected_point) = ACTIVE
+            .lock()
+            .unwrap()
+            .as_ref()
+            .map(|s| (s.dragging, s.selected_point))
+            .unwrap_or((None, None));
+        let highlighted = dragging.or(selected_point);
 
         match &active_payload.kind {
             CurveKind::Bezier {
@@ -615,7 +720,7 @@ fn show_curve_editor_layout(ctx: &egui::Context, ui: &mut egui::Ui, world: &mut 
             _ => {}
         }
         for (i, (_, p)) in control_pts.iter().enumerate() {
-            let color = if Some(i) == dragging {
+            let color = if Some(i) == highlighted {
                 accent
             } else {
                 egui::Color32::WHITE
@@ -625,6 +730,17 @@ fn show_curve_editor_layout(ctx: &egui::Context, ui: &mut egui::Ui, world: &mut 
         painter.circle_filled(view.to_screen(0.0, 0.0), 5.0, egui::Color32::WHITE);
         painter.circle_filled(view.to_screen(1.0, 1.0), 5.0, egui::Color32::WHITE);
 
+        if let CurveKind::Script { source } = &mut active_payload.kind {
+            let edit = graph_ui.add(
+                egui::TextEdit::multiline(source)
+                    .desired_rows(6)
+                    .desired_width(f32::INFINITY),
+            );
+            if edit.changed() {
+                curve_changed = true;
+            }
+        }
+
         const HIT_RADIUS: f32 = 10.0;
 
         if response.drag_started() {
@@ -632,6 +748,7 @@ fn show_curve_editor_layout(ctx: &egui::Context, ui: &mut egui::Ui, world: &mut 
                 let hit = nearest_control_point(&control_pts, &view, pos, HIT_RADIUS);
                 if let Some(state) = ACTIVE.lock().unwrap().as_mut() {
                     state.dragging = hit;
+                    state.selected_point = hit;
                 }
             }
         }
@@ -654,10 +771,8 @@ fn show_curve_editor_layout(ctx: &egui::Context, ui: &mut egui::Ui, world: &mut 
         if response.secondary_clicked() {
             if let Some(pos) = response.interact_pointer_pos() {
                 if let Some(idx) = nearest_control_point(&control_pts, &view, pos, HIT_RADIUS) {
-                    if let (CurveKind::Normal { segments }, PointRef::NormalBoundary(i)) =
-                        (&mut active_payload.kind, control_pts[idx].0)
-                    {
-                        merge_boundary(segments, i);
+                    let point_ref = control_pts[idx].0;
+                    if reset_point(&mut active_payload.kind, point_ref) {
                         curve_changed = true;
                     }
                 }
@@ -666,11 +781,21 @@ fn show_curve_editor_layout(ctx: &egui::Context, ui: &mut egui::Ui, world: &mut 
 
         if response.clicked() {
             if let Some(pos) = response.interact_pointer_pos() {
-                if nearest_control_point(&control_pts, &view, pos, HIT_RADIUS).is_none() {
-                    if let CurveKind::Normal { segments } = &mut active_payload.kind {
-                        let (x, _) = view.to_data(pos);
-                        neoutl_easing_standard::add_segment(segments, x.clamp(0.05, 0.95));
-                        curve_changed = true;
+                match nearest_control_point(&control_pts, &view, pos, HIT_RADIUS) {
+                    Some(idx) => {
+                        if let Some(state) = ACTIVE.lock().unwrap().as_mut() {
+                            state.selected_point = Some(idx);
+                        }
+                    }
+                    None => {
+                        if let CurveKind::Normal { segments } = &mut active_payload.kind {
+                            let (x, _) = view.to_data(pos);
+                            neoutl_easing_standard::add_segment(segments, x.clamp(0.05, 0.95));
+                            curve_changed = true;
+                        }
+                        if let Some(state) = ACTIVE.lock().unwrap().as_mut() {
+                            state.selected_point = None;
+                        }
                     }
                 }
             }
@@ -679,7 +804,11 @@ fn show_curve_editor_layout(ctx: &egui::Context, ui: &mut egui::Ui, world: &mut 
         let preset_ui = &mut cols[1];
         preset_ui.horizontal(|ui| {
             ui.label(icons::ICON_SEARCH);
-            ui.label(egui::RichText::new("プリセットを検索…").weak());
+            ui.add(
+                egui::TextEdit::singleline(&mut search)
+                    .hint_text("プリセットを検索…")
+                    .desired_width(f32::INFINITY),
+            );
         });
         preset_ui.separator();
         preset_ui.horizontal(|ui| {
@@ -687,10 +816,17 @@ fn show_curve_editor_layout(ctx: &egui::Context, ui: &mut egui::Ui, world: &mut 
             ui.label(format!("(37) {}", <&str>::from(icons::ICON_EXPAND_MORE)));
         });
         preset_ui.label(egui::RichText::new("適用時に現在の頂点構成を上書きします").weak());
+        let query = search.to_lowercase();
         egui::ScrollArea::vertical()
             .id_salt(("preset_scroll", &target))
             .show(preset_ui, |ui| {
-                let session = SESSION_PRESETS.lock().unwrap().clone();
+                let session: Vec<(String, CurveKind)> = SESSION_PRESETS
+                    .lock()
+                    .unwrap()
+                    .iter()
+                    .filter(|(name, _)| query.is_empty() || name.to_lowercase().contains(&query))
+                    .cloned()
+                    .collect();
                 if !session.is_empty() {
                     ui.label(egui::RichText::new("保存済み").weak());
                     for chunk in session.chunks(3) {
@@ -746,7 +882,11 @@ fn show_curve_editor_layout(ctx: &egui::Context, ui: &mut egui::Ui, world: &mut 
                     "easeInBounce",
                     "easeOutBounce",
                 ];
-                for row in names.chunks(3) {
+                let filtered: Vec<&str> = names
+                    .into_iter()
+                    .filter(|name| query.is_empty() || name.to_lowercase().contains(&query))
+                    .collect();
+                for row in filtered.chunks(3) {
                     ui.horizontal(|ui| {
                         for name in row {
                             let kind = default_for(name);
@@ -762,19 +902,24 @@ fn show_curve_editor_layout(ctx: &egui::Context, ui: &mut egui::Ui, world: &mut 
             });
     });
 
+    if let Some(state) = ACTIVE.lock().unwrap().as_mut() {
+        state.search = search;
+    }
+
+    let apply_all = APPLY_ALL_SEGMENTS.load(Ordering::Relaxed);
+    let affected = if apply_all { track.len() } else { 1 };
     let mut applied = false;
     ui.add_space(4.0);
     ui.horizontal(|ui| {
         if ui
             .add_sized(
                 egui::vec2(ui.available_size_before_wrap().x, 30.0),
-                elegance::Button::new("適用").accent(elegance::Accent::Blue),
+                elegance::Button::new(format!("適用 ({affected})")).accent(elegance::Accent::Blue),
             )
             .clicked()
         {
             applied = true;
         }
-        let apply_all = APPLY_ALL_SEGMENTS.load(Ordering::Relaxed);
         if ui
             .small_button(format!(
                 "{} {}",
@@ -801,6 +946,19 @@ fn show_curve_editor_layout(ctx: &egui::Context, ui: &mut egui::Ui, world: &mut 
                 let prev_frame = track[idx - 1].frame;
                 if let Some(state) = ACTIVE.lock().unwrap().as_mut() {
                     state.selected_frame = Some(prev_frame);
+                    state.selected_point = None;
+                }
+            }
+        }
+    }
+    if next_kf_requested {
+        if let Some(idx) = track.iter().position(|k| Some(k.frame) == selected) {
+            let max_idx = track.len().saturating_sub(2);
+            if idx < max_idx {
+                let next_frame = track[idx + 1].frame;
+                if let Some(state) = ACTIVE.lock().unwrap().as_mut() {
+                    state.selected_frame = Some(next_frame);
+                    state.selected_point = None;
                 }
             }
         }
@@ -823,6 +981,7 @@ fn show_curve_editor_layout(ctx: &egui::Context, ui: &mut egui::Ui, world: &mut 
                 );
                 if let Some(state) = ACTIVE.lock().unwrap().as_mut() {
                     state.selected_frame = Some(new_frame);
+                    state.selected_point = None;
                 }
             }
         }
@@ -843,7 +1002,6 @@ fn show_curve_editor_layout(ctx: &egui::Context, ui: &mut egui::Ui, world: &mut 
         }
     }
     if applied {
-        let apply_all = APPLY_ALL_SEGMENTS.load(Ordering::Relaxed);
         let frames: Vec<i32> = if apply_all {
             track.iter().map(|k| k.frame).collect()
         } else {
