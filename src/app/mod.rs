@@ -1,11 +1,11 @@
 pub mod shortcuts;
-pub mod splash;
 pub mod state;
 pub mod theme;
 pub mod update;
 
 use crate::app::state::SharedAppState;
 use crate::infra::gpu_shared::SharedGpu;
+use crate::project::ProjectMeta;
 use crate::ui::dialogs::DialogSet;
 use crate::ui::launcher::LauncherPanel;
 use crate::ui::preview::PreviewPanel;
@@ -143,21 +143,20 @@ fn show_dialog_contents(ctx: &egui::Context, ui: &mut egui::Ui, p: &RegisteredPr
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Stage {
-    Splash,
     Launcher,
     Project,
 }
 
-fn apply_stage_size(ctx: &egui::Context, stage: Stage) {
-    let size = match stage {
-        Stage::Splash => (
-            crate::app::splash::WINDOW_SIZE.0 as f32,
-            crate::app::splash::WINDOW_SIZE.1 as f32,
-        ),
-        Stage::Launcher => LAUNCHER_WINDOW_SIZE,
-        Stage::Project => return,
-    };
-    ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(egui::vec2(size.0, size.1)));
+fn launch_wait_overlay(ctx: &egui::Context, name: &str) {
+    let mut open = true;
+    elegance::Modal::new("launch_wait_overlay", &mut open)
+        .heading(t!("起動中…"))
+        .show(ctx, |ui| {
+            ui.horizontal(|ui| {
+                ui.add(elegance::Spinner::new());
+                ui.label(name);
+            });
+        });
 }
 
 pub struct NeoUtlApp {
@@ -166,6 +165,7 @@ pub struct NeoUtlApp {
     launcher: LauncherPanel,
     init_rx: std::sync::mpsc::Receiver<()>,
     init_done: bool,
+    pending_project: Option<ProjectMeta>,
     stage: Stage,
 }
 
@@ -180,17 +180,20 @@ impl NeoUtlApp {
             launcher: LauncherPanel::new(),
             init_rx,
             init_done: false,
-            stage: Stage::Splash,
+            pending_project: None,
+            stage: Stage::Launcher,
         }
     }
 
-    fn current_stage(&self) -> Stage {
-        if !self.init_done {
-            Stage::Splash
-        } else if self.slot.borrow().is_none() {
-            Stage::Launcher
-        } else {
-            Stage::Project
+    fn poll_init(&mut self) {
+        if self.init_done {
+            return;
+        }
+        match self.init_rx.try_recv() {
+            Ok(()) | Err(std::sync::mpsc::TryRecvError::Disconnected) => {
+                self.init_done = true;
+            }
+            Err(std::sync::mpsc::TryRecvError::Empty) => {}
         }
     }
 }
@@ -201,39 +204,32 @@ impl eframe::App for NeoUtlApp {
         crate::app::theme::install(&ctx);
         ctx.request_repaint();
 
-        if !self.init_done {
-            match self.init_rx.try_recv() {
-                Ok(()) | Err(std::sync::mpsc::TryRecvError::Disconnected) => {
-                    self.init_done = true;
-                }
-                Err(std::sync::mpsc::TryRecvError::Empty) => {}
-            }
-        }
+        self.poll_init();
 
-        let stage = self.current_stage();
-        if stage != self.stage {
-            apply_stage_size(&ctx, stage);
-            self.stage = stage;
-        }
-
-        if stage == Stage::Splash {
-            egui::CentralPanel::default()
-                .frame(egui::Frame::NONE)
-                .show(ui, |ui| {
-                    ui.centered_and_justified(|ui| {
-                        ui.add(egui::Image::new(crate::app::splash::SOURCE.clone()));
-                    });
-                });
-            return;
-        }
+        let stage = if self.slot.borrow().is_some() {
+            Stage::Project
+        } else {
+            Stage::Launcher
+        };
+        self.stage = stage;
 
         if stage == Stage::Launcher {
             ctx.send_viewport_cmd(egui::ViewportCommand::Title("NeoUtl".to_owned()));
+            let blocked = self.pending_project.is_some();
             egui::CentralPanel::default().show(ui, |ui| {
-                if let Some(meta) = self.launcher.show(ui) {
+                ui.add_enabled_ui(!blocked, |ui| {
+                    if let Some(meta) = self.launcher.show(ui) {
+                        self.pending_project = Some(meta);
+                    }
+                });
+            });
+            if let Some(meta) = &self.pending_project {
+                launch_wait_overlay(&ctx, &meta.name);
+                if self.init_done {
+                    let meta = self.pending_project.take().expect("直前にSomeを確認済み");
                     crate::ui::start_project(meta, self.gpu.clone(), self.slot.clone());
                 }
-            });
+            }
             return;
         }
 
@@ -314,10 +310,8 @@ pub fn run(
     init_rx: std::sync::mpsc::Receiver<()>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let mut options = eframe::NativeOptions::default();
-    options.viewport = egui::ViewportBuilder::default().with_inner_size([
-        crate::app::splash::WINDOW_SIZE.0 as f32,
-        crate::app::splash::WINDOW_SIZE.1 as f32,
-    ]);
+    options.viewport = egui::ViewportBuilder::default()
+        .with_inner_size([LAUNCHER_WINDOW_SIZE.0, LAUNCHER_WINDOW_SIZE.1]);
     options.wgpu_options.wgpu_setup =
         egui_wgpu::WgpuSetup::Existing(egui_wgpu::WgpuSetupExisting {
             instance: gpu.instance.clone(),
