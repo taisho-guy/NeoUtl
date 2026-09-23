@@ -2,8 +2,9 @@ pub mod curve;
 pub mod script;
 
 pub use curve::{
-    CurveKind, CurveSegment, Modifier, add_segment, evaluate_kind_with_modifiers, remove_segment,
-    replace_segment_kind,
+    ApplyMode, CurveKind, CurveSegment, Modifier, SegmentCurveKind, add_segment, bounce_handle,
+    bounce_set_handle, elastic_amp_handle_y, elastic_freq_decay_handle, elastic_set_amp,
+    elastic_set_freq_decay, evaluate_kind_with_modifiers, remove_segment, replace_segment_kind,
 };
 
 use neoutl_easing_api::{
@@ -17,6 +18,8 @@ use std::ffi::c_void;
 pub struct EasingPayload {
     pub kind: CurveKind,
     pub modifiers: Vec<Modifier>,
+    #[serde(default)]
+    pub apply_mode: ApplyMode,
 }
 
 impl EasingPayload {
@@ -24,6 +27,7 @@ impl EasingPayload {
         Self {
             kind: CurveKind::Linear,
             modifiers: Vec::new(),
+            apply_mode: ApplyMode::Normal,
         }
     }
 
@@ -82,6 +86,63 @@ unsafe fn decode_keyframes(keyframes_ptr: *const KeyframeC, count: usize) -> Vec
         .collect()
 }
 
+fn resolve_effective_values(points: &[DecodedKeyframe]) -> Vec<f32> {
+    let mut values: Vec<f32> = points.iter().map(|p| p.value).collect();
+    for i in 0..points.len() {
+        if points[i].easing.apply_mode != ApplyMode::Interpolate {
+            continue;
+        }
+        let prev = (0..i)
+            .rev()
+            .find(|&j| points[j].easing.apply_mode != ApplyMode::Interpolate);
+        let next =
+            (i + 1..points.len()).find(|&j| points[j].easing.apply_mode != ApplyMode::Interpolate);
+        if let (Some(p), Some(n)) = (prev, next) {
+            let span = (points[n].frame - points[p].frame).max(1) as f32;
+            let t = (points[i].frame - points[p].frame) as f32 / span;
+            values[i] = values[p] + (values[n] - values[p]) * t;
+        }
+    }
+    values
+}
+
+fn effective_indices(points: &[DecodedKeyframe]) -> Vec<usize> {
+    let last = points.len() - 1;
+    (0..points.len())
+        .filter(|&i| {
+            i == 0 || i == last || points[i].easing.apply_mode != ApplyMode::IgnoreMidPoint
+        })
+        .collect()
+}
+
+fn evaluate_track(points: &[DecodedKeyframe], frame: i32, fallback: f32) -> f32 {
+    match points {
+        [] => fallback,
+        [only] => only.value,
+        _ => {
+            let first = &points[0];
+            let last = &points[points.len() - 1];
+            if frame <= first.frame {
+                return first.value;
+            }
+            if frame >= last.frame {
+                return last.value;
+            }
+            let values = resolve_effective_values(points);
+            let effective = effective_indices(points);
+            let pos = effective.partition_point(|&i| points[i].frame <= frame);
+            let pos = pos.clamp(1, effective.len() - 1);
+            let (ia, ib) = (effective[pos - 1], effective[pos]);
+            if points[ia].easing.is_step() {
+                return values[ia];
+            }
+            let span = (points[ib].frame - points[ia].frame).max(1) as f32;
+            let t = (frame - points[ia].frame) as f32 / span;
+            values[ia] + (values[ib] - values[ia]) * ease(&points[ia].easing, t)
+        }
+    }
+}
+
 static META: EasingEngineMeta = EasingEngineMeta {
     id: StrRef::from_str("neoutl-easing-standard"),
     name: StrRef::from_str("Standard Easing Engine"),
@@ -98,28 +159,7 @@ unsafe extern "C" fn evaluate_c(
     fallback: f32,
 ) -> f32 {
     let points = unsafe { decode_keyframes(keyframes_ptr, count) };
-    match points.as_slice() {
-        [] => fallback,
-        [only] => only.value,
-        _ => {
-            let first = &points[0];
-            let last = &points[points.len() - 1];
-            if frame <= first.frame {
-                return first.value;
-            }
-            if frame >= last.frame {
-                return last.value;
-            }
-            let idx = points.partition_point(|k| k.frame <= frame);
-            let (a, b) = (&points[idx - 1], &points[idx]);
-            if a.easing.is_step() {
-                return a.value;
-            }
-            let span = (b.frame - a.frame).max(1) as f32;
-            let t = (frame - a.frame) as f32 / span;
-            a.value + (b.value - a.value) * ease(&a.easing, t)
-        }
-    }
+    evaluate_track(&points, frame, fallback)
 }
 
 unsafe extern "C" fn open_editor_window_c(

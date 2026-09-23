@@ -18,9 +18,9 @@ dependencies = [
  "egui_code_editor",
  "egui_extras",
  "egui_material_icons",
- "egui_plot",
  "font-kit",
  "half",
+ "kurbo 0.13.1",
  "libloading 0.9.0",
  "maolan-host-adapter",
  "neo-media-ffmpeg",
@@ -1440,17 +1440,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cee0067630964844d829cc80f9b9744fdf0443b2eea1e66a0934ccc1af14eb82"
 dependencies = [
  "egui",
-]
-
-[[package]]
-name = "egui_plot"
-version = "0.37.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "90f3711a5032bb65a41011b23fcdc6c4bb599757b82cc0181d41e7d1de16986a"
-dependencies = [
- "ahash",
- "egui",
- "emath",
 ]
 
 [[package]]

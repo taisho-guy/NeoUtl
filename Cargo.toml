@@ -121,7 +121,7 @@ eframe = { version = "0.36", default-features = false, features = ["wgpu", "defa
 egui_extras = { version = "0.36", features = ["svg"] }
 egui_material_icons = "0.8"
 egui_code_editor = "0.4"
-egui_plot = "0.37"
+kurbo = "0.13"
 egui-elegance = "0.16"
 rust-i18n.workspace = true
 ureq.workspace = true

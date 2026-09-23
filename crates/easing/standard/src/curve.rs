@@ -57,8 +57,8 @@ impl CurveKind {
 
     pub fn default_bounce() -> Self {
         CurveKind::Bounce {
-            cor: 0.5,
-            period: 0.3,
+            cor: 0.6,
+            period: 0.5,
             reversed: false,
         }
     }
@@ -66,7 +66,7 @@ impl CurveKind {
     pub fn default_elastic() -> Self {
         CurveKind::Elastic {
             amplitude: 1.0,
-            frequency: 3.0,
+            frequency: 5.0,
             decay: 6.0,
             reversed: false,
         }
@@ -77,7 +77,7 @@ impl CurveKind {
             segments: vec![CurveSegment {
                 anchor_start: [0.0, 0.0],
                 anchor_end: [1.0, 1.0],
-                kind: CurveKind::Linear,
+                kind: SegmentCurveKind::Linear,
                 modifiers: Vec::new(),
             }],
         }
@@ -95,20 +95,102 @@ impl CurveKind {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
+pub enum SegmentCurveKind {
+    Linear,
+    Bezier {
+        handle_left: [f32; 2],
+        handle_right: [f32; 2],
+    },
+    Bounce {
+        cor: f32,
+        period: f32,
+        reversed: bool,
+    },
+    Elastic {
+        amplitude: f32,
+        frequency: f32,
+        decay: f32,
+        reversed: bool,
+    },
+}
+
+impl SegmentCurveKind {
+    pub fn label(&self) -> &'static str {
+        match self {
+            SegmentCurveKind::Linear => "Linear",
+            SegmentCurveKind::Bezier { .. } => "Bezier",
+            SegmentCurveKind::Bounce { .. } => "Bounce",
+            SegmentCurveKind::Elastic { .. } => "Elastic",
+        }
+    }
+
+    pub fn evaluate(&self, t: f32) -> f32 {
+        match self {
+            SegmentCurveKind::Linear => t,
+            SegmentCurveKind::Bezier {
+                handle_left,
+                handle_right,
+            } => bezier_ease(t, *handle_left, *handle_right),
+            SegmentCurveKind::Bounce {
+                cor,
+                period,
+                reversed,
+            } => bounce_ease(t, *cor, *period, *reversed),
+            SegmentCurveKind::Elastic {
+                amplitude,
+                frequency,
+                decay,
+                reversed,
+            } => elastic_ease(t, *amplitude, *frequency, *decay, *reversed),
+        }
+    }
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct CurveSegment {
     pub anchor_start: [f32; 2],
     pub anchor_end: [f32; 2],
-    pub kind: CurveKind,
+    pub kind: SegmentCurveKind,
     pub modifiers: Vec<Modifier>,
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ApplyMode {
+    #[default]
+    Normal,
+    IgnoreMidPoint,
+    Interpolate,
+}
+
+impl ApplyMode {
+    pub fn label(self) -> &'static str {
+        match self {
+            ApplyMode::Normal => "通常",
+            ApplyMode::IgnoreMidPoint => "中間点を無視",
+            ApplyMode::Interpolate => "中間点を補間",
+        }
+    }
+}
+
+fn default_true() -> bool {
+    true
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum Modifier {
     Discretization {
+        #[serde(default)]
+        name: Option<String>,
+        #[serde(default = "default_true")]
+        enabled: bool,
         sampling_resolution: u32,
         quantization_resolution: u32,
     },
     Noise {
+        #[serde(default)]
+        name: Option<String>,
+        #[serde(default = "default_true")]
+        enabled: bool,
         seed: i32,
         amplitude: f32,
         frequency: f32,
@@ -117,11 +199,19 @@ pub enum Modifier {
         decay_sharpness: f32,
     },
     SineWave {
+        #[serde(default)]
+        name: Option<String>,
+        #[serde(default = "default_true")]
+        enabled: bool,
         amplitude: f32,
         frequency: f32,
         phase: f32,
     },
     SquareWave {
+        #[serde(default)]
+        name: Option<String>,
+        #[serde(default = "default_true")]
+        enabled: bool,
         amplitude: f32,
         frequency: f32,
         phase: f32,
@@ -130,7 +220,7 @@ pub enum Modifier {
 }
 
 impl Modifier {
-    pub fn label(&self) -> &'static str {
+    pub fn kind_label(&self) -> &'static str {
         match self {
             Modifier::Discretization { .. } => "Discretization",
             Modifier::Noise { .. } => "Noise",
@@ -139,11 +229,49 @@ impl Modifier {
         }
     }
 
+    pub fn display_name(&self) -> &str {
+        let named = match self {
+            Modifier::Discretization { name, .. }
+            | Modifier::Noise { name, .. }
+            | Modifier::SineWave { name, .. }
+            | Modifier::SquareWave { name, .. } => name.as_deref(),
+        };
+        named.filter(|n| !n.is_empty()).unwrap_or(self.kind_label())
+    }
+
+    pub fn is_enabled(&self) -> bool {
+        match self {
+            Modifier::Discretization { enabled, .. }
+            | Modifier::Noise { enabled, .. }
+            | Modifier::SineWave { enabled, .. }
+            | Modifier::SquareWave { enabled, .. } => *enabled,
+        }
+    }
+
+    pub fn set_enabled(&mut self, value: bool) {
+        match self {
+            Modifier::Discretization { enabled, .. }
+            | Modifier::Noise { enabled, .. }
+            | Modifier::SineWave { enabled, .. }
+            | Modifier::SquareWave { enabled, .. } => *enabled = value,
+        }
+    }
+
+    pub fn set_name(&mut self, value: Option<String>) {
+        match self {
+            Modifier::Discretization { name, .. }
+            | Modifier::Noise { name, .. }
+            | Modifier::SineWave { name, .. }
+            | Modifier::SquareWave { name, .. } => *name = value,
+        }
+    }
+
     fn wrap(&self, base: &dyn Fn(f32) -> f32, t: f32) -> f32 {
         match self {
             Modifier::Discretization {
                 sampling_resolution,
                 quantization_resolution,
+                ..
             } => {
                 let s = (*sampling_resolution).max(1) as f32;
                 let q = (*quantization_resolution).max(1) as f32;
@@ -158,6 +286,7 @@ impl Modifier {
                 phase,
                 octaves,
                 decay_sharpness,
+                ..
             } => {
                 let raw = base(t);
                 let n = fbm_noise1(
@@ -172,6 +301,7 @@ impl Modifier {
                 amplitude,
                 frequency,
                 phase,
+                ..
             } => {
                 let raw = base(t);
                 raw + (std::f32::consts::TAU * (*frequency * t + *phase)).sin() * *amplitude
@@ -181,6 +311,7 @@ impl Modifier {
                 frequency,
                 phase,
                 duty,
+                ..
             } => {
                 let raw = base(t);
                 let cycle = (*frequency * t + *phase).fract();
@@ -203,6 +334,9 @@ pub fn apply_modifiers(
     mods.iter()
         .cloned()
         .fold(Box::new(base) as Box<dyn Fn(f32) -> f32>, |acc, m| {
+            if !m.is_enabled() {
+                return acc;
+            }
             Box::new(move |t: f32| m.wrap(&acc, t))
         })
 }
@@ -227,7 +361,7 @@ fn value_noise1(seed: i32, x: f32) -> f32 {
     a + (b - a) * u
 }
 
-fn fbm_noise1(seed: i32, x: f32, octaves: u32, decay_sharpness: f32) -> f32 {
+pub(crate) fn fbm_noise1(seed: i32, x: f32, octaves: u32, decay_sharpness: f32) -> f32 {
     let mut total = 0.0f32;
     let mut freq = 1.0f32;
     let mut amp = 1.0f32;
@@ -268,36 +402,143 @@ fn bezier_ease(t: f32, h1: [f32; 2], h2: [f32; 2]) -> f32 {
 }
 
 fn bounce_ease(t: f32, cor: f32, period: f32, reversed: bool) -> f32 {
-    let t = if reversed { 1.0 - t } else { t };
-    let cor = cor.clamp(0.01, 0.99);
-    let period = period.max(0.01);
-    let mut drop_start = 0.0f32;
-    let mut amp = 1.0f32;
-    let mut half_period = period;
-    let mut y;
-    loop {
-        let seg_end = drop_start + half_period;
-        if t <= seg_end || amp < 1e-4 {
-            let local = (t - drop_start) / half_period.max(1e-6);
-            let bounce_y = 1.0 - (2.0 * local - 1.0).powi(2);
-            y = 1.0 - amp * (1.0 - bounce_y);
-            break;
+    let cor = cor.clamp(0.001, 0.999);
+    let period = period.max(0.001);
+    let ln_cor = cor.ln();
+
+    let func1 = |prog: f32| -> f32 { (((cor - 1.0) * prog + 1.0).max(1e-6).ln() / ln_cor).floor() };
+    let func2 = |prog: f32| -> f32 {
+        prog + 0.5 + 1.0 / (cor - 1.0)
+            - (cor + 1.0) * cor.powf(func1(prog + 0.5)) / (2.0 * cor - 2.0)
+    };
+
+    let progress = if reversed { 1.0 - t } else { t };
+    let f2 = func2(progress / period);
+    let tmp = 4.0 * f2 * f2 - cor.powf(2.0 * func1(progress / period + 0.5));
+
+    let limit_value = period * (1.0 / (1.0 - cor) - 0.5);
+    let raw_ret = if limit_value > 1.0 {
+        let n = ((1.0 + (cor - 1.0) * (1.0 / period + 0.5)).max(1e-6).ln() / ln_cor).floor();
+        if progress < period * ((cor.powf(n) - 1.0) / (cor - 1.0) - 0.5) {
+            tmp
+        } else {
+            0.0
         }
-        drop_start = seg_end;
-        amp *= cor * cor;
-        half_period *= cor;
+    } else if progress < limit_value {
+        tmp
+    } else {
+        0.0
+    };
+
+    let ret = if reversed { -1.0 - raw_ret } else { raw_ret };
+    1.0 + ret
+}
+
+pub fn bounce_handle(cor: f32, period: f32, reversed: bool) -> (f32, f32) {
+    let mut x_rel = (period * (cor + 1.0) * 0.5).clamp(0.0, 1.0);
+    let mut y_rel = (1.0 - cor * cor).clamp(0.0, 1.0);
+    if reversed {
+        x_rel = 1.0 - x_rel;
+        y_rel = 1.0 - y_rel;
     }
-    y = y.clamp(0.0, 1.0);
-    if reversed { 1.0 - y } else { y }
+    (x_rel, y_rel)
+}
+
+pub fn bounce_set_handle(x: f32, y: f32, reversed: bool) -> (f32, f32) {
+    let mut x_rel = x.clamp(0.0, 1.0);
+    let mut y_rel = y.clamp(0.0, 1.0);
+    if reversed {
+        x_rel = 1.0 - x_rel;
+        y_rel = 1.0 - y_rel;
+    }
+    let cor = (1.0 - y_rel.clamp(0.001, 1.0)).sqrt();
+    let period = 2.0 * x_rel.clamp(0.001, 1.0) / (cor + 1.0);
+    (cor, period)
 }
 
 fn elastic_ease(t: f32, amplitude: f32, frequency: f32, decay: f32, reversed: bool) -> f32 {
-    let t = if reversed { 1.0 - t } else { t };
-    let envelope = (-decay * t).exp();
-    let osc = (std::f32::consts::TAU * frequency * t).sin();
-    let y = 1.0 - envelope * osc * amplitude;
-    let y = y.clamp(-2.0, 2.0);
-    if reversed { 1.0 - y } else { y }
+    let frequency = frequency.max(0.001);
+    let progress = if reversed { 1.0 - t } else { t };
+    let omega = std::f32::consts::TAU * frequency;
+    let exp_k = (-decay).exp();
+
+    let func_elastic = |prog: f32| -> f32 {
+        let coef = if decay == 0.0 {
+            1.0 - prog
+        } else {
+            (exp_k.powf(prog) - exp_k) / (1.0 - exp_k)
+        };
+        1.0 - coef * (omega * prog).cos()
+    };
+    let func_elastic_derivative = |prog: f32| -> f32 {
+        let angle = omega * prog;
+        let c = angle.cos();
+        let s = angle.sin();
+        if decay == 0.0 {
+            c + omega * (1.0 - prog) * s
+        } else {
+            let exp_kt = exp_k.powf(prog);
+            decay * exp_kt * c + omega * (exp_kt - exp_k) * s
+        }
+    };
+    let func_elastic_derivative_2 = |prog: f32| -> f32 {
+        let angle = omega * prog;
+        let c = angle.cos();
+        let s = angle.sin();
+        if decay == 0.0 {
+            omega * omega * (1.0 - prog) * c - 2.0 * omega * s
+        } else {
+            let exp_kt = exp_k.powf(prog);
+            let omega_sq = omega * omega;
+            ((omega_sq - decay * decay) * exp_kt - omega_sq * exp_k) * c
+                - 2.0 * omega * decay * exp_kt * s
+        }
+    };
+
+    let mut extremum_t = (0.5 - (decay / frequency).max(0.0).sqrt() * 0.05) / frequency;
+    for _ in 0..3 {
+        let d2 = func_elastic_derivative_2(extremum_t);
+        if d2.abs() > 1e-9 {
+            extremum_t -= func_elastic_derivative(extremum_t) / d2;
+        }
+    }
+    let extremum_x = func_elastic(extremum_t);
+    let tmp = func_elastic(progress);
+    let raw_ret = if progress < extremum_t {
+        (amplitude * (extremum_x - 1.0) + 1.0) / extremum_x.abs().max(1e-6) * tmp
+    } else {
+        amplitude * (tmp - 1.0) + 1.0
+    };
+    if reversed { 1.0 - raw_ret } else { raw_ret }
+}
+
+pub fn elastic_amp_handle_y(amplitude: f32) -> f32 {
+    1.0 + amplitude
+}
+
+pub fn elastic_set_amp(y: f32) -> f32 {
+    (y - 1.0).clamp(0.0, 1.0)
+}
+
+pub fn elastic_freq_decay_handle(frequency: f32, decay: f32, reversed: bool) -> (f32, f32) {
+    let frequency = frequency.max(0.001);
+    let x = if reversed {
+        1.0 - 0.5 / frequency
+    } else {
+        0.5 / frequency
+    };
+    let anchor_y = if reversed { 0.0 } else { 1.0 };
+    let y = anchor_y - (-(decay - 1.0) * 0.1).exp();
+    (x, y)
+}
+
+pub fn elastic_set_freq_decay(x: f32, y: f32, reversed: bool) -> (f32, f32) {
+    let value_freq = if reversed { 1.0 - x } else { x };
+    let anchor_y = if reversed { 0.0 } else { 1.0 };
+    let value_decay = y - anchor_y + 1.0;
+    let frequency = (0.5 / value_freq.max(0.0001)).max(0.5);
+    let decay = -10.0 * (1.0 - value_decay.clamp(0.0, 0.9999)).ln() + 1.0;
+    (frequency, decay)
 }
 
 pub fn evaluate_kind(kind: &CurveKind, t: f32) -> f32 {
@@ -409,7 +650,13 @@ fn evaluate_segment(seg: &CurveSegment, t: f32) -> f32 {
     let local_t = ((t - x0) / span).clamp(0.0, 1.0);
     let y0 = seg.anchor_start[1];
     let y1 = seg.anchor_end[1];
-    let local_y = evaluate_kind_with_modifiers(&seg.kind, &seg.modifiers, local_t);
+    let base_t = local_t.clamp(0.0, 1.0);
+    let local_y = if seg.modifiers.is_empty() {
+        seg.kind.evaluate(base_t)
+    } else {
+        let kind = seg.kind.clone();
+        apply_modifiers(move |u| kind.evaluate(u), &seg.modifiers)(base_t)
+    };
     y0 + (y1 - y0) * local_y
 }
 
@@ -430,7 +677,7 @@ pub fn add_segment(segments: &mut Vec<CurveSegment>, at_x: f32) {
         CurveSegment {
             anchor_start: [start, 0.0],
             anchor_end: [end, 1.0],
-            kind: CurveKind::Linear,
+            kind: SegmentCurveKind::Linear,
             modifiers: Vec::new(),
         },
     );
@@ -455,7 +702,7 @@ pub fn remove_segment(segments: &mut Vec<CurveSegment>, index: usize) {
     }
 }
 
-pub fn replace_segment_kind(segments: &mut [CurveSegment], index: usize, kind: CurveKind) {
+pub fn replace_segment_kind(segments: &mut [CurveSegment], index: usize, kind: SegmentCurveKind) {
     if let Some(seg) = segments.get_mut(index) {
         seg.kind = kind;
     }
