@@ -41,11 +41,7 @@ fn bicubic(x: f32) -> f32 {
 
 fn bilinear(x: f32) -> f32 {
     let x = x.abs();
-    if x < 1.0 {
-        1.0 - x
-    } else {
-        0.0
-    }
+    if x < 1.0 { 1.0 - x } else { 0.0 }
 }
 
 pub fn build_taps(kind: FilterKind, scale_ratio: f32) -> FilterTaps {

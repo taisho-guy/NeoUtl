@@ -5,10 +5,10 @@ edition = "2024"
 
 [dependencies]
 neoutl-media-api.workspace = true
-neo-media-ffmpeg = { path = "../neo-media-ffmpeg" }
+neo-media-ffmpeg.workspace = true
 egui-wgpu = "0.36"
-wgpu_text = "30"
-arc-swap = "1"
-libloading = "0.9"
-tokio = { version = "1", features = ["rt-multi-thread", "sync"] }
+wgpu_text.workspace = true
+arc-swap.workspace = true
+libloading.workspace = true
+tokio.workspace = true
 rust-i18n.workspace = true

@@ -4,4 +4,4 @@ version = "0.0.0"
 edition = "2024"
 
 [dependencies]
-neoutl-shared-abi = { path = "../neoutl-shared-abi" }
+neoutl-shared-abi.workspace = true

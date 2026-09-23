@@ -8,5 +8,5 @@ name       = "neoutl_media_symphonia_decoder"
 crate-type = ["cdylib"]
 
 [dependencies]
-neoutl-media-api = { path = "../../neoutl-media-api" }
+neoutl-media-api.workspace = true
 symphonia = { version = "0.6", features = ["all"] }

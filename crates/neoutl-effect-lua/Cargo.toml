@@ -7,9 +7,9 @@ edition = "2024"
 crate-type = ["rlib"]
 
 [dependencies]
-neoutl-shared-abi = { path = "../neoutl-shared-abi" }
-neoutl-effect-api = { path = "../neoutl-effect-api" }
-mlua = { version = "0.12", default-features = false, features = ["vendored", "send"] }
+neoutl-shared-abi.workspace = true
+neoutl-effect-api.workspace = true
+mlua.workspace = true
 
 [features]
 default = []

@@ -4,8 +4,8 @@ version = "0.0.0"
 edition = "2024"
 
 [dependencies]
-neoutl-media-api = { path = "../neoutl-media-api" }
-neoutl-color = { path = "../neoutl-color" }
+neoutl-media-api.workspace = true
+neoutl-color.workspace = true
 neo-media-core = { path = "../neo-media-core" }
 neo-media-cache = { path = "../neo-media-cache" }
 neo-media-support = { path = "../neo-media-support" }
@@ -13,7 +13,7 @@ neo-media-swscale.workspace = true
 bytemuck.workspace = true
 ffmpeg-sys-next = { version = "9", features = ["swscale"] }
 libc = "0.2"
-wgpu = { version = "30", features = ["vulkan-portability"] }
+wgpu = { workspace = true, features = ["vulkan-portability"] }
 
 [build-dependencies]
-neoutl-object-shader-build = { path = "../neoutl-object-shader-build" }
+neoutl-object-shader-build.workspace = true

@@ -34,10 +34,6 @@ resolver = "2"
 maolan-host-adapter = { path = "crates/maolan-host-adapter" }
 neoutl-shared-abi = { path = "crates/neoutl-shared-abi" }
 neoutl-color = { path = "crates/neoutl-color" }
-bytemuck = "1"
-half = "2"
-serde = { version = "1", features = ["derive"] }
-serde_yaml = "0.9"
 neoutl-object-api = { path = "crates/neoutl-object-api" }
 neoutl-effect-api = { path = "crates/neoutl-effect-api" }
 neoutl-effect-lua = { path = "crates/neoutl-effect-lua" }
@@ -51,16 +47,27 @@ neoutl-easing-standard = { path = "crates/easings/neoutl-easing-standard" }
 neoutl-effect-shader-build = { path = "crates/neoutl-effect-shader-build" }
 neoutl-object-shader-build = { path = "crates/neoutl-object-shader-build" }
 neo-media-swscale = { path = "crates/neo-media-swscale" }
-toml = "1"
+neo-media-ffmpeg = { path = "crates/neo-media-ffmpeg" }
+neoutl-schema = { path = "crates/neoutl-schema" }
+bytemuck = "1"
+half = "2"
+serde = "1"
+serde_yaml = "0.9"
 serde_json = "1"
+toml = "1"
 rust-i18n = "4"
 ureq = { version = "3", features = ["json", "_tls"] }
 zip = "8"
-neoutl-schema = { path = "crates/neoutl-schema" }
 prost = "0.14"
 prost-types = "0.14"
 prost-build = "0.14"
-winit = "0.30"
+wgpu = "30"
+wgpu-hal = "30"
+wgpu_text = "30"
+mlua = { version = "0.12", default-features = false, features = ["vendored", "send"] }
+tokio = { version = "1", features = ["rt-multi-thread", "sync"] }
+arc-swap = "1"
+libloading = "0.9"
 
 [package]
 name = "NeoUtl"
@@ -89,19 +96,19 @@ toml.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 serde_yaml.workspace = true
-libloading = "0.9"
-arc-swap = "1"
+libloading.workspace = true
+arc-swap.workspace = true
 notify = "8"
 rodio = { version = "0.22", default-features = false, features = ["playback", "symphonia-wav", "symphonia-mp3", "symphonia-vorbis", "symphonia-flac", "symphonia-aac", "symphonia-isomp4"] }
-neo-media-ffmpeg = { path = "crates/neo-media-ffmpeg" }
+neo-media-ffmpeg.workspace = true
 self-replace = "1"
 sentry = { version = "0.49", default-features = false, features = ["backtrace", "contexts", "panic"] }
 semver = "1"
 tempfile = "3"
-wgpu = "30"
-wgpu_text = "30"
+wgpu.workspace = true
+wgpu_text.workspace = true
 font-kit = "0.14"
-tokio = { version = "1", features = ["rt-multi-thread", "sync"] }
+tokio.workspace = true
 shipyard = "0.11"
 rfd = "0.17"
 pollster = "1"
@@ -113,9 +120,9 @@ egui_material_icons = "0.8"
 egui_code_editor = "0.4"
 egui_plot = "0.37"
 egui-elegance = "0.16"
-rust-i18n = "4"
-ureq = { version = "3", features = ["json", "_tls"] }
-zip = "8"
+rust-i18n.workspace = true
+ureq.workspace = true
+zip.workspace = true
 egui-system-fonts = "0.36"
 cxx = "1"
 maolan-host-adapter.workspace = true
@@ -127,10 +134,10 @@ neoutl-object-shader-build.workspace = true
 
 [target.'cfg(target_os = "linux")'.dependencies]
 ash = "0.38"
-wgpu-hal = { version = "30", features = ["vulkan"] }
+wgpu-hal = { workspace = true, features = ["vulkan"] }
 
 [target.'cfg(target_os = "windows")'.dependencies]
-wgpu-hal = { version = "30", features = ["dx12"] }
+wgpu-hal = { workspace = true, features = ["dx12"] }
 
 [profile.release]
 opt-level = 3

@@ -5,6 +5,7 @@ use std::{
 };
 
 mod dxc;
+mod lint;
 mod slang;
 
 struct DiscoveredCrate {
@@ -321,7 +322,7 @@ fn main() {
         match args[i].as_str() {
             "--release" => release = true,
             "--offline" => offline = true,
-            "build" | "run" => task = args[i].clone(),
+            "build" | "run" | "lint" => task = args[i].clone(),
             "--target" => {
                 i += 1;
                 target = args.get(i).cloned();
@@ -340,6 +341,11 @@ fn main() {
     let target = target.as_deref();
 
     let root = workspace_root();
+
+    if task == "lint" {
+        std::process::exit(if lint::run(&root) { 0 } else { 1 });
+    }
+
     generate_japanese_i18n(&root);
 
     slang::ensure_installed(&root, offline);

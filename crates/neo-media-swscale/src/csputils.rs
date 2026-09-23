@@ -32,9 +32,5 @@ pub fn matrix_index(mc: MatrixCoefficients) -> u32 {
 }
 
 pub fn range_index(full_range: bool) -> u32 {
-    if full_range {
-        1
-    } else {
-        0
-    }
+    if full_range { 1 } else { 0 }
 }

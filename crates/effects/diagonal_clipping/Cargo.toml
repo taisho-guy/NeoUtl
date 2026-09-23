@@ -9,7 +9,7 @@ crate-type = ["cdylib"]
 
 [dependencies]
 rust-i18n.workspace = true
-neoutl-effect-api = { path = "../../neoutl-effect-api" }
+neoutl-effect-api.workspace = true
 
 [build-dependencies]
 neoutl-effect-shader-build.workspace = true

@@ -1,6 +1,6 @@
 use neo_media_core::{MatrixCoefficients, PixelFormat};
 
-use crate::filters::{build_taps, FilterKind, FilterTaps};
+use crate::filters::{FilterKind, FilterTaps, build_taps};
 use crate::format::describe;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

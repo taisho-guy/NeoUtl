@@ -1,8 +1,8 @@
 [package]
 name = "neo-media-swscale"
 version = "0.1.0"
-edition = "2021"
+edition = "2024"
 
 [dependencies]
 neo-media-core = { path = "../neo-media-core" }
-bytemuck = { version = "1", features = ["derive"] }
+bytemuck = { workspace = true, features = ["derive"] }

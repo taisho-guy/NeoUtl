@@ -5,4 +5,4 @@ edition = "2024"
 
 [dependencies]
 neoutl-media-api.workspace = true
-wgpu = "30"
+wgpu.workspace = true

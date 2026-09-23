@@ -7,10 +7,10 @@ edition = "2024"
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-neoutl-easing-api = { path = "../../neoutl-easing-api" }
-neoutl-shared-abi = { path = "../../neoutl-shared-abi" }
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
-mlua = { version = "0.12", default-features = false, features = ["vendored", "send"] }
+neoutl-easing-api.workspace = true
+neoutl-shared-abi.workspace = true
+serde = { workspace = true, features = ["derive"] }
+serde_json.workspace = true
+mlua.workspace = true
 
 [build-dependencies]

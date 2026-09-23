@@ -1,5 +1,5 @@
 use neo_media_core::{MatrixCoefficients, PixelFormat};
-use neo_media_swscale::{build_plan, is_identity, FilterKind};
+use neo_media_swscale::{FilterKind, build_plan, is_identity};
 
 fn psnr(a: &[u8], b: &[u8]) -> f64 {
     assert_eq!(a.len(), b.len());

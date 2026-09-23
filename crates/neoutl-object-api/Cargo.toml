@@ -7,4 +7,4 @@ edition = "2024"
 crate-type = ["rlib"]
 
 [dependencies]
-neoutl-shared-abi = { path = "../neoutl-shared-abi" }
+neoutl-shared-abi.workspace = true

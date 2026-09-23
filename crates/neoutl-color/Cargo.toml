@@ -4,5 +4,5 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-bytemuck = { version = "1", features = ["derive"] }
-half = { version = "2", features = ["bytemuck"] }
+bytemuck = { workspace = true, features = ["derive"] }
+half = { workspace = true, features = ["bytemuck"] }

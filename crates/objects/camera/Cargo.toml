@@ -8,4 +8,4 @@ name       = "neoutl_object_camera"
 crate-type = ["cdylib"]
 
 [dependencies]
-neoutl-object-api = { path = "../../neoutl-object-api" }
+neoutl-object-api.workspace = true
