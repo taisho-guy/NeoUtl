@@ -1,3 +1,8 @@
+[package]
+name = "NeoUtl"
+version = "0.7.5"
+edition = "2024"
+
 [workspace]
 members = [
     ".",
@@ -71,11 +76,6 @@ mlua = { version = "0.12", default-features = false, features = ["vendored", "se
 tokio = { version = "1", features = ["rt-multi-thread", "sync"] }
 arc-swap = "1"
 libloading = "0.9"
-
-[package]
-name = "NeoUtl"
-version = "0.7.4"
-edition = "2024"
 
 [dependencies]
 neoutl-shared-abi.workspace = true
