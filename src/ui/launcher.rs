@@ -229,83 +229,95 @@ impl LauncherPanel {
     fn project_row(&mut self, ui: &mut egui::Ui, item: &ProjectMeta) {
         let theme = Theme::current(ui.ctx());
         let p = theme.palette.clone();
-        ui.horizontal(|ui| {
-            if self.selection_mode {
-                let mut checked = self.selected.contains(&item.dir);
-                if ui.add(Checkbox::new(&mut checked, "")).changed() {
-                    if checked {
-                        self.selected.insert(item.dir.clone());
-                    } else {
-                        self.selected.remove(&item.dir);
-                    }
-                }
-            }
-            let is_selected = self.selected.contains(&item.dir);
-            let size = egui::vec2(ui.available_width(), 40.0);
-            let (rect, response) = ui.allocate_exact_size(size, egui::Sense::click());
-            if ui.is_rect_visible(rect) {
-                let hovered = response.hovered();
-                let border = if is_selected {
-                    p.text
-                } else if hovered {
-                    p.text_muted
-                } else {
-                    p.border
-                };
-                let fill = if is_selected {
-                    egui::Color32::from_rgba_unmultiplied(p.text.r(), p.text.g(), p.text.b(), 20)
-                } else if hovered {
-                    egui::Color32::from_rgba_unmultiplied(
-                        p.text_muted.r(),
-                        p.text_muted.g(),
-                        p.text_muted.b(),
-                        15,
-                    )
-                } else {
-                    egui::Color32::TRANSPARENT
-                };
-                ui.painter().rect(
-                    rect,
-                    egui::CornerRadius::same(theme.control_radius as u8),
-                    fill,
-                    egui::Stroke::new(1.0, border),
-                    egui::StrokeKind::Inside,
-                );
-                let pad = 12.0;
-                ui.painter().text(
-                    egui::pos2(rect.left() + pad, rect.center().y),
-                    egui::Align2::LEFT_CENTER,
-                    &item.name,
-                    egui::FontId::proportional(theme.typography.body),
-                    p.text,
-                );
-                let meta = format!(
-                    "{} × {}  {}fps  ・  {}",
-                    item.width,
-                    item.height,
-                    item.fps,
-                    project::format_date(item.modified)
-                );
-                ui.painter().text(
-                    egui::pos2(rect.right() - pad, rect.center().y),
-                    egui::Align2::RIGHT_CENTER,
-                    meta,
-                    egui::FontId::proportional(theme.typography.small),
-                    p.text_muted,
-                );
-            }
-            if response.clicked() {
+        let row_width = ui.available_width();
+        tui(ui, ui.id().with(("project_row", &item.dir)))
+            .style(row_style_full(8.0, row_width))
+            .show(|tui| {
                 if self.selection_mode {
-                    if is_selected {
-                        self.selected.remove(&item.dir);
-                    } else {
-                        self.selected.insert(item.dir.clone());
-                    }
-                } else {
-                    self.pending_open = Some(item.dir.clone());
+                    tui.ui(|ui| {
+                        let mut checked = self.selected.contains(&item.dir);
+                        if ui.add(Checkbox::new(&mut checked, "")).changed() {
+                            if checked {
+                                self.selected.insert(item.dir.clone());
+                            } else {
+                                self.selected.remove(&item.dir);
+                            }
+                        }
+                    });
                 }
-            }
-        });
+                tui.style(grow_style()).ui(|ui| {
+                    let is_selected = self.selected.contains(&item.dir);
+                    let size = egui::vec2(ui.available_width(), 40.0);
+                    let (rect, response) = ui.allocate_exact_size(size, egui::Sense::click());
+                    if ui.is_rect_visible(rect) {
+                        let hovered = response.hovered();
+                        let border = if is_selected {
+                            p.text
+                        } else if hovered {
+                            p.text_muted
+                        } else {
+                            p.border
+                        };
+                        let fill = if is_selected {
+                            egui::Color32::from_rgba_unmultiplied(
+                                p.text.r(),
+                                p.text.g(),
+                                p.text.b(),
+                                20,
+                            )
+                        } else if hovered {
+                            egui::Color32::from_rgba_unmultiplied(
+                                p.text_muted.r(),
+                                p.text_muted.g(),
+                                p.text_muted.b(),
+                                15,
+                            )
+                        } else {
+                            egui::Color32::TRANSPARENT
+                        };
+                        ui.painter().rect(
+                            rect,
+                            egui::CornerRadius::same(theme.control_radius as u8),
+                            fill,
+                            egui::Stroke::new(1.0, border),
+                            egui::StrokeKind::Inside,
+                        );
+                        let pad = 12.0;
+                        ui.painter().text(
+                            egui::pos2(rect.left() + pad, rect.center().y),
+                            egui::Align2::LEFT_CENTER,
+                            &item.name,
+                            egui::FontId::proportional(theme.typography.body),
+                            p.text,
+                        );
+                        let meta = format!(
+                            "{} × {}  {}fps  ・  {}",
+                            item.width,
+                            item.height,
+                            item.fps,
+                            project::format_date(item.modified)
+                        );
+                        ui.painter().text(
+                            egui::pos2(rect.right() - pad, rect.center().y),
+                            egui::Align2::RIGHT_CENTER,
+                            meta,
+                            egui::FontId::proportional(theme.typography.small),
+                            p.text_muted,
+                        );
+                    }
+                    if response.clicked() {
+                        if self.selection_mode {
+                            if is_selected {
+                                self.selected.remove(&item.dir);
+                            } else {
+                                self.selected.insert(item.dir.clone());
+                            }
+                        } else {
+                            self.pending_open = Some(item.dir.clone());
+                        }
+                    }
+                });
+            });
         ui.add_space(6.0);
     }
 

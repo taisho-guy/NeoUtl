@@ -2,7 +2,9 @@ use crate::ecs::EcsWorld;
 use crate::ecs::components::ParamAccess;
 use crate::ecs::types::{Keyframe, Value};
 use crate::infra::localization::effect_param_label;
+use crate::ui::ui_ext::row_style;
 use egui_material_icons::icons;
+use egui_taffy::{TuiBuilderLogic, tui};
 use kurbo::{CubicBez, ParamCurve, Point as KPoint};
 use neoutl_easing_standard::{
     ApplyMode, CurveKind, CurveSegment, EasingPayload, ease, encode_payload, parse_payload,
@@ -492,138 +494,176 @@ fn show_curve_editor_layout(ctx: &egui::Context, ui: &mut egui::Ui, world: &mut 
         curve_changed = true;
     }
 
-    ui.horizontal(|ui| {
-        if ui
-            .small_button(icons::ICON_CONTENT_COPY)
-            .on_hover_text("コピー")
-            .clicked()
-        {
-            let json = serde_json::to_string_pretty(&active_payload).unwrap_or_default();
-            ctx.copy_text(json);
-        }
-        if ui
-            .small_button(icons::ICON_LIBRARY_ADD)
-            .on_hover_text("保存")
-            .clicked()
-        {
-            let mut store = SESSION_PRESETS.lock().unwrap();
-            let name = format!("カスタム {}", store.len() + 1);
-            store.push((name, active_payload.kind.clone()));
-        }
-        if ui
-            .small_button(icons::ICON_REFRESH)
-            .on_hover_text("リセット")
-            .clicked()
-        {
-            active_payload = EasingPayload::linear();
-            active_payload.kind = CurveKind::default_bezier();
-            curve_changed = true;
-        }
-        ui.separator();
-        {
-            let category = category_index(&active_payload.kind);
-            let mut new_category = category;
-            ui.add(
-                elegance::Select::new(("curve_mode", &target), &mut new_category)
-                    .options(CATEGORY_LABELS.into_iter().enumerate()),
-            );
-            if new_category != category {
-                active_payload.kind = category_default(new_category);
-                active_payload.modifiers.clear();
-                curve_changed = true;
-            }
-        }
-        if ui
-            .small_button(icons::ICON_CHEVRON_LEFT)
-            .on_hover_text("前のキーフレーム")
-            .clicked()
-        {
-            prev_kf_requested = true;
-        }
-        let position = track
-            .iter()
-            .position(|k| Some(k.frame) == selected)
-            .map(|i| i + 1)
-            .unwrap_or(1);
-        ui.label(format!("{position}"));
-        if ui
-            .small_button(icons::ICON_CHEVRON_RIGHT)
-            .on_hover_text("次のキーフレーム")
-            .clicked()
-        {
-            next_kf_requested = true;
-        }
-        if ui
-            .small_button(icons::ICON_ADD)
-            .on_hover_text("キーフレーム追加")
-            .clicked()
-        {
-            add_kf_requested = true;
-        }
-        ui.add_space(4.0);
-        ui.label(egui::RichText::new(effect_param_label(&label)).weak());
-    });
+    tui(ui, ui.id().with("easing_toolbar_row"))
+        .style(row_style(4.0))
+        .show(|tui| {
+            tui.ui(|ui| {
+                if ui
+                    .small_button(icons::ICON_CONTENT_COPY)
+                    .on_hover_text("コピー")
+                    .clicked()
+                {
+                    let json = serde_json::to_string_pretty(&active_payload).unwrap_or_default();
+                    ctx.copy_text(json);
+                }
+            });
+            tui.ui(|ui| {
+                if ui
+                    .small_button(icons::ICON_LIBRARY_ADD)
+                    .on_hover_text("保存")
+                    .clicked()
+                {
+                    let mut store = SESSION_PRESETS.lock().unwrap();
+                    let name = format!("カスタム {}", store.len() + 1);
+                    store.push((name, active_payload.kind.clone()));
+                }
+            });
+            tui.ui(|ui| {
+                if ui
+                    .small_button(icons::ICON_REFRESH)
+                    .on_hover_text("リセット")
+                    .clicked()
+                {
+                    active_payload = EasingPayload::linear();
+                    active_payload.kind = CurveKind::default_bezier();
+                    curve_changed = true;
+                }
+            });
+            tui.ui(|ui| {
+                ui.separator();
+            });
+            tui.ui(|ui| {
+                let category = category_index(&active_payload.kind);
+                let mut new_category = category;
+                ui.add(
+                    elegance::Select::new(("curve_mode", &target), &mut new_category)
+                        .options(CATEGORY_LABELS.into_iter().enumerate()),
+                );
+                if new_category != category {
+                    active_payload.kind = category_default(new_category);
+                    active_payload.modifiers.clear();
+                    curve_changed = true;
+                }
+            });
+            tui.ui(|ui| {
+                if ui
+                    .small_button(icons::ICON_CHEVRON_LEFT)
+                    .on_hover_text("前のキーフレーム")
+                    .clicked()
+                {
+                    prev_kf_requested = true;
+                }
+            });
+            tui.ui(|ui| {
+                let position = track
+                    .iter()
+                    .position(|k| Some(k.frame) == selected)
+                    .map(|i| i + 1)
+                    .unwrap_or(1);
+                ui.label(format!("{position}"));
+            });
+            tui.ui(|ui| {
+                if ui
+                    .small_button(icons::ICON_CHEVRON_RIGHT)
+                    .on_hover_text("次のキーフレーム")
+                    .clicked()
+                {
+                    next_kf_requested = true;
+                }
+            });
+            tui.ui(|ui| {
+                if ui
+                    .small_button(icons::ICON_ADD)
+                    .on_hover_text("キーフレーム追加")
+                    .clicked()
+                {
+                    add_kf_requested = true;
+                }
+            });
+            tui.ui(|ui| {
+                ui.label(egui::RichText::new(effect_param_label(&label)).weak());
+            });
+        });
 
     let selected_point_initial = ACTIVE
         .lock()
         .unwrap()
         .as_ref()
         .and_then(|s| s.selected_point);
-    ui.horizontal(|ui| {
-        let reversible = matches!(
-            active_payload.kind,
-            CurveKind::Bounce { .. } | CurveKind::Elastic { .. }
-        );
-        if ui
-            .add_enabled(
-                reversible,
-                egui::Button::new(format!("{} 反転", <&str>::from(icons::ICON_SWAP_HORIZ))),
-            )
-            .clicked()
-        {
-            match &mut active_payload.kind {
-                CurveKind::Bounce { reversed, .. } => *reversed = !*reversed,
-                CurveKind::Elastic { reversed, .. } => *reversed = !*reversed,
-                _ => {}
-            }
-            curve_changed = true;
-        }
-        ui.separator();
-        ui.label("補間モード");
-        const MODES: [ApplyMode; 3] = [
-            ApplyMode::Normal,
-            ApplyMode::IgnoreMidPoint,
-            ApplyMode::Interpolate,
-        ];
-        let current_mode = MODES
-            .iter()
-            .position(|m| *m == active_payload.apply_mode)
-            .unwrap_or(0);
-        let mut new_mode = current_mode;
-        ui.add(
-            elegance::Select::new(("apply_mode", &target), &mut new_mode)
-                .options(MODES.iter().map(|m| m.label()).enumerate()),
-        );
-        if new_mode != current_mode {
-            active_payload.apply_mode = MODES[new_mode];
-            curve_changed = true;
-        }
-        ui.separator();
-        let status = match selected_point_initial {
-            Some(i) => format!("選択中の頂点: {}", i + 1),
-            None => "頂点未選択".to_owned(),
-        };
-        ui.label(egui::RichText::new(status).weak());
-    });
+    tui(ui, ui.id().with("easing_mode_row"))
+        .style(row_style(4.0))
+        .show(|tui| {
+            tui.ui(|ui| {
+                let reversible = matches!(
+                    active_payload.kind,
+                    CurveKind::Bounce { .. } | CurveKind::Elastic { .. }
+                );
+                if ui
+                    .add_enabled(
+                        reversible,
+                        egui::Button::new(format!("{} 反転", <&str>::from(icons::ICON_SWAP_HORIZ))),
+                    )
+                    .clicked()
+                {
+                    match &mut active_payload.kind {
+                        CurveKind::Bounce { reversed, .. } => *reversed = !*reversed,
+                        CurveKind::Elastic { reversed, .. } => *reversed = !*reversed,
+                        _ => {}
+                    }
+                    curve_changed = true;
+                }
+            });
+            tui.ui(|ui| {
+                ui.separator();
+            });
+            tui.ui(|ui| {
+                ui.label("補間モード");
+            });
+            tui.ui(|ui| {
+                const MODES: [ApplyMode; 3] = [
+                    ApplyMode::Normal,
+                    ApplyMode::IgnoreMidPoint,
+                    ApplyMode::Interpolate,
+                ];
+                let current_mode = MODES
+                    .iter()
+                    .position(|m| *m == active_payload.apply_mode)
+                    .unwrap_or(0);
+                let mut new_mode = current_mode;
+                ui.add(
+                    elegance::Select::new(("apply_mode", &target), &mut new_mode)
+                        .options(MODES.iter().map(|m| m.label()).enumerate()),
+                );
+                if new_mode != current_mode {
+                    active_payload.apply_mode = MODES[new_mode];
+                    curve_changed = true;
+                }
+            });
+            tui.ui(|ui| {
+                ui.separator();
+            });
+            tui.ui(|ui| {
+                let status = match selected_point_initial {
+                    Some(i) => format!("選択中の頂点: {}", i + 1),
+                    None => "頂点未選択".to_owned(),
+                };
+                ui.label(egui::RichText::new(status).weak());
+            });
+        });
 
     ui.separator();
     ui.columns(2, |cols| {
         let graph_ui = &mut cols[0];
-        graph_ui.horizontal(|ui| {
-            ui.label(egui::RichText::new("標準").strong());
-            ui.add_space(8.0);
-            ui.label("ビュー");
-        });
+        tui(graph_ui, graph_ui.id().with("easing_graph_header_row"))
+            .style(row_style(8.0))
+            .show(|tui| {
+                tui.ui(|ui| {
+                    ui.label(egui::RichText::new("標準").strong());
+                });
+                tui.ui(|ui| {
+                    ui.label("ビュー");
+                });
+            });
         let selected_index = selected
             .and_then(|frame| track.windows(2).position(|w| w[0].frame == frame))
             .unwrap_or_else(|| track.len().saturating_sub(2));
@@ -802,19 +842,31 @@ fn show_curve_editor_layout(ctx: &egui::Context, ui: &mut egui::Ui, world: &mut 
         }
 
         let preset_ui = &mut cols[1];
-        preset_ui.horizontal(|ui| {
-            ui.label(icons::ICON_SEARCH);
-            ui.add(
-                egui::TextEdit::singleline(&mut search)
-                    .hint_text("プリセットを検索…")
-                    .desired_width(f32::INFINITY),
-            );
-        });
+        tui(preset_ui, preset_ui.id().with("preset_search_row"))
+            .style(row_style(4.0))
+            .show(|tui| {
+                tui.ui(|ui| {
+                    ui.label(icons::ICON_SEARCH);
+                });
+                tui.style(crate::ui::ui_ext::grow_style()).ui(|ui| {
+                    ui.add(
+                        egui::TextEdit::singleline(&mut search)
+                            .hint_text("プリセットを検索…")
+                            .desired_width(f32::INFINITY),
+                    );
+                });
+            });
         preset_ui.separator();
-        preset_ui.horizontal(|ui| {
-            ui.label(egui::RichText::new("すべて").strong());
-            ui.label(format!("(37) {}", <&str>::from(icons::ICON_EXPAND_MORE)));
-        });
+        tui(preset_ui, preset_ui.id().with("preset_heading_row"))
+            .style(row_style(4.0))
+            .show(|tui| {
+                tui.ui(|ui| {
+                    ui.label(egui::RichText::new("すべて").strong());
+                });
+                tui.ui(|ui| {
+                    ui.label(format!("(37) {}", <&str>::from(icons::ICON_EXPAND_MORE)));
+                });
+            });
         preset_ui.label(egui::RichText::new("適用時に現在の頂点構成を上書きします").weak());
         let query = search.to_lowercase();
         egui::ScrollArea::vertical()
@@ -829,17 +881,21 @@ fn show_curve_editor_layout(ctx: &egui::Context, ui: &mut egui::Ui, world: &mut 
                     .collect();
                 if !session.is_empty() {
                     ui.label(egui::RichText::new("保存済み").weak());
-                    for chunk in session.chunks(3) {
-                        ui.horizontal(|ui| {
-                            for (name, kind) in chunk {
-                                let response = preset_card(ui, name, kind);
-                                if response.clicked() {
-                                    active_payload.kind = kind.clone();
-                                    active_payload.modifiers.clear();
-                                    curve_changed = true;
+                    for (chunk_index, chunk) in session.chunks(3).enumerate() {
+                        tui(ui, ui.id().with(("preset_session_card_row", chunk_index)))
+                            .style(row_style(4.0))
+                            .show(|tui| {
+                                for (name, kind) in chunk {
+                                    tui.ui(|ui| {
+                                        let response = preset_card(ui, name, kind);
+                                        if response.clicked() {
+                                            active_payload.kind = kind.clone();
+                                            active_payload.modifiers.clear();
+                                            curve_changed = true;
+                                        }
+                                    });
                                 }
-                            }
-                        });
+                            });
                     }
                     ui.separator();
                 }
@@ -886,18 +942,22 @@ fn show_curve_editor_layout(ctx: &egui::Context, ui: &mut egui::Ui, world: &mut 
                     .into_iter()
                     .filter(|name| query.is_empty() || name.to_lowercase().contains(&query))
                     .collect();
-                for row in filtered.chunks(3) {
-                    ui.horizontal(|ui| {
-                        for name in row {
-                            let kind = default_for(name);
-                            let response = preset_card(ui, name, &kind);
-                            if response.clicked() {
-                                active_payload.kind = kind;
-                                active_payload.modifiers.clear();
-                                curve_changed = true;
+                for (row_index, row) in filtered.chunks(3).enumerate() {
+                    tui(ui, ui.id().with(("preset_builtin_card_row", row_index)))
+                        .style(row_style(4.0))
+                        .show(|tui| {
+                            for name in row {
+                                tui.ui(|ui| {
+                                    let kind = default_for(name);
+                                    let response = preset_card(ui, name, &kind);
+                                    if response.clicked() {
+                                        active_payload.kind = kind;
+                                        active_payload.modifiers.clear();
+                                        curve_changed = true;
+                                    }
+                                });
                             }
-                        }
-                    });
+                        });
                 }
             });
     });
@@ -910,35 +970,44 @@ fn show_curve_editor_layout(ctx: &egui::Context, ui: &mut egui::Ui, world: &mut 
     let affected = if apply_all { track.len() } else { 1 };
     let mut applied = false;
     ui.add_space(4.0);
-    ui.horizontal(|ui| {
-        if ui
-            .add_sized(
-                egui::vec2(ui.available_size_before_wrap().x, 30.0),
-                elegance::Button::new(format!("適用 ({affected})")).accent(elegance::Accent::Blue),
-            )
-            .clicked()
-        {
-            applied = true;
-        }
-        if ui
-            .small_button(format!(
-                "{} {}",
-                <&str>::from(icons::ICON_EXPAND_MORE),
-                if apply_all {
-                    "全区間"
-                } else {
-                    "選択区間"
+    tui(ui, ui.id().with("easing_apply_row"))
+        .style(row_style(4.0))
+        .show(|tui| {
+            tui.style(crate::ui::ui_ext::grow_style()).ui(|ui| {
+                if ui
+                    .add_sized(
+                        egui::vec2(ui.available_width(), 30.0),
+                        elegance::Button::new(format!("適用 ({affected})"))
+                            .accent(elegance::Accent::Blue),
+                    )
+                    .clicked()
+                {
+                    applied = true;
                 }
-            ))
-            .on_hover_text("適用範囲の切替")
-            .clicked()
-        {
-            APPLY_ALL_SEGMENTS.store(!apply_all, Ordering::Relaxed);
-        }
-        if ui.small_button("閉じる").clicked() {
-            close_requested = true;
-        }
-    });
+            });
+            tui.ui(|ui| {
+                if ui
+                    .small_button(format!(
+                        "{} {}",
+                        <&str>::from(icons::ICON_EXPAND_MORE),
+                        if apply_all {
+                            "全区間"
+                        } else {
+                            "選択区間"
+                        }
+                    ))
+                    .on_hover_text("適用範囲の切替")
+                    .clicked()
+                {
+                    APPLY_ALL_SEGMENTS.store(!apply_all, Ordering::Relaxed);
+                }
+            });
+            tui.ui(|ui| {
+                if ui.small_button("閉じる").clicked() {
+                    close_requested = true;
+                }
+            });
+        });
 
     if prev_kf_requested {
         if let Some(idx) = track.iter().position(|k| Some(k.frame) == selected) {

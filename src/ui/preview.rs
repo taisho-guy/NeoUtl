@@ -5,6 +5,8 @@ use crate::ecs::systems::get_active_objects_system;
 use crate::renderer::RenderEngine;
 use crate::ui::dialogs::DialogSet;
 use crate::ui::timeline::util::egui_key_name;
+use crate::ui::ui_ext::row_style;
+use egui_taffy::{TuiBuilderLogic, tui};
 use egui_wgpu::Renderer as EguiRenderer;
 use egui_wgpu::wgpu;
 use elegance::{BrowserTab, BrowserTabs, BrowserTabsEvent};
@@ -213,6 +215,8 @@ impl PreviewPanel {
     }
 
     fn menu_bar(&mut self, ui: &mut egui::Ui, state: &SharedAppState) {
+        use crate::ui::ui_ext::{row_between_style, row_style};
+        use egui_taffy::{TuiBuilderLogic, tui};
         use elegance::{MenuBar, MenuItem};
         let mut open_export = false;
         let mut open_system_settings = false;
@@ -220,112 +224,127 @@ impl PreviewPanel {
         let mut open_keybindings = false;
         let mut open_timeline = false;
         let mut open_properties = false;
-        ui.horizontal(|ui| {
-            MenuBar::new("preview_menu_bar").show(ui, |bar| {
-                bar.menu(t!("ファイル"), |ui| {
-                    if ui.add(MenuItem::new(t!("新規プロジェクト"))).clicked() {
-                        let _ = app_state::new_project_session(state);
-                    }
-                    if ui.add(MenuItem::new(t!("プロジェクトを開く"))).clicked() {
-                        if let Some(dir) = rfd::FileDialog::new().pick_folder() {
-                            let _ = app_state::open_project_session(state, &dir);
-                        }
-                    }
-                    if ui.add(MenuItem::new(t!("上書き保存"))).clicked() {
-                        let _ = app_state::save_active(state);
-                    }
-                    if ui.add(MenuItem::new(t!("名前を付けて保存"))).clicked() {
-                        if let Some(dir) = rfd::FileDialog::new().pick_folder() {
-                            let world_holder = app_state::active_world(state);
-                            let doc = world_holder.lock().unwrap().to_document();
-                            let _ = crate::project::save_document(&dir, &doc);
-                        }
-                    }
-                    if ui.add(MenuItem::new(t!("メディアの書き出し"))).clicked() {
-                        open_export = true;
-                    }
-                    ui.separator();
-                    if ui.add(MenuItem::new(t!("終了"))).clicked() {
-                        app_state::save_all(state);
-                        std::process::exit(0);
-                    }
+        let row_width = ui.available_width();
+        tui(ui, ui.id().with("preview_menu_bar_row"))
+            .style(row_between_style(row_width))
+            .show(|tui| {
+                tui.ui(|ui| {
+                    MenuBar::new("preview_menu_bar").show(ui, |bar| {
+                        bar.menu(t!("ファイル"), |ui| {
+                            if ui.add(MenuItem::new(t!("新規プロジェクト"))).clicked() {
+                                let _ = app_state::new_project_session(state);
+                            }
+                            if ui.add(MenuItem::new(t!("プロジェクトを開く"))).clicked() {
+                                if let Some(dir) = rfd::FileDialog::new().pick_folder() {
+                                    let _ = app_state::open_project_session(state, &dir);
+                                }
+                            }
+                            if ui.add(MenuItem::new(t!("上書き保存"))).clicked() {
+                                let _ = app_state::save_active(state);
+                            }
+                            if ui.add(MenuItem::new(t!("名前を付けて保存"))).clicked() {
+                                if let Some(dir) = rfd::FileDialog::new().pick_folder() {
+                                    let world_holder = app_state::active_world(state);
+                                    let doc = world_holder.lock().unwrap().to_document();
+                                    let _ = crate::project::save_document(&dir, &doc);
+                                }
+                            }
+                            if ui.add(MenuItem::new(t!("メディアの書き出し"))).clicked() {
+                                open_export = true;
+                            }
+                            ui.separator();
+                            if ui.add(MenuItem::new(t!("終了"))).clicked() {
+                                app_state::save_all(state);
+                                std::process::exit(0);
+                            }
+                        });
+                        bar.menu(t!("編集"), |ui| {
+                            if ui.add(MenuItem::new(t!("元に戻す"))).clicked() {
+                                app_state::undo_active(state);
+                            }
+                            if ui.add(MenuItem::new(t!("やり直し"))).clicked() {
+                                app_state::redo_active(state);
+                            }
+                            ui.separator();
+                            if ui.add(MenuItem::new(t!("システム設定"))).clicked() {
+                                open_system_settings = true;
+                            }
+                            if ui.add(MenuItem::new(t!("プロジェクト設定"))).clicked() {
+                                open_project_settings = true;
+                            }
+                            if ui.add(MenuItem::new(t!("ショートカット設定"))).clicked() {
+                                open_keybindings = true;
+                            }
+                        });
+                        bar.menu(t!("表示"), |ui| {
+                            if ui.add(MenuItem::new(t!("拡張編集"))).clicked() {
+                                open_timeline = true;
+                            }
+                            if ui.add(MenuItem::new(t!("プロパティ"))).clicked() {
+                                open_properties = true;
+                            }
+                        });
+                    });
                 });
-                bar.menu(t!("編集"), |ui| {
-                    if ui.add(MenuItem::new(t!("元に戻す"))).clicked() {
-                        app_state::undo_active(state);
-                    }
-                    if ui.add(MenuItem::new(t!("やり直し"))).clicked() {
-                        app_state::redo_active(state);
-                    }
-                    ui.separator();
-                    if ui.add(MenuItem::new(t!("システム設定"))).clicked() {
-                        open_system_settings = true;
-                    }
-                    if ui.add(MenuItem::new(t!("プロジェクト設定"))).clicked() {
-                        open_project_settings = true;
-                    }
-                    if ui.add(MenuItem::new(t!("ショートカット設定"))).clicked() {
-                        open_keybindings = true;
-                    }
-                });
-                bar.menu(t!("表示"), |ui| {
-                    if ui.add(MenuItem::new(t!("拡張編集"))).clicked() {
-                        open_timeline = true;
-                    }
-                    if ui.add(MenuItem::new(t!("プロパティ"))).clicked() {
-                        open_properties = true;
-                    }
+
+                tui.style(row_style(6.0)).add(|tui| {
+                    tui.ui(|ui| {
+                        ui.add(
+                            egui::DragValue::new(&mut self.speed_percent)
+                                .range(
+                                    crate::project::config::PLAYBACK_SPEED_MIN_PERCENT
+                                        ..=crate::project::config::PLAYBACK_SPEED_MAX_PERCENT,
+                                )
+                                .suffix("%"),
+                        );
+                    });
+                    tui.ui(|ui| {
+                        ui.label(t!("速度"));
+                    });
+                    tui.ui(|ui| {
+                        if ui
+                            .add_sized([28.0, 28.0], elegance::Button::new("⏭"))
+                            .clicked()
+                        {
+                            self.apply_frame(self.current_frame + 1, state);
+                        }
+                    });
+                    tui.ui(|ui| {
+                        let icon = if self.is_playing { "⏸" } else { "▶" };
+                        if ui
+                            .add_sized([28.0, 28.0], elegance::Button::new(icon))
+                            .clicked()
+                        {
+                            self.is_playing = !self.is_playing;
+                            let mixer = app_state::active_audio_mixer(state);
+                            if self.is_playing {
+                                self.playback_anchor = Some((Instant::now(), self.current_frame));
+                                mixer.lock().unwrap().play();
+                            } else {
+                                self.playback_anchor = None;
+                                mixer.lock().unwrap().pause();
+                            }
+                        }
+                    });
+                    tui.ui(|ui| {
+                        if ui
+                            .add_sized([28.0, 28.0], elegance::Button::new("⏮"))
+                            .clicked()
+                        {
+                            self.apply_frame(self.current_frame - 1, state);
+                        }
+                    });
+                    tui.ui(|ui| {
+                        let digits = self.total_frames.max(1).to_string().len();
+                        ui.monospace(format!(
+                            "{:0width$} / {}",
+                            self.current_frame,
+                            self.total_frames,
+                            width = digits
+                        ));
+                    });
                 });
             });
-
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                ui.add(
-                    egui::DragValue::new(&mut self.speed_percent)
-                        .range(
-                            crate::project::config::PLAYBACK_SPEED_MIN_PERCENT
-                                ..=crate::project::config::PLAYBACK_SPEED_MAX_PERCENT,
-                        )
-                        .suffix("%"),
-                );
-                ui.label(t!("速度"));
-
-                if ui
-                    .add_sized([28.0, 28.0], elegance::Button::new("⏭"))
-                    .clicked()
-                {
-                    self.apply_frame(self.current_frame + 1, state);
-                }
-                let icon = if self.is_playing { "⏸" } else { "▶" };
-                if ui
-                    .add_sized([28.0, 28.0], elegance::Button::new(icon))
-                    .clicked()
-                {
-                    self.is_playing = !self.is_playing;
-                    let mixer = app_state::active_audio_mixer(state);
-                    if self.is_playing {
-                        self.playback_anchor = Some((Instant::now(), self.current_frame));
-                        mixer.lock().unwrap().play();
-                    } else {
-                        self.playback_anchor = None;
-                        mixer.lock().unwrap().pause();
-                    }
-                }
-                if ui
-                    .add_sized([28.0, 28.0], elegance::Button::new("⏮"))
-                    .clicked()
-                {
-                    self.apply_frame(self.current_frame - 1, state);
-                }
-
-                let digits = self.total_frames.max(1).to_string().len();
-                ui.monospace(format!(
-                    "{:0width$} / {}",
-                    self.current_frame,
-                    self.total_frames,
-                    width = digits
-                ));
-            });
-        });
         if open_export {
             self.open_export = true;
         }
@@ -470,26 +489,34 @@ impl PreviewPanel {
                 ui.label(t!(
                     "保存されていない変更があります。閉じる前に保存しますか？"
                 ));
-                ui.horizontal(|ui| {
-                    if ui
-                        .add(elegance::Button::new(t!("保存して閉じる")))
-                        .clicked()
-                    {
-                        save_and_close = true;
-                    }
-                    if ui
-                        .add(elegance::Button::new(t!("保存せず閉じる")).outline())
-                        .clicked()
-                    {
-                        discard_and_close = true;
-                    }
-                    if ui
-                        .add(elegance::Button::new(t!("キャンセル")).outline())
-                        .clicked()
-                    {
-                        cancel = true;
-                    }
-                });
+                tui(ui, ui.id().with("confirm_close_session_actions"))
+                    .style(row_style(8.0))
+                    .show(|tui| {
+                        tui.ui(|ui| {
+                            if ui
+                                .add(elegance::Button::new(t!("保存して閉じる")))
+                                .clicked()
+                            {
+                                save_and_close = true;
+                            }
+                        });
+                        tui.ui(|ui| {
+                            if ui
+                                .add(elegance::Button::new(t!("保存せず閉じる")).outline())
+                                .clicked()
+                            {
+                                discard_and_close = true;
+                            }
+                        });
+                        tui.ui(|ui| {
+                            if ui
+                                .add(elegance::Button::new(t!("キャンセル")).outline())
+                                .clicked()
+                            {
+                                cancel = true;
+                            }
+                        });
+                    });
             });
         if !modal_open {
             cancel = true;

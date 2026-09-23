@@ -1,5 +1,8 @@
 use crate::infra::localization::tr;
+use crate::ui::ui_ext::fixed_style;
 use egui::Ui;
+use egui_taffy::taffy;
+use egui_taffy::{TuiBuilderLogic, tui};
 use elegance::{Select, Slider, Switch, TextInput};
 
 pub fn field_height(ui: &Ui) -> f32 {
@@ -7,11 +10,19 @@ pub fn field_height(ui: &Ui) -> f32 {
 }
 
 fn field_label(ui: &mut Ui, label: &str) {
-    ui.allocate_ui_with_layout(
-        egui::vec2(0.0, field_height(ui)),
-        egui::Layout::left_to_right(egui::Align::Center),
-        |ui| ui.label(tr(label)),
-    );
+    let height = field_height(ui);
+    let width = ui.available_width();
+    let style = taffy::Style {
+        align_items: Some(taffy::AlignItems::Center),
+        ..fixed_style(width, height)
+    };
+    tui(ui, ui.id().with(("field_label", label)))
+        .style(style)
+        .show(|tui| {
+            tui.ui(|ui| {
+                ui.label(tr(label));
+            });
+        });
 }
 
 pub fn name_field(ui: &mut Ui, label: &str, value: &mut String) -> bool {
@@ -101,21 +112,27 @@ pub fn float_text_field(ui: &mut Ui, label: &str, value: &mut f32, min: f32, max
 pub fn choice_field(ui: &mut Ui, label: &str, options: &[String], selected: &mut i32) -> bool {
     field_label(ui, label);
     let mut changed = false;
-    ui.allocate_ui_with_layout(
-        egui::vec2(0.0, field_height(ui)),
-        egui::Layout::left_to_right(egui::Align::Center),
-        |ui| {
-            let mut idx = (*selected).max(0) as usize;
-            let resp = ui.add(
-                Select::new((ui.id(), "choice_field"), &mut idx)
-                    .options(options.iter().enumerate().map(|(i, o)| (i, tr(o)))),
-            );
-            if resp.changed() {
-                *selected = idx as i32;
-                changed = true;
-            }
-        },
-    );
+    let height = field_height(ui);
+    let width = ui.available_width();
+    let style = taffy::Style {
+        align_items: Some(taffy::AlignItems::Center),
+        ..fixed_style(width, height)
+    };
+    tui(ui, ui.id().with(("choice_field", label)))
+        .style(style)
+        .show(|tui| {
+            tui.ui(|ui| {
+                let mut idx = (*selected).max(0) as usize;
+                let resp = ui.add(
+                    Select::new((ui.id(), "choice_field"), &mut idx)
+                        .options(options.iter().enumerate().map(|(i, o)| (i, tr(o)))),
+                );
+                if resp.changed() {
+                    *selected = idx as i32;
+                    changed = true;
+                }
+            });
+        });
     ui.end_row();
     changed
 }

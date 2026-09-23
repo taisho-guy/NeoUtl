@@ -9,6 +9,8 @@ use crate::ecs::object_schema::{
     is_visible, resolve_range,
 };
 use crate::infra::localization::effect_param_label;
+use crate::ui::ui_ext::row_style;
+use egui_taffy::{TuiBuilderLogic, tui};
 use elegance::{Checkbox, Select, Slider, TextArea};
 use neoutl_shared_abi::ParamKind;
 
@@ -274,14 +276,20 @@ pub fn transform_section(ui: &mut egui::Ui, world: &mut EcsWorld, id: usize) {
         };
         match schema.kind {
             ParamKind::Bool => {
-                ui.horizontal(|ui| {
-                    ui.label(effect_param_label(schema.label));
-                    let mut b = value > 0.5;
-                    if ui.add(Checkbox::new(&mut b, "")).changed() {
-                        transform.set_param(schema.key, if b { 1.0 } else { 0.0 });
-                        world.set_transform(id, transform);
-                    }
-                });
+                tui(ui, ui.id().with((id, "transform_bool", schema.key)))
+                    .style(row_style(6.0))
+                    .show(|tui| {
+                        tui.ui(|ui| {
+                            ui.label(effect_param_label(schema.label));
+                        });
+                        tui.ui(|ui| {
+                            let mut b = value > 0.5;
+                            if ui.add(Checkbox::new(&mut b, "")).changed() {
+                                transform.set_param(schema.key, if b { 1.0 } else { 0.0 });
+                                world.set_transform(id, transform);
+                            }
+                        });
+                    });
             }
             ParamKind::Float => {
                 let (min, max) = resolve_range(schema.range, 1920.0, 1080.0);
@@ -334,20 +342,28 @@ pub fn text_section(ui: &mut egui::Ui, world: &mut EcsWorld, id: usize) {
     let mut remove_at: Option<usize> = None;
     let mut updated: Option<Vec<String>> = None;
     for row in 0..stack.len() {
-        ui.horizontal(|ui| {
-            let mut family = stack[row].clone();
-            if let Some(new_family) =
-                crate::ui::font_stack::font_stack_row(ui, (id, "font_stack", row), &mut family)
-            {
-                stack[row] = new_family;
-                updated = Some(stack.clone());
-            }
-            ui.add_enabled_ui(stack.len() > 1, |ui| {
-                if ui.small_button("✕").clicked() {
-                    remove_at = Some(row);
-                }
+        tui(ui, ui.id().with((id, "font_stack_row_tui", row)))
+            .style(row_style(6.0))
+            .show(|tui| {
+                tui.style(crate::ui::ui_ext::grow_style()).ui(|ui| {
+                    let mut family = stack[row].clone();
+                    if let Some(new_family) = crate::ui::font_stack::font_stack_row(
+                        ui,
+                        (id, "font_stack", row),
+                        &mut family,
+                    ) {
+                        stack[row] = new_family;
+                        updated = Some(stack.clone());
+                    }
+                });
+                tui.ui(|ui| {
+                    ui.add_enabled_ui(stack.len() > 1, |ui| {
+                        if ui.small_button("✕").clicked() {
+                            remove_at = Some(row);
+                        }
+                    });
+                });
             });
-        });
     }
     if let Some(new_stack) = updated {
         world.set_text_font_stack(id, new_stack);
@@ -378,31 +394,44 @@ pub fn text_section(ui: &mut egui::Ui, world: &mut EcsWorld, id: usize) {
             ParamKind::Text if schema.key == "font_family" => {}
             ParamKind::Text => {}
             ParamKind::Bool => {
-                ui.horizontal(|ui| {
-                    ui.label(effect_param_label(schema.label));
-                    let mut b = content.get_param(schema.key).unwrap_or(0.0) > 0.5;
-                    if ui.add(Checkbox::new(&mut b, "")).changed() {
-                        world.set_text_param(id, schema.key, if b { 1.0 } else { 0.0 });
-                    }
-                });
+                tui(ui, ui.id().with((id, "text_bool", schema.key)))
+                    .style(row_style(6.0))
+                    .show(|tui| {
+                        tui.ui(|ui| {
+                            ui.label(effect_param_label(schema.label));
+                        });
+                        tui.ui(|ui| {
+                            let mut b = content.get_param(schema.key).unwrap_or(0.0) > 0.5;
+                            if ui.add(Checkbox::new(&mut b, "")).changed() {
+                                world.set_text_param(id, schema.key, if b { 1.0 } else { 0.0 });
+                            }
+                        });
+                    });
             }
             ParamKind::Enum => {
-                ui.horizontal(|ui| {
-                    ui.label(effect_param_label(schema.label));
-                    let mut idx = content.get_param(schema.key).unwrap_or(0.0).round() as usize;
-                    let resp = ui.add(
-                        Select::new((ui.id(), "text", schema.key), &mut idx).options(
-                            schema
-                                .enum_options
-                                .iter()
-                                .enumerate()
-                                .map(|(i, o)| (i, effect_param_label(o).to_string())),
-                        ),
-                    );
-                    if resp.changed() {
-                        world.set_text_param(id, schema.key, idx as f32);
-                    }
-                });
+                tui(ui, ui.id().with((id, "text_enum", schema.key)))
+                    .style(row_style(6.0))
+                    .show(|tui| {
+                        tui.ui(|ui| {
+                            ui.label(effect_param_label(schema.label));
+                        });
+                        tui.ui(|ui| {
+                            let mut idx =
+                                content.get_param(schema.key).unwrap_or(0.0).round() as usize;
+                            let resp = ui.add(
+                                Select::new((ui.id(), "text", schema.key), &mut idx).options(
+                                    schema
+                                        .enum_options
+                                        .iter()
+                                        .enumerate()
+                                        .map(|(i, o)| (i, effect_param_label(o).to_string())),
+                                ),
+                            );
+                            if resp.changed() {
+                                world.set_text_param(id, schema.key, idx as f32);
+                            }
+                        });
+                    });
             }
             ParamKind::Float => {
                 let value = content.get_param(schema.key).unwrap_or(0.0);
@@ -516,33 +545,37 @@ pub fn audio_section(ui: &mut egui::Ui, world: &mut EcsWorld, id: usize) {
         if !is_visible(schema, |k| audio.get_param(k).unwrap_or(0.0)) {
             continue;
         }
-        ui.horizontal(|ui| {
-            ui.label(effect_param_label(schema.label));
-            match schema.kind {
-                ParamKind::Bool => {
-                    let mut b = audio.get_param(schema.key).unwrap_or(0.0) > 0.5;
-                    if ui.add(Checkbox::new(&mut b, "")).changed() {
-                        audio.set_param(schema.key, if b { 1.0 } else { 0.0 });
-                        world.set_audio_params(id, audio.volume, audio.pan, audio.mute);
+        tui(ui, ui.id().with((id, "audio_param", schema.key)))
+            .style(row_style(6.0))
+            .show(|tui| {
+                tui.ui(|ui| {
+                    ui.label(effect_param_label(schema.label));
+                });
+                tui.ui(|ui| match schema.kind {
+                    ParamKind::Bool => {
+                        let mut b = audio.get_param(schema.key).unwrap_or(0.0) > 0.5;
+                        if ui.add(Checkbox::new(&mut b, "")).changed() {
+                            audio.set_param(schema.key, if b { 1.0 } else { 0.0 });
+                            world.set_audio_params(id, audio.volume, audio.pan, audio.mute);
+                        }
                     }
-                }
-                ParamKind::Float => {
-                    let (min, max) = resolve_range(schema.range, 1920.0, 1080.0);
-                    let mut value = audio.get_param(schema.key).unwrap_or(0.0);
-                    if ui
-                        .add(
-                            Slider::new(&mut value, min..=max)
-                                .step(((max - min).max(0.001) / 1000.0) as f64),
-                        )
-                        .changed()
-                    {
-                        audio.set_param(schema.key, value);
-                        world.set_audio_params(id, audio.volume, audio.pan, audio.mute);
+                    ParamKind::Float => {
+                        let (min, max) = resolve_range(schema.range, 1920.0, 1080.0);
+                        let mut value = audio.get_param(schema.key).unwrap_or(0.0);
+                        if ui
+                            .add(
+                                Slider::new(&mut value, min..=max)
+                                    .step(((max - min).max(0.001) / 1000.0) as f64),
+                            )
+                            .changed()
+                        {
+                            audio.set_param(schema.key, value);
+                            world.set_audio_params(id, audio.volume, audio.pan, audio.mute);
+                        }
                     }
-                }
-                _ => {}
-            }
-        });
+                    _ => {}
+                });
+            });
     }
 }
 
@@ -575,30 +608,45 @@ pub fn group_control_section(ui: &mut egui::Ui, world: &mut EcsWorld, id: usize)
         }
         match schema.kind {
             ParamKind::Bool => {
-                ui.horizontal(|ui| {
-                    ui.label(effect_param_label(schema.label));
-                    let mut b = gc.get_param(schema.key).unwrap_or(0.0) > 0.5;
-                    if ui.add(Checkbox::new(&mut b, "")).changed() {
-                        gc.set_param(schema.key, if b { 1.0 } else { 0.0 });
-                        world.set_group_control(id, gc);
-                    }
-                });
+                tui(ui, ui.id().with((id, "group_control_bool", schema.key)))
+                    .style(row_style(6.0))
+                    .show(|tui| {
+                        tui.ui(|ui| {
+                            ui.label(effect_param_label(schema.label));
+                        });
+                        tui.ui(|ui| {
+                            let mut b = gc.get_param(schema.key).unwrap_or(0.0) > 0.5;
+                            if ui.add(Checkbox::new(&mut b, "")).changed() {
+                                gc.set_param(schema.key, if b { 1.0 } else { 0.0 });
+                                world.set_group_control(id, gc);
+                            }
+                        });
+                    });
             }
             ParamKind::Float if GROUP_CONTROL_STRUCTURAL_KEYS.contains(&schema.key) => {
-                ui.horizontal(|ui| {
-                    ui.label(effect_param_label(schema.label));
-                    let (min, max) = resolve_range(schema.range, 1920.0, 1080.0);
-                    let mut value = gc.get_param(schema.key).unwrap_or(0.0);
-                    if ui
-                        .add(
-                            Slider::new(&mut value, min..=max)
-                                .step(((max - min).max(0.001) / 1000.0) as f64),
-                        )
-                        .changed()
-                    {
-                        gc.set_param(schema.key, value.round());
-                        world.set_group_control(id, gc);
-                    }
+                tui(
+                    ui,
+                    ui.id().with((id, "group_control_structural", schema.key)),
+                )
+                .style(row_style(6.0))
+                .show(|tui| {
+                    tui.ui(|ui| {
+                        ui.label(effect_param_label(schema.label));
+                    });
+                    tui.ui(|ui| {
+                        let (min, max) = resolve_range(schema.range, 1920.0, 1080.0);
+                        let mut value = gc.get_param(schema.key).unwrap_or(0.0);
+                        if ui
+                            .add(
+                                Slider::new(&mut value, min..=max)
+                                    .step(((max - min).max(0.001) / 1000.0) as f64),
+                            )
+                            .changed()
+                        {
+                            gc.set_param(schema.key, value.round());
+                            world.set_group_control(id, gc);
+                        }
+                    });
                 });
             }
             ParamKind::Float => {
@@ -629,23 +677,30 @@ pub fn group_control_section(ui: &mut egui::Ui, world: &mut EcsWorld, id: usize)
                 );
             }
             ParamKind::Enum => {
-                ui.horizontal(|ui| {
-                    ui.label(effect_param_label(schema.label));
-                    let mut current = gc.get_param(schema.key).unwrap_or(0.0).round() as usize;
-                    let resp = ui.add(
-                        Select::new((id, schema.key), &mut current).options(
-                            schema
-                                .enum_options
-                                .iter()
-                                .enumerate()
-                                .map(|(i, opt)| (i, *opt)),
-                        ),
-                    );
-                    if resp.changed() {
-                        gc.set_param(schema.key, current as f32);
-                        world.set_group_control(id, gc);
-                    }
-                });
+                tui(ui, ui.id().with((id, "group_control_enum", schema.key)))
+                    .style(row_style(6.0))
+                    .show(|tui| {
+                        tui.ui(|ui| {
+                            ui.label(effect_param_label(schema.label));
+                        });
+                        tui.ui(|ui| {
+                            let mut current =
+                                gc.get_param(schema.key).unwrap_or(0.0).round() as usize;
+                            let resp = ui.add(
+                                Select::new((id, schema.key), &mut current).options(
+                                    schema
+                                        .enum_options
+                                        .iter()
+                                        .enumerate()
+                                        .map(|(i, opt)| (i, *opt)),
+                                ),
+                            );
+                            if resp.changed() {
+                                gc.set_param(schema.key, current as f32);
+                                world.set_group_control(id, gc);
+                            }
+                        });
+                    });
             }
             _ => {}
         }
@@ -668,27 +723,33 @@ pub fn compositing_section(ui: &mut egui::Ui, world: &mut EcsWorld, id: usize) {
     ui.separator();
     ui.colored_label(egui::Color32::from_rgb(0x8a, 0xab, 0xff), t!("合成"));
 
-    ui.horizontal(|ui| {
-        ui.label(t!("ブレンドモード"));
-        let current_mode = world.blend_mode_of(id);
-        let mut current = BLEND_MODE_OPTIONS
-            .iter()
-            .position(|(m, _)| *m == current_mode)
-            .unwrap_or(0);
-        let resp = ui.add(
-            Select::new((id, "blend_mode"), &mut current).options(
-                BLEND_MODE_OPTIONS
+    tui(ui, ui.id().with((id, "compositing_blend_mode")))
+        .style(row_style(6.0))
+        .show(|tui| {
+            tui.ui(|ui| {
+                ui.label(t!("ブレンドモード"));
+            });
+            tui.ui(|ui| {
+                let current_mode = world.blend_mode_of(id);
+                let mut current = BLEND_MODE_OPTIONS
                     .iter()
-                    .enumerate()
-                    .map(|(i, (_, label))| (i, *label)),
-            ),
-        );
-        if resp.changed() {
-            if let Some((mode, _)) = BLEND_MODE_OPTIONS.get(current) {
-                world.set_blend_mode(id, *mode);
-            }
-        }
-    });
+                    .position(|(m, _)| *m == current_mode)
+                    .unwrap_or(0);
+                let resp = ui.add(
+                    Select::new((id, "blend_mode"), &mut current).options(
+                        BLEND_MODE_OPTIONS
+                            .iter()
+                            .enumerate()
+                            .map(|(i, (_, label))| (i, *label)),
+                    ),
+                );
+                if resp.changed() {
+                    if let Some((mode, _)) = BLEND_MODE_OPTIONS.get(current) {
+                        world.set_blend_mode(id, *mode);
+                    }
+                }
+            });
+        });
 }
 
 pub fn mask_section(ui: &mut egui::Ui, world: &mut EcsWorld, id: usize) {
@@ -703,30 +764,50 @@ pub fn mask_section(ui: &mut egui::Ui, world: &mut EcsWorld, id: usize) {
         .collect();
     for &i in &indices {
         ui.push_id(i, |ui| {
-            ui.horizontal(|ui| {
-                ui.label(format!("#{i}"));
-                if ui.small_button(t!("削除")).clicked() {
-                    world.remove_effect(id, i);
-                }
-            });
-            ui.horizontal(|ui| {
-                ui.label(t!("半径/サイズ"));
-                let mut radius = world.effect_param_f32(id, i, "radius").unwrap_or(0.4);
-                if ui.add(Slider::new(&mut radius, 0.0..=1.0)).changed() {
-                    world.set_effect_param(id, i, "radius", radius);
-                }
-            });
-            ui.horizontal(|ui| {
-                ui.label(t!("フェザー"));
-                let mut feather = world.effect_param_f32(id, i, "feather").unwrap_or(0.0);
-                if ui.add(Slider::new(&mut feather, 0.0..=0.5)).changed() {
-                    world.set_effect_param(id, i, "feather", feather);
-                }
-                let mut invert = world.effect_param_bool(id, i, "invert");
-                if ui.add(Checkbox::new(&mut invert, t!("反転"))).changed() {
-                    world.set_effect_param_bool(id, i, "invert", invert);
-                }
-            });
+            tui(ui, ui.id().with("mask_header_row"))
+                .style(row_style(6.0))
+                .show(|tui| {
+                    tui.ui(|ui| {
+                        ui.label(format!("#{i}"));
+                    });
+                    tui.ui(|ui| {
+                        if ui.small_button(t!("削除")).clicked() {
+                            world.remove_effect(id, i);
+                        }
+                    });
+                });
+            tui(ui, ui.id().with("mask_radius_row"))
+                .style(row_style(6.0))
+                .show(|tui| {
+                    tui.ui(|ui| {
+                        ui.label(t!("半径/サイズ"));
+                    });
+                    tui.ui(|ui| {
+                        let mut radius = world.effect_param_f32(id, i, "radius").unwrap_or(0.4);
+                        if ui.add(Slider::new(&mut radius, 0.0..=1.0)).changed() {
+                            world.set_effect_param(id, i, "radius", radius);
+                        }
+                    });
+                });
+            tui(ui, ui.id().with("mask_feather_row"))
+                .style(row_style(6.0))
+                .show(|tui| {
+                    tui.ui(|ui| {
+                        ui.label(t!("フェザー"));
+                    });
+                    tui.ui(|ui| {
+                        let mut feather = world.effect_param_f32(id, i, "feather").unwrap_or(0.0);
+                        if ui.add(Slider::new(&mut feather, 0.0..=0.5)).changed() {
+                            world.set_effect_param(id, i, "feather", feather);
+                        }
+                    });
+                    tui.ui(|ui| {
+                        let mut invert = world.effect_param_bool(id, i, "invert");
+                        if ui.add(Checkbox::new(&mut invert, t!("反転"))).changed() {
+                            world.set_effect_param_bool(id, i, "invert", invert);
+                        }
+                    });
+                });
         });
     }
     if ui.small_button(t!("マスクを追加")).clicked() {
@@ -744,45 +825,63 @@ pub fn time_remap_section(ui: &mut egui::Ui, world: &mut EcsWorld, id: usize) {
     let mut changed = false;
 
     let mut freeze_enabled = remap.freeze_frame.is_some();
-    ui.horizontal(|ui| {
-        if ui
-            .add(Checkbox::new(&mut freeze_enabled, t!("フリーズフレーム")))
-            .changed()
-        {
-            remap.freeze_frame = if freeze_enabled { Some(0) } else { None };
-            changed = true;
-        }
-        if let Some(frame) = remap.freeze_frame.as_mut() {
-            let mut v = *frame as f32;
-            if ui.add(Slider::new(&mut v, 0.0..=100000.0)).changed() {
-                *frame = v.round() as i32;
-                changed = true;
-            }
-        }
-    });
+    tui(ui, ui.id().with((id, "time_remap_freeze")))
+        .style(row_style(6.0))
+        .show(|tui| {
+            tui.ui(|ui| {
+                if ui
+                    .add(Checkbox::new(&mut freeze_enabled, t!("フリーズフレーム")))
+                    .changed()
+                {
+                    remap.freeze_frame = if freeze_enabled { Some(0) } else { None };
+                    changed = true;
+                }
+            });
+            tui.style(crate::ui::ui_ext::grow_style()).ui(|ui| {
+                if let Some(frame) = remap.freeze_frame.as_mut() {
+                    let mut v = *frame as f32;
+                    if ui.add(Slider::new(&mut v, 0.0..=100000.0)).changed() {
+                        *frame = v.round() as i32;
+                        changed = true;
+                    }
+                }
+            });
+        });
 
     let mut remove_idx: Option<usize> = None;
     for (i, k) in remap.keyframes.iter_mut().enumerate() {
         ui.push_id(i, |ui| {
-            ui.horizontal(|ui| {
-                ui.label(t!("入力フレーム"));
-                let mut kf = k.frame as f32;
-                if ui.add(Slider::new(&mut kf, 0.0..=100000.0)).changed() {
-                    k.frame = kf.round() as i32;
-                    k.edit_seq = crate::ecs::types::next_edit_seq();
-                    changed = true;
-                }
-                ui.label(t!("出力フレーム"));
-                let mut vf = k.value;
-                if ui.add(Slider::new(&mut vf, 0.0..=100000.0)).changed() {
-                    k.value = vf;
-                    k.edit_seq = crate::ecs::types::next_edit_seq();
-                    changed = true;
-                }
-                if ui.small_button(t!("削除")).clicked() {
-                    remove_idx = Some(i);
-                }
-            });
+            tui(ui, ui.id().with("time_remap_keyframe_row"))
+                .style(row_style(6.0))
+                .show(|tui| {
+                    tui.ui(|ui| {
+                        ui.label(t!("入力フレーム"));
+                    });
+                    tui.ui(|ui| {
+                        let mut kf = k.frame as f32;
+                        if ui.add(Slider::new(&mut kf, 0.0..=100000.0)).changed() {
+                            k.frame = kf.round() as i32;
+                            k.edit_seq = crate::ecs::types::next_edit_seq();
+                            changed = true;
+                        }
+                    });
+                    tui.ui(|ui| {
+                        ui.label(t!("出力フレーム"));
+                    });
+                    tui.ui(|ui| {
+                        let mut vf = k.value;
+                        if ui.add(Slider::new(&mut vf, 0.0..=100000.0)).changed() {
+                            k.value = vf;
+                            k.edit_seq = crate::ecs::types::next_edit_seq();
+                            changed = true;
+                        }
+                    });
+                    tui.ui(|ui| {
+                        if ui.small_button(t!("削除")).clicked() {
+                            remove_idx = Some(i);
+                        }
+                    });
+                });
         });
     }
     if let Some(i) = remove_idx {
@@ -825,49 +924,53 @@ pub fn clip_target_section(ui: &mut egui::Ui, world: &mut EcsWorld, id: usize) {
         if !is_visible(schema, |key| ct.get_param(key).unwrap_or(0.0)) {
             continue;
         }
-        ui.horizontal(|ui| {
-            ui.label(effect_param_label(schema.label));
-            match schema.kind {
-                ParamKind::Bool => {
-                    let mut b = ct.get_param(schema.key).unwrap_or(0.0) > 0.5;
-                    if ui.add(Checkbox::new(&mut b, "")).changed() {
-                        ct.set_param(schema.key, if b { 1.0 } else { 0.0 });
-                        world.set_clip_target(id, ct);
+        tui(ui, ui.id().with((id, "clip_target_param", schema.key)))
+            .style(row_style(6.0))
+            .show(|tui| {
+                tui.ui(|ui| {
+                    ui.label(effect_param_label(schema.label));
+                });
+                tui.ui(|ui| match schema.kind {
+                    ParamKind::Bool => {
+                        let mut b = ct.get_param(schema.key).unwrap_or(0.0) > 0.5;
+                        if ui.add(Checkbox::new(&mut b, "")).changed() {
+                            ct.set_param(schema.key, if b { 1.0 } else { 0.0 });
+                            world.set_clip_target(id, ct);
+                        }
                     }
-                }
-                ParamKind::Float => {
-                    let (min, max) = resolve_range(schema.range, 1920.0, 1080.0);
-                    let mut value = ct.get_param(schema.key).unwrap_or(0.0);
-                    if ui
-                        .add(
-                            Slider::new(&mut value, min..=max)
-                                .step(((max - min).max(0.001) / 1000.0) as f64),
-                        )
-                        .changed()
-                    {
-                        ct.set_param(schema.key, value.round());
-                        world.set_clip_target(id, ct);
+                    ParamKind::Float => {
+                        let (min, max) = resolve_range(schema.range, 1920.0, 1080.0);
+                        let mut value = ct.get_param(schema.key).unwrap_or(0.0);
+                        if ui
+                            .add(
+                                Slider::new(&mut value, min..=max)
+                                    .step(((max - min).max(0.001) / 1000.0) as f64),
+                            )
+                            .changed()
+                        {
+                            ct.set_param(schema.key, value.round());
+                            world.set_clip_target(id, ct);
+                        }
                     }
-                }
-                ParamKind::Enum => {
-                    let mut current = ct.get_param(schema.key).unwrap_or(0.0).round() as usize;
-                    let resp = ui.add(
-                        Select::new((id, schema.key), &mut current).options(
-                            schema
-                                .enum_options
-                                .iter()
-                                .enumerate()
-                                .map(|(i, opt)| (i, *opt)),
-                        ),
-                    );
-                    if resp.changed() {
-                        ct.set_param(schema.key, current as f32);
-                        world.set_clip_target(id, ct);
+                    ParamKind::Enum => {
+                        let mut current = ct.get_param(schema.key).unwrap_or(0.0).round() as usize;
+                        let resp = ui.add(
+                            Select::new((id, schema.key), &mut current).options(
+                                schema
+                                    .enum_options
+                                    .iter()
+                                    .enumerate()
+                                    .map(|(i, opt)| (i, *opt)),
+                            ),
+                        );
+                        if resp.changed() {
+                            ct.set_param(schema.key, current as f32);
+                            world.set_clip_target(id, ct);
+                        }
                     }
-                }
-                _ => {}
-            }
-        });
+                    _ => {}
+                });
+            });
     }
 }
 

@@ -1,5 +1,7 @@
 use super::segment::Segment;
 use crate::infra::localization::effect_param_label;
+use crate::ui::ui_ext::{fixed_style, row_style};
+use egui_taffy::{TuiBuilderLogic, tui};
 use elegance::{Button, ButtonSize, Slider};
 use std::collections::HashMap;
 use std::sync::Mutex;
@@ -87,66 +89,99 @@ pub fn property_row(
     let fixed_w = BOX_W * 2.0 + button_w + spacing * 4.0;
     let slider_w = ((ui.available_width() - fixed_w) / 2.0).max(SLIDER_MIN_W);
 
-    ui.horizontal(|ui| {
-        ui.spacing_mut().slider_width = slider_w;
-
-        let slider_l = ui.add_sized(
-            [slider_w, row_height],
-            Slider::new(&mut start_v, min..=max).show_value(false),
-        );
-        let box_l = ui.add_sized(
-            [BOX_W, row_height],
-            egui::DragValue::new(&mut start_v)
-                .range(min..=max)
-                .speed(step),
-        );
-        if slider_l.changed() || box_l.changed() {
-            if !left_active {
-                left_active = true;
-                out.start_commit = true;
-            }
-            out.start_value = Some(start_v.clamp(min, max));
-        }
-        if slider_l.drag_stopped() || box_l.drag_stopped() || box_l.lost_focus() {
-            left_active = false;
-            out.start_release = true;
-        }
-
-        if ui
-            .add(
-                Button::new(button_text)
-                    .size(ButtonSize::Small)
-                    .min_width(button_w),
-            )
-            .clicked()
-        {
-            out.label_clicked = true;
-        }
-
-        ui.add_enabled_ui(has_keyframes, |ui| {
-            let box_r = ui.add_sized(
-                [BOX_W, row_height],
-                egui::DragValue::new(&mut end_v)
-                    .range(min..=max)
-                    .speed(step),
-            );
-            let slider_r = ui.add_sized(
-                [slider_w, row_height],
-                Slider::new(&mut end_v, min..=max).show_value(false),
-            );
-            if box_r.changed() || slider_r.changed() {
-                if !right_active {
-                    right_active = true;
-                    out.end_commit = true;
+    ui.spacing_mut().slider_width = slider_w;
+    tui(ui, ui.make_persistent_id((id, "row")))
+        .style(row_style(spacing))
+        .show(|tui| {
+            tui.style(fixed_style(slider_w, row_height)).ui(|ui| {
+                let slider_l = ui.add_sized(
+                    [slider_w, row_height],
+                    Slider::new(&mut start_v, min..=max).show_value(false),
+                );
+                if slider_l.changed() {
+                    if !left_active {
+                        left_active = true;
+                        out.start_commit = true;
+                    }
+                    out.start_value = Some(start_v.clamp(min, max));
                 }
-                out.end_value = Some(end_v.clamp(min, max));
-            }
-            if box_r.drag_stopped() || box_r.lost_focus() || slider_r.drag_stopped() {
-                right_active = false;
-                out.end_release = true;
-            }
+                if slider_l.drag_stopped() {
+                    left_active = false;
+                    out.start_release = true;
+                }
+            });
+            tui.style(fixed_style(BOX_W, row_height)).ui(|ui| {
+                let box_l = ui.add_sized(
+                    [BOX_W, row_height],
+                    egui::DragValue::new(&mut start_v)
+                        .range(min..=max)
+                        .speed(step),
+                );
+                if box_l.changed() {
+                    if !left_active {
+                        left_active = true;
+                        out.start_commit = true;
+                    }
+                    out.start_value = Some(start_v.clamp(min, max));
+                }
+                if box_l.drag_stopped() || box_l.lost_focus() {
+                    left_active = false;
+                    out.start_release = true;
+                }
+            });
+            tui.ui(|ui| {
+                if ui
+                    .add(
+                        Button::new(button_text)
+                            .size(ButtonSize::Small)
+                            .min_width(button_w),
+                    )
+                    .clicked()
+                {
+                    out.label_clicked = true;
+                }
+            });
+            tui.style(fixed_style(BOX_W, row_height)).ui(|ui| {
+                ui.add_enabled_ui(has_keyframes, |ui| {
+                    let box_r = ui.add_sized(
+                        [BOX_W, row_height],
+                        egui::DragValue::new(&mut end_v)
+                            .range(min..=max)
+                            .speed(step),
+                    );
+                    if box_r.changed() {
+                        if !right_active {
+                            right_active = true;
+                            out.end_commit = true;
+                        }
+                        out.end_value = Some(end_v.clamp(min, max));
+                    }
+                    if box_r.drag_stopped() || box_r.lost_focus() {
+                        right_active = false;
+                        out.end_release = true;
+                    }
+                });
+            });
+            tui.style(fixed_style(slider_w, row_height)).ui(|ui| {
+                ui.add_enabled_ui(has_keyframes, |ui| {
+                    let slider_r = ui.add_sized(
+                        [slider_w, row_height],
+                        Slider::new(&mut end_v, min..=max).show_value(false),
+                    );
+                    if slider_r.changed() {
+                        if !right_active {
+                            right_active = true;
+                            out.end_commit = true;
+                        }
+                        out.end_value = Some(end_v.clamp(min, max));
+                    }
+                    if slider_r.drag_stopped() {
+                        right_active = false;
+                        out.end_release = true;
+                    }
+                });
+            });
         });
-    });
 
     set_active(id, (left_active, right_active));
     out
@@ -212,65 +247,58 @@ pub fn color_row(
     let fixed_w = BOX_W * 2.0 + button_w + spacing * 4.0;
     let slider_w = ((ui.available_width() - fixed_w) / 2.0).max(SLIDER_MIN_W);
 
-    ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
-        ui.add_space(slider_w);
-        let picker_l = ui
-            .allocate_ui_with_layout(
-                egui::vec2(BOX_W, row_height),
-                egui::Layout::left_to_right(egui::Align::Center),
-                |ui| {
-                    ui.add(elegance::ColorPicker::new(
-                        ("color_row_l", id),
-                        &mut start_c,
-                    ))
-                },
-            )
-            .inner;
-        if picker_l.changed() {
-            if !left_active {
-                left_active = true;
-                out.start_commit = true;
-            }
-            out.start_color = Some(start_c.to_normalized_gamma_f32());
-        }
-        if picker_l.drag_stopped() || picker_l.lost_focus() {
-            left_active = false;
-            out.start_release = true;
-        }
-
-        if ui
-            .add(
-                Button::new(button_text)
-                    .size(ButtonSize::Small)
-                    .min_width(button_w),
-            )
-            .clicked()
-        {
-            out.label_clicked = true;
-        }
-
-        ui.add_enabled_ui(has_keyframes, |ui| {
-            let picker_r = ui
-                .allocate_ui_with_layout(
-                    egui::vec2(BOX_W, row_height),
-                    egui::Layout::left_to_right(egui::Align::Center),
-                    |ui| ui.add(elegance::ColorPicker::new(("color_row_r", id), &mut end_c)),
-                )
-                .inner;
-            if picker_r.changed() {
-                if !right_active {
-                    right_active = true;
-                    out.end_commit = true;
+    tui(ui, ui.make_persistent_id((id, "color_row")))
+        .style(row_style(spacing))
+        .show(|tui| {
+            tui.style(fixed_style(slider_w, row_height)).ui(|_ui| {});
+            tui.style(fixed_style(BOX_W, row_height)).ui(|ui| {
+                let picker_l = ui.add(elegance::ColorPicker::new(
+                    ("color_row_l", id),
+                    &mut start_c,
+                ));
+                if picker_l.changed() {
+                    if !left_active {
+                        left_active = true;
+                        out.start_commit = true;
+                    }
+                    out.start_color = Some(start_c.to_normalized_gamma_f32());
                 }
-                out.end_color = Some(end_c.to_normalized_gamma_f32());
-            }
-            if picker_r.drag_stopped() || picker_r.lost_focus() {
-                right_active = false;
-                out.end_release = true;
-            }
+                if picker_l.drag_stopped() || picker_l.lost_focus() {
+                    left_active = false;
+                    out.start_release = true;
+                }
+            });
+            tui.ui(|ui| {
+                if ui
+                    .add(
+                        Button::new(button_text)
+                            .size(ButtonSize::Small)
+                            .min_width(button_w),
+                    )
+                    .clicked()
+                {
+                    out.label_clicked = true;
+                }
+            });
+            tui.style(fixed_style(BOX_W, row_height)).ui(|ui| {
+                ui.add_enabled_ui(has_keyframes, |ui| {
+                    let picker_r =
+                        ui.add(elegance::ColorPicker::new(("color_row_r", id), &mut end_c));
+                    if picker_r.changed() {
+                        if !right_active {
+                            right_active = true;
+                            out.end_commit = true;
+                        }
+                        out.end_color = Some(end_c.to_normalized_gamma_f32());
+                    }
+                    if picker_r.drag_stopped() || picker_r.lost_focus() {
+                        right_active = false;
+                        out.end_release = true;
+                    }
+                });
+            });
+            tui.style(fixed_style(slider_w, row_height)).ui(|_ui| {});
         });
-        ui.add_space(slider_w);
-    });
 
     set_active(id, (left_active, right_active));
     out

@@ -8,9 +8,10 @@ use crate::ecs::{
     resources::{AudioPluginSettingsResource, SystemSettingsResource},
 };
 use crate::infra::localization::tr;
-use crate::ui::ui_ext::{self, UiExt, page_title};
+use crate::ui::ui_ext::{self, UiExt, page_title, row_between_style};
 use egui::{Context, Ui};
 use egui_material_icons::{MaterialIcon, icons};
+use egui_taffy::{TuiBuilderLogic, tui};
 use elegance::{Accent, BuiltInTheme, Button};
 use std::sync::{Arc, Mutex};
 
@@ -171,28 +172,33 @@ impl SystemSettingsWindow {
 
         egui::Panel::bottom("system_setting_footer").show(ui, |ui| {
             ui.footer_bar(|ui| {
-                ui.allocate_ui_with_layout(
-                    egui::vec2(ui.available_width(), super::fields::field_height(ui)),
-                    egui::Layout::left_to_right(egui::Align::Center),
-                    |ui| {
-                        ui.label(&self.save_status);
-                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                            if ui.add(Button::new(t!("保存"))).clicked() {
-                                let s = world_holder.lock().unwrap().get_system_settings();
-                                let plugin_save = plugin_settings::save_to_disk(
-                                    &self.persistable_audio_plugin_settings(),
-                                );
-                                self.save_status = match (save_to_disk(&s), plugin_save) {
-                                    (Ok(()), Ok(())) => t!("保存完了"),
-                                    _ => t!("保存失敗"),
-                                };
-                            }
-                            if ui.add(Button::new(t!("再読込")).outline()).clicked() {
-                                self.reload(world_holder);
-                            }
+                let row_width = ui.available_width();
+                tui(ui, ui.id().with("system_settings_footer"))
+                    .style(row_between_style(row_width))
+                    .show(|tui| {
+                        tui.ui(|ui| {
+                            ui.label(&self.save_status);
                         });
-                    },
-                )
+                        tui.style(ui_ext::row_style(8.0)).add(|tui| {
+                            tui.ui(|ui| {
+                                if ui.add(Button::new(t!("保存"))).clicked() {
+                                    let s = world_holder.lock().unwrap().get_system_settings();
+                                    let plugin_save = plugin_settings::save_to_disk(
+                                        &self.persistable_audio_plugin_settings(),
+                                    );
+                                    self.save_status = match (save_to_disk(&s), plugin_save) {
+                                        (Ok(()), Ok(())) => t!("保存完了"),
+                                        _ => t!("保存失敗"),
+                                    };
+                                }
+                            });
+                            tui.ui(|ui| {
+                                if ui.add(Button::new(t!("再読込")).outline()).clicked() {
+                                    self.reload(world_holder);
+                                }
+                            });
+                        });
+                    });
             })
         });
 

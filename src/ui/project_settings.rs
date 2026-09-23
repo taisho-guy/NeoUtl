@@ -1,8 +1,9 @@
 use crate::app::state::{self as app_state, SharedAppState};
 use crate::project;
 use crate::ui::system_settings::fields::name_field;
-use crate::ui::ui_ext::UiExt;
+use crate::ui::ui_ext::{UiExt, row_end_style, row_style};
 use egui::{Context, Ui};
+use egui_taffy::{TuiBuilderLogic, tui};
 
 pub struct ProjectSettingsWindow {
     pub open: bool,
@@ -83,14 +84,21 @@ impl ProjectSettingsWindow {
 
         egui::Panel::bottom("project_setting_footer").show(ui, |ui| {
             ui.footer_bar(|ui| {
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    if ui.button(t!("OK")).clicked() {
-                        confirmed = true;
-                    }
-                    if ui.button(t!("キャンセル")).clicked() {
-                        close_requested = true;
-                    }
-                })
+                let row_width = ui.available_width();
+                tui(ui, ui.id().with("project_settings_footer"))
+                    .style(row_end_style(8.0, row_width))
+                    .show(|tui| {
+                        tui.ui(|ui| {
+                            if ui.button(t!("キャンセル")).clicked() {
+                                close_requested = true;
+                            }
+                        });
+                        tui.ui(|ui| {
+                            if ui.button(t!("OK")).clicked() {
+                                confirmed = true;
+                            }
+                        });
+                    });
             });
         });
 
@@ -105,38 +113,52 @@ impl ProjectSettingsWindow {
                 });
 
                 ui.section(t!("映像フォーマット"), |ui| {
-                    ui.horizontal(|ui| {
-                        ui.add(
-                            egui::DragValue::new(&mut self.fps)
-                                .range(1..=240)
-                                .suffix(" fps"),
-                        );
-                        ui.add(
-                            egui::DragValue::new(&mut self.width)
-                                .range(16..=7680)
-                                .suffix(" px"),
-                        );
-                        ui.add(
-                            egui::DragValue::new(&mut self.height)
-                                .range(16..=7680)
-                                .suffix(" px"),
-                        );
-                    });
+                    tui(ui, ui.id().with("project_settings_video_format"))
+                        .style(row_style(8.0))
+                        .show(|tui| {
+                            tui.ui(|ui| {
+                                ui.add(
+                                    egui::DragValue::new(&mut self.fps)
+                                        .range(1..=240)
+                                        .suffix(" fps"),
+                                );
+                            });
+                            tui.ui(|ui| {
+                                ui.add(
+                                    egui::DragValue::new(&mut self.width)
+                                        .range(16..=7680)
+                                        .suffix(" px"),
+                                );
+                            });
+                            tui.ui(|ui| {
+                                ui.add(
+                                    egui::DragValue::new(&mut self.height)
+                                        .range(16..=7680)
+                                        .suffix(" px"),
+                                );
+                            });
+                        });
                 });
 
                 ui.section(t!("音声フォーマット"), |ui| {
-                    ui.horizontal(|ui| {
-                        ui.add(
-                            egui::DragValue::new(&mut self.audio_channels)
-                                .range(1..=8)
-                                .suffix(" ch"),
-                        );
-                        ui.add(
-                            egui::DragValue::new(&mut self.audio_sample_rate)
-                                .range(8000..=192000)
-                                .suffix(" Hz"),
-                        );
-                    });
+                    tui(ui, ui.id().with("project_settings_audio_format"))
+                        .style(row_style(8.0))
+                        .show(|tui| {
+                            tui.ui(|ui| {
+                                ui.add(
+                                    egui::DragValue::new(&mut self.audio_channels)
+                                        .range(1..=8)
+                                        .suffix(" ch"),
+                                );
+                            });
+                            tui.ui(|ui| {
+                                ui.add(
+                                    egui::DragValue::new(&mut self.audio_sample_rate)
+                                        .range(8000..=192000)
+                                        .suffix(" Hz"),
+                                );
+                            });
+                        });
                 });
             });
         });

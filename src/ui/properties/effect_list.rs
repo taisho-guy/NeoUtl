@@ -4,6 +4,8 @@ use crate::ecs::TimelineData;
 use crate::ecs::effects::{find_effect, param_schema};
 use crate::ecs::types::Value;
 use crate::infra::localization::effect_param_label;
+use crate::ui::ui_ext::row_style;
+use egui_taffy::{TuiBuilderLogic, tui};
 use elegance::{
     BadgeTone, Checkbox, ContextMenu, MenuItem, SegmentedButton, Select, SortableItem, SortableList,
 };
@@ -112,31 +114,44 @@ pub fn effects_sidebar(ui: &mut egui::Ui, world: &mut EcsWorld, id: usize) {
                     .corner_radius(3.0)
                     .inner_margin(4.0)
                     .show(ui, |ui| {
-                        ui.horizontal(|ui| {
-                            let mut active = !inst.bypass;
-                            if ui.add(Checkbox::new(&mut active, "")).changed() {
-                                world.set_audio_plugin_bypass(id, index, !active);
-                            }
-                            let name = inst
-                                .path
-                                .file_stem()
-                                .and_then(|s| s.to_str())
-                                .unwrap_or(&inst.plugin_id);
-                            ui.add(egui::Label::new(name).truncate());
-                            ui.add_enabled_ui(index > 0, |ui| {
-                                if ui.small_button("↑").clicked() {
-                                    world.reorder_audio_plugin(id, index, index - 1);
-                                }
+                        let row_width = ui.available_width();
+                        tui(ui, ui.id().with(("plugin_sidebar_row_tui", id, index)))
+                            .style(crate::ui::ui_ext::row_style_full(4.0, row_width))
+                            .show(|tui| {
+                                tui.ui(|ui| {
+                                    let mut active = !inst.bypass;
+                                    if ui.add(Checkbox::new(&mut active, "")).changed() {
+                                        world.set_audio_plugin_bypass(id, index, !active);
+                                    }
+                                });
+                                tui.style(crate::ui::ui_ext::grow_style()).ui(|ui| {
+                                    let name = inst
+                                        .path
+                                        .file_stem()
+                                        .and_then(|s| s.to_str())
+                                        .unwrap_or(&inst.plugin_id);
+                                    ui.add(egui::Label::new(name).truncate());
+                                });
+                                tui.ui(|ui| {
+                                    ui.add_enabled_ui(index > 0, |ui| {
+                                        if ui.small_button("↑").clicked() {
+                                            world.reorder_audio_plugin(id, index, index - 1);
+                                        }
+                                    });
+                                });
+                                tui.ui(|ui| {
+                                    ui.add_enabled_ui(index < last, |ui| {
+                                        if ui.small_button("↓").clicked() {
+                                            world.reorder_audio_plugin(id, index, index + 1);
+                                        }
+                                    });
+                                });
+                                tui.ui(|ui| {
+                                    if ui.small_button("✕").clicked() {
+                                        world.remove_audio_plugin(id, index);
+                                    }
+                                });
                             });
-                            ui.add_enabled_ui(index < last, |ui| {
-                                if ui.small_button("↓").clicked() {
-                                    world.reorder_audio_plugin(id, index, index + 1);
-                                }
-                            });
-                            if ui.small_button("✕").clicked() {
-                                world.remove_audio_plugin(id, index);
-                            }
-                        });
                     });
             });
         }
@@ -166,35 +181,49 @@ pub fn effects_section(
         let last = plugins.len() - 1;
         for (index, inst) in plugins.into_iter().enumerate() {
             ui.push_id(("audio_plugin_row", id, index), |ui| {
-                ui.horizontal(|ui| {
-                    let mut active = !inst.bypass;
-                    if ui.add(Checkbox::new(&mut active, "")).changed() {
-                        world.set_audio_plugin_bypass(id, index, !active);
-                    }
-                    let name = inst
-                        .path
-                        .file_stem()
-                        .and_then(|s| s.to_str())
-                        .unwrap_or(&inst.plugin_id);
-                    ui.strong(name);
-                    ui.colored_label(
-                        egui::Color32::from_rgb(0x88, 0x88, 0x90),
-                        format!("({:?})", inst.format),
-                    );
-                    ui.add_enabled_ui(index > 0, |ui| {
-                        if ui.small_button("↑").clicked() {
-                            world.reorder_audio_plugin(id, index, index - 1);
-                        }
+                tui(ui, ui.id().with(("audio_plugin_row_tui", id, index)))
+                    .style(row_style(6.0))
+                    .show(|tui| {
+                        tui.ui(|ui| {
+                            let mut active = !inst.bypass;
+                            if ui.add(Checkbox::new(&mut active, "")).changed() {
+                                world.set_audio_plugin_bypass(id, index, !active);
+                            }
+                        });
+                        tui.ui(|ui| {
+                            let name = inst
+                                .path
+                                .file_stem()
+                                .and_then(|s| s.to_str())
+                                .unwrap_or(&inst.plugin_id);
+                            ui.strong(name);
+                        });
+                        tui.ui(|ui| {
+                            ui.colored_label(
+                                egui::Color32::from_rgb(0x88, 0x88, 0x90),
+                                format!("({:?})", inst.format),
+                            );
+                        });
+                        tui.ui(|ui| {
+                            ui.add_enabled_ui(index > 0, |ui| {
+                                if ui.small_button("↑").clicked() {
+                                    world.reorder_audio_plugin(id, index, index - 1);
+                                }
+                            });
+                        });
+                        tui.ui(|ui| {
+                            ui.add_enabled_ui(index < last, |ui| {
+                                if ui.small_button("↓").clicked() {
+                                    world.reorder_audio_plugin(id, index, index + 1);
+                                }
+                            });
+                        });
+                        tui.ui(|ui| {
+                            if ui.small_button("✕").clicked() {
+                                world.remove_audio_plugin(id, index);
+                            }
+                        });
                     });
-                    ui.add_enabled_ui(index < last, |ui| {
-                        if ui.small_button("↓").clicked() {
-                            world.reorder_audio_plugin(id, index, index + 1);
-                        }
-                    });
-                    if ui.small_button("✕").clicked() {
-                        world.remove_audio_plugin(id, index);
-                    }
-                });
 
                 ui.indent(("plugin_info", index), |ui| {
                     if inst.param_info.is_empty() {
@@ -240,26 +269,38 @@ pub fn effects_section(
         let last = effects.len() - 1;
         for (index, inst) in effects.into_iter().enumerate() {
             ui.push_id(("effect_row", id, index), |ui| {
-                ui.horizontal(|ui| {
-                    let mut enabled = inst.enabled;
-                    if ui.add(Checkbox::new(&mut enabled, "")).changed() {
-                        world.set_effect_enabled(id, index, enabled);
-                    }
-                    ui.label(&inst.effect_id);
-                    ui.add_enabled_ui(index > 0, |ui| {
-                        if ui.small_button("↑").clicked() {
-                            world.reorder_effect(id, index, index - 1);
-                        }
+                tui(ui, ui.id().with(("effect_row_tui", id, index)))
+                    .style(row_style(6.0))
+                    .show(|tui| {
+                        tui.ui(|ui| {
+                            let mut enabled = inst.enabled;
+                            if ui.add(Checkbox::new(&mut enabled, "")).changed() {
+                                world.set_effect_enabled(id, index, enabled);
+                            }
+                        });
+                        tui.ui(|ui| {
+                            ui.label(&inst.effect_id);
+                        });
+                        tui.ui(|ui| {
+                            ui.add_enabled_ui(index > 0, |ui| {
+                                if ui.small_button("↑").clicked() {
+                                    world.reorder_effect(id, index, index - 1);
+                                }
+                            });
+                        });
+                        tui.ui(|ui| {
+                            ui.add_enabled_ui(index < last, |ui| {
+                                if ui.small_button("↓").clicked() {
+                                    world.reorder_effect(id, index, index + 1);
+                                }
+                            });
+                        });
+                        tui.ui(|ui| {
+                            if ui.small_button("✕").clicked() {
+                                world.remove_effect(id, index);
+                            }
+                        });
                     });
-                    ui.add_enabled_ui(index < last, |ui| {
-                        if ui.small_button("↓").clicked() {
-                            world.reorder_effect(id, index, index + 1);
-                        }
-                    });
-                    if ui.small_button("✕").clicked() {
-                        world.remove_effect(id, index);
-                    }
-                });
 
                 let Some(source) = find_effect(&inst.effect_id) else {
                     ui.small(t!("(エフェクト定義が見つかりません)"));
@@ -367,9 +408,17 @@ fn param_widget(
     current: Option<&Value>,
     objects: &[TimelineData],
 ) -> Option<Value> {
-    ui.horizontal(|ui| {
-        ui.label(effect_param_label(&s.label));
-        match s.kind {
+    tui(
+        ui,
+        ui.id()
+            .with(("param_widget_row", object_id, effect_index, &s.key)),
+    )
+    .style(row_style(6.0))
+    .show(|tui| {
+        tui.ui(|ui| {
+            ui.label(effect_param_label(&s.label));
+        });
+        tui.ui(|ui| match s.kind {
             ParamKind::Bool => {
                 let mut b = match current {
                     Some(Value::Bool(b)) => *b,
@@ -449,9 +498,8 @@ fn param_widget(
                 resp.changed().then_some(Value::TrackRef(track_ref))
             }
             ParamKind::Group | ParamKind::Separator | ParamKind::Float | ParamKind::Color => None,
-        }
+        })
     })
-    .inner
 }
 
 fn apply_effect_value(

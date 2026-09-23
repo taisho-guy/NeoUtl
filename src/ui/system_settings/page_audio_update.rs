@@ -5,6 +5,8 @@ use crate::app::update::{self, UpdateStatus};
 use crate::audio::{plugin_registry, plugin_settings};
 use crate::ecs::EcsWorld;
 use crate::ecs::resources::AudioPluginSettingsResource;
+use crate::ui::ui_ext::row_style;
+use egui_taffy::{TuiBuilderLogic, tui};
 use elegance::{Button, Indicator, IndicatorState, ProgressBar, Spinner, Switch, TextInput};
 use maolan_host_adapter::PluginCatalogEntry;
 use std::path::PathBuf;
@@ -56,31 +58,55 @@ impl SystemSettingsWindow {
         let status = self.scan_status.lock().unwrap().clone();
         match &status {
             ScanStatus::Idle => {
-                ui.horizontal(|ui| {
-                    ui.add(Indicator::new(IndicatorState::Off));
-                    ui.label(t!("未走査"));
-                });
+                tui(ui, ui.id().with("scan_status_idle_row"))
+                    .style(row_style(6.0))
+                    .show(|tui| {
+                        tui.ui(|ui| {
+                            ui.add(Indicator::new(IndicatorState::Off));
+                        });
+                        tui.ui(|ui| {
+                            ui.label(t!("未走査"));
+                        });
+                    });
                 ui.end_row();
             }
             ScanStatus::Scanning => {
-                ui.horizontal(|ui| {
-                    ui.add(Spinner::new());
-                    ui.label(t!("走査中..."));
-                });
+                tui(ui, ui.id().with("scan_status_scanning_row"))
+                    .style(row_style(6.0))
+                    .show(|tui| {
+                        tui.ui(|ui| {
+                            ui.add(Spinner::new());
+                        });
+                        tui.ui(|ui| {
+                            ui.label(t!("走査中..."));
+                        });
+                    });
                 ui.end_row();
             }
             ScanStatus::Done => {
-                ui.horizontal(|ui| {
-                    ui.add(Indicator::new(IndicatorState::On));
-                    ui.label(t!("走査完了"));
-                });
+                tui(ui, ui.id().with("scan_status_done_row"))
+                    .style(row_style(6.0))
+                    .show(|tui| {
+                        tui.ui(|ui| {
+                            ui.add(Indicator::new(IndicatorState::On));
+                        });
+                        tui.ui(|ui| {
+                            ui.label(t!("走査完了"));
+                        });
+                    });
                 ui.end_row();
             }
             ScanStatus::Error(err) => {
-                ui.horizontal(|ui| {
-                    ui.add(Indicator::new(IndicatorState::Off));
-                    ui.label(t!("エラー: %{arg0}", arg0 = format!("{err}")));
-                });
+                tui(ui, ui.id().with("scan_status_error_row"))
+                    .style(row_style(6.0))
+                    .show(|tui| {
+                        tui.ui(|ui| {
+                            ui.add(Indicator::new(IndicatorState::Off));
+                        });
+                        tui.ui(|ui| {
+                            ui.label(t!("エラー: %{arg0}", arg0 = format!("{err}")));
+                        });
+                    });
                 ui.end_row();
             }
         }
@@ -165,34 +191,58 @@ impl SystemSettingsWindow {
         let status = self.update_status.lock().unwrap().clone();
         match status {
             UpdateStatus::Idle => {
-                ui.horizontal(|ui| {
-                    ui.add(Indicator::new(IndicatorState::Off));
-                    ui.label(t!("未確認"));
-                });
+                tui(ui, ui.id().with("update_status_idle_row"))
+                    .style(row_style(6.0))
+                    .show(|tui| {
+                        tui.ui(|ui| {
+                            ui.add(Indicator::new(IndicatorState::Off));
+                        });
+                        tui.ui(|ui| {
+                            ui.label(t!("未確認"));
+                        });
+                    });
                 ui.end_row();
             }
             UpdateStatus::Checking => {
-                ui.horizontal(|ui| {
-                    ui.add(Spinner::new());
-                    ui.label(t!("確認中..."));
-                });
+                tui(ui, ui.id().with("update_status_checking_row"))
+                    .style(row_style(6.0))
+                    .show(|tui| {
+                        tui.ui(|ui| {
+                            ui.add(Spinner::new());
+                        });
+                        tui.ui(|ui| {
+                            ui.label(t!("確認中..."));
+                        });
+                    });
                 ui.end_row();
             }
             UpdateStatus::UpToDate => {
-                ui.horizontal(|ui| {
-                    ui.add(Indicator::new(IndicatorState::On));
-                    ui.label(t!("最新版です"));
-                });
+                tui(ui, ui.id().with("update_status_uptodate_row"))
+                    .style(row_style(6.0))
+                    .show(|tui| {
+                        tui.ui(|ui| {
+                            ui.add(Indicator::new(IndicatorState::On));
+                        });
+                        tui.ui(|ui| {
+                            ui.label(t!("最新版です"));
+                        });
+                    });
                 ui.end_row();
             }
             UpdateStatus::Available(info) => {
-                ui.horizontal(|ui| {
-                    ui.add(Indicator::new(IndicatorState::Connecting));
-                    ui.label(t!(
-                        "新バージョン: %{arg0}",
-                        arg0 = format!("{}", info.version)
-                    ));
-                });
+                tui(ui, ui.id().with("update_status_available_row"))
+                    .style(row_style(6.0))
+                    .show(|tui| {
+                        tui.ui(|ui| {
+                            ui.add(Indicator::new(IndicatorState::Connecting));
+                        });
+                        tui.ui(|ui| {
+                            ui.label(t!(
+                                "新バージョン: %{arg0}",
+                                arg0 = format!("{}", info.version)
+                            ));
+                        });
+                    });
                 ui.end_row();
                 ui.label(&info.notes);
                 ui.end_row();
@@ -202,25 +252,43 @@ impl SystemSettingsWindow {
                 ui.end_row();
             }
             UpdateStatus::Downloading(fraction) => {
-                ui.horizontal(|ui| {
-                    ui.add(Spinner::new());
-                    ui.label(t!("ダウンロード中"));
-                });
+                tui(ui, ui.id().with("update_status_downloading_row"))
+                    .style(row_style(6.0))
+                    .show(|tui| {
+                        tui.ui(|ui| {
+                            ui.add(Spinner::new());
+                        });
+                        tui.ui(|ui| {
+                            ui.label(t!("ダウンロード中"));
+                        });
+                    });
                 ui.add(ProgressBar::new(fraction));
                 ui.end_row();
             }
             UpdateStatus::Installed => {
-                ui.horizontal(|ui| {
-                    ui.add(Indicator::new(IndicatorState::On));
-                    ui.label(t!("更新完了。再起動してください"));
-                });
+                tui(ui, ui.id().with("update_status_installed_row"))
+                    .style(row_style(6.0))
+                    .show(|tui| {
+                        tui.ui(|ui| {
+                            ui.add(Indicator::new(IndicatorState::On));
+                        });
+                        tui.ui(|ui| {
+                            ui.label(t!("更新完了。再起動してください"));
+                        });
+                    });
                 ui.end_row();
             }
             UpdateStatus::Error(err) => {
-                ui.horizontal(|ui| {
-                    ui.add(Indicator::new(IndicatorState::Off));
-                    ui.label(t!("エラー: %{arg0}", arg0 = format!("{err}")));
-                });
+                tui(ui, ui.id().with("update_status_error_row"))
+                    .style(row_style(6.0))
+                    .show(|tui| {
+                        tui.ui(|ui| {
+                            ui.add(Indicator::new(IndicatorState::Off));
+                        });
+                        tui.ui(|ui| {
+                            ui.label(t!("エラー: %{arg0}", arg0 = format!("{err}")));
+                        });
+                    });
                 ui.end_row();
             }
         }
