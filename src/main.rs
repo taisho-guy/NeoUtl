@@ -9,6 +9,7 @@ macro_rules! t {
         rust_i18n::t!($($args)*).to_string()
     };
 }
+mod app;
 mod app_state;
 mod audio;
 mod config;
@@ -17,7 +18,6 @@ mod document;
 mod easings;
 mod ecs;
 mod effects;
-mod egui_loop;
 mod export;
 mod gpu_shared;
 mod hot_reload;
@@ -85,8 +85,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         })
         .expect("初期化スレッド起動失敗");
     let shared_gpu = std::rc::Rc::new(gpu_shared::init_shared_gpu()?);
-    let preview_slot = egui_loop::make_preview_slot();
-    egui_loop::run(shared_gpu, preview_slot, init_done_rx)?;
+    app::run(shared_gpu, init_done_rx)?;
     project::finish_runtime_session();
     Ok(())
 }

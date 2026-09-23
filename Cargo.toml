@@ -107,8 +107,7 @@ rfd = "0.17"
 pollster = "1"
 egui = "0.36"
 egui-wgpu = "0.36"
-egui-winit = "0.36"
-winit = "0.30"
+eframe = { version = "0.36", default-features = false, features = ["wgpu", "default_fonts", "x11", "wayland"] }
 egui_extras = { version = "0.36", features = ["svg"] }
 egui_material_icons = "0.8"
 egui_code_editor = "0.4"

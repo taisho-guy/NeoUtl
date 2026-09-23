@@ -14,8 +14,8 @@ pub mod timeline;
 pub mod types;
 pub mod ui_ext;
 
+use crate::app::PreviewSlot;
 use crate::app_state::{AppState, ProjectSession};
-use crate::egui_loop::PreviewSlot;
 use crate::gpu_shared::SharedGpu;
 use crate::project;
 use preview::{LegacyWindows, PreviewPanel};
@@ -38,5 +38,5 @@ pub fn start_project(meta: project::ProjectMeta, gpu: Rc<SharedGpu>, slot: Previ
     let timeline = Rc::new(RefCell::new(TimelineWindow::new()));
     timeline.borrow_mut().open = true;
     let properties = Rc::new(RefCell::new(PropertiesPanel::new()));
-    crate::egui_loop::set_preview(&slot, panel, dialogs, timeline, properties, state);
+    crate::app::set_preview(&slot, panel, dialogs, timeline, properties, state);
 }
