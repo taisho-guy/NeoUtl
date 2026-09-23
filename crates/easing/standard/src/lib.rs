@@ -3,8 +3,9 @@ pub mod script;
 
 pub use curve::{
     ApplyMode, CurveKind, CurveSegment, Modifier, SegmentCurveKind, add_segment, bounce_handle,
-    bounce_set_handle, elastic_amp_handle_y, elastic_freq_decay_handle, elastic_set_amp,
-    elastic_set_freq_decay, evaluate_kind_with_modifiers, remove_segment, replace_segment_kind,
+    bounce_set_handle, drag_anchor_x, elastic_amp_handle_y, elastic_freq_decay_handle,
+    elastic_set_amp, elastic_set_freq_decay, evaluate_kind_with_modifiers, remove_segment,
+    replace_segment_kind,
 };
 
 use neoutl_easing_api::{

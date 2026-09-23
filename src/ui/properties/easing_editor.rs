@@ -4,7 +4,9 @@ use crate::ecs::types::{Keyframe, Value};
 use crate::infra::localization::effect_param_label;
 use egui_material_icons::icons;
 use kurbo::{CubicBez, ParamCurve, Point as KPoint};
-use neoutl_easing_standard::{CurveKind, EasingPayload, ease, encode_payload, parse_payload};
+use neoutl_easing_standard::{
+    CurveKind, CurveSegment, EasingPayload, ease, encode_payload, parse_payload,
+};
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, Ordering};
 
@@ -25,6 +27,7 @@ struct EditorState {
     target: TrackTarget,
     label: String,
     selected_frame: Option<i32>,
+    dragging: Option<usize>,
 }
 
 static ACTIVE: Mutex<Option<EditorState>> = Mutex::new(None);
@@ -43,6 +46,7 @@ pub fn toggle(target: TrackTarget, label: &str) {
             target,
             label: label.to_owned(),
             selected_frame: None,
+            dragging: None,
         })
     };
 }
@@ -170,6 +174,181 @@ fn default_for(name: &str) -> CurveKind {
     }
 }
 
+fn category_index(kind: &CurveKind) -> usize {
+    match kind {
+        CurveKind::Elastic { .. } => 1,
+        CurveKind::Bounce { .. } => 2,
+        CurveKind::Script { .. } => 3,
+        _ => 0,
+    }
+}
+
+fn category_default(index: usize) -> CurveKind {
+    match index {
+        1 => CurveKind::default_elastic(),
+        2 => CurveKind::default_bounce(),
+        3 => CurveKind::default_script(),
+        _ => CurveKind::default_bezier(),
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum PointRef {
+    BezierLeft,
+    BezierRight,
+    BounceHandle,
+    ElasticAmp,
+    ElasticFreqDecay,
+    NormalBoundary(usize),
+}
+
+fn control_points(kind: &CurveKind) -> Vec<(PointRef, [f32; 2])> {
+    match kind {
+        CurveKind::Bezier {
+            handle_left,
+            handle_right,
+        } => vec![
+            (PointRef::BezierLeft, *handle_left),
+            (PointRef::BezierRight, *handle_right),
+        ],
+        CurveKind::Bounce {
+            cor,
+            period,
+            reversed,
+        } => {
+            let (x, y) = neoutl_easing_standard::bounce_handle(*cor, *period, *reversed);
+            vec![(PointRef::BounceHandle, [x, y])]
+        }
+        CurveKind::Elastic {
+            amplitude,
+            frequency,
+            decay,
+            reversed,
+        } => {
+            let amp_x = if *reversed { 1.0 } else { 0.0 };
+            let amp_y = neoutl_easing_standard::elastic_amp_handle_y(*amplitude);
+            let (fx, fy) =
+                neoutl_easing_standard::elastic_freq_decay_handle(*frequency, *decay, *reversed);
+            vec![
+                (PointRef::ElasticAmp, [amp_x, amp_y]),
+                (PointRef::ElasticFreqDecay, [fx, fy]),
+            ]
+        }
+        CurveKind::Normal { segments } => segments
+            .iter()
+            .enumerate()
+            .take(segments.len().saturating_sub(1))
+            .map(|(i, seg)| (PointRef::NormalBoundary(i), seg.anchor_end))
+            .collect(),
+        CurveKind::Linear | CurveKind::Standard { .. } | CurveKind::Script { .. } => Vec::new(),
+    }
+}
+
+fn nearest_control_point(
+    points: &[(PointRef, [f32; 2])],
+    view: &CurveView,
+    screen_pos: egui::Pos2,
+    radius: f32,
+) -> Option<usize> {
+    points
+        .iter()
+        .map(|(_, p)| view.to_screen(p[0], p[1]).distance(screen_pos))
+        .enumerate()
+        .filter(|(_, d)| *d <= radius)
+        .min_by(|a, b| a.1.total_cmp(&b.1))
+        .map(|(i, _)| i)
+}
+
+fn snap_y(y: f32, shift: bool) -> f32 {
+    if shift {
+        if y >= 0.5 { 1.0 } else { 0.0 }
+    } else {
+        y
+    }
+}
+
+fn apply_point_drag(
+    kind: &mut CurveKind,
+    point_ref: PointRef,
+    data: (f32, f32),
+    modifiers: egui::Modifiers,
+) {
+    let (px, py) = data;
+    match (kind, point_ref) {
+        (
+            CurveKind::Bezier {
+                handle_left,
+                handle_right,
+            },
+            PointRef::BezierLeft,
+        ) => {
+            handle_left[0] = px.clamp(0.0, 1.0);
+            handle_left[1] = snap_y(py, modifiers.shift);
+            if modifiers.shift && modifiers.ctrl {
+                handle_right[0] = (1.0 - handle_left[0]).clamp(0.0, 1.0);
+                handle_right[1] = handle_left[1];
+            }
+        }
+        (
+            CurveKind::Bezier {
+                handle_left,
+                handle_right,
+            },
+            PointRef::BezierRight,
+        ) => {
+            handle_right[0] = px.clamp(0.0, 1.0);
+            handle_right[1] = snap_y(py, modifiers.shift);
+            if modifiers.shift && modifiers.ctrl {
+                handle_left[0] = (1.0 - handle_right[0]).clamp(0.0, 1.0);
+                handle_left[1] = handle_right[1];
+            }
+        }
+        (
+            CurveKind::Bounce {
+                cor,
+                period,
+                reversed,
+            },
+            PointRef::BounceHandle,
+        ) => {
+            let (new_cor, new_period) =
+                neoutl_easing_standard::bounce_set_handle(px, py, *reversed);
+            *cor = new_cor;
+            *period = new_period;
+        }
+        (CurveKind::Elastic { amplitude, .. }, PointRef::ElasticAmp) => {
+            *amplitude = neoutl_easing_standard::elastic_set_amp(py);
+        }
+        (
+            CurveKind::Elastic {
+                frequency,
+                decay,
+                reversed,
+                ..
+            },
+            PointRef::ElasticFreqDecay,
+        ) => {
+            let (new_freq, new_decay) =
+                neoutl_easing_standard::elastic_set_freq_decay(px, py, *reversed);
+            *frequency = new_freq;
+            *decay = new_decay;
+        }
+        (CurveKind::Normal { segments }, PointRef::NormalBoundary(i)) => {
+            neoutl_easing_standard::drag_anchor_x(segments, i + 1, px.clamp(0.0, 1.0));
+        }
+        _ => {}
+    }
+}
+
+fn merge_boundary(segments: &mut Vec<CurveSegment>, boundary_index: usize) {
+    if segments.len() <= 1 || boundary_index + 1 >= segments.len() {
+        return;
+    }
+    let next_end = segments[boundary_index + 1].anchor_end;
+    segments[boundary_index].anchor_end = next_end;
+    segments.remove(boundary_index + 1);
+}
+
 pub fn show(ctx: &egui::Context, ui: &mut egui::Ui, world: &mut EcsWorld) -> bool {
     show_curve_editor_layout(ctx, ui, world)
 }
@@ -244,18 +423,19 @@ fn show_curve_editor_layout(ctx: &egui::Context, ui: &mut egui::Ui, world: &mut 
     let track = track_of(world, &target);
     let selected = selected_frame.or_else(|| track.windows(2).next().map(|w| w[0].frame));
 
-    let mut selected_kind: Option<CurveKind> = None;
     let mut close_requested = false;
     let mut curve_changed = false;
-    let mut edited_payload = None;
     let mut prev_kf_requested = false;
     let mut add_kf_requested = false;
-    let mut copy_requested = false;
-    let mut save_requested = false;
-    let mut reset_requested = false;
+
     let visuals = ctx.style_of(ctx.theme()).visuals.clone();
     let accent = visuals.selection.bg_fill;
     let weak_text = visuals.weak_text_color();
+
+    let mut active_payload = selected
+        .and_then(|frame| track.iter().find(|k| k.frame == frame))
+        .map(|k| parse_payload(&k.engine_payload))
+        .unwrap_or_else(EasingPayload::linear);
 
     ui.horizontal(|ui| {
         if ui
@@ -263,32 +443,42 @@ fn show_curve_editor_layout(ctx: &egui::Context, ui: &mut egui::Ui, world: &mut 
             .on_hover_text("コピー")
             .clicked()
         {
-            copy_requested = true;
+            let json = serde_json::to_string_pretty(&active_payload).unwrap_or_default();
+            ctx.copy_text(json);
         }
         if ui
             .small_button(icons::ICON_LIBRARY_ADD)
             .on_hover_text("保存")
             .clicked()
         {
-            save_requested = true;
+            let mut store = SESSION_PRESETS.lock().unwrap();
+            let name = format!("カスタム {}", store.len() + 1);
+            store.push((name, active_payload.kind.clone()));
         }
         if ui
             .small_button(icons::ICON_REFRESH)
             .on_hover_text("リセット")
             .clicked()
         {
-            reset_requested = true;
+            active_payload = EasingPayload::linear();
+            curve_changed = true;
         }
         ui.separator();
         {
-            let mut curve_mode_idx: usize = 0;
+            let category = category_index(&active_payload.kind);
+            let mut new_category = category;
             ui.add(
-                elegance::Select::new(("curve_mode", &target), &mut curve_mode_idx).options(
+                elegance::Select::new(("curve_mode", &target), &mut new_category).options(
                     ["標準", "振動", "バウンス", "スクリプト"]
                         .into_iter()
                         .enumerate(),
                 ),
             );
+            if new_category != category {
+                active_payload.kind = category_default(new_category);
+                active_payload.modifiers.clear();
+                curve_changed = true;
+            }
         }
         if ui
             .small_button(icons::ICON_CHEVRON_LEFT)
@@ -313,13 +503,17 @@ fn show_curve_editor_layout(ctx: &egui::Context, ui: &mut egui::Ui, world: &mut 
         ui.add_space(4.0);
         ui.label(egui::RichText::new(effect_param_label(&label)).weak());
     });
-    let mut reverse_toggled = false;
     ui.horizontal(|ui| {
         if ui
             .small_button(format!("{} 反転", <&str>::from(icons::ICON_SWAP_HORIZ)))
             .clicked()
         {
-            reverse_toggled = true;
+            match &mut active_payload.kind {
+                CurveKind::Bounce { reversed, .. } => *reversed = !*reversed,
+                CurveKind::Elastic { reversed, .. } => *reversed = !*reversed,
+                _ => {}
+            }
+            curve_changed = true;
         }
     });
 
@@ -334,31 +528,6 @@ fn show_curve_editor_layout(ctx: &egui::Context, ui: &mut egui::Ui, world: &mut 
         let selected_index = selected
             .and_then(|frame| track.windows(2).position(|w| w[0].frame == frame))
             .unwrap_or(0);
-        let mut active_payload = selected
-            .and_then(|frame| track.iter().find(|k| k.frame == frame))
-            .map(|k| parse_payload(&k.engine_payload))
-            .unwrap_or_else(EasingPayload::linear);
-        if reverse_toggled {
-            match &mut active_payload.kind {
-                CurveKind::Bounce { reversed, .. } => *reversed = !*reversed,
-                CurveKind::Elastic { reversed, .. } => *reversed = !*reversed,
-                _ => {}
-            }
-            curve_changed = true;
-        }
-        if reset_requested {
-            active_payload = EasingPayload::linear();
-            curve_changed = true;
-        }
-        if copy_requested {
-            let json = serde_json::to_string_pretty(&active_payload).unwrap_or_default();
-            graph_ui.ctx().copy_text(json);
-        }
-        if save_requested {
-            let mut store = SESSION_PRESETS.lock().unwrap();
-            let name = format!("カスタム {}", store.len() + 1);
-            store.push((name, active_payload.kind.clone()));
-        }
 
         let (rect, response) = graph_ui.allocate_exact_size(
             egui::vec2(graph_ui.available_width(), 330.0),
@@ -376,11 +545,15 @@ fn show_curve_editor_layout(ctx: &egui::Context, ui: &mut egui::Ui, world: &mut 
         }
 
         for (segment_index, window) in track.windows(2).enumerate() {
-            let segment_payload = parse_payload(&window[0].engine_payload);
+            let active = segment_index == selected_index;
+            let segment_payload = if active {
+                active_payload.clone()
+            } else {
+                parse_payload(&window[0].engine_payload)
+            };
             let sample = sample_segment(&segment_payload, 128);
             let points: Vec<egui::Pos2> =
                 sample.iter().map(|[x, y]| view.to_screen(*x, *y)).collect();
-            let active = segment_index == selected_index;
             let color = if active {
                 accent
             } else {
@@ -390,44 +563,36 @@ fn show_curve_editor_layout(ctx: &egui::Context, ui: &mut egui::Ui, world: &mut 
                 points,
                 egui::Stroke::new(if active { 3.0 } else { 1.5 }, color),
             ));
+        }
 
-            if !active {
-                continue;
-            }
-            if let CurveKind::Bezier {
+        let control_pts = control_points(&active_payload.kind);
+        let dragging = ACTIVE.lock().unwrap().as_ref().and_then(|s| s.dragging);
+
+        match &active_payload.kind {
+            CurveKind::Bezier {
                 handle_left,
                 handle_right,
-            } = &active_payload.kind
-            {
-                let hl = view.to_screen(handle_left[0], handle_left[1]);
-                let hr = view.to_screen(handle_right[0], handle_right[1]);
+            } => {
                 painter.line_segment(
-                    [view.to_screen(0.0, 0.0), hl],
+                    [
+                        view.to_screen(0.0, 0.0),
+                        view.to_screen(handle_left[0], handle_left[1]),
+                    ],
                     egui::Stroke::new(1.0, weak_text),
                 );
                 painter.line_segment(
-                    [view.to_screen(1.0, 1.0), hr],
+                    [
+                        view.to_screen(1.0, 1.0),
+                        view.to_screen(handle_right[0], handle_right[1]),
+                    ],
                     egui::Stroke::new(1.0, weak_text),
                 );
-                painter.circle_filled(hl, 6.0, egui::Color32::WHITE);
-                painter.circle_filled(hr, 6.0, egui::Color32::WHITE);
             }
-            if let CurveKind::Bounce {
-                cor,
-                period,
-                reversed,
-            } = &active_payload.kind
-            {
-                let (hx, hy) = neoutl_easing_standard::bounce_handle(*cor, *period, *reversed);
-                painter.circle_filled(view.to_screen(hx, hy), 6.0, egui::Color32::WHITE);
-            }
-            if let CurveKind::Elastic {
+            CurveKind::Elastic {
                 amplitude,
-                frequency,
-                decay,
                 reversed,
-            } = &active_payload.kind
-            {
+                ..
+            } => {
                 let amp_x = if *reversed { 1.0 } else { 0.0 };
                 let amp_y = neoutl_easing_standard::elastic_amp_handle_y(*amplitude);
                 let base_y = if *reversed { 0.0 } else { 1.0 };
@@ -435,93 +600,81 @@ fn show_curve_editor_layout(ctx: &egui::Context, ui: &mut egui::Ui, world: &mut 
                     [view.to_screen(amp_x, base_y), view.to_screen(amp_x, amp_y)],
                     egui::Stroke::new(1.0, weak_text),
                 );
-                let (fx, fy) = neoutl_easing_standard::elastic_freq_decay_handle(
-                    *frequency, *decay, *reversed,
-                );
-                painter.circle_filled(view.to_screen(amp_x, amp_y), 6.0, egui::Color32::WHITE);
-                painter.circle_filled(view.to_screen(fx, fy), 6.0, egui::Color32::WHITE);
             }
-            painter.circle_filled(view.to_screen(0.0, 0.0), 5.0, egui::Color32::WHITE);
-            painter.circle_filled(view.to_screen(1.0, 1.0), 5.0, egui::Color32::WHITE);
+            CurveKind::Normal { segments } => {
+                for seg in segments.iter() {
+                    painter.line_segment(
+                        [
+                            view.to_screen(seg.anchor_start[0], 0.0),
+                            view.to_screen(seg.anchor_start[0], 1.0),
+                        ],
+                        egui::Stroke::new(1.0, egui::Color32::from_gray(60)),
+                    );
+                }
+            }
+            _ => {}
+        }
+        for (i, (_, p)) in control_pts.iter().enumerate() {
+            let color = if Some(i) == dragging {
+                accent
+            } else {
+                egui::Color32::WHITE
+            };
+            painter.circle_filled(view.to_screen(p[0], p[1]), 6.0, color);
+        }
+        painter.circle_filled(view.to_screen(0.0, 0.0), 5.0, egui::Color32::WHITE);
+        painter.circle_filled(view.to_screen(1.0, 1.0), 5.0, egui::Color32::WHITE);
+
+        const HIT_RADIUS: f32 = 10.0;
+
+        if response.drag_started() {
+            if let Some(pos) = response.interact_pointer_pos() {
+                let hit = nearest_control_point(&control_pts, &view, pos, HIT_RADIUS);
+                if let Some(state) = ACTIVE.lock().unwrap().as_mut() {
+                    state.dragging = hit;
+                }
+            }
+        }
+        if response.dragged() {
+            if let (Some(pos), Some(idx)) = (response.interact_pointer_pos(), dragging) {
+                if let Some((point_ref, _)) = control_pts.get(idx).copied() {
+                    let modifiers = graph_ui.ctx().input(|i| i.modifiers);
+                    let data = view.to_data(pos);
+                    apply_point_drag(&mut active_payload.kind, point_ref, data, modifiers);
+                    curve_changed = true;
+                }
+            }
+        }
+        if response.drag_stopped() {
+            if let Some(state) = ACTIVE.lock().unwrap().as_mut() {
+                state.dragging = None;
+            }
         }
 
-        if response.double_clicked() {
-            if let CurveKind::Normal { segments } = &mut active_payload.kind {
-                if let Some(pos) = response.interact_pointer_pos() {
-                    let (x, _y) = view.to_data(pos);
-                    neoutl_easing_standard::add_segment(segments, x.clamp(0.05, 0.95));
-                    curve_changed = true;
-                }
-            }
-        } else if response.dragged() {
-            let modifiers = graph_ui.ctx().input(|i| i.modifiers);
+        if response.secondary_clicked() {
             if let Some(pos) = response.interact_pointer_pos() {
-                let (px, py) = view.to_data(pos);
-                if let CurveKind::Bezier {
-                    handle_left,
-                    handle_right,
-                } = &mut active_payload.kind
-                {
-                    let dl = (px - handle_left[0]).powi(2) + (py - handle_left[1]).powi(2);
-                    let dr = (px - handle_right[0]).powi(2) + (py - handle_right[1]).powi(2);
-                    let snap = |y: f32| {
-                        if modifiers.shift {
-                            if y >= 0.5 { 1.0 } else { 0.0 }
-                        } else {
-                            y
-                        }
-                    };
-                    if dl <= dr {
-                        handle_left[0] = px.clamp(0.0, 1.0);
-                        handle_left[1] = snap(py);
-                        if modifiers.shift && modifiers.ctrl {
-                            handle_right[0] = (1.0 - handle_left[0]).clamp(0.0, 1.0);
-                            handle_right[1] = handle_left[1];
-                        }
-                    } else {
-                        handle_right[0] = px.clamp(0.0, 1.0);
-                        handle_right[1] = snap(py);
-                        if modifiers.shift && modifiers.ctrl {
-                            handle_left[0] = (1.0 - handle_right[0]).clamp(0.0, 1.0);
-                            handle_left[1] = handle_right[1];
-                        }
+                if let Some(idx) = nearest_control_point(&control_pts, &view, pos, HIT_RADIUS) {
+                    if let (CurveKind::Normal { segments }, PointRef::NormalBoundary(i)) =
+                        (&mut active_payload.kind, control_pts[idx].0)
+                    {
+                        merge_boundary(segments, i);
+                        curve_changed = true;
                     }
-                    curve_changed = true;
-                }
-                if let CurveKind::Bounce {
-                    cor,
-                    period,
-                    reversed,
-                } = &mut active_payload.kind
-                {
-                    let (new_cor, new_period) =
-                        neoutl_easing_standard::bounce_set_handle(px, py, *reversed);
-                    *cor = new_cor;
-                    *period = new_period;
-                    curve_changed = true;
-                }
-                if let CurveKind::Elastic {
-                    amplitude,
-                    frequency,
-                    decay,
-                    reversed,
-                } = &mut active_payload.kind
-                {
-                    let amp_x = if *reversed { 1.0 } else { 0.0 };
-                    let dist_to_amp = (px - amp_x).abs();
-                    if dist_to_amp < 0.08 {
-                        *amplitude = neoutl_easing_standard::elastic_set_amp(py);
-                    } else {
-                        let (new_freq, new_decay) =
-                            neoutl_easing_standard::elastic_set_freq_decay(px, py, *reversed);
-                        *frequency = new_freq;
-                        *decay = new_decay;
-                    }
-                    curve_changed = true;
                 }
             }
         }
-        edited_payload = Some(active_payload);
+
+        if response.clicked() {
+            if let Some(pos) = response.interact_pointer_pos() {
+                if nearest_control_point(&control_pts, &view, pos, HIT_RADIUS).is_none() {
+                    if let CurveKind::Normal { segments } = &mut active_payload.kind {
+                        let (x, _) = view.to_data(pos);
+                        neoutl_easing_standard::add_segment(segments, x.clamp(0.05, 0.95));
+                        curve_changed = true;
+                    }
+                }
+            }
+        }
 
         let preset_ui = &mut cols[1];
         preset_ui.horizontal(|ui| {
@@ -533,6 +686,7 @@ fn show_curve_editor_layout(ctx: &egui::Context, ui: &mut egui::Ui, world: &mut 
             ui.label(egui::RichText::new("すべて").strong());
             ui.label(format!("(37) {}", <&str>::from(icons::ICON_EXPAND_MORE)));
         });
+        preset_ui.label(egui::RichText::new("適用時に現在の頂点構成を上書きします").weak());
         egui::ScrollArea::vertical()
             .id_salt(("preset_scroll", &target))
             .show(preset_ui, |ui| {
@@ -544,7 +698,9 @@ fn show_curve_editor_layout(ctx: &egui::Context, ui: &mut egui::Ui, world: &mut 
                             for (name, kind) in chunk {
                                 let response = preset_card(ui, name, kind);
                                 if response.clicked() {
-                                    selected_kind = Some(kind.clone());
+                                    active_payload.kind = kind.clone();
+                                    active_payload.modifiers.clear();
+                                    curve_changed = true;
                                 }
                             }
                         });
@@ -596,7 +752,9 @@ fn show_curve_editor_layout(ctx: &egui::Context, ui: &mut egui::Ui, world: &mut 
                             let kind = default_for(name);
                             let response = preset_card(ui, name, &kind);
                             if response.clicked() {
-                                selected_kind = Some(kind);
+                                active_payload.kind = kind;
+                                active_payload.modifiers.clear();
+                                curve_changed = true;
                             }
                         }
                     });
@@ -670,57 +828,37 @@ fn show_curve_editor_layout(ctx: &egui::Context, ui: &mut egui::Ui, world: &mut 
         }
     }
 
-    if let (Some(frame), Some(kind)) = (selected, selected_kind) {
-        if let Some(k) = track.iter().find(|k| k.frame == frame) {
-            set_kf(
-                world,
-                &target,
-                frame,
-                k.value,
-                k.engine_id.clone(),
-                encode_payload(&EasingPayload {
-                    kind,
-                    modifiers: Vec::new(),
-                    apply_mode: Default::default(),
-                }),
-            );
-        }
-    }
     if curve_changed {
         if let Some(frame) = selected {
             if let Some(k) = track.iter().find(|k| k.frame == frame) {
-                if let Some(payload) = &edited_payload {
-                    set_kf(
-                        world,
-                        &target,
-                        frame,
-                        k.value,
-                        k.engine_id.clone(),
-                        encode_payload(payload),
-                    );
-                }
+                set_kf(
+                    world,
+                    &target,
+                    frame,
+                    k.value,
+                    k.engine_id.clone(),
+                    encode_payload(&active_payload),
+                );
             }
         }
     }
     if applied {
-        if let Some(payload) = &edited_payload {
-            let apply_all = APPLY_ALL_SEGMENTS.load(Ordering::Relaxed);
-            let frames: Vec<i32> = if apply_all {
-                track.iter().map(|k| k.frame).collect()
-            } else {
-                selected.into_iter().collect()
-            };
-            for frame in frames {
-                if let Some(k) = track.iter().find(|k| k.frame == frame) {
-                    set_kf(
-                        world,
-                        &target,
-                        frame,
-                        k.value,
-                        k.engine_id.clone(),
-                        encode_payload(payload),
-                    );
-                }
+        let apply_all = APPLY_ALL_SEGMENTS.load(Ordering::Relaxed);
+        let frames: Vec<i32> = if apply_all {
+            track.iter().map(|k| k.frame).collect()
+        } else {
+            selected.into_iter().collect()
+        };
+        for frame in frames {
+            if let Some(k) = track.iter().find(|k| k.frame == frame) {
+                set_kf(
+                    world,
+                    &target,
+                    frame,
+                    k.value,
+                    k.engine_id.clone(),
+                    encode_payload(&active_payload),
+                );
             }
         }
     }
