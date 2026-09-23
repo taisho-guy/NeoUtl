@@ -113,7 +113,7 @@ local EXCLUDE_FILES = {
 
 local EXCLUDE_DIRS = {
     "neoutl-wgpu", "Carla", "node_modules", ".git", ".svn", ".hg", "target", "build", "dist",
-    "out", ".next", ".nuxt", "__pycache__", ".venv", "venv", ".idea", ".vscode"
+    "out", ".next", ".nuxt", "__pycache__", ".venv", "venv", ".idea", ".vscode", "NeoQtl"
 }
 
 local IS_WINDOWS = os.getenv("OS") and os.getenv("OS"):match("[Ww]indows") or os.getenv("WINDIR") ~= nil
