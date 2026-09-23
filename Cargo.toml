@@ -1,54 +1,57 @@
 [workspace]
 members = [
     ".",
-    "crates/neoutl-schema",
-    "crates/neoutl-shared-abi",
-    "crates/neoutl-color",
-    "crates/neoutl-object-api",
-    "crates/neoutl-effect-api",
-    "crates/neoutl-effect-lua",
-    "crates/neoutl-lua-runtime",
-    "crates/neoutl-easing-api",
-    "crates/neoutl-expression-api",
-    "crates/easings/neoutl-easing-standard",
-    "crates/objects/*",
-    "crates/effects/*",
-    "crates/neoutl-media-api",
-    "crates/neoutl-media-runtime",
-    "crates/neoutl-mlt-api",
-    "crates/media/symphonia-decoder",
-    "crates/media/image-decoder",
-    "crates/neo-media-core",
-    "crates/neo-media-cache",
-    "crates/neo-media-support",
-    "crates/neo-media-swscale",
-    "crates/neo-media-ffmpeg",
-    "crates/neoutl-effect-shader-build",
-    "crates/neoutl-object-shader-build",
-    "crates/xtask",
-    "crates/maolan-host-adapter",
+    "crates/core/schema",
+    "crates/core/shared-abi",
+    "crates/core/color",
+    "crates/object/api",
+    "crates/effect/api",
+    "crates/effect/lua",
+    "crates/lua-runtime",
+    "crates/easing/api",
+    "crates/expression/api",
+    "crates/easing/standard",
+    "crates/object/plugins/*",
+    "crates/effect/plugins/*",
+    "crates/media/api",
+    "crates/media/runtime",
+    "crates/media/mlt-api",
+    "crates/media/decoders/symphonia",
+    "crates/media/decoders/image",
+    "crates/media/core",
+    "crates/media/cache",
+    "crates/media/support",
+    "crates/media/swscale",
+    "crates/media/ffmpeg",
+    "crates/effect/shader-build",
+    "crates/object/shader-build",
+    "xtask",
+    "crates/host-adapter",
 ]
 resolver = "2"
 
 [workspace.dependencies]
-maolan-host-adapter = { path = "crates/maolan-host-adapter" }
-neoutl-shared-abi = { path = "crates/neoutl-shared-abi" }
-neoutl-color = { path = "crates/neoutl-color" }
-neoutl-object-api = { path = "crates/neoutl-object-api" }
-neoutl-effect-api = { path = "crates/neoutl-effect-api" }
-neoutl-effect-lua = { path = "crates/neoutl-effect-lua" }
-neoutl-lua-runtime = { path = "crates/neoutl-lua-runtime" }
-neoutl-easing-api = { path = "crates/neoutl-easing-api" }
-neoutl-expression-api = { path = "crates/neoutl-expression-api" }
-neoutl-media-api = { path = "crates/neoutl-media-api" }
-neoutl-media-runtime = { path = "crates/neoutl-media-runtime" }
-neoutl-mlt-api = { path = "crates/neoutl-mlt-api" }
-neoutl-easing-standard = { path = "crates/easings/neoutl-easing-standard" }
-neoutl-effect-shader-build = { path = "crates/neoutl-effect-shader-build" }
-neoutl-object-shader-build = { path = "crates/neoutl-object-shader-build" }
-neo-media-swscale = { path = "crates/neo-media-swscale" }
-neo-media-ffmpeg = { path = "crates/neo-media-ffmpeg" }
-neoutl-schema = { path = "crates/neoutl-schema" }
+maolan-host-adapter = { path = "crates/host-adapter" }
+neoutl-shared-abi = { path = "crates/core/shared-abi" }
+neoutl-color = { path = "crates/core/color" }
+neoutl-object-api = { path = "crates/object/api" }
+neoutl-effect-api = { path = "crates/effect/api" }
+neoutl-effect-lua = { path = "crates/effect/lua" }
+neoutl-lua-runtime = { path = "crates/lua-runtime" }
+neoutl-easing-api = { path = "crates/easing/api" }
+neoutl-expression-api = { path = "crates/expression/api" }
+neoutl-media-api = { path = "crates/media/api" }
+neoutl-media-runtime = { path = "crates/media/runtime" }
+neoutl-mlt-api = { path = "crates/media/mlt-api" }
+neoutl-easing-standard = { path = "crates/easing/standard" }
+neoutl-effect-shader-build = { path = "crates/effect/shader-build" }
+neoutl-object-shader-build = { path = "crates/object/shader-build" }
+neo-media-core = { path = "crates/media/core" }
+neo-media-cache = { path = "crates/media/cache" }
+neo-media-support = { path = "crates/media/support" }
+neo-media-swscale = { path = "crates/media/swscale" }
+neo-media-ffmpeg = { path = "crates/media/ffmpeg" }
+neoutl-schema = { path = "crates/core/schema" }
 bytemuck = "1"
 half = "2"
 serde = "1"

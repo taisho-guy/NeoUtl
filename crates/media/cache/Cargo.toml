@@ -1,0 +1,9 @@
+[package]
+name = "neo-media-cache"
+version = "0.0.0"
+edition = "2024"
+
+[dependencies]
+wgpu = { workspace = true, features = ["vulkan-portability"] }
+wgpu-hal = { workspace = true, features = ["vulkan"] }
+neo-media-core.workspace = true
