@@ -45,41 +45,30 @@ pub fn set_preview(
     });
 }
 
-struct DialogWindow {
-    id: &'static str,
-    title: &'static str,
-}
-
-const DIALOG_WINDOWS: &[DialogWindow] = &[
-    DialogWindow {
-        id: "system_settings",
-        title: "System Settings",
-    },
-    DialogWindow {
-        id: "project_settings",
-        title: "Project Settings",
-    },
-    DialogWindow {
-        id: "scene_settings",
-        title: "Scene Settings",
-    },
-    DialogWindow {
-        id: "keybindings",
-        title: "Keybindings",
-    },
-    DialogWindow {
-        id: "export",
-        title: "Export",
-    },
-    DialogWindow {
-        id: "effect_add",
-        title: "Add Effect",
-    },
-    DialogWindow {
-        id: "easing_editor",
-        title: "Easing Editor",
-    },
+const DIALOG_WINDOW_IDS: &[&str] = &[
+    "system_settings",
+    "project_settings",
+    "scene_settings",
+    "keybindings",
+    "export",
+    "effect_add",
+    "easing_editor",
 ];
+
+const LAUNCHER_WINDOW_SIZE: (f32, f32) = (960.0, 640.0);
+
+fn dialog_title(id: &str) -> String {
+    match id {
+        "system_settings" => t!("システム設定"),
+        "project_settings" => t!("プロジェクト設定"),
+        "scene_settings" => t!("シーン設定"),
+        "keybindings" => t!("ショートカット設定"),
+        "export" => t!("メディアの書き出し"),
+        "effect_add" => t!("エフェクト追加"),
+        "easing_editor" => t!("イージングエディタ"),
+        _ => id.to_owned(),
+    }
+}
 
 fn dialog_open_state(p: &RegisteredPreview, id: &str) -> bool {
     match id {
@@ -152,12 +141,32 @@ fn show_dialog_contents(ctx: &egui::Context, ui: &mut egui::Ui, p: &RegisteredPr
     }
 }
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Stage {
+    Splash,
+    Launcher,
+    Project,
+}
+
+fn apply_stage_size(ctx: &egui::Context, stage: Stage) {
+    let size = match stage {
+        Stage::Splash => (
+            crate::app::splash::WINDOW_SIZE.0 as f32,
+            crate::app::splash::WINDOW_SIZE.1 as f32,
+        ),
+        Stage::Launcher => LAUNCHER_WINDOW_SIZE,
+        Stage::Project => return,
+    };
+    ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(egui::vec2(size.0, size.1)));
+}
+
 pub struct NeoUtlApp {
     gpu: Rc<SharedGpu>,
     slot: PreviewSlot,
     launcher: LauncherPanel,
     init_rx: std::sync::mpsc::Receiver<()>,
     init_done: bool,
+    stage: Stage,
 }
 
 impl NeoUtlApp {
@@ -171,6 +180,17 @@ impl NeoUtlApp {
             launcher: LauncherPanel::new(),
             init_rx,
             init_done: false,
+            stage: Stage::Splash,
+        }
+    }
+
+    fn current_stage(&self) -> Stage {
+        if !self.init_done {
+            Stage::Splash
+        } else if self.slot.borrow().is_none() {
+            Stage::Launcher
+        } else {
+            Stage::Project
         }
     }
 }
@@ -186,20 +206,29 @@ impl eframe::App for NeoUtlApp {
                 Ok(()) | Err(std::sync::mpsc::TryRecvError::Disconnected) => {
                     self.init_done = true;
                 }
-                Err(std::sync::mpsc::TryRecvError::Empty) => {
-                    egui::CentralPanel::default()
-                        .frame(egui::Frame::NONE)
-                        .show(ui, |ui| {
-                            ui.centered_and_justified(|ui| {
-                                ui.add(egui::Image::new(crate::app::splash::SOURCE.clone()));
-                            });
-                        });
-                    return;
-                }
+                Err(std::sync::mpsc::TryRecvError::Empty) => {}
             }
         }
 
-        if self.slot.borrow().is_none() {
+        let stage = self.current_stage();
+        if stage != self.stage {
+            apply_stage_size(&ctx, stage);
+            self.stage = stage;
+        }
+
+        if stage == Stage::Splash {
+            egui::CentralPanel::default()
+                .frame(egui::Frame::NONE)
+                .show(ui, |ui| {
+                    ui.centered_and_justified(|ui| {
+                        ui.add(egui::Image::new(crate::app::splash::SOURCE.clone()));
+                    });
+                });
+            return;
+        }
+
+        if stage == Stage::Launcher {
+            ctx.send_viewport_cmd(egui::ViewportCommand::Title("NeoUtl".to_owned()));
             egui::CentralPanel::default().show(ui, |ui| {
                 if let Some(meta) = self.launcher.show(ui) {
                     crate::ui::start_project(meta, self.gpu.clone(), self.slot.clone());
@@ -214,28 +243,26 @@ impl eframe::App for NeoUtlApp {
         let egui_renderer = render_state.renderer.clone();
 
         let slot_ref = self.slot.borrow();
-        let p = slot_ref.as_ref().expect("slot存在確認済み");
+        let p = slot_ref
+            .as_ref()
+            .expect("Stage::Projectはslot存在を保証する");
 
         ctx.send_viewport_cmd(egui::ViewportCommand::Title(
             crate::app::state::active_project_window_title(&p.state),
         ));
-
-        ctx.show_viewport_immediate(
-            egui::ViewportId::from_hash_of("preview"),
-            egui::ViewportBuilder::default().with_title("Preview"),
-            |ui, _class| {
-                egui::CentralPanel::default().show(ui, |ui| {
-                    let mut renderer = egui_renderer.write();
-                    p.panel
-                        .borrow_mut()
-                        .show(ui, &mut renderer, &p.state, &p.dialogs);
-                });
-            },
-        );
+        egui::CentralPanel::default().show(ui, |ui| {
+            let mut renderer = egui_renderer.write();
+            p.panel
+                .borrow_mut()
+                .show(ui, &mut renderer, &p.state, &p.dialogs);
+        });
+        p.dialogs
+            .borrow_mut()
+            .sync_preview_requests(&p.state, &p.panel);
 
         ctx.show_viewport_immediate(
             egui::ViewportId::from_hash_of("timeline"),
-            egui::ViewportBuilder::default().with_title("Timeline"),
+            egui::ViewportBuilder::default().with_title(t!("拡張編集")),
             |ui, _class| {
                 let ctx = ui.ctx().clone();
                 egui::CentralPanel::default().show(ui, |ui| {
@@ -248,7 +275,7 @@ impl eframe::App for NeoUtlApp {
 
         ctx.show_viewport_immediate(
             egui::ViewportId::from_hash_of("properties"),
-            egui::ViewportBuilder::default().with_title("Properties"),
+            egui::ViewportBuilder::default().with_title(t!("プロパティ")),
             |ui, _class| {
                 let ctx = ui.ctx().clone();
                 egui::CentralPanel::default().show(ui, |ui| {
@@ -257,18 +284,18 @@ impl eframe::App for NeoUtlApp {
             },
         );
 
-        for dialog in DIALOG_WINDOWS {
-            if !dialog_open_state(p, dialog.id) {
+        for id in DIALOG_WINDOW_IDS {
+            if !dialog_open_state(p, id) {
                 continue;
             }
             let mut still_open = true;
             ctx.show_viewport_immediate(
-                egui::ViewportId::from_hash_of(dialog.id),
-                egui::ViewportBuilder::default().with_title(dialog.title),
+                egui::ViewportId::from_hash_of(id),
+                egui::ViewportBuilder::default().with_title(dialog_title(id)),
                 |ui, _class| {
                     let ctx = ui.ctx().clone();
                     egui::CentralPanel::default().show(ui, |ui| {
-                        show_dialog_contents(&ctx, ui, p, dialog.id);
+                        show_dialog_contents(&ctx, ui, p, id);
                     });
                     if ui.input(|i| i.viewport().close_requested()) {
                         still_open = false;
@@ -276,7 +303,7 @@ impl eframe::App for NeoUtlApp {
                 },
             );
             if !still_open {
-                set_dialog_open(p, dialog.id, false);
+                set_dialog_open(p, id, false);
             }
         }
     }
@@ -287,6 +314,10 @@ pub fn run(
     init_rx: std::sync::mpsc::Receiver<()>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let mut options = eframe::NativeOptions::default();
+    options.viewport = egui::ViewportBuilder::default().with_inner_size([
+        crate::app::splash::WINDOW_SIZE.0 as f32,
+        crate::app::splash::WINDOW_SIZE.1 as f32,
+    ]);
     options.wgpu_options.wgpu_setup =
         egui_wgpu::WgpuSetup::Existing(egui_wgpu::WgpuSetupExisting {
             instance: gpu.instance.clone(),
