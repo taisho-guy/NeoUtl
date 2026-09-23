@@ -1,4 +1,6 @@
 use crate::project::{self, ProjectMeta};
+use crate::ui::ui_ext::{col_style, grow_style, row_between_style, row_style, row_style_full};
+use egui_taffy::{TuiBuilderLogic, tui};
 use elegance::{Accent, Button, Card, Checkbox, TextInput, Theme};
 use std::collections::HashSet;
 use std::path::PathBuf;
@@ -78,69 +80,89 @@ impl LauncherPanel {
         Card::new().heading(t!("新規プロジェクト")).show(ui, |ui| {
             ui.set_width(ui.available_width());
             let muted = Theme::current(ui.ctx()).palette.text_muted;
-            ui.horizontal(|ui| {
-                ui.vertical(|ui| {
-                    ui.colored_label(muted, t!("映像"));
-                    ui.horizontal(|ui| {
-                        ui.add(
-                            egui::DragValue::new(&mut self.fps)
-                                .range(1..=240)
-                                .suffix(" fps"),
-                        );
-                        ui.add(
-                            egui::DragValue::new(&mut self.width)
-                                .range(16..=7680)
-                                .suffix(" px"),
-                        );
-                        ui.add(
-                            egui::DragValue::new(&mut self.height)
-                                .range(16..=7680)
-                                .suffix(" px"),
-                        );
+            let row_width = ui.available_width();
+            tui(ui, ui.id().with("new_project_info"))
+                .style(row_between_style(row_width))
+                .show(|tui| {
+                    tui.style(col_style(4.0)).add(|tui| {
+                        tui.ui(|ui| {
+                            ui.colored_label(muted, t!("映像"));
+                        });
+                        tui.style(row_style(4.0)).add(|tui| {
+                            tui.ui(|ui| {
+                                ui.add(
+                                    egui::DragValue::new(&mut self.fps)
+                                        .range(1..=240)
+                                        .suffix(" fps"),
+                                );
+                            });
+                            tui.ui(|ui| {
+                                ui.add(
+                                    egui::DragValue::new(&mut self.width)
+                                        .range(16..=7680)
+                                        .suffix(" px"),
+                                );
+                            });
+                            tui.ui(|ui| {
+                                ui.add(
+                                    egui::DragValue::new(&mut self.height)
+                                        .range(16..=7680)
+                                        .suffix(" px"),
+                                );
+                            });
+                        });
                     });
-                });
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Min), |ui| {
-                    ui.vertical(|ui| {
-                        ui.colored_label(muted, t!("音声"));
-                        ui.horizontal(|ui| {
-                            ui.add(
-                                egui::DragValue::new(&mut self.channels)
-                                    .range(1..=8)
-                                    .suffix(" ch"),
-                            );
-                            ui.add(
-                                egui::DragValue::new(&mut self.sample_rate)
-                                    .range(8000..=192000)
-                                    .suffix(" Hz"),
-                            );
+                    tui.style(col_style(4.0)).add(|tui| {
+                        tui.ui(|ui| {
+                            ui.colored_label(muted, t!("音声"));
+                        });
+                        tui.style(row_style(4.0)).add(|tui| {
+                            tui.ui(|ui| {
+                                ui.add(
+                                    egui::DragValue::new(&mut self.channels)
+                                        .range(1..=8)
+                                        .suffix(" ch"),
+                                );
+                            });
+                            tui.ui(|ui| {
+                                ui.add(
+                                    egui::DragValue::new(&mut self.sample_rate)
+                                        .range(8000..=192000)
+                                        .suffix(" Hz"),
+                                );
+                            });
                         });
                     });
                 });
-            });
             ui.add_space(8.0);
             ui.colored_label(muted, t!("名前"));
             ui.add_space(4.0);
-            ui.horizontal(|ui| {
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    if ui.add(Button::new(t!("作成して開く"))).clicked() {
-                        match project::create_project(
-                            &self.name,
-                            self.fps,
-                            self.width,
-                            self.height,
-                            self.sample_rate,
-                            self.channels,
-                        ) {
-                            Ok(meta) => {
-                                self.status.clear();
-                                result = Some(meta);
+            let create_row_width = ui.available_width();
+            tui(ui, ui.id().with("create_row"))
+                .style(row_style_full(8.0, create_row_width))
+                .show(|tui| {
+                    tui.style(grow_style()).ui(|ui| {
+                        ui.add(TextInput::new(&mut self.name).desired_width(ui.available_width()));
+                    });
+                    tui.ui(|ui| {
+                        if ui.add(Button::new(t!("作成して開く"))).clicked() {
+                            match project::create_project(
+                                &self.name,
+                                self.fps,
+                                self.width,
+                                self.height,
+                                self.sample_rate,
+                                self.channels,
+                            ) {
+                                Ok(meta) => {
+                                    self.status.clear();
+                                    result = Some(meta);
+                                }
+                                Err(err) => self.status = err.to_string(),
                             }
-                            Err(err) => self.status = err.to_string(),
                         }
-                    }
-                    ui.add(TextInput::new(&mut self.name).desired_width(ui.available_width()));
+                    });
                 });
-            });
             if !self.status.is_empty() {
                 ui.add_space(6.0);
                 ui.colored_label(Theme::current(ui.ctx()).palette.danger, &self.status);
@@ -150,47 +172,58 @@ impl LauncherPanel {
     }
 
     fn toolbar(&mut self, ui: &mut egui::Ui) {
-        ui.horizontal(|ui| {
-            if ui.add(Button::new(self.sort.label()).outline()).clicked() {
-                self.sort = self.sort.next();
-            }
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                let has_selection = !self.selected.is_empty();
-                if ui
-                    .add(
-                        Button::new(t!("削除"))
-                            .accent(Accent::Red)
-                            .outline()
-                            .enabled(has_selection),
-                    )
-                    .clicked()
-                {
-                    for dir in self.selected.drain() {
-                        let _ = project::delete_project(&dir);
+        let row_width = ui.available_width();
+        tui(ui, ui.id().with("toolbar"))
+            .style(row_between_style(row_width))
+            .show(|tui| {
+                tui.ui(|ui| {
+                    if ui.add(Button::new(self.sort.label()).outline()).clicked() {
+                        self.sort = self.sort.next();
                     }
-                }
-                if ui
-                    .add(Button::new(t!("コピー")).outline().enabled(has_selection))
-                    .clicked()
-                {
-                    for dir in self.selected.iter() {
-                        let _ = project::copy_project(dir);
-                    }
-                    self.selected.clear();
-                }
-                let toggle_label = if self.selection_mode {
-                    t!("選択モードを出る")
-                } else {
-                    t!("選択モードに入る")
-                };
-                if ui.add(Button::new(toggle_label).outline()).clicked() {
-                    self.selection_mode = !self.selection_mode;
-                    if !self.selection_mode {
-                        self.selected.clear();
-                    }
-                }
+                });
+                tui.style(row_style(8.0)).add(|tui| {
+                    let has_selection = !self.selected.is_empty();
+                    tui.ui(|ui| {
+                        let toggle_label = if self.selection_mode {
+                            t!("選択モードを出る")
+                        } else {
+                            t!("選択モードに入る")
+                        };
+                        if ui.add(Button::new(toggle_label).outline()).clicked() {
+                            self.selection_mode = !self.selection_mode;
+                            if !self.selection_mode {
+                                self.selected.clear();
+                            }
+                        }
+                    });
+                    tui.ui(|ui| {
+                        if ui
+                            .add(Button::new(t!("コピー")).outline().enabled(has_selection))
+                            .clicked()
+                        {
+                            for dir in self.selected.iter() {
+                                let _ = project::copy_project(dir);
+                            }
+                            self.selected.clear();
+                        }
+                    });
+                    tui.ui(|ui| {
+                        if ui
+                            .add(
+                                Button::new(t!("削除"))
+                                    .accent(Accent::Red)
+                                    .outline()
+                                    .enabled(has_selection),
+                            )
+                            .clicked()
+                        {
+                            for dir in self.selected.drain() {
+                                let _ = project::delete_project(&dir);
+                            }
+                        }
+                    });
+                });
             });
-        });
     }
 
     fn project_row(&mut self, ui: &mut egui::Ui, item: &ProjectMeta) {

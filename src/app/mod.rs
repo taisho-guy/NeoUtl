@@ -325,6 +325,7 @@ pub fn run(
         options,
         Box::new(move |cc| {
             crate::app::theme::install(&cc.egui_ctx);
+            crate::ui::ui_ext::configure_taffy(&cc.egui_ctx);
             egui_material_icons::initialize(&cc.egui_ctx);
             egui_extras::install_image_loaders(&cc.egui_ctx);
             egui_system_fonts::set_auto(&cc.egui_ctx, egui_system_fonts::FontStyle::Sans);

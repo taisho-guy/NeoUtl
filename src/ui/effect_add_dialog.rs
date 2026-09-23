@@ -1,7 +1,8 @@
 use crate::infra::localization::tr;
 use crate::ui::types::CatalogRow;
-use crate::ui::ui_ext::UiExt;
+use crate::ui::ui_ext::{UiExt, grow_style, row_style_full};
 use egui::Ui;
+use egui_taffy::{TuiBuilderLogic, tui};
 use elegance::{Button, SegmentedControl, TextInput};
 
 pub trait EffectCatalogSource {
@@ -53,11 +54,18 @@ impl EffectAddDialog {
 
         egui::CentralPanel::default().show(ui, |ui| {
             ui.page_content(|ui| {
-                ui.horizontal(|ui| {
-                    ui.label(t!("検索:"));
-                    let hint = t!("エフェクト名を検索…").to_string();
-                    ui.add(TextInput::new(&mut self.query).hint(hint.as_str()));
-                });
+                let row_width = ui.available_width();
+                tui(ui, ui.id().with("effect_search_row"))
+                    .style(row_style_full(8.0, row_width))
+                    .show(|tui| {
+                        tui.ui(|ui| {
+                            ui.label(t!("検索:"));
+                        });
+                        tui.style(grow_style()).ui(|ui| {
+                            let hint = t!("エフェクト名を検索…").to_string();
+                            ui.add(TextInput::new(&mut self.query).hint(hint.as_str()));
+                        });
+                    });
 
                 {
                     let sort_labels = ["カテゴリ順", "名前順", "最近使用"];

@@ -1,4 +1,95 @@
 use egui::{Color32, Frame, Margin, RichText, Ui};
+use egui_taffy::taffy;
+use egui_taffy::taffy::Style;
+
+pub fn configure_taffy(ctx: &egui::Context) {
+    ctx.options_mut(|options| {
+        options.max_passes = std::num::NonZeroUsize::new(2).unwrap();
+    });
+    ctx.all_styles_mut(|style| {
+        style.wrap_mode = Some(egui::TextWrapMode::Extend);
+    });
+}
+
+pub fn row_style(gap: f32) -> Style {
+    Style {
+        flex_direction: taffy::FlexDirection::Row,
+        align_items: Some(taffy::AlignItems::Center),
+        gap: taffy::Size {
+            width: taffy::LengthPercentage::length(gap),
+            height: taffy::LengthPercentage::length(gap),
+        },
+        ..Default::default()
+    }
+}
+
+pub fn col_style(gap: f32) -> Style {
+    Style {
+        flex_direction: taffy::FlexDirection::Column,
+        gap: taffy::Size {
+            width: taffy::LengthPercentage::length(gap),
+            height: taffy::LengthPercentage::length(gap),
+        },
+        ..Default::default()
+    }
+}
+
+pub fn row_between_style(width: f32) -> Style {
+    Style {
+        flex_direction: taffy::FlexDirection::Row,
+        justify_content: Some(taffy::JustifyContent::SpaceBetween),
+        align_items: Some(taffy::AlignItems::Center),
+        size: taffy::Size {
+            width: taffy::Dimension::length(width),
+            height: taffy::Dimension::auto(),
+        },
+        ..Default::default()
+    }
+}
+
+pub fn row_style_full(gap: f32, width: f32) -> Style {
+    let mut style = row_style(gap);
+    style.size = taffy::Size {
+        width: taffy::Dimension::length(width),
+        height: taffy::Dimension::auto(),
+    };
+    style
+}
+
+pub fn row_end_style(gap: f32, width: f32) -> Style {
+    Style {
+        flex_direction: taffy::FlexDirection::Row,
+        justify_content: Some(taffy::JustifyContent::End),
+        align_items: Some(taffy::AlignItems::Center),
+        gap: taffy::Size {
+            width: taffy::LengthPercentage::length(gap),
+            height: taffy::LengthPercentage::length(gap),
+        },
+        size: taffy::Size {
+            width: taffy::Dimension::length(width),
+            height: taffy::Dimension::auto(),
+        },
+        ..Default::default()
+    }
+}
+
+pub fn fixed_style(width: f32, height: f32) -> Style {
+    Style {
+        size: taffy::Size {
+            width: taffy::Dimension::length(width),
+            height: taffy::Dimension::length(height),
+        },
+        flex_shrink: 0.0,
+        ..Default::default()
+    }
+}
+
+pub fn grow_style() -> Style {
+    Style {
+        flex_grow: 1.0,
+        ..Default::default()
+    }
+}
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
 pub struct Density;

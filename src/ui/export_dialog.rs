@@ -1,7 +1,9 @@
 use crate::app::state::SharedAppState;
 use crate::infra::localization::tr;
 use crate::project::export::{EncoderBackend, ExportCodec, ExportJob, ExportPreset};
+use crate::ui::ui_ext::{col_style, row_end_style, row_style};
 use egui::{Context, Ui};
+use egui_taffy::{TuiBuilderLogic, tui};
 use elegance::{Button, ProgressBar, SegmentedControl, Slider, TextInput};
 use std::sync::{Arc, Mutex};
 
@@ -219,38 +221,53 @@ impl ExportDialog {
         let mut close_requested = false;
         egui::CentralPanel::default().show(ui, |ui| {
             ui.label(t!("書き出しプリセット"));
-            ui.horizontal(|ui| {
-                let current = self
-                    .presets
-                    .get(self.selected_preset.max(0) as usize)
-                    .map(|p| p.name.clone())
-                    .unwrap_or_else(|| t!("(未選択)"));
-                if ui.add(Button::new(&current)).clicked() && !self.presets.is_empty() {
-                    let next = (self.selected_preset + 1).rem_euclid(self.presets.len() as i32);
-                    self.selected_preset = next;
-                    self.apply_preset(next as usize);
-                }
-                if ui.add(Button::new(t!("保存"))).clicked() {
-                    self.save_preset();
-                }
-                ui.add_enabled(self.selected_preset >= 0, Button::new(tr("削除")))
-                    .clicked()
-                    .then(|| self.delete_preset());
-            });
+            tui(ui, ui.id().with("preset_row"))
+                .style(row_style(8.0))
+                .show(|tui| {
+                    tui.ui(|ui| {
+                        let current = self
+                            .presets
+                            .get(self.selected_preset.max(0) as usize)
+                            .map(|p| p.name.clone())
+                            .unwrap_or_else(|| t!("(未選択)"));
+                        if ui.add(Button::new(&current)).clicked() && !self.presets.is_empty() {
+                            let next =
+                                (self.selected_preset + 1).rem_euclid(self.presets.len() as i32);
+                            self.selected_preset = next;
+                            self.apply_preset(next as usize);
+                        }
+                    });
+                    tui.ui(|ui| {
+                        if ui.add(Button::new(t!("保存"))).clicked() {
+                            self.save_preset();
+                        }
+                    });
+                    tui.ui(|ui| {
+                        ui.add_enabled(self.selected_preset >= 0, Button::new(tr("削除")))
+                            .clicked()
+                            .then(|| self.delete_preset());
+                    });
+                });
             ui.add(TextInput::new(&mut self.preset_name));
 
             ui.label(t!("出力ファイル"));
-            ui.horizontal(|ui| {
-                let display = if self.output_path.is_empty() {
-                    t!("未選択")
-                } else {
-                    self.output_path.clone()
-                };
-                ui.label(display);
-                ui.add_enabled(!queue_running, Button::new(tr("選択...")))
-                    .clicked()
-                    .then(|| self.pick_output_path());
-            });
+            tui(ui, ui.id().with("output_path_row"))
+                .style(row_style(8.0))
+                .show(|tui| {
+                    tui.ui(|ui| {
+                        let display = if self.output_path.is_empty() {
+                            t!("未選択")
+                        } else {
+                            self.output_path.clone()
+                        };
+                        ui.label(display);
+                    });
+                    tui.ui(|ui| {
+                        ui.add_enabled(!queue_running, Button::new(tr("選択...")))
+                            .clicked()
+                            .then(|| self.pick_output_path());
+                    });
+                });
 
             ui.label(t!("映像コーデック"));
             {
@@ -291,32 +308,52 @@ impl ExportDialog {
                 }
             }
 
-            ui.horizontal(|ui| {
-                ui.vertical(|ui| {
-                    ui.label(t!("平均ビットレート(kbps)"));
-                    ui.add(Slider::new(&mut self.average_bitrate_kbps, 500..=200000));
+            tui(ui, ui.id().with("bitrate_row"))
+                .style(row_style(16.0))
+                .show(|tui| {
+                    tui.style(col_style(2.0)).add(|tui| {
+                        tui.ui(|ui| {
+                            ui.label(t!("平均ビットレート(kbps)"));
+                        });
+                        tui.ui(|ui| {
+                            ui.add(Slider::new(&mut self.average_bitrate_kbps, 500..=200000));
+                        });
+                    });
+                    tui.style(col_style(2.0)).add(|tui| {
+                        tui.ui(|ui| {
+                            ui.label(t!("最大ビットレート(kbps)"));
+                        });
+                        tui.ui(|ui| {
+                            ui.add(Slider::new(&mut self.max_bitrate_kbps, 500..=200000));
+                        });
+                    });
                 });
-                ui.vertical(|ui| {
-                    ui.label(t!("最大ビットレート(kbps)"));
-                    ui.add(Slider::new(&mut self.max_bitrate_kbps, 500..=200000));
-                });
-            });
 
-            ui.horizontal(|ui| {
-                let end_max = if self.total_frames > 0 {
-                    self.total_frames - 1
-                } else {
-                    0
-                };
-                ui.vertical(|ui| {
-                    ui.label(t!("開始フレーム"));
-                    ui.add(Slider::new(&mut self.start_frame, 0..=end_max));
+            let end_max = if self.total_frames > 0 {
+                self.total_frames - 1
+            } else {
+                0
+            };
+            tui(ui, ui.id().with("frame_range_row"))
+                .style(row_style(16.0))
+                .show(|tui| {
+                    tui.style(col_style(2.0)).add(|tui| {
+                        tui.ui(|ui| {
+                            ui.label(t!("開始フレーム"));
+                        });
+                        tui.ui(|ui| {
+                            ui.add(Slider::new(&mut self.start_frame, 0..=end_max));
+                        });
+                    });
+                    tui.style(col_style(2.0)).add(|tui| {
+                        tui.ui(|ui| {
+                            ui.label(t!("終了フレーム"));
+                        });
+                        tui.ui(|ui| {
+                            ui.add(Slider::new(&mut self.end_frame, 1..=self.total_frames));
+                        });
+                    });
                 });
-                ui.vertical(|ui| {
-                    ui.label(t!("終了フレーム"));
-                    ui.add(Slider::new(&mut self.end_frame, 1..=self.total_frames));
-                });
-            });
 
             if queue_running {
                 ui.label(
@@ -342,29 +379,36 @@ impl ExportDialog {
             }
 
             ui.separator();
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                let start_enabled = !queue_running && !self.output_path.is_empty();
-                if ui
-                    .add_enabled(start_enabled, Button::new(tr("書き出し")))
-                    .clicked()
-                {
-                    self.start_export(state);
-                }
-                let close_label = if queue_running {
-                    t!("中止")
-                } else {
-                    t!("閉じる")
-                };
-                if ui.add(Button::new(close_label).outline()).clicked() {
-                    if queue_running {
-                        if let Some(queue) = &self.active_queue {
-                            queue.cancel_current();
+            let actions_row_width = ui.available_width();
+            tui(ui, ui.id().with("export_actions_row"))
+                .style(row_end_style(8.0, actions_row_width))
+                .show(|tui| {
+                    tui.ui(|ui| {
+                        let close_label = if queue_running {
+                            t!("中止")
+                        } else {
+                            t!("閉じる")
+                        };
+                        if ui.add(Button::new(close_label).outline()).clicked() {
+                            if queue_running {
+                                if let Some(queue) = &self.active_queue {
+                                    queue.cancel_current();
+                                }
+                            } else {
+                                close_requested = true;
+                            }
                         }
-                    } else {
-                        close_requested = true;
-                    }
-                }
-            });
+                    });
+                    tui.ui(|ui| {
+                        let start_enabled = !queue_running && !self.output_path.is_empty();
+                        if ui
+                            .add_enabled(start_enabled, Button::new(tr("書き出し")))
+                            .clicked()
+                        {
+                            self.start_export(state);
+                        }
+                    });
+                });
         });
         self.open = !close_requested;
     }

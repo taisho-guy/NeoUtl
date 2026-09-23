@@ -1,5 +1,7 @@
 use crate::app::shortcuts::{self, ALL_COMMANDS, CommandId, OwnedBinding, Scope};
+use crate::ui::ui_ext::{fixed_style, row_between_style, row_style};
 use egui::{Context, Ui};
+use egui_taffy::{TuiBuilderLogic, tui};
 
 fn scope_label(s: Scope) -> String {
     match s {
@@ -162,72 +164,92 @@ impl KeybindingsWindow {
                         };
                         egui::Frame::default().fill(fill).show(ui, |ui| {
                             ui.set_width(ui.available_width());
-                            ui.horizontal(|ui| {
-                                ui.label(&row.label);
-                                ui.label(&row.scope_label);
-
-                                ui.with_layout(
-                                    egui::Layout::right_to_left(egui::Align::Center),
-                                    |ui| {
-                                        if ui
-                                            .add_sized(
-                                                [reset_btn_w, row_height],
-                                                egui::Button::new(t!("既定へ")),
-                                            )
-                                            .clicked()
-                                        {
-                                            shortcuts::active_keymap()
-                                                .lock()
-                                                .unwrap()
-                                                .reset_to_default(row.command);
-                                            self.sync();
-                                        }
-
+                            let row_width = ui.available_width();
+                            tui(ui, ui.id().with(("keybind_row", i)))
+                                .style(row_between_style(row_width))
+                                .show(|tui| {
+                                    tui.style(row_style(12.0)).add(|tui| {
+                                        tui.ui(|ui| {
+                                            ui.label(&row.label);
+                                        });
+                                        tui.ui(|ui| {
+                                            ui.label(&row.scope_label);
+                                        });
+                                    });
+                                    tui.style(row_style(4.0)).add(|tui| {
                                         let capturing = self.capturing == Some(row.command);
                                         let text = if capturing {
                                             t!("入力待ち…")
                                         } else {
                                             row.key_display.clone()
                                         };
-                                        if ui
-                                            .add_sized(
-                                                [key_btn_w, row_height],
-                                                egui::Button::new(text),
-                                            )
-                                            .clicked()
-                                        {
-                                            self.capturing = Some(row.command);
-                                            self.pending_binding = None;
-                                        }
-                                    },
-                                );
-                            });
+                                        tui.style(fixed_style(key_btn_w, row_height)).ui(|ui| {
+                                            if ui
+                                                .add_sized(
+                                                    [key_btn_w, row_height],
+                                                    egui::Button::new(text),
+                                                )
+                                                .clicked()
+                                            {
+                                                self.capturing = Some(row.command);
+                                                self.pending_binding = None;
+                                            }
+                                        });
+
+                                        tui.style(fixed_style(reset_btn_w, row_height)).ui(|ui| {
+                                            if ui
+                                                .add_sized(
+                                                    [reset_btn_w, row_height],
+                                                    egui::Button::new(t!("既定へ")),
+                                                )
+                                                .clicked()
+                                            {
+                                                shortcuts::active_keymap()
+                                                    .lock()
+                                                    .unwrap()
+                                                    .reset_to_default(row.command);
+                                                self.sync();
+                                            }
+                                        });
+                                    });
+                                });
                         });
                     }
                 });
 
             ui.separator();
-            ui.horizontal(|ui| {
-                if ui.button(t!("全て既定へ")).clicked() {
-                    shortcuts::active_keymap().lock().unwrap().reset_all();
-                    self.sync();
-                }
-                if ui.button(t!("保存")).clicked() {
-                    let result =
-                        shortcuts::save_to_disk(&shortcuts::active_keymap().lock().unwrap());
-                    self.save_status = match result {
-                        Ok(()) => t!("保存完了"),
-                        Err(_) => t!("保存失敗"),
-                    };
-                }
-                if ui.button(t!("再読込")).clicked() {
-                    let loaded = shortcuts::load_from_disk().unwrap_or_default();
-                    *shortcuts::active_keymap().lock().unwrap() = loaded;
-                    self.sync();
-                    self.save_status = t!("再読込完了");
-                }
-                ui.label(&self.save_status);
-            });
+            tui(ui, ui.id().with("keybind_actions"))
+                .style(row_style(8.0))
+                .show(|tui| {
+                    tui.ui(|ui| {
+                        if ui.button(t!("全て既定へ")).clicked() {
+                            shortcuts::active_keymap().lock().unwrap().reset_all();
+                            self.sync();
+                        }
+                    });
+                    tui.ui(|ui| {
+                        if ui.button(t!("保存")).clicked() {
+                            let result = shortcuts::save_to_disk(
+                                &shortcuts::active_keymap().lock().unwrap(),
+                            );
+                            self.save_status = match result {
+                                Ok(()) => t!("保存完了"),
+                                Err(_) => t!("保存失敗"),
+                            };
+                        }
+                    });
+                    tui.ui(|ui| {
+                        if ui.button(t!("再読込")).clicked() {
+                            let loaded = shortcuts::load_from_disk().unwrap_or_default();
+                            *shortcuts::active_keymap().lock().unwrap() = loaded;
+                            self.sync();
+                            self.save_status = t!("再読込完了");
+                        }
+                    });
+                    tui.ui(|ui| {
+                        ui.label(&self.save_status);
+                    });
+                });
         });
     }
 }
