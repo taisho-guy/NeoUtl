@@ -39,8 +39,8 @@ impl TimelineWindow {
             kind_known: plugin.is_some(),
             layer: data.layer,
             label: plugin.map_or_else(
-                || crate::localization::tr("Unknown"),
-                |p| crate::localization::object_name(&p.name),
+                || crate::infra::localization::tr("Unknown"),
+                |p| crate::infra::localization::object_name(&p.name),
             ),
             selected: false,
             keyframe_frames: Vec::new(),

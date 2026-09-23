@@ -26,7 +26,7 @@ impl RenderEngine {
                     label: Some("Effect Passthrough Copy Encoder"),
                 });
             encoder.copy_texture_to_texture(src.as_image_copy(), dst.as_image_copy(), extent);
-            crate::gpu_shared::locked_submit(&self.queue, [encoder.finish()]);
+            crate::infra::gpu_shared::locked_submit(&self.queue, [encoder.finish()]);
             return;
         }
 
@@ -40,7 +40,7 @@ impl RenderEngine {
             self.effect_ping.as_image_copy(),
             extent,
         );
-        crate::gpu_shared::locked_submit(&self.queue, [encoder.finish()]);
+        crate::infra::gpu_shared::locked_submit(&self.queue, [encoder.finish()]);
 
         let mut src_is_ping = true;
         for (effect_id, params) in chain {
@@ -186,7 +186,7 @@ impl RenderEngine {
                 rpass.set_bind_group(0, &bind_group, &[]);
                 rpass.draw(0..3, 0..1);
             }
-            crate::gpu_shared::locked_submit(&self.queue, [encoder.finish()]);
+            crate::infra::gpu_shared::locked_submit(&self.queue, [encoder.finish()]);
             src_is_ping = !src_is_ping;
         }
 
@@ -201,7 +201,7 @@ impl RenderEngine {
                 label: Some("Effect Finalize Encoder"),
             });
         encoder.copy_texture_to_texture(final_src.as_image_copy(), dst.as_image_copy(), extent);
-        crate::gpu_shared::locked_submit(&self.queue, [encoder.finish()]);
+        crate::infra::gpu_shared::locked_submit(&self.queue, [encoder.finish()]);
     }
 
     pub(super) fn draw_standard_pass(
@@ -392,7 +392,7 @@ impl RenderEngine {
                 }
             }
         }
-        crate::gpu_shared::locked_submit(&self.queue, [encoder.finish()]);
+        crate::infra::gpu_shared::locked_submit(&self.queue, [encoder.finish()]);
     }
 
     pub(super) fn composite_effect_object(
@@ -468,7 +468,7 @@ impl RenderEngine {
             rpass.set_bind_group(0, &bind_group, &[]);
             rpass.draw(0..3, 0..1);
         }
-        crate::gpu_shared::locked_submit(&self.queue, [encoder.finish()]);
+        crate::infra::gpu_shared::locked_submit(&self.queue, [encoder.finish()]);
     }
 
     pub(super) fn composite_clipped_object(
@@ -570,6 +570,6 @@ impl RenderEngine {
             rpass.set_bind_group(0, &bind_group, &[]);
             rpass.draw(0..3, 0..1);
         }
-        crate::gpu_shared::locked_submit(&self.queue, [encoder.finish()]);
+        crate::infra::gpu_shared::locked_submit(&self.queue, [encoder.finish()]);
     }
 }

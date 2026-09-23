@@ -1,4 +1,4 @@
-use crate::localization::tr;
+use crate::infra::localization::tr;
 use crate::ui::types::CatalogRow;
 use crate::ui::ui_ext::UiExt;
 use egui::Ui;

@@ -1,4 +1,4 @@
-use crate::localization::tr;
+use crate::infra::localization::tr;
 use crate::ui::types::{ContextMenuItem, ObjectKindItem};
 use egui::Color32;
 

@@ -21,7 +21,7 @@ pub struct HistoryStack {
 #[allow(dead_code)]
 impl HistoryStack {
     pub fn new() -> Self {
-        Self::with_max_depth(crate::config::UNDO_HISTORY_LIMIT)
+        Self::with_max_depth(crate::project::config::UNDO_HISTORY_LIMIT)
     }
 
     pub fn with_max_depth(max_depth: usize) -> Self {

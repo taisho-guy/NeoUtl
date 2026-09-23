@@ -1,5 +1,5 @@
 use super::TimelineWindow;
-use crate::app_state::SharedAppState;
+use crate::app::state::SharedAppState;
 use crate::ui::dialogs::DialogSet;
 use crate::ui::preview::PreviewPanel;
 use crate::ui::types::SceneTabItem;

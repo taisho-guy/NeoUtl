@@ -1,8 +1,8 @@
-use crate::app_state::{self, SharedAppState};
+use crate::app::shortcuts::{self, CommandId, Scope};
+use crate::app::state::{self as app_state, SharedAppState};
 use crate::ecs::resources::ProjectResource;
 use crate::ecs::systems::get_active_objects_system;
 use crate::renderer::RenderEngine;
-use crate::shortcuts::{self, CommandId, Scope};
 use crate::ui::dialogs::DialogSet;
 use crate::ui::timeline::util::egui_key_name;
 use egui_wgpu::Renderer as EguiRenderer;
@@ -131,7 +131,7 @@ impl PreviewPanel {
         };
         let speed_percent = self
             .speed_percent
-            .max(crate::config::PLAYBACK_SPEED_MIN_PERCENT);
+            .max(crate::project::config::PLAYBACK_SPEED_MIN_PERCENT);
         let next = Self::frame_from_anchor(anchor_instant, anchor_frame, self.fps, speed_percent);
 
         {
@@ -282,8 +282,8 @@ impl PreviewPanel {
                 ui.add(
                     egui::DragValue::new(&mut self.speed_percent)
                         .range(
-                            crate::config::PLAYBACK_SPEED_MIN_PERCENT
-                                ..=crate::config::PLAYBACK_SPEED_MAX_PERCENT,
+                            crate::project::config::PLAYBACK_SPEED_MIN_PERCENT
+                                ..=crate::project::config::PLAYBACK_SPEED_MAX_PERCENT,
                         )
                         .suffix("%"),
                 );

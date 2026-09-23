@@ -10,37 +10,25 @@ macro_rules! t {
     };
 }
 mod app;
-mod app_state;
 mod audio;
-mod config;
-mod crash_report;
-mod document;
 mod easings;
 mod ecs;
 mod effects;
-mod export;
-mod gpu_shared;
-mod hot_reload;
-mod localization;
+mod infra;
 mod objects;
 mod project;
 mod renderer;
-mod schema;
-mod shortcuts;
-mod splash;
-mod theme;
 mod ui;
-mod update;
 fn configure_decode_runtime() {
     let system_settings = ui::system_settings::load_from_disk().unwrap_or_default();
     neoutl_media_runtime::runtime::set_worker_threads(system_settings.worker_threads);
 }
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    localization::initialize();
+    infra::localization::initialize();
     let crash_reporting_enabled = ui::system_settings::load_from_disk()
         .unwrap_or_default()
         .crash_reporting_enabled;
-    let _sentry_guard = crash_report::init(crash_reporting_enabled);
+    let _sentry_guard = infra::crash_report::init(crash_reporting_enabled);
     let _ = project::begin_runtime_session();
     let (init_done_tx, init_done_rx) = std::sync::mpsc::channel();
     std::thread::Builder::new()
@@ -84,7 +72,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let _ = init_done_tx.send(());
         })
         .expect("初期化スレッド起動失敗");
-    let shared_gpu = std::rc::Rc::new(gpu_shared::init_shared_gpu()?);
+    let shared_gpu = std::rc::Rc::new(infra::gpu_shared::init_shared_gpu()?);
     app::run(shared_gpu, init_done_rx)?;
     project::finish_runtime_session();
     Ok(())

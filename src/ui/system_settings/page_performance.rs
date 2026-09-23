@@ -2,7 +2,7 @@ use super::fields::{choice_field, int_field};
 use super::helpers::hw_backend_display_name;
 use super::window::SystemSettingsWindow;
 use crate::ecs::EcsWorld;
-use crate::localization::tr;
+use crate::infra::localization::tr;
 use std::sync::{Arc, Mutex};
 
 impl SystemSettingsWindow {
@@ -39,9 +39,9 @@ impl SystemSettingsWindow {
     }
 
     pub(super) fn page_decode(&mut self, ui: &mut egui::Ui, world_holder: &Arc<Mutex<EcsWorld>>) {
-        debug_assert_eq!(crate::config::DECODE_BACKEND_AUTO, 0);
-        debug_assert_eq!(crate::config::DECODE_BACKEND_GPU_FIXED, 1);
-        debug_assert_eq!(crate::config::DECODE_BACKEND_CPU_FIXED, 2);
+        debug_assert_eq!(crate::project::config::DECODE_BACKEND_AUTO, 0);
+        debug_assert_eq!(crate::project::config::DECODE_BACKEND_GPU_FIXED, 1);
+        debug_assert_eq!(crate::project::config::DECODE_BACKEND_CPU_FIXED, 2);
         let options = [
             "自動".to_string(),
             "GPU固定".to_string(),
@@ -63,8 +63,8 @@ impl SystemSettingsWindow {
             ui,
             "HWデコードサーフェス予備数",
             &mut hw_decode_extra_frames,
-            crate::config::HW_DECODE_EXTRA_FRAMES_MIN,
-            crate::config::HW_DECODE_EXTRA_FRAMES_MAX,
+            crate::project::config::HW_DECODE_EXTRA_FRAMES_MIN,
+            crate::project::config::HW_DECODE_EXTRA_FRAMES_MAX,
         ) {
             self.hw_decode_extra_frames = hw_decode_extra_frames;
             self.persist(world_holder, |s| {

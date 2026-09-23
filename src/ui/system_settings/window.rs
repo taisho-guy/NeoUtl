@@ -1,14 +1,14 @@
 use super::helpers::{
     ScanStatus, category_label, easing_engine_ids_and_names, index_of, load_from_disk, save_to_disk,
 };
+use crate::app::update::UpdateStatus;
 use crate::audio::{plugin_registry, plugin_settings};
 use crate::ecs::{
     EcsWorld,
     resources::{AudioPluginSettingsResource, SystemSettingsResource},
 };
-use crate::localization::tr;
+use crate::infra::localization::tr;
 use crate::ui::ui_ext::{self, UiExt, page_title};
-use crate::update::UpdateStatus;
 use egui::{Context, Ui};
 use egui_material_icons::{MaterialIcon, icons};
 use elegance::{Accent, BuiltInTheme, Button};
@@ -67,11 +67,11 @@ impl SystemSettingsWindow {
         neoutl_media_runtime::runtime::set_worker_threads(s.worker_threads);
         neo_media_ffmpeg::set_hw_decode_extra_frames(s.hw_decode_extra_frames);
         neo_media_ffmpeg::set_hw_device_type_priority(s.hw_device_type_priority.clone());
-        crate::theme::restore(&s.theme_id);
+        crate::app::theme::restore(&s.theme_id);
 
         let update_status = Arc::new(Mutex::new(UpdateStatus::Idle));
         if s.check_update_on_startup {
-            crate::update::spawn_check(update_status.clone());
+            crate::app::update::spawn_check(update_status.clone());
         }
 
         let audio_plugin_settings = plugin_settings::load_from_disk().unwrap_or_default();
@@ -80,7 +80,7 @@ impl SystemSettingsWindow {
         Self {
             open: false,
             selected_category: 0,
-            theme_choice: crate::theme::current(),
+            theme_choice: crate::app::theme::current(),
             easing_engine_index: index_of(&easing_engine_ids, &s.easing_engine_id),
             easing_engine_ids,
             easing_engine_names,
@@ -141,8 +141,8 @@ impl SystemSettingsWindow {
         neo_media_ffmpeg::set_hw_device_type_priority(loaded.hw_device_type_priority.clone());
         self.hw_device_type_priority = loaded.hw_device_type_priority.clone();
 
-        self.theme_choice = crate::theme::from_id(&loaded.theme_id);
-        crate::theme::set(self.theme_choice);
+        self.theme_choice = crate::app::theme::from_id(&loaded.theme_id);
+        crate::app::theme::set(self.theme_choice);
         self.easing_engine_index = index_of(&self.easing_engine_ids, &loaded.easing_engine_id);
         self.autosave_enabled = loaded.autosave_enabled;
         self.autosave_interval_sec = loaded.autosave_interval_sec;

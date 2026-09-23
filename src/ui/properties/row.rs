@@ -1,5 +1,5 @@
 use super::segment::Segment;
-use crate::localization::effect_param_label;
+use crate::infra::localization::effect_param_label;
 use elegance::{Button, ButtonSize, Slider};
 use std::collections::HashMap;
 use std::sync::Mutex;

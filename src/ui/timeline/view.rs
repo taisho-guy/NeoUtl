@@ -1,5 +1,5 @@
 use super::{RangeSelect, TimelineWindow};
-use crate::app_state::{self, SharedAppState};
+use crate::app::state::{self as app_state, SharedAppState};
 use crate::ui::preview::PreviewPanel;
 use crate::ui::types::{LayerState, TimelineObject};
 use egui::{Pos2, Rect, Sense, Stroke, Vec2};

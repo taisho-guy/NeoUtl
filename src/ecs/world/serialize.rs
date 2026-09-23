@@ -1,9 +1,9 @@
-use crate::document::{DocumentModel, MediaSourceDoc, ObjectDoc, ObjectPayload};
 use crate::ecs::EcsWorld;
 use crate::ecs::components::ObjectId;
 use crate::ecs::object_query_views::ObjectQueryViews;
 use crate::ecs::resolve_stable_id;
 use crate::ecs::resources::{ProjectResource, SceneResource, TimelineResource};
+use crate::project::document::{DocumentModel, MediaSourceDoc, ObjectDoc, ObjectPayload};
 use shipyard::{Get, IntoIter, UniqueView, UniqueViewMut, View};
 
 impl EcsWorld {
@@ -59,7 +59,7 @@ impl EcsWorld {
                             .time_remaps
                             .get(entity)
                             .ok()
-                            .map(crate::document::TimeRemapDoc::from),
+                            .map(crate::project::document::TimeRemapDoc::from),
                         camera: views.cameras.get(entity).ok().copied(),
                     },
                 });

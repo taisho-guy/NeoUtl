@@ -1,4 +1,4 @@
-use crate::config;
+use crate::project::config;
 
 pub fn init(enabled: bool) -> Option<sentry::ClientInitGuard> {
     if !enabled {

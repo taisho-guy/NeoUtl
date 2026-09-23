@@ -1,6 +1,6 @@
 use super::util::build_context_menu;
 use super::{DragMode, MenuState, TimelineWindow};
-use crate::app_state::{self, SharedAppState};
+use crate::app::state::{self as app_state, SharedAppState};
 use crate::objects::registry;
 use crate::ui::dialogs::DialogSet;
 use crate::ui::preview::PreviewPanel;
@@ -166,7 +166,7 @@ impl TimelineWindow {
             .enumerate()
             .map(|(kind_id, plugin)| ObjectKindItem {
                 kind: kind_id as i32,
-                name: crate::localization::object_name(&plugin.name),
+                name: crate::infra::localization::object_name(&plugin.name),
             })
             .collect();
         let registry_snapshot = registry();
@@ -177,8 +177,8 @@ impl TimelineWindow {
             .iter()
             .map(|o| {
                 let label = registry_snapshot.get(o.kind as usize).map_or_else(
-                    || crate::localization::tr("Unknown"),
-                    |p| crate::localization::object_name(&p.name),
+                    || crate::infra::localization::tr("Unknown"),
+                    |p| crate::infra::localization::object_name(&p.name),
                 );
                 (o.id, format!("[{}] {}", o.id, label))
             })

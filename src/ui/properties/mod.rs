@@ -5,7 +5,7 @@ mod sections;
 mod segment;
 mod track;
 
-use crate::app_state::{self, SharedAppState};
+use crate::app::state::{self as app_state, SharedAppState};
 use crate::ui::effect_add_dialog::EffectAddDialog;
 use crate::ui::effect_catalog::EffectCatalogState;
 use crate::ui::preview::PreviewPanel;
@@ -43,7 +43,7 @@ impl PropertiesPanel {
                 if let Some(plugin_entry) =
                     crate::audio::plugin_registry::find_by_id_or_path(&selected_id)
                 {
-                    let mixer_holder = crate::app_state::active_audio_mixer(state);
+                    let mixer_holder = crate::app::state::active_audio_mixer(state);
                     let mut mixer = mixer_holder.lock().unwrap();
                     let param_info = mixer.probe_plugin_param_info(
                         plugin_entry.format,

@@ -1,4 +1,4 @@
-use crate::app_state::{self, SharedAppState};
+use crate::app::state::{self as app_state, SharedAppState};
 use prost::Message;
 use std::collections::VecDeque;
 use std::path::{Path, PathBuf};
@@ -122,7 +122,7 @@ pub fn load_export_presets() -> Vec<ExportPreset> {
     };
     file.presets
         .iter()
-        .map(|p| crate::schema::SchemaContract::from_schema(p))
+        .map(|p| crate::project::schema::SchemaContract::from_schema(p))
         .collect::<Result<Vec<_>, _>>()
         .unwrap_or_else(|_| default_export_presets())
 }
@@ -134,7 +134,7 @@ pub fn save_export_presets(presets: &[ExportPreset]) -> Result<(), String> {
     let file = neoutl_schema::ExportPresetFile {
         presets: presets
             .iter()
-            .map(crate::schema::SchemaContract::to_schema)
+            .map(crate::project::schema::SchemaContract::to_schema)
             .collect(),
     };
     std::fs::write(path, file.encode_to_vec()).map_err(|e| e.to_string())

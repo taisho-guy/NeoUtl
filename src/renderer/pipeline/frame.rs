@@ -65,7 +65,7 @@ impl RenderEngine {
                 depth_or_array_layers: 1,
             },
         );
-        crate::gpu_shared::locked_submit(&self.queue, [encoder.finish()]);
+        crate::infra::gpu_shared::locked_submit(&self.queue, [encoder.finish()]);
 
         let slice = output_buffer.slice(..);
         let (tx, rx) = std::sync::mpsc::channel();
@@ -358,7 +358,7 @@ impl RenderEngine {
                             });
                         target.brush.draw(&mut glyph_pass);
                     }
-                    crate::gpu_shared::locked_submit(&self.queue, [encoder.finish()]);
+                    crate::infra::gpu_shared::locked_submit(&self.queue, [encoder.finish()]);
                 }
 
                 if tc.outline_width > 0.0 {
@@ -538,7 +538,7 @@ impl RenderEngine {
                     }
                 }
             }
-            crate::gpu_shared::locked_submit(&self.queue, [encoder.finish()]);
+            crate::infra::gpu_shared::locked_submit(&self.queue, [encoder.finish()]);
             drawn_any = true;
         }
 
@@ -579,7 +579,7 @@ impl RenderEngine {
                     multiview_mask: None,
                 });
             }
-            crate::gpu_shared::locked_submit(&self.queue, [encoder.finish()]);
+            crate::infra::gpu_shared::locked_submit(&self.queue, [encoder.finish()]);
         }
     }
 }

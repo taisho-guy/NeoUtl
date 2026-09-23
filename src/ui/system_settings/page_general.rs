@@ -35,8 +35,8 @@ impl SystemSettingsWindow {
         ui.label(t!("テーマ"));
         let resp = ui.add(ThemeSwitcher::new(&mut self.theme_choice).auto_install(false));
         if resp.changed() {
-            crate::theme::set(self.theme_choice);
-            let id = crate::theme::id_of(self.theme_choice).to_string();
+            crate::app::theme::set(self.theme_choice);
+            let id = crate::app::theme::id_of(self.theme_choice).to_string();
             self.persist(world_holder, |s| s.theme_id = id);
         }
         ui.end_row();

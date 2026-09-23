@@ -1,6 +1,11 @@
-use crate::document::DocumentModel;
+pub mod config;
+pub mod document;
+pub mod export;
+pub mod schema;
+
 use crate::ecs::EcsWorld;
 use crate::ecs::resources::SceneMeta;
+use crate::project::document::DocumentModel;
 use prost::Message;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -217,7 +222,7 @@ pub fn load_project(dir: &Path) -> Option<ProjectMeta> {
 
 pub fn load_document(dir: &Path) -> Option<DocumentModel> {
     let file = read_file(dir)?;
-    crate::schema::SchemaContract::from_schema(&file).ok()
+    crate::project::schema::SchemaContract::from_schema(&file).ok()
 }
 
 pub fn list_projects() -> Vec<ProjectMeta> {
@@ -287,7 +292,7 @@ pub fn create_project(
 }
 
 pub fn save_document(dir: &Path, doc: &DocumentModel) -> std::io::Result<()> {
-    let bytes = crate::schema::encode_schema(doc);
+    let bytes = crate::project::schema::encode_schema(doc);
     write_atomic_bytes(&meta_path(dir), &bytes)?;
     clear_recovery(dir);
     Ok(())
@@ -315,7 +320,7 @@ pub fn save_autosave_from_world(world: &EcsWorld) -> std::io::Result<()> {
         std::fs::create_dir_all(parent)?;
     }
     let doc = world.to_document();
-    let bytes = crate::schema::encode_schema(&doc);
+    let bytes = crate::project::schema::encode_schema(&doc);
     write_atomic_bytes(&recovery, &bytes)
 }
 
@@ -367,9 +372,9 @@ pub fn save_from_world(world: &EcsWorld) -> std::io::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::document::{MediaSourceDoc, ObjectDoc, ObjectPayload};
     use crate::ecs::components::{AudioParams, ShapeParams, TextContent};
     use crate::ecs::transform::Transform;
+    use crate::project::document::{MediaSourceDoc, ObjectDoc, ObjectPayload};
     use neoutl_media_runtime::MediaKind;
     use std::collections::HashMap;
 

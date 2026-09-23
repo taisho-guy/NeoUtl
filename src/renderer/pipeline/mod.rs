@@ -1,10 +1,10 @@
-use crate::config;
 use crate::ecs::resources::ProjectResource;
 use crate::ecs::systems::{ActiveObject, CapturedObjects};
 use crate::ecs::types::Value;
 use crate::effects;
-use crate::hot_reload::{self as hot_reload_crate, ReloadEvent};
+use crate::infra::hot_reload::{self as hot_reload_crate, ReloadEvent};
 use crate::objects::{by_kind_id, registry};
+use crate::project::config;
 use egui_wgpu::wgpu;
 use neoutl_object_api::{IMAGE_STABLE_ID, UNIT_SIZE_PX, VIDEO_STABLE_ID};
 use shipyard::EntityId;
@@ -163,7 +163,7 @@ impl RenderEngine {
         let effect_pipelines =
             build_effect_pipelines_from_registry(&device, &effect_pipeline_layout);
         let scripts_dir = crate::effects::default_effects_lua_dir();
-        let hot_reload_rx = if crate::config::SYSTEM_DEFAULT_HOT_RELOAD_ENABLED {
+        let hot_reload_rx = if crate::project::config::SYSTEM_DEFAULT_HOT_RELOAD_ENABLED {
             Some(hot_reload_crate::spawn_watcher(
                 crate::objects::default_objects_dir(),
                 crate::effects::default_effects_dir(),
@@ -556,7 +556,10 @@ impl RenderEngine {
     }
 
     #[allow(dead_code)]
-    pub fn reconfigure_from_shared_gpu(&mut self, shared_gpu: &crate::gpu_shared::SharedGpu) {
+    pub fn reconfigure_from_shared_gpu(
+        &mut self,
+        shared_gpu: &crate::infra::gpu_shared::SharedGpu,
+    ) {
         self.reconfigure_accelerator(
             shared_gpu.device.clone(),
             shared_gpu.queue.clone(),
@@ -612,7 +615,7 @@ impl RenderEngine {
             0,
             20,
         );
-        crate::gpu_shared::locked_submit(&self.queue, [encoder.finish()]);
+        crate::infra::gpu_shared::locked_submit(&self.queue, [encoder.finish()]);
 
         let slice = self.reduce_mean_readback_buffer.slice(..);
         let (tx, rx) = std::sync::mpsc::channel();

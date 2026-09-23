@@ -1,4 +1,4 @@
-use crate::config;
+use crate::project::config;
 use maolan_host_adapter::{PluginCatalogEntry, PluginFormat};
 use neo_media_ffmpeg::default_hw_device_type_priority;
 use shipyard::Unique;

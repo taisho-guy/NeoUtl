@@ -1,10 +1,10 @@
 use super::fields::{self, toggle_field};
 use super::helpers::ScanStatus;
 use super::window::SystemSettingsWindow;
+use crate::app::update::{self, UpdateStatus};
 use crate::audio::{plugin_registry, plugin_settings};
 use crate::ecs::EcsWorld;
 use crate::ecs::resources::AudioPluginSettingsResource;
-use crate::update::{self, UpdateStatus};
 use elegance::{Button, Indicator, IndicatorState, ProgressBar, Spinner, Switch, TextInput};
 use maolan_host_adapter::PluginCatalogEntry;
 use std::path::PathBuf;

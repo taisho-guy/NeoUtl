@@ -1,4 +1,4 @@
-use crate::app_state::SharedAppState;
+use crate::app::state::SharedAppState;
 use crate::ecs::EcsWorld;
 use crate::ui::export_dialog::ExportDialog;
 use crate::ui::keybindings::KeybindingsWindow;
@@ -42,7 +42,7 @@ impl DialogSet {
         if dirty {
             self.confirm_close_session = Some(index);
         } else {
-            let _ = crate::app_state::close_session(state, index);
+            let _ = crate::app::state::close_session(state, index);
         }
     }
 

@@ -1,7 +1,7 @@
 use super::context_menu::menu_row;
 use super::util::build_layer_menu;
 use super::{MenuState, TimelineWindow};
-use crate::app_state::SharedAppState;
+use crate::app::state::SharedAppState;
 use crate::ui::dialogs::DialogSet;
 use crate::ui::preview::PreviewPanel;
 use crate::ui::types::{ContextMenuItem, LayerState};

@@ -2,7 +2,7 @@ use super::util::{brighten, darken, readable_text_color};
 use super::{
     ClipDrag, DragMode, HANDLE_WIDTH, KEYFRAME_SIZE, KeyframeDrag, LAYER_HEIGHT, TimelineWindow,
 };
-use crate::app_state::SharedAppState;
+use crate::app::state::SharedAppState;
 use crate::ui::preview::PreviewPanel;
 use crate::ui::types::TimelineObject;
 use egui::{Color32, Painter, Pos2, Rect, Sense, Stroke, Vec2};

@@ -1,5 +1,5 @@
 use super::{HEADER_WIDTH, LAYER_HEIGHT, TimelineWindow};
-use crate::app_state::SharedAppState;
+use crate::app::state::SharedAppState;
 use crate::ui::preview::PreviewPanel;
 use crate::ui::types::LayerState;
 use egui::{Pos2, Rect, Sense, Stroke, Vec2};

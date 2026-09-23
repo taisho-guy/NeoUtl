@@ -1,5 +1,5 @@
 use super::{HEADER_WIDTH, RULER_HEIGHT, TimelineWindow};
-use crate::app_state::{self, SharedAppState};
+use crate::app::state::{self as app_state, SharedAppState};
 use crate::ui::preview::PreviewPanel;
 use egui::{Pos2, Rect, Sense, Stroke, Vec2};
 use std::cell::RefCell;

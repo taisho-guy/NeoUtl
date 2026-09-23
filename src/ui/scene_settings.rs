@@ -1,4 +1,4 @@
-use crate::app_state::{self, SharedAppState};
+use crate::app::state::{self as app_state, SharedAppState};
 use crate::ecs::SceneSettings;
 use crate::project;
 use crate::ui::system_settings::fields::{

@@ -1,4 +1,3 @@
-use crate::document::{MediaSourceDoc, ObjectDoc, ObjectPayload, TimeRemapDoc};
 use crate::ecs::EcsWorld;
 use crate::ecs::audio_plugins::PluginChain;
 use crate::ecs::components::ParamAccess;
@@ -12,6 +11,7 @@ use crate::ecs::object_query_views::ObjectQueryViews;
 use crate::ecs::resolve_stable_id;
 use crate::ecs::resources::{SceneResource, TimelineResource};
 use crate::ecs::transform::{Camera, GlobalMatrix, Transform};
+use crate::project::document::{MediaSourceDoc, ObjectDoc, ObjectPayload, TimeRemapDoc};
 use shipyard::{Get, IntoIter, UniqueView, UniqueViewMut, View, ViewMut};
 use std::collections::HashMap;
 

@@ -160,7 +160,7 @@ pub fn load_all(effects_dir: &Path, scripts_dir: &Path) {
         push_unique(&mut ids, &mut sources, EffectSource::Native(plugin));
     }
     for lua_source in neoutl_effect_lua::load_dir(scripts_dir) {
-        crate::localization::load_plugin_catalog(&lua_source.script_path);
+        crate::infra::localization::load_plugin_catalog(&lua_source.script_path);
         push_unique(&mut ids, &mut sources, EffectSource::Lua(lua_source));
     }
 
@@ -318,7 +318,7 @@ pub fn default_effects_lua_dir() -> PathBuf {
 }
 
 fn load_one(path: &Path) -> Result<EffectPlugin, PluginError> {
-    crate::localization::load_plugin_catalog(path);
+    crate::infra::localization::load_plugin_catalog(path);
     let lib = unsafe { Library::new(path) }.map_err(|e| PluginError::Load(e.to_string()))?;
     let entry: Symbol<EntryFn> =
         unsafe { lib.get(ENTRY_SYMBOL) }.map_err(|e| PluginError::Load(e.to_string()))?;

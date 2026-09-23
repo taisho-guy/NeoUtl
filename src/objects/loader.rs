@@ -229,7 +229,7 @@ pub fn default_objects_dir() -> PathBuf {
 }
 
 fn load_one(path: &Path) -> Result<ObjectPlugin, PluginError> {
-    crate::localization::load_plugin_catalog(path);
+    crate::infra::localization::load_plugin_catalog(path);
     let lib = unsafe { Library::new(path) }.map_err(|e| PluginError::Load(e.to_string()))?;
     let entry: Symbol<EntryFn> =
         unsafe { lib.get(ENTRY_SYMBOL) }.map_err(|e| PluginError::Load(e.to_string()))?;

@@ -1,6 +1,6 @@
-use crate::app_state::SharedAppState;
-use crate::export::{EncoderBackend, ExportCodec, ExportJob, ExportPreset};
-use crate::localization::tr;
+use crate::app::state::SharedAppState;
+use crate::infra::localization::tr;
+use crate::project::export::{EncoderBackend, ExportCodec, ExportJob, ExportPreset};
 use egui::{Context, Ui};
 use elegance::{Button, ProgressBar, SegmentedControl, Slider, TextInput};
 use std::sync::{Arc, Mutex};
@@ -24,14 +24,14 @@ pub struct ExportDialog {
     progress: Arc<Mutex<(i32, i32)>>,
     status_text: String,
     status_is_error: bool,
-    active_queue: Option<crate::export::RenderQueue>,
+    active_queue: Option<crate::project::export::RenderQueue>,
 }
 
 impl ExportDialog {
     pub fn new() -> Self {
         Self {
             open: false,
-            presets: crate::export::load_export_presets(),
+            presets: crate::project::export::load_export_presets(),
             selected_preset: -1,
             preset_name: String::new(),
             output_path: String::new(),
@@ -52,7 +52,7 @@ impl ExportDialog {
 
     pub fn open(&mut self, state: &SharedAppState) {
         let total_frames = {
-            let world_holder = crate::app_state::active_world(state);
+            let world_holder = crate::app::state::active_world(state);
             let world = world_holder.lock().unwrap();
             world.total_frames()
         };
@@ -60,7 +60,7 @@ impl ExportDialog {
         self.start_frame = 0;
         self.end_frame = total_frames;
         self.status_text.clear();
-        self.presets = crate::export::load_export_presets();
+        self.presets = crate::project::export::load_export_presets();
         if let Some(first) = self.presets.first() {
             self.selected_preset = 0;
             self.preset_name = first.name.clone();
@@ -122,7 +122,7 @@ impl ExportDialog {
         } else {
             self.presets.push(preset);
         }
-        let _ = crate::export::save_export_presets(&self.presets);
+        let _ = crate::project::export::save_export_presets(&self.presets);
         self.status_text = t!("プリセットを保存しました");
     }
 
@@ -134,7 +134,7 @@ impl ExportDialog {
         if index < self.presets.len() {
             self.presets.remove(index);
         }
-        let _ = crate::export::save_export_presets(&self.presets);
+        let _ = crate::project::export::save_export_presets(&self.presets);
         self.selected_preset = -1;
         self.preset_name.clear();
         self.status_text = t!("プリセットを削除しました");
@@ -210,7 +210,8 @@ impl ExportDialog {
             .map(|q| {
                 matches!(
                     q.state(),
-                    crate::export::QueueState::Running | crate::export::QueueState::CancelRequested
+                    crate::project::export::QueueState::Running
+                        | crate::project::export::QueueState::CancelRequested
                 )
             })
             .unwrap_or(false);

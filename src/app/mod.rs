@@ -1,5 +1,11 @@
-use crate::app_state::SharedAppState;
-use crate::gpu_shared::SharedGpu;
+pub mod shortcuts;
+pub mod splash;
+pub mod state;
+pub mod theme;
+pub mod update;
+
+use crate::app::state::SharedAppState;
+use crate::infra::gpu_shared::SharedGpu;
 use crate::ui::dialogs::DialogSet;
 use crate::ui::launcher::LauncherPanel;
 use crate::ui::preview::PreviewPanel;
@@ -111,7 +117,7 @@ fn show_dialog_contents(ctx: &egui::Context, ui: &mut egui::Ui, p: &RegisteredPr
             p.dialogs.borrow_mut().system_settings.show(
                 ctx,
                 ui,
-                &crate::app_state::settings_world(&p.state),
+                &crate::app::state::settings_world(&p.state),
             );
         }
         "project_settings" => {
@@ -136,7 +142,7 @@ fn show_dialog_contents(ctx: &egui::Context, ui: &mut egui::Ui, p: &RegisteredPr
             p.properties.borrow_mut().show_effect_add(ui, &p.state);
         }
         "easing_editor" => {
-            let holder = crate::app_state::active_world(&p.state);
+            let holder = crate::app::state::active_world(&p.state);
             let mut world = holder.lock().unwrap();
             if !crate::ui::properties::easing_editor::show(ctx, ui, &mut world) {
                 crate::ui::properties::easing_editor::close();
@@ -157,7 +163,7 @@ pub struct NeoUtlApp {
 impl NeoUtlApp {
     fn new(gpu: Rc<SharedGpu>, init_rx: std::sync::mpsc::Receiver<()>) -> Self {
         if let Some(loaded) = crate::ui::system_settings::load_from_disk() {
-            crate::theme::restore(&loaded.theme_id);
+            crate::app::theme::restore(&loaded.theme_id);
         }
         Self {
             gpu,
@@ -172,7 +178,7 @@ impl NeoUtlApp {
 impl eframe::App for NeoUtlApp {
     fn ui(&mut self, ui: &mut egui::Ui, frame: &mut eframe::Frame) {
         let ctx = ui.ctx().clone();
-        crate::theme::install(&ctx);
+        crate::app::theme::install(&ctx);
         ctx.request_repaint();
 
         if !self.init_done {
@@ -185,7 +191,7 @@ impl eframe::App for NeoUtlApp {
                         .frame(egui::Frame::NONE)
                         .show(ui, |ui| {
                             ui.centered_and_justified(|ui| {
-                                ui.add(egui::Image::new(crate::splash::SOURCE.clone()));
+                                ui.add(egui::Image::new(crate::app::splash::SOURCE.clone()));
                             });
                         });
                     return;
@@ -211,7 +217,7 @@ impl eframe::App for NeoUtlApp {
         let p = slot_ref.as_ref().expect("slot存在確認済み");
 
         ctx.send_viewport_cmd(egui::ViewportCommand::Title(
-            crate::app_state::active_project_window_title(&p.state),
+            crate::app::state::active_project_window_title(&p.state),
         ));
 
         ctx.show_viewport_immediate(
@@ -293,7 +299,7 @@ pub fn run(
         "NeoUtl",
         options,
         Box::new(move |cc| {
-            crate::theme::install(&cc.egui_ctx);
+            crate::app::theme::install(&cc.egui_ctx);
             egui_material_icons::initialize(&cc.egui_ctx);
             egui_extras::install_image_loaders(&cc.egui_ctx);
             egui_system_fonts::set_auto(&cc.egui_ctx, egui_system_fonts::FontStyle::Sans);

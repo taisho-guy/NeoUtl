@@ -48,13 +48,13 @@ pub(super) fn save_to_disk(s: &SystemSettingsResource) -> std::io::Result<()> {
     if let Some(dir) = path.parent() {
         std::fs::create_dir_all(dir)?;
     }
-    let encoded = crate::schema::encode_schema(s);
+    let encoded = crate::project::schema::encode_schema(s);
     std::fs::write(path, encoded)
 }
 
 pub(crate) fn load_from_disk() -> Option<SystemSettingsResource> {
     let bytes = std::fs::read(settings_path()).ok()?;
-    crate::schema::decode_schema::<SystemSettingsResource>(&bytes).ok()
+    crate::project::schema::decode_schema::<SystemSettingsResource>(&bytes).ok()
 }
 
 pub(super) fn easing_engine_ids_and_names() -> (Vec<String>, Vec<String>) {

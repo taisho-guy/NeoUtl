@@ -1,4 +1,4 @@
-use crate::shortcuts::{self, ALL_COMMANDS, CommandId, OwnedBinding, Scope};
+use crate::app::shortcuts::{self, ALL_COMMANDS, CommandId, OwnedBinding, Scope};
 use egui::{Context, Ui};
 
 fn scope_label(s: Scope) -> String {

@@ -1,7 +1,7 @@
 use crate::ecs::EcsWorld;
 use crate::ecs::components::ParamAccess;
 use crate::ecs::types::{Keyframe, Value};
-use crate::localization::effect_param_label;
+use crate::infra::localization::effect_param_label;
 use egui_plot::{Line, Plot, PlotPoints, Points};
 use neoutl_easing_standard::{CurveKind, ease, encode_payload, parse_payload};
 use std::sync::Mutex;

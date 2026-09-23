@@ -1,8 +1,8 @@
 use super::TimelineWindow;
-use crate::app_state::{self, SharedAppState};
+use crate::app::state::{self as app_state, SharedAppState};
 use crate::ecs::EcsWorld;
 use crate::ecs::components::{GroupControl, MediaSource, ShapeParams, TextContent};
-use crate::localization::tr;
+use crate::infra::localization::tr;
 use crate::objects::registry;
 use crate::ui::preview::PreviewPanel;
 use std::cell::RefCell;

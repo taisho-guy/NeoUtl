@@ -8,7 +8,7 @@ use crate::ecs::object_schema::{
     GROUP_CONTROL_SCHEMA, SHAPE_COLOR_SCHEMA, SHAPE_SCHEMA, TEXT_SCHEMA, TRANSFORM_SCHEMA,
     is_visible, resolve_range,
 };
-use crate::localization::effect_param_label;
+use crate::infra::localization::effect_param_label;
 use elegance::{Checkbox, Select, Slider, TextArea};
 use neoutl_shared_abi::ParamKind;
 

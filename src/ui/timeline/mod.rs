@@ -1,7 +1,7 @@
-use crate::app_state::{self, SharedAppState};
+use crate::app::shortcuts::{self, CommandId, Scope};
+use crate::app::state::{self as app_state, SharedAppState};
 use crate::ecs::EcsWorld;
 use crate::objects::registry;
-use crate::shortcuts::{self, CommandId, Scope};
 use crate::ui::dialogs::DialogSet;
 use crate::ui::preview::PreviewPanel;
 use crate::ui::types::{ContextMenuItem, LayerState, ObjectKindItem, SceneTabItem, TimelineObject};
@@ -230,7 +230,7 @@ impl TimelineWindow {
                 .enumerate()
                 .map(|(kind_id, plugin)| ObjectKindItem {
                     kind: kind_id as i32,
-                    name: crate::localization::object_name(&plugin.name),
+                    name: crate::infra::localization::object_name(&plugin.name),
                 })
                 .collect();
             (

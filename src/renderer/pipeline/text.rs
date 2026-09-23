@@ -153,6 +153,6 @@ impl RenderEngine {
                 depth_or_array_layers: 1,
             },
         );
-        crate::gpu_shared::locked_submit(&self.queue, [encoder.finish()]);
+        crate::infra::gpu_shared::locked_submit(&self.queue, [encoder.finish()]);
     }
 }

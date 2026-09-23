@@ -1,4 +1,4 @@
-use crate::localization::tr;
+use crate::infra::localization::tr;
 use egui::Ui;
 use elegance::{Select, Slider, Switch, TextInput};
 

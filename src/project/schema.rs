@@ -22,7 +22,7 @@ where
     T::from_schema(&schema)
 }
 
-impl SchemaContract for crate::document::DocumentModel {
+impl SchemaContract for crate::project::document::DocumentModel {
     type Schema = neoutl_schema::DocumentModel;
 
     fn to_schema(&self) -> Self::Schema {
@@ -200,7 +200,7 @@ impl SchemaContract for crate::ecs::resources::SceneMeta {
     }
 }
 
-impl SchemaContract for crate::export::ExportPreset {
+impl SchemaContract for crate::project::export::ExportPreset {
     type Schema = neoutl_schema::ExportPreset;
 
     fn to_schema(&self) -> Self::Schema {
@@ -212,7 +212,7 @@ impl SchemaContract for crate::export::ExportPreset {
     }
 }
 
-impl SchemaContract for crate::shortcuts::KeymapResource {
+impl SchemaContract for crate::app::shortcuts::KeymapResource {
     type Schema = neoutl_schema::KeymapResource;
 
     fn to_schema(&self) -> Self::Schema {
@@ -224,7 +224,7 @@ impl SchemaContract for crate::shortcuts::KeymapResource {
     }
 }
 
-impl SchemaContract for crate::shortcuts::Override {
+impl SchemaContract for crate::app::shortcuts::Override {
     type Schema = neoutl_schema::Override;
 
     fn to_schema(&self) -> Self::Schema {
@@ -239,12 +239,12 @@ impl SchemaContract for crate::shortcuts::Override {
 #[cfg(test)]
 mod tests {
     use super::SchemaContract;
-    use crate::document::{DocumentModel, ObjectDoc, ObjectPayload};
+    use crate::app::shortcuts::{CommandId, KeymapResource, Override, OwnedBinding, Scope};
     use crate::ecs::components::{AudioParams, TextContent};
     use crate::ecs::resources::{AudioPluginSettingsResource, SceneMeta, SystemSettingsResource};
     use crate::ecs::transform::Transform;
-    use crate::export::{EncoderBackend, ExportCodec, ExportPreset};
-    use crate::shortcuts::{CommandId, KeymapResource, Override, OwnedBinding, Scope};
+    use crate::project::document::{DocumentModel, ObjectDoc, ObjectPayload};
+    use crate::project::export::{EncoderBackend, ExportCodec, ExportPreset};
     use std::collections::HashMap;
 
     #[test]

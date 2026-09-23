@@ -1,4 +1,4 @@
-use crate::localization::{effect_category, effect_name};
+use crate::infra::localization::{effect_category, effect_name};
 use crate::ui::effect_add_dialog::EffectCatalogSource;
 use crate::ui::types::CatalogRow;
 use std::sync::Mutex;

@@ -61,7 +61,7 @@ fn read_texture_rgba16f(
             depth_or_array_layers: 1,
         },
     );
-    crate::gpu_shared::locked_submit(queue, [encoder.finish()]);
+    crate::infra::gpu_shared::locked_submit(queue, [encoder.finish()]);
 
     let slice = output_buffer.slice(..);
     let (tx, rx) = std::sync::mpsc::channel();

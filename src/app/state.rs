@@ -1,8 +1,8 @@
 use crate::audio::AudioMixer;
-use crate::config;
-use crate::document::DocumentModel;
-use crate::document::ObjectDoc;
 use crate::ecs::EcsWorld;
+use crate::project::config;
+use crate::project::document::DocumentModel;
+use crate::project::document::ObjectDoc;
 use crate::project::{self, ProjectMeta};
 use crate::renderer::RenderEngine;
 use std::sync::{Arc, Mutex};
@@ -88,19 +88,19 @@ impl ProjectSession {
 
 fn report_error(msg: &str) {
     eprintln!("{msg}");
-    crate::crash_report::capture_message(msg);
+    crate::infra::crash_report::capture_message(msg);
 }
 
 fn report_io_error(context: &str, err: &std::io::Error) {
     eprintln!("{context}: {err}");
-    crate::crash_report::capture_error(err);
+    crate::infra::crash_report::capture_error(err);
 }
 
 pub struct AppState {
     pub sessions: Vec<ProjectSession>,
     pub active: usize,
     pub clipboard: Vec<ObjectDoc>,
-    pub render_queue: crate::export::RenderQueue,
+    pub render_queue: crate::project::export::RenderQueue,
 }
 
 pub type SharedAppState = Arc<Mutex<AppState>>;
@@ -111,7 +111,7 @@ impl AppState {
             sessions: vec![first],
             active: 0,
             clipboard: Vec::new(),
-            render_queue: crate::export::RenderQueue::new(),
+            render_queue: crate::project::export::RenderQueue::new(),
         }));
         start_autosave_worker(&state);
         state
@@ -356,11 +356,11 @@ pub fn close_session(state: &SharedAppState, index: usize) -> Result<(), String>
     Ok(())
 }
 
-pub fn set_clipboard(state: &SharedAppState, docs: Vec<crate::document::ObjectDoc>) {
+pub fn set_clipboard(state: &SharedAppState, docs: Vec<crate::project::document::ObjectDoc>) {
     let mut s = state.lock().unwrap();
     s.clipboard = docs;
 }
 
-pub fn clipboard(state: &SharedAppState) -> Vec<crate::document::ObjectDoc> {
+pub fn clipboard(state: &SharedAppState) -> Vec<crate::project::document::ObjectDoc> {
     state.lock().unwrap().clipboard.clone()
 }

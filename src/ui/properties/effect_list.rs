@@ -3,7 +3,7 @@ use crate::ecs::EcsWorld;
 use crate::ecs::TimelineData;
 use crate::ecs::effects::{find_effect, param_schema};
 use crate::ecs::types::Value;
-use crate::localization::effect_param_label;
+use crate::infra::localization::effect_param_label;
 use elegance::{
     BadgeTone, Checkbox, ContextMenu, MenuItem, SegmentedButton, Select, SortableItem, SortableList,
 };
