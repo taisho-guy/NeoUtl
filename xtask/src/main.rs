@@ -186,6 +186,22 @@ fn apply_toolchain_env(cmd: &mut Command, workspace_root: &Path) {
     cmd.env("PATH", joined_path);
 }
 
+fn prepend_path(cmd: &mut Command, dir: PathBuf) {
+    let current = cmd
+        .get_envs()
+        .find(|(key, _)| *key == "PATH")
+        .and_then(|(_, value)| value.map(|v| v.to_os_string()))
+        .or_else(|| env::var_os("PATH"))
+        .unwrap_or_default();
+    let mut paths = vec![dir];
+    paths.extend(env::split_paths(&current));
+    let Ok(joined_path) = env::join_paths(paths) else {
+        eprintln!("[xtask] PATH合成失敗");
+        return;
+    };
+    cmd.env("PATH", joined_path);
+}
+
 const PLUGIN_HOST_VERSION: &str = "0.0.7";
 
 fn plugin_host_install_root(workspace_root: &Path) -> PathBuf {
@@ -215,6 +231,7 @@ fn stage_plugin_host(workspace_root: &Path, profile: &str, target: Option<&str>,
             cmd.arg("--offline");
         }
         apply_toolchain_env(&mut cmd, workspace_root);
+        prepend_path(&mut cmd, install_root.join("bin"));
         let status = cmd
             .status()
             .expect("maolan-plugin-hostインストール起動失敗");
