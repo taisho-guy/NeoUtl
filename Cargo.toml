@@ -28,7 +28,6 @@ members = [
     "crates/xtask",
     "crates/maolan-host-adapter",
 ]
-exclude = ["neoutl-wgpu"]
 resolver = "2"
 
 [workspace.dependencies]
@@ -61,6 +60,7 @@ neoutl-schema = { path = "crates/neoutl-schema" }
 prost = "0.14"
 prost-types = "0.14"
 prost-build = "0.14"
+winit = "0.30"
 
 [package]
 name = "NeoUtl"
