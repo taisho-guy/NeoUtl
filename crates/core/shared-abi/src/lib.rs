@@ -51,9 +51,6 @@ impl StrRef {
         }
     }
 
-    /// # Safety
-    /// `ptr` は `len` バイト以上有効な UTF-8 バイト列を指し、`'static` の間
-    /// 生存し続けていること。呼び出し元(FFI境界)が生存期間を保証する。
     pub unsafe fn as_str(&self) -> &'static str {
         unsafe { std::str::from_utf8_unchecked(std::slice::from_raw_parts(self.ptr, self.len)) }
     }
@@ -87,9 +84,6 @@ impl<T> FfiSlice<T> {
         self.ptr.is_null() || self.len == 0
     }
 
-    /// # Safety
-    /// 非空の場合、`ptr` は `len` 個の `T` を指し、`'static` の間有効かつ
-    /// 他に排他参照が存在しないこと。呼び出し元(FFI境界)が保証する。
     pub unsafe fn as_slice(&self) -> &'static [T] {
         if self.is_empty() {
             &[]
@@ -137,9 +131,6 @@ pub struct ParamRowOwned {
 }
 
 impl ParamSchema {
-    /// # Safety
-    /// `self.key` / `self.label` / `self.enum_options` の各 `StrRef` が
-    /// [`StrRef::as_str`] の安全条件を満たしていること。
     pub unsafe fn to_owned_row(&self) -> ParamRowOwned {
         unsafe {
             ParamRowOwned {

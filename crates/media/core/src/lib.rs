@@ -128,10 +128,6 @@ pub trait NeoFramePool: Send + Sync {
         height: u32,
     ) -> Result<wgpu::Texture, PoolError>;
     fn release(&self, texture: wgpu::Texture);
-    /// # Safety
-    /// `texture` は `device` が生成した GPU キューへの書き込みが完了(同期
-    /// 済み)している状態であること。実装は書き込み完了前の `texture` を
-    /// 受け取った場合の挙動を保証しない。
     unsafe fn finalize_write(
         &self,
         device: &wgpu::Device,

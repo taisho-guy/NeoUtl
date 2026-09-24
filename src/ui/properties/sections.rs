@@ -129,8 +129,6 @@ pub(super) struct ColorRowCtx<'a, S: std::hash::Hash + Copy + std::fmt::Debug> {
 }
 
 fn color_marker_channel(v: f32) -> u8 {
-    // 色チャンネル値は0.0-1.0を想定するが、キーフレーム値の入力元を
-    // 保証しないためclampで範囲を確定した上で0-255へ変換する。
     #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
     {
         (v * 255.0).round().clamp(0.0, 255.0) as u8
@@ -276,7 +274,9 @@ pub(super) fn color_row_ctx<S: std::hash::Hash + Copy + std::fmt::Debug>(
         );
     }
 
-    commit_color_row_outcome(world, object_id, keys, &track, &segments, clip_end, &outcome);
+    commit_color_row_outcome(
+        world, object_id, keys, &track, &segments, clip_end, &outcome,
+    );
 
     let mut boundary_set = std::collections::BTreeSet::new();
     for channel in &track {
@@ -396,7 +396,12 @@ pub fn transform_section(ui: &mut egui::Ui, world: &mut EcsWorld, id: usize) {
     }
 }
 
-fn text_font_stack_editor(ui: &mut egui::Ui, world: &mut EcsWorld, id: usize, stack: &mut Vec<String>) {
+fn text_font_stack_editor(
+    ui: &mut egui::Ui,
+    world: &mut EcsWorld,
+    id: usize,
+    stack: &mut Vec<String>,
+) {
     let mut remove_at: Option<usize> = None;
     let mut updated: Option<Vec<String>> = None;
     for row in 0..stack.len() {
@@ -451,8 +456,6 @@ fn text_enum_row(
             });
             tui.ui(|ui| {
                 let raw_idx = content.get_param(schema.key).unwrap_or(0.0).round();
-                // 0..enum_options長へclampし、負値・NaN・範囲外を
-                // 排除した上でusizeへ変換する。
                 let max_idx = schema.enum_options.len().saturating_sub(1);
                 #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
                 let mut idx = (raw_idx.max(0.0) as usize).min(max_idx);
@@ -746,8 +749,6 @@ fn group_control_enum_row(
             });
             tui.ui(|ui| {
                 let raw_current = gc.get_param(schema.key).unwrap_or(0.0).round();
-                // 0..enum_options長へclampし、負値・NaN・範囲外を
-                // 排除した上でusizeへ変換する。
                 let max_idx = schema.enum_options.len().saturating_sub(1);
                 #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
                 let mut current = (raw_current.max(0.0) as usize).min(max_idx);
@@ -965,8 +966,6 @@ pub fn time_remap_section(ui: &mut egui::Ui, world: &mut EcsWorld, id: usize) {
             });
             tui.style(crate::ui::ui_ext::grow_style()).ui(|ui| {
                 if let Some(frame) = remap.freeze_frame.as_mut() {
-                    // フレーム番号は0..=100_000のSlider範囲に収まる(f32仮数部
-                    // 23bitの精度上限16_777_216を大きく下回るため精度損失なし)。
                     #[allow(clippy::cast_precision_loss)]
                     let mut v = *frame as f32;
                     if ui.add(Slider::new(&mut v, 0.0..=100_000.0)).changed() {
@@ -991,8 +990,6 @@ pub fn time_remap_section(ui: &mut egui::Ui, world: &mut EcsWorld, id: usize) {
                         ui.label(t!("入力フレーム"));
                     });
                     tui.ui(|ui| {
-                        // フレーム番号は0..=100_000のSlider範囲に収まる(f32仮数部
-                        // 23bitの精度上限16_777_216を大きく下回るため精度損失なし)。
                         #[allow(clippy::cast_precision_loss)]
                         let mut kf = k.frame as f32;
                         if ui.add(Slider::new(&mut kf, 0.0..=100_000.0)).changed() {
@@ -1090,8 +1087,6 @@ pub fn clip_target_section(ui: &mut egui::Ui, world: &mut EcsWorld, id: usize) {
                     }
                     ParamKind::Enum => {
                         let raw_current = ct.get_param(schema.key).unwrap_or(0.0).round();
-                        // 0..enum_options長へclampし、負値・NaN・範囲外を
-                        // 排除した上でusizeへ変換する。
                         let max_idx = schema.enum_options.len().saturating_sub(1);
                         #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
                         let mut current = (raw_current.max(0.0) as usize).min(max_idx);

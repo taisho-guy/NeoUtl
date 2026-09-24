@@ -69,10 +69,6 @@ pub const fn uniform_size_std(count: u32) -> u32 {
     count.div_ceil(4) * 16
 }
 
-/// # Safety
-/// `params_ptr` は `count` 個の `f32` を指す有効な読み取り可能領域である
-/// こと。`out_ptr` は `uniform_size_std(count)` バイト以上の書き込み可能な
-/// 領域を指し、`params_ptr` の領域と重ならないこと。
 pub unsafe fn pack_uniform_std(params_ptr: *const f32, count: u32, out_ptr: *mut u8) {
     let total = uniform_size_std(count) as usize;
     unsafe {
