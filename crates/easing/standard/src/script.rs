@@ -5,7 +5,11 @@ use std::sync::atomic::{AtomicU32, Ordering};
 const INSTRUCTION_LIMIT: u32 = 100_000;
 
 pub fn evaluate(source: &str, t: f32) -> Option<f32> {
-    let lua = Lua::new_with(StdLib::MATH, mlua::LuaOptions::new()).ok()?;
+    evaluate_checked(source, t).ok()
+}
+
+pub fn evaluate_checked(source: &str, t: f32) -> Result<f32, String> {
+    let lua = Lua::new_with(StdLib::MATH, mlua::LuaOptions::new()).map_err(|e| e.to_string())?;
 
     let count = AtomicU32::new(0);
     lua.set_hook(
@@ -21,12 +25,12 @@ pub fn evaluate(source: &str, t: f32) -> Option<f32> {
             }
         },
     )
-    .ok()?;
+    .map_err(|e| e.to_string())?;
 
     let globals = lua.globals();
-    globals.set("t", t).ok()?;
-    globals.set("st", 0.0f32).ok()?;
-    globals.set("ed", 1.0f32).ok()?;
+    globals.set("t", t).map_err(|e| e.to_string())?;
+    globals.set("st", 0.0f32).map_err(|e| e.to_string())?;
+    globals.set("ed", 1.0f32).map_err(|e| e.to_string())?;
 
     let noise_fn = lua
         .create_function(
@@ -35,9 +39,11 @@ pub fn evaluate(source: &str, t: f32) -> Option<f32> {
                 Ok(n * amp)
             },
         )
-        .ok()?;
-    globals.set("noise", noise_fn).ok()?;
+        .map_err(|e| e.to_string())?;
+    globals.set("noise", noise_fn).map_err(|e| e.to_string())?;
 
-    let result: mlua::Result<f32> = lua.load(source).set_name("curve_script").eval();
-    result.ok()
+    lua.load(source)
+        .set_name("curve_script")
+        .eval::<f32>()
+        .map_err(|e| e.to_string())
 }

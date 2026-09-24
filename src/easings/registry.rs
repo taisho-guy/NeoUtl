@@ -1,11 +1,12 @@
 use neoutl_easing_standard::CurveKind;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
+use std::sync::{Mutex, OnceLock};
 
 #[derive(Clone, Serialize, Deserialize)]
-struct PresetEntry {
-    name: String,
-    kind: CurveKind,
+pub struct PresetEntry {
+    pub name: String,
+    pub kind: CurveKind,
 }
 
 #[derive(Default)]
@@ -26,27 +27,56 @@ impl CurveRegistry {
         }
     }
 
-    pub fn names(&self) -> impl Iterator<Item = &str> {
-        self.entries.iter().map(|e| e.name.as_str())
+    pub fn entries(&self) -> &[PresetEntry] {
+        &self.entries
     }
 
-    pub fn get(&self, name: &str) -> Option<&CurveKind> {
-        self.entries
+    pub fn push_unique(&mut self, kind: CurveKind) -> usize {
+        let mut n = self.entries.len() + 1;
+        while self
+            .entries
             .iter()
-            .find(|e| e.name == name)
-            .map(|e| &e.kind)
+            .any(|e| e.name == format!("カスタム {n}"))
+        {
+            n += 1;
+        }
+        self.entries.push(PresetEntry {
+            name: format!("カスタム {n}"),
+            kind,
+        });
+        self.flush();
+        self.entries.len() - 1
     }
 
-    pub fn save_as(&mut self, name: &str, kind: CurveKind) {
-        if let Some(existing) = self.entries.iter_mut().find(|e| e.name == name) {
-            existing.kind = kind;
-        } else {
-            self.entries.push(PresetEntry {
-                name: name.to_owned(),
-                kind,
-            });
+    pub fn rename(&mut self, index: usize, name: String) {
+        let name = name.trim().to_owned();
+        let taken = self
+            .entries
+            .iter()
+            .enumerate()
+            .any(|(i, e)| i != index && e.name == name);
+        if let Some(entry) = self.entries.get_mut(index)
+            && !name.is_empty()
+            && !taken
+        {
+            entry.name = name;
+            self.flush();
         }
-        self.flush();
+    }
+
+    pub fn remove(&mut self, index: usize) {
+        if index < self.entries.len() {
+            self.entries.remove(index);
+            self.flush();
+        }
+    }
+
+    pub fn move_by(&mut self, index: usize, delta: isize) {
+        let target = index.saturating_add_signed(delta);
+        if index < self.entries.len() && target < self.entries.len() {
+            self.entries.swap(index, target);
+            self.flush();
+        }
     }
 
     fn flush(&self) {
@@ -79,4 +109,12 @@ impl CurveRegistry {
 
 pub fn default_presets_path(easings_dir: &Path) -> PathBuf {
     easings_dir.join("curve_presets.json")
+}
+
+pub fn shared() -> &'static Mutex<CurveRegistry> {
+    static SHARED: OnceLock<Mutex<CurveRegistry>> = OnceLock::new();
+    SHARED.get_or_init(|| {
+        let dir = super::loader::default_easings_dir();
+        Mutex::new(CurveRegistry::load(&default_presets_path(&dir)))
+    })
 }

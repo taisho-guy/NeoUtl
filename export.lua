@@ -108,7 +108,7 @@ local EXCLUDE_FILES = {
     [".DS_Store"]=true, ["Thumbs.db"]=true, ["package-lock.json"]=true,
     ["yarn.lock"]=true, ["pnpm-lock.yaml"]=true, ["bun.lockb"]=true,
     ["Cargo.lock"]=true, ["poetry.lock"]=true, ["Pipfile.lock"]=true,
-    ["mix.lock"]=true, ["composer.lock"]=true, ["Icons.js"]=true
+    ["mix.lock"]=true, ["composer.lock"]=true, ["Icons.js"]=true, ["LICENSE"]=true
 }
 
 local EXCLUDE_DIRS = {
