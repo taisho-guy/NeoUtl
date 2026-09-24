@@ -128,6 +128,95 @@ pub(super) struct ColorRowCtx<'a, S: std::hash::Hash + Copy + std::fmt::Debug> {
     pub button_w: f32,
 }
 
+fn color_marker_channel(v: f32) -> u8 {
+    // 色チャンネル値は0.0-1.0を想定するが、キーフレーム値の入力元を
+    // 保証しないためclampで範囲を確定した上で0-255へ変換する。
+    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+    {
+        (v * 255.0).round().clamp(0.0, 255.0) as u8
+    }
+}
+
+fn seed_color_tracks(
+    world: &mut EcsWorld,
+    object_id: usize,
+    keys: [&'static str; 4],
+    clip_start: i32,
+    base_value: [f32; 4],
+    track: &mut [Vec<crate::ecs::types::Keyframe>; 4],
+) {
+    for i in 0..4 {
+        if track[i].is_empty() {
+            let target = super::easing_editor::TrackTarget::Object {
+                object_id,
+                key: keys[i].to_string(),
+            };
+            track[i] = super::easing_editor::seed_start(world, &target, clip_start, base_value[i]);
+        }
+    }
+}
+
+fn commit_color_row_outcome(
+    world: &mut EcsWorld,
+    object_id: usize,
+    keys: [&'static str; 4],
+    track: &[Vec<crate::ecs::types::Keyframe>; 4],
+    segments: &[super::segment::Segment; 4],
+    clip_end: i32,
+    outcome: &super::row::ColorRowOutcome,
+) {
+    if let Some(c) = outcome.start_color {
+        for i in 0..4 {
+            let (e, p) = engine_of(&track[i], segments[i].start_frame);
+            world.set_keyframe(object_id, keys[i], segments[i].start_frame, c[i], e, p);
+        }
+    }
+    if let Some(c) = outcome.end_color {
+        for i in 0..4 {
+            let end_frame = if track[i].len() < 2 && clip_end > segments[i].start_frame {
+                clip_end
+            } else {
+                segments[i].end_frame
+            };
+            let (e, p) = engine_of(&track[i], end_frame);
+            world.set_keyframe(object_id, keys[i], end_frame, c[i], e, p);
+        }
+    }
+}
+
+fn apply_color_track_outcome(
+    world: &mut EcsWorld,
+    object_id: usize,
+    keys: [&'static str; 4],
+    object_target: impl Fn(usize) -> super::easing_editor::TrackTarget,
+    t_outcome: &super::track::TrackOutcome,
+) {
+    if let Some(f) = t_outcome.add_point {
+        for i in 0..4 {
+            super::easing_editor::edit_track(world, &object_target(i), |t| {
+                let _ = t.insert_point(f);
+            });
+        }
+    }
+    if let Some(f) = t_outcome.remove_point {
+        for key in keys {
+            world.remove_keyframe(object_id, key, f);
+        }
+    }
+    if let Some(commit) = &t_outcome.drag_committed {
+        for i in 0..4 {
+            super::easing_editor::edit_track(world, &object_target(i), |t| commit.apply(t));
+        }
+    }
+    if t_outcome.equalize {
+        for i in 0..4 {
+            super::easing_editor::edit_track(world, &object_target(i), |t| {
+                let _ = t.equalize();
+            });
+        }
+    }
+}
+
 pub(super) fn color_row_ctx<S: std::hash::Hash + Copy + std::fmt::Debug>(
     ui: &mut egui::Ui,
     world: &mut EcsWorld,
@@ -147,16 +236,8 @@ pub(super) fn color_row_ctx<S: std::hash::Hash + Copy + std::fmt::Debug>(
     } = ctx;
 
     let mut track = track;
-    for i in 0..4 {
-        if track[i].is_empty() {
-            let target = super::easing_editor::TrackTarget::Object {
-                object_id,
-                key: keys[i].to_string(),
-            };
-            track[i] = super::easing_editor::seed_start(world, &target, clip_start, base_value[i]);
-        }
-    }
-    let object_target = |i: usize| super::easing_editor::TrackTarget::Object {
+    seed_color_tracks(world, object_id, keys, clip_start, base_value, &mut track);
+    let object_target = move |i: usize| super::easing_editor::TrackTarget::Object {
         object_id,
         key: keys[i].to_string(),
     };
@@ -195,23 +276,7 @@ pub(super) fn color_row_ctx<S: std::hash::Hash + Copy + std::fmt::Debug>(
         );
     }
 
-    if let Some(c) = outcome.start_color {
-        for i in 0..4 {
-            let (e, p) = engine_of(&track[i], segments[i].start_frame);
-            world.set_keyframe(object_id, keys[i], segments[i].start_frame, c[i], e, p);
-        }
-    }
-    if let Some(c) = outcome.end_color {
-        for i in 0..4 {
-            let end_frame = if track[i].len() < 2 && clip_end > segments[i].start_frame {
-                clip_end
-            } else {
-                segments[i].end_frame
-            };
-            let (e, p) = engine_of(&track[i], end_frame);
-            world.set_keyframe(object_id, keys[i], end_frame, c[i], e, p);
-        }
-    }
+    commit_color_row_outcome(world, object_id, keys, &track, &segments, clip_end, &outcome);
 
     let mut boundary_set = std::collections::BTreeSet::new();
     for channel in &track {
@@ -226,14 +291,13 @@ pub(super) fn color_row_ctx<S: std::hash::Hash + Copy + std::fmt::Debug>(
             track[i]
                 .iter()
                 .find(|k| k.frame == f)
-                .map(|k| k.value)
-                .unwrap_or(base_value[i])
+                .map_or(base_value[i], |k| k.value)
         };
         Some(egui::Color32::from_rgba_unmultiplied(
-            (ch(0) * 255.0).round() as u8,
-            (ch(1) * 255.0).round() as u8,
-            (ch(2) * 255.0).round() as u8,
-            (ch(3) * 255.0).round() as u8,
+            color_marker_channel(ch(0)),
+            color_marker_channel(ch(1)),
+            color_marker_channel(ch(2)),
+            color_marker_channel(ch(3)),
         ))
     };
 
@@ -254,30 +318,7 @@ pub(super) fn color_row_ctx<S: std::hash::Hash + Copy + std::fmt::Debug>(
         },
     );
 
-    if let Some(f) = t_outcome.add_point {
-        for i in 0..4 {
-            super::easing_editor::edit_track(world, &object_target(i), |t| {
-                let _ = t.insert_point(f);
-            });
-        }
-    }
-    if let Some(f) = t_outcome.remove_point {
-        for key in keys {
-            world.remove_keyframe(object_id, key, f);
-        }
-    }
-    if let Some(commit) = t_outcome.drag_committed {
-        for i in 0..4 {
-            super::easing_editor::edit_track(world, &object_target(i), |t| commit.apply(t));
-        }
-    }
-    if t_outcome.equalize {
-        for i in 0..4 {
-            super::easing_editor::edit_track(world, &object_target(i), |t| {
-                let _ = t.equalize();
-            });
-        }
-    }
+    apply_color_track_outcome(world, object_id, keys, object_target, &t_outcome);
 }
 
 pub(super) fn engine_of(track: &[crate::ecs::types::Keyframe], frame: i32) -> (String, Vec<u8>) {
@@ -285,8 +326,9 @@ pub(super) fn engine_of(track: &[crate::ecs::types::Keyframe], frame: i32) -> (S
         .iter()
         .find(|k| k.frame == frame)
         .or_else(|| track.last())
-        .map(|k| (k.engine_id.clone(), k.engine_payload.clone()))
-        .unwrap_or(("neoutl-easing-standard".into(), Vec::new()))
+        .map_or(("neoutl-easing-standard".into(), Vec::new()), |k| {
+            (k.engine_id.clone(), k.engine_payload.clone())
+        })
 }
 
 pub fn transform_section(ui: &mut egui::Ui, world: &mut EcsWorld, id: usize) {
@@ -354,23 +396,7 @@ pub fn transform_section(ui: &mut egui::Ui, world: &mut EcsWorld, id: usize) {
     }
 }
 
-pub fn text_section(ui: &mut egui::Ui, world: &mut EcsWorld, id: usize) {
-    let Some(mut content) = world.get_text(id) else {
-        return;
-    };
-    let (clip_start, clip_end) = clip_bounds(world, id);
-    let current_frame = world.current_frame();
-    let button_w = super::row::button_column_width(
-        ui,
-        TEXT_SCHEMA
-            .iter()
-            .filter(|s| s.kind == ParamKind::Float)
-            .map(|s| effect_param_label(s.label)),
-    );
-    ui.separator();
-    ui.colored_label(egui::Color32::from_rgb(0x8a, 0xab, 0xff), t!("テキスト"));
-    ui.label(effect_param_label("フォント候補"));
-    let mut stack = content.font_family_stack.clone();
+fn text_font_stack_editor(ui: &mut egui::Ui, world: &mut EcsWorld, id: usize, stack: &mut Vec<String>) {
     let mut remove_at: Option<usize> = None;
     let mut updated: Option<Vec<String>> = None;
     for row in 0..stack.len() {
@@ -406,8 +432,66 @@ pub fn text_section(ui: &mut egui::Ui, world: &mut EcsWorld, id: usize) {
     }
     if ui.small_button("+").clicked() {
         stack.push(String::new());
-        world.set_text_font_stack(id, stack);
+        world.set_text_font_stack(id, stack.clone());
     }
+}
+
+fn text_enum_row(
+    ui: &mut egui::Ui,
+    world: &mut EcsWorld,
+    id: usize,
+    schema: &crate::ecs::object_schema::ParamSchema,
+    content: &crate::ecs::components::TextContent,
+) {
+    tui(ui, ui.id().with((id, "text_enum", schema.key)))
+        .style(row_style(6.0))
+        .show(|tui| {
+            tui.ui(|ui| {
+                ui.label(effect_param_label(schema.label));
+            });
+            tui.ui(|ui| {
+                let raw_idx = content.get_param(schema.key).unwrap_or(0.0).round();
+                // 0..enum_options長へclampし、負値・NaN・範囲外を
+                // 排除した上でusizeへ変換する。
+                let max_idx = schema.enum_options.len().saturating_sub(1);
+                #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+                let mut idx = (raw_idx.max(0.0) as usize).min(max_idx);
+                let resp = ui.add(
+                    Select::new((ui.id(), "text", schema.key), &mut idx).options(
+                        schema
+                            .enum_options
+                            .iter()
+                            .enumerate()
+                            .map(|(i, o)| (i, effect_param_label(o))),
+                    ),
+                );
+                if resp.changed() {
+                    #[allow(clippy::cast_precision_loss)]
+                    let idx_f32 = idx as f32;
+                    world.set_text_param(id, schema.key, idx_f32);
+                }
+            });
+        });
+}
+
+pub fn text_section(ui: &mut egui::Ui, world: &mut EcsWorld, id: usize) {
+    let Some(mut content) = world.get_text(id) else {
+        return;
+    };
+    let (clip_start, clip_end) = clip_bounds(world, id);
+    let current_frame = world.current_frame();
+    let button_w = super::row::button_column_width(
+        ui,
+        TEXT_SCHEMA
+            .iter()
+            .filter(|s| s.kind == ParamKind::Float)
+            .map(|s| effect_param_label(s.label)),
+    );
+    ui.separator();
+    ui.colored_label(egui::Color32::from_rgb(0x8a, 0xab, 0xff), t!("テキスト"));
+    ui.label(effect_param_label("フォント候補"));
+    let mut stack = content.font_family_stack.clone();
+    text_font_stack_editor(ui, world, id, &mut stack);
     for schema in TEXT_SCHEMA {
         if !is_visible(schema, |k| content.get_param(k).unwrap_or(0.0)) {
             continue;
@@ -423,7 +507,6 @@ pub fn text_section(ui: &mut egui::Ui, world: &mut EcsWorld, id: usize) {
                     world.set_text(id, content.text.clone(), content.font_size);
                 }
             }
-            ParamKind::Text if schema.key == "font_family" => {}
             ParamKind::Text => {}
             ParamKind::Bool => {
                 tui(ui, ui.id().with((id, "text_bool", schema.key)))
@@ -440,31 +523,7 @@ pub fn text_section(ui: &mut egui::Ui, world: &mut EcsWorld, id: usize) {
                         });
                     });
             }
-            ParamKind::Enum => {
-                tui(ui, ui.id().with((id, "text_enum", schema.key)))
-                    .style(row_style(6.0))
-                    .show(|tui| {
-                        tui.ui(|ui| {
-                            ui.label(effect_param_label(schema.label));
-                        });
-                        tui.ui(|ui| {
-                            let mut idx =
-                                content.get_param(schema.key).unwrap_or(0.0).round() as usize;
-                            let resp = ui.add(
-                                Select::new((ui.id(), "text", schema.key), &mut idx).options(
-                                    schema
-                                        .enum_options
-                                        .iter()
-                                        .enumerate()
-                                        .map(|(i, o)| (i, effect_param_label(o).to_string())),
-                                ),
-                            );
-                            if resp.changed() {
-                                world.set_text_param(id, schema.key, idx as f32);
-                            }
-                        });
-                    });
-            }
+            ParamKind::Enum => text_enum_row(ui, world, id, schema, &content),
             ParamKind::Float => {
                 let value = content.get_param(schema.key).unwrap_or(0.0);
                 let (min, max) = resolve_range(schema.range, 1920.0, 1080.0);
@@ -597,7 +656,7 @@ pub fn audio_section(ui: &mut egui::Ui, world: &mut EcsWorld, id: usize) {
                         if ui
                             .add(
                                 Slider::new(&mut value, min..=max)
-                                    .step(((max - min).max(0.001) / 1000.0) as f64),
+                                    .step(f64::from((max - min).max(0.001) / 1000.0)),
                             )
                             .changed()
                         {
@@ -614,8 +673,106 @@ pub fn audio_section(ui: &mut egui::Ui, world: &mut EcsWorld, id: usize) {
 const GROUP_CONTROL_STRUCTURAL_KEYS: &[&str] =
     &["layer_count_down", "layer_count_up", "camera_target_layer"];
 
+fn group_control_bool_row(
+    ui: &mut egui::Ui,
+    world: &mut EcsWorld,
+    id: usize,
+    schema: &crate::ecs::object_schema::ParamSchema,
+    gc: &crate::ecs::components::GroupControl,
+) {
+    tui(ui, ui.id().with((id, "group_control_bool", schema.key)))
+        .style(row_style(6.0))
+        .show(|tui| {
+            tui.ui(|ui| {
+                ui.label(effect_param_label(schema.label));
+            });
+            tui.ui(|ui| {
+                let mut b = gc.get_param(schema.key).unwrap_or(0.0) > 0.5;
+                if ui.add(Checkbox::new(&mut b, "")).changed() {
+                    let mut gc = *gc;
+                    gc.set_param(schema.key, if b { 1.0 } else { 0.0 });
+                    world.set_group_control(id, gc);
+                }
+            });
+        });
+}
+
+fn group_control_structural_row(
+    ui: &mut egui::Ui,
+    world: &mut EcsWorld,
+    id: usize,
+    schema: &crate::ecs::object_schema::ParamSchema,
+    gc: &crate::ecs::components::GroupControl,
+) {
+    tui(
+        ui,
+        ui.id().with((id, "group_control_structural", schema.key)),
+    )
+    .style(row_style(6.0))
+    .show(|tui| {
+        tui.ui(|ui| {
+            ui.label(effect_param_label(schema.label));
+        });
+        tui.ui(|ui| {
+            let (min, max) = resolve_range(schema.range, 1920.0, 1080.0);
+            let mut value = gc.get_param(schema.key).unwrap_or(0.0);
+            if ui
+                .add(
+                    Slider::new(&mut value, min..=max)
+                        .step(f64::from((max - min).max(0.001) / 1000.0)),
+                )
+                .changed()
+            {
+                let mut gc = *gc;
+                gc.set_param(schema.key, value.round());
+                world.set_group_control(id, gc);
+            }
+        });
+    });
+}
+
+fn group_control_enum_row(
+    ui: &mut egui::Ui,
+    world: &mut EcsWorld,
+    id: usize,
+    schema: &crate::ecs::object_schema::ParamSchema,
+    gc: &crate::ecs::components::GroupControl,
+) {
+    tui(ui, ui.id().with((id, "group_control_enum", schema.key)))
+        .style(row_style(6.0))
+        .show(|tui| {
+            tui.ui(|ui| {
+                ui.label(effect_param_label(schema.label));
+            });
+            tui.ui(|ui| {
+                let raw_current = gc.get_param(schema.key).unwrap_or(0.0).round();
+                // 0..enum_options長へclampし、負値・NaN・範囲外を
+                // 排除した上でusizeへ変換する。
+                let max_idx = schema.enum_options.len().saturating_sub(1);
+                #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+                let mut current = (raw_current.max(0.0) as usize).min(max_idx);
+                let resp = ui.add(
+                    Select::new((id, schema.key), &mut current).options(
+                        schema
+                            .enum_options
+                            .iter()
+                            .enumerate()
+                            .map(|(i, opt)| (i, *opt)),
+                    ),
+                );
+                if resp.changed() {
+                    #[allow(clippy::cast_precision_loss)]
+                    let current_f32 = current as f32;
+                    let mut gc = *gc;
+                    gc.set_param(schema.key, current_f32);
+                    world.set_group_control(id, gc);
+                }
+            });
+        });
+}
+
 pub fn group_control_section(ui: &mut egui::Ui, world: &mut EcsWorld, id: usize) {
-    let Some(mut gc) = world.get_group_control(id) else {
+    let Some(gc) = world.get_group_control(id) else {
         return;
     };
     let (clip_start, clip_end) = clip_bounds(world, id);
@@ -639,47 +796,9 @@ pub fn group_control_section(ui: &mut egui::Ui, world: &mut EcsWorld, id: usize)
             continue;
         }
         match schema.kind {
-            ParamKind::Bool => {
-                tui(ui, ui.id().with((id, "group_control_bool", schema.key)))
-                    .style(row_style(6.0))
-                    .show(|tui| {
-                        tui.ui(|ui| {
-                            ui.label(effect_param_label(schema.label));
-                        });
-                        tui.ui(|ui| {
-                            let mut b = gc.get_param(schema.key).unwrap_or(0.0) > 0.5;
-                            if ui.add(Checkbox::new(&mut b, "")).changed() {
-                                gc.set_param(schema.key, if b { 1.0 } else { 0.0 });
-                                world.set_group_control(id, gc);
-                            }
-                        });
-                    });
-            }
+            ParamKind::Bool => group_control_bool_row(ui, world, id, schema, &gc),
             ParamKind::Float if GROUP_CONTROL_STRUCTURAL_KEYS.contains(&schema.key) => {
-                tui(
-                    ui,
-                    ui.id().with((id, "group_control_structural", schema.key)),
-                )
-                .style(row_style(6.0))
-                .show(|tui| {
-                    tui.ui(|ui| {
-                        ui.label(effect_param_label(schema.label));
-                    });
-                    tui.ui(|ui| {
-                        let (min, max) = resolve_range(schema.range, 1920.0, 1080.0);
-                        let mut value = gc.get_param(schema.key).unwrap_or(0.0);
-                        if ui
-                            .add(
-                                Slider::new(&mut value, min..=max)
-                                    .step(((max - min).max(0.001) / 1000.0) as f64),
-                            )
-                            .changed()
-                        {
-                            gc.set_param(schema.key, value.round());
-                            world.set_group_control(id, gc);
-                        }
-                    });
-                });
+                group_control_structural_row(ui, world, id, schema, &gc);
             }
             ParamKind::Float => {
                 let (min, max) = resolve_range(schema.range, 1920.0, 1080.0);
@@ -708,32 +827,7 @@ pub fn group_control_section(ui: &mut egui::Ui, world: &mut EcsWorld, id: usize)
                     |w, f| w.remove_keyframe(id, schema.key, f),
                 );
             }
-            ParamKind::Enum => {
-                tui(ui, ui.id().with((id, "group_control_enum", schema.key)))
-                    .style(row_style(6.0))
-                    .show(|tui| {
-                        tui.ui(|ui| {
-                            ui.label(effect_param_label(schema.label));
-                        });
-                        tui.ui(|ui| {
-                            let mut current =
-                                gc.get_param(schema.key).unwrap_or(0.0).round() as usize;
-                            let resp = ui.add(
-                                Select::new((id, schema.key), &mut current).options(
-                                    schema
-                                        .enum_options
-                                        .iter()
-                                        .enumerate()
-                                        .map(|(i, opt)| (i, *opt)),
-                                ),
-                            );
-                            if resp.changed() {
-                                gc.set_param(schema.key, current as f32);
-                                world.set_group_control(id, gc);
-                            }
-                        });
-                    });
-            }
+            ParamKind::Enum => group_control_enum_row(ui, world, id, schema, &gc),
             _ => {}
         }
     }
@@ -775,10 +869,10 @@ pub fn compositing_section(ui: &mut egui::Ui, world: &mut EcsWorld, id: usize) {
                             .map(|(i, (_, label))| (i, *label)),
                     ),
                 );
-                if resp.changed() {
-                    if let Some((mode, _)) = BLEND_MODE_OPTIONS.get(current) {
-                        world.set_blend_mode(id, *mode);
-                    }
+                if resp.changed()
+                    && let Some((mode, _)) = BLEND_MODE_OPTIONS.get(current)
+                {
+                    world.set_blend_mode(id, *mode);
                 }
             });
         });
@@ -871,9 +965,15 @@ pub fn time_remap_section(ui: &mut egui::Ui, world: &mut EcsWorld, id: usize) {
             });
             tui.style(crate::ui::ui_ext::grow_style()).ui(|ui| {
                 if let Some(frame) = remap.freeze_frame.as_mut() {
+                    // フレーム番号は0..=100_000のSlider範囲に収まる(f32仮数部
+                    // 23bitの精度上限16_777_216を大きく下回るため精度損失なし)。
+                    #[allow(clippy::cast_precision_loss)]
                     let mut v = *frame as f32;
-                    if ui.add(Slider::new(&mut v, 0.0..=100000.0)).changed() {
-                        *frame = v.round() as i32;
+                    if ui.add(Slider::new(&mut v, 0.0..=100_000.0)).changed() {
+                        #[allow(clippy::cast_possible_truncation)]
+                        {
+                            *frame = v.round().clamp(0.0, 100_000.0) as i32;
+                        }
                         changed = true;
                     }
                 }
@@ -891,9 +991,14 @@ pub fn time_remap_section(ui: &mut egui::Ui, world: &mut EcsWorld, id: usize) {
                         ui.label(t!("入力フレーム"));
                     });
                     tui.ui(|ui| {
+                        // フレーム番号は0..=100_000のSlider範囲に収まる(f32仮数部
+                        // 23bitの精度上限16_777_216を大きく下回るため精度損失なし)。
+                        #[allow(clippy::cast_precision_loss)]
                         let mut kf = k.frame as f32;
-                        if ui.add(Slider::new(&mut kf, 0.0..=100000.0)).changed() {
-                            move_request = Some((i, kf.round() as i32));
+                        if ui.add(Slider::new(&mut kf, 0.0..=100_000.0)).changed() {
+                            #[allow(clippy::cast_possible_truncation)]
+                            let next_frame = kf.round().clamp(0.0, 100_000.0) as i32;
+                            move_request = Some((i, next_frame));
                         }
                     });
                     tui.ui(|ui| {
@@ -901,7 +1006,7 @@ pub fn time_remap_section(ui: &mut egui::Ui, world: &mut EcsWorld, id: usize) {
                     });
                     tui.ui(|ui| {
                         let mut vf = k.value;
-                        if ui.add(Slider::new(&mut vf, 0.0..=100000.0)).changed() {
+                        if ui.add(Slider::new(&mut vf, 0.0..=100_000.0)).changed() {
                             k.value = vf;
                             k.edit_seq = crate::ecs::types::next_edit_seq();
                             changed = true;
@@ -926,8 +1031,7 @@ pub fn time_remap_section(ui: &mut egui::Ui, world: &mut EcsWorld, id: usize) {
         let last = remap
             .keyframes
             .last()
-            .map(|k| (k.frame, k.value))
-            .unwrap_or((0, 0.0));
+            .map_or((0, 0.0), |k| (k.frame, k.value));
         remap.keyframes.push(crate::ecs::types::Keyframe::new(
             last.0 + 30,
             last.1 + 30.0,
@@ -976,7 +1080,7 @@ pub fn clip_target_section(ui: &mut egui::Ui, world: &mut EcsWorld, id: usize) {
                         if ui
                             .add(
                                 Slider::new(&mut value, min..=max)
-                                    .step(((max - min).max(0.001) / 1000.0) as f64),
+                                    .step(f64::from((max - min).max(0.001) / 1000.0)),
                             )
                             .changed()
                         {
@@ -985,7 +1089,12 @@ pub fn clip_target_section(ui: &mut egui::Ui, world: &mut EcsWorld, id: usize) {
                         }
                     }
                     ParamKind::Enum => {
-                        let mut current = ct.get_param(schema.key).unwrap_or(0.0).round() as usize;
+                        let raw_current = ct.get_param(schema.key).unwrap_or(0.0).round();
+                        // 0..enum_options長へclampし、負値・NaN・範囲外を
+                        // 排除した上でusizeへ変換する。
+                        let max_idx = schema.enum_options.len().saturating_sub(1);
+                        #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+                        let mut current = (raw_current.max(0.0) as usize).min(max_idx);
                         let resp = ui.add(
                             Select::new((id, schema.key), &mut current).options(
                                 schema
@@ -996,7 +1105,9 @@ pub fn clip_target_section(ui: &mut egui::Ui, world: &mut EcsWorld, id: usize) {
                             ),
                         );
                         if resp.changed() {
-                            ct.set_param(schema.key, current as f32);
+                            #[allow(clippy::cast_precision_loss)]
+                            let current_f32 = current as f32;
+                            ct.set_param(schema.key, current_f32);
                             world.set_clip_target(id, ct);
                         }
                     }
@@ -1010,7 +1121,6 @@ pub(super) fn clip_bounds(world: &EcsWorld, id: usize) -> (i32, i32) {
     world
         .get_timeline_objects()
         .into_iter()
-        .find(|o| o.id as usize == id)
-        .map(|o| (o.start_frame, o.end_frame))
-        .unwrap_or((0, 0))
+        .find(|o| usize::try_from(o.id).is_ok_and(|oid| oid == id))
+        .map_or((0, 0), |o| (o.start_frame, o.end_frame))
 }
