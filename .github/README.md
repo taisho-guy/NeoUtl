@@ -3,7 +3,7 @@
 > [!IMPORTANT]
 > 本リポジトリ（GitHub）は[Codeberg](https://codeberg.org/taisho-guy/NeoUtl)のミラーです。イシューやプルリクエスト等はCodebergにてお受けしております。
 
-[公式サイト](https://neoutl.taisho-guy.org) / [Codeberg](https://codeberg.org/taisho-guy/NeoUtl) / [Zulip](https://taisho-guy.zulipchat.com/join/lz2ljlwmnz2xridgihuprspg/) / [Wiki](https://codeberg.org/taisho-guy/NeoUtl/wiki/Home) / [AviQtl](https://codeberg.org/taisho-guy/NeoUtl/src/branch/aviqtl)
+[公式サイト](https://neoutl.taisho-guy.org) / [Codeberg](https://codeberg.org/TeamNeoUtl/NeoUtl) / [Zulip](https://taisho-guy.zulipchat.com/join/lz2ljlwmnz2xridgihuprspg/) / [Wiki](https://codeberg.org/TeamNeoUtl/NeoUtl/wiki/Home) / [AviQtl](https://codeberg.org/TeamNeoUtl/NeoUtl/src/branch/aviqtl)
 
 ## NeoUtlとは
 
@@ -13,6 +13,7 @@ AviUtl ExEdit0ライクな動画編集ソフトウェアです。LinuxやWindows
 
 ## コミュニティに参加しましょう！
 [Zulip](https://zulip.com)は、効率的なコミュニケーションのために設計された、組織的なチームチャットアプリです。[こちら](https://taisho-guy.zulipchat.com/join/lz2ljlwmnz2xridgihuprspg/)から招待を受け取り、NeoUtlの開発者やユーザーと繋がることが出来ます。デスクトップやモバイル向けに[Zulipアプリ](https://zulip.com/apps/)も提供されております。
+
 ## ロードマップ
 
 [TODO.md](https://codeberg.org/taisho-guy/NeoUtl/src/branch/main/TODO.md)をご確認下さい。
