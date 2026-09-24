@@ -1,3 +1,6 @@
 [submodule "wiki"]
 	path = wiki
 	url = https://codeberg.org/taisho-guy/NeoUtl.wiki.git
+[submodule "sdk"]
+	path = sdk
+	url = https://codeberg.org/TeamNeoUtl/neoutl-sdk.git
