@@ -31,7 +31,6 @@ dependencies = [
  "neoutl-effect-api",
  "neoutl-effect-lua",
  "neoutl-expression-api",
- "neoutl-extension-api",
  "neoutl-lua-runtime",
  "neoutl-media-api",
  "neoutl-media-runtime",
@@ -39,6 +38,7 @@ dependencies = [
  "neoutl-object-api",
  "neoutl-object-shader-build",
  "neoutl-schema",
+ "neoutl-sdk",
  "neoutl-shared-abi",
  "notify",
  "pollster 1.0.1",
@@ -3432,16 +3432,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "neoutl-extension-api"
-version = "0.7.5"
-dependencies = [
- "egui",
- "neoutl-shared-abi",
- "serde",
- "serde_json",
-]
-
-[[package]]
 name = "neoutl-lua-runtime"
 version = "0.0.0"
 dependencies = [
@@ -3585,6 +3575,20 @@ dependencies = [
  "prost-types",
  "protoc-bin-vendored",
  "serde",
+]
+
+[[package]]
+name = "neoutl-sdk"
+version = "0.7.5"
+dependencies = [
+ "egui",
+ "neoutl-easing-api",
+ "neoutl-effect-api",
+ "neoutl-expression-api",
+ "neoutl-object-api",
+ "neoutl-shared-abi",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

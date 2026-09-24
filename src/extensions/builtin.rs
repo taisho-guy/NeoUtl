@@ -1,4 +1,4 @@
-use neoutl_extension_api::*;
+use neoutl_sdk::extension::*;
 
 pub struct QuickPaletteExtension {
     meta: ExtensionMetadata,

@@ -32,7 +32,7 @@ members = [
     "crates/object/shader-build",
     "xtask",
     "crates/host-adapter",
-    "crates/extension/api",
+    "sdk/neoutl/0.7.5/rust",
 ]
 resolver = "2"
 
@@ -58,7 +58,7 @@ neo-media-support = { path = "crates/media/support" }
 neo-media-swscale = { path = "crates/media/swscale" }
 neo-media-ffmpeg = { path = "crates/media/ffmpeg" }
 neoutl-schema = { path = "crates/core/schema" }
-neoutl-extension-api = { path = "crates/extension/api" }
+neoutl-sdk = { path = "sdk/neoutl/0.7.5/rust" }
 bytemuck = "1"
 half = "2"
 serde = "1"
@@ -94,7 +94,7 @@ neoutl-media-api.workspace = true
 neoutl-media-runtime.workspace = true
 neoutl-mlt-api.workspace = true
 neoutl-easing-standard.workspace = true
-neoutl-extension-api.workspace = true
+neoutl-sdk.workspace = true
 neoutl-schema.workspace = true
 prost.workspace = true
 prost-types.workspace = true

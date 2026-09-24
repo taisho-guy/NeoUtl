@@ -3,7 +3,7 @@ use std::os::raw::{c_char, c_double, c_float, c_int, c_void};
 pub const EXTENSION_ENTRY_SYMBOL: &[u8] = b"neoutl_extension_create\0";
 pub const EXTENSION_API_VERSION: u32 = 1;
 
-pub type ExtensionCreateFn = fn() -> Box<dyn crate::ExtensionPlugin>;
+pub type ExtensionCreateFn = fn() -> Box<dyn crate::extension::ExtensionPlugin>;
 
 pub type AviUtl2ObjectHandle = *mut c_void;
 pub type AviUtl2EffectHandle = *mut c_void;

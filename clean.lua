@@ -6,7 +6,7 @@ local table_concat = table.concat
 local EXCLUDE_DIRS = {
     "target", ".git", ".svn", ".hg", "neoutl-wgpu", "node_modules",
     "dist", "build", "out", ".next", ".nuxt", "__pycache__", ".venv", "venv",
-    ".idea", ".vscode", "slang"
+    ".idea", ".vscode", "slang", "sdk", "wiki", "aviutl2_sdk_mirror"
 }
 
 local FAMILIES = {

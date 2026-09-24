@@ -194,9 +194,9 @@ impl TimelineWindow {
         );
 
         let location = if hit_id >= 0 {
-            neoutl_extension_api::MenuLocation::TimelineClipContext
+            neoutl_sdk::extension::MenuLocation::TimelineClipContext
         } else {
-            neoutl_extension_api::MenuLocation::TimelineLayerContext
+            neoutl_sdk::extension::MenuLocation::TimelineLayerContext
         };
         let ext_items = {
             let mgr = crate::extensions::global_extension_manager()
@@ -456,9 +456,9 @@ impl TimelineWindow {
             action if action >= 2000 => {
                 let idx = (action - 2000) as usize;
                 let location = if menu.hit_id >= 0 {
-                    neoutl_extension_api::MenuLocation::TimelineClipContext
+                    neoutl_sdk::extension::MenuLocation::TimelineClipContext
                 } else {
-                    neoutl_extension_api::MenuLocation::TimelineLayerContext
+                    neoutl_sdk::extension::MenuLocation::TimelineLayerContext
                 };
                 let cmd = {
                     let mgr = crate::extensions::global_extension_manager()

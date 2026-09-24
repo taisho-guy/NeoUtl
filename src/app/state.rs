@@ -82,7 +82,7 @@ impl ProjectSession {
             .lock()
             .unwrap()
             .dispatch_event(
-                &neoutl_extension_api::ExtensionEvent::ProjectLoaded {
+                &neoutl_sdk::extension::ExtensionEvent::ProjectLoaded {
                     project_name: meta.name.clone(),
                     dir: meta.dir.to_string_lossy().to_string(),
                 },
@@ -305,7 +305,7 @@ pub fn save_active(state: &SharedAppState) -> bool {
             .lock()
             .unwrap()
             .dispatch_event(
-                &neoutl_extension_api::ExtensionEvent::ProjectSaved {
+                &neoutl_sdk::extension::ExtensionEvent::ProjectSaved {
                     project_name: name,
                     dir: dir.to_string_lossy().to_string(),
                 },

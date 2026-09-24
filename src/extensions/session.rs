@@ -1,8 +1,8 @@
 use crate::app::state::{self as app_state, SharedAppState};
 use crate::ecs::components::{MediaSource, TextAlign, TextContent};
 use crate::ecs::object_query_views::ObjectQueryViews;
-use neoutl_extension_api::{EditSession, EffectInfo, ObjectInfo, ProjectInfo};
 use neoutl_media_runtime::MediaKind;
+use neoutl_sdk::extension::{EditSession, EffectInfo, ObjectInfo, ProjectInfo};
 use shipyard::{Get, IntoIter};
 use std::path::PathBuf;
 

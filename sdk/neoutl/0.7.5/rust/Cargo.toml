@@ -1,0 +1,17 @@
+[package]
+name = "neoutl-sdk"
+version = "0.7.5"
+edition = "2024"
+description = "Official all-in-one SDK for NeoUtl plugin development (Objects, Effects, Easing, Expressions, Extensions)"
+license = "GPL-3.0"
+authors = ["NeoUtl Core Team"]
+
+[dependencies]
+neoutl-shared-abi = { path = "../../../../crates/core/shared-abi" }
+neoutl-object-api = { path = "../../../../crates/object/api" }
+neoutl-effect-api = { path = "../../../../crates/effect/api" }
+neoutl-easing-api = { path = "../../../../crates/easing/api" }
+neoutl-expression-api = { path = "../../../../crates/expression/api" }
+egui = { version = "0.36", default-features = false }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"

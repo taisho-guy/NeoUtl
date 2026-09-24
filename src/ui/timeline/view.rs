@@ -112,7 +112,7 @@ impl TimelineWindow {
             let world_holder = app_state::active_world(state);
             world_holder.lock().unwrap().get_project().fps
         };
-        let mut overlay_ctx = neoutl_extension_api::TimelineOverlayContext {
+        let mut overlay_ctx = neoutl_sdk::extension::TimelineOverlayContext {
             painter: &painter,
             timeline_rect: rect,
             visible_frame_range: (self.px_to_frame(0.0), self.px_to_frame(rect.width())),

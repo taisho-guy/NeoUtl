@@ -290,8 +290,8 @@ impl PreviewPanel {
                                     .lock()
                                     .unwrap();
                                 mgr.menus_for_location(
-                                    &neoutl_extension_api::MenuLocation::MenuBar(
-                                        neoutl_extension_api::MenuBarSection::Tools,
+                                    &neoutl_sdk::extension::MenuLocation::MenuBar(
+                                        neoutl_sdk::extension::MenuBarSection::Tools,
                                     ),
                                 )
                                 .into_iter()
@@ -321,8 +321,8 @@ impl PreviewPanel {
                                     .collect();
                                 let items: Vec<_> = mgr
                                     .menus_for_location(
-                                        &neoutl_extension_api::MenuLocation::MenuBar(
-                                            neoutl_extension_api::MenuBarSection::Plugins,
+                                        &neoutl_sdk::extension::MenuLocation::MenuBar(
+                                            neoutl_sdk::extension::MenuBarSection::Plugins,
                                         ),
                                     )
                                     .into_iter()
@@ -685,7 +685,7 @@ impl PreviewPanel {
                             world.selected_ids().iter().copied().collect::<Vec<_>>(),
                         )
                     };
-                    let mut overlay_ctx = neoutl_extension_api::PreviewOverlayContext {
+                    let mut overlay_ctx = neoutl_sdk::extension::PreviewOverlayContext {
                         painter: &painter,
                         viewport_rect: image_rect,
                         scene_resolution: [res_w, res_h],

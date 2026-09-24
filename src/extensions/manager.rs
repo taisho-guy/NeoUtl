@@ -2,7 +2,7 @@ use crate::app::state::SharedAppState;
 use crate::extensions::builtin::{QuickPaletteExtension, SubtitleImporterExtension};
 use crate::extensions::session::AppEditSession;
 use libloading::{Library, Symbol};
-use neoutl_extension_api::*;
+use neoutl_sdk::extension::*;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, OnceLock};
