@@ -14,6 +14,17 @@ const BLOCK_TIMEOUT: Duration = Duration::from_secs(2);
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(5);
 const REQUEST_CLAP_PARAMETERS: u32 = 9;
 
+pub struct SpawnConfig<'a> {
+    pub binary_path: &'a std::path::Path,
+    pub format: PluginFormat,
+    pub plugin_spec: &'a str,
+    pub instance_id: &'a str,
+    pub sample_rate: f64,
+    pub buffer_size: usize,
+    pub num_inputs: usize,
+    pub num_outputs: usize,
+}
+
 pub struct PluginProcess {
     child: Child,
     shm: ShmMapping,
@@ -26,16 +37,17 @@ pub struct PluginProcess {
 }
 
 impl PluginProcess {
-    pub fn spawn(
-        binary_path: &std::path::Path,
-        format: PluginFormat,
-        plugin_spec: &str,
-        instance_id: &str,
-        sample_rate: f64,
-        buffer_size: usize,
-        num_inputs: usize,
-        num_outputs: usize,
-    ) -> Result<Self, HostError> {
+    pub fn spawn(config: SpawnConfig<'_>) -> Result<Self, HostError> {
+        let SpawnConfig {
+            binary_path,
+            format,
+            plugin_spec,
+            instance_id,
+            sample_rate,
+            buffer_size,
+            num_inputs,
+            num_outputs,
+        } = config;
         let format_tag = format.host_format_tag()?;
         let shm_name = format!(
             "/neoutl-plugin-{}-{}",
@@ -286,7 +298,7 @@ impl Drop for PluginProcess {
 }
 
 unsafe fn decode_clap_parameters(scratch: *mut u8, size: usize) -> Option<Vec<PluginParamInfo>> {
-    if size < 4 || size > SCRATCH_SIZE {
+    if !(4..=SCRATCH_SIZE).contains(&size) {
         return None;
     }
     let mut offset = 0usize;

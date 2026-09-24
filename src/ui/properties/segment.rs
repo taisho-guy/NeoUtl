@@ -1,3 +1,4 @@
+use crate::ecs::track::Track;
 use crate::ecs::types::Keyframe;
 
 #[derive(Clone, Copy, Debug)]
@@ -8,56 +9,33 @@ pub struct Segment {
     pub end_value: f32,
 }
 
-pub fn boundary_frames(track: &[Keyframe], clip_start: i32, clip_end: i32) -> Vec<i32> {
-    let mut frames: Vec<i32> = track.iter().map(|k| k.frame).collect();
-    frames.push(clip_start);
-    frames.push(clip_end);
-    frames.sort_unstable();
-    frames.dedup();
-    frames
+pub fn boundary_frames(track: &[Keyframe]) -> Vec<i32> {
+    track.iter().map(|k| k.frame).collect()
 }
 
-fn value_at(track: &[Keyframe], frame: i32, base_value: f32) -> f32 {
-    if let Some(k) = track.iter().find(|k| k.frame == frame) {
-        return k.value;
-    }
-    if let Some(k) = track
-        .iter()
-        .filter(|k| k.frame < frame)
-        .max_by_key(|k| k.frame)
-    {
-        return k.value;
-    }
-    if let Some(k) = track
-        .iter()
-        .filter(|k| k.frame > frame)
-        .min_by_key(|k| k.frame)
-    {
-        return k.value;
-    }
-    base_value
-}
-
-pub fn resolve_segment(
-    track: &[Keyframe],
-    clip_start: i32,
-    clip_end: i32,
-    current_frame: i32,
-    base_value: f32,
-) -> Segment {
-    let bounds = boundary_frames(track, clip_start, clip_end);
-    let last_idx = bounds.len() - 1;
-    let frame = current_frame.clamp(clip_start, clip_end);
-    let idx = match bounds.binary_search(&frame) {
-        Ok(i) => i.min(last_idx.saturating_sub(1)),
-        Err(i) => i.saturating_sub(1).min(last_idx.saturating_sub(1)),
-    };
-    let start_frame = bounds[idx];
-    let end_frame = bounds[(idx + 1).min(last_idx)];
-    Segment {
-        start_frame,
-        end_frame,
-        start_value: value_at(track, start_frame, base_value),
-        end_value: value_at(track, end_frame, base_value),
+pub fn resolve_segment(track: &[Keyframe], current_frame: i32, base_value: f32) -> Segment {
+    let owned = track.to_vec();
+    match (owned.first(), owned.locate(current_frame)) {
+        (None, _) => Segment {
+            start_frame: current_frame,
+            end_frame: current_frame,
+            start_value: base_value,
+            end_value: base_value,
+        },
+        (Some(only), None) => Segment {
+            start_frame: only.frame,
+            end_frame: only.frame,
+            start_value: only.value,
+            end_value: only.value,
+        },
+        (Some(_), Some(loc)) => {
+            let (a, b) = (&owned[loc.section], &owned[loc.section + 1]);
+            Segment {
+                start_frame: a.frame,
+                end_frame: b.frame,
+                start_value: a.value,
+                end_value: b.value,
+            }
+        }
     }
 }

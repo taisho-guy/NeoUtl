@@ -8,6 +8,7 @@ use crate::ecs::object_schema::{
     GROUP_CONTROL_SCHEMA, SHAPE_COLOR_SCHEMA, SHAPE_SCHEMA, TEXT_SCHEMA, TRANSFORM_SCHEMA,
     is_visible, resolve_range,
 };
+use crate::ecs::track::Track;
 use crate::infra::localization::effect_param_label;
 use crate::ui::ui_ext::row_style;
 use egui_taffy::{TuiBuilderLogic, tui};
@@ -48,7 +49,14 @@ pub(super) fn float_row<S: std::hash::Hash + Copy + std::fmt::Debug>(
         track,
         button_w,
     } = ctx;
-    let segment = resolve_segment(track, clip_start, clip_end, current_frame, base_value);
+    let seeded;
+    let track: &[crate::ecs::types::Keyframe] = if track.is_empty() {
+        seeded = super::easing_editor::seed_start(world, &target, clip_start, base_value);
+        &seeded
+    } else {
+        track
+    };
+    let segment = resolve_segment(track, current_frame, base_value);
     let outcome = property_row(
         ui,
         id_source,
@@ -60,7 +68,7 @@ pub(super) fn float_row<S: std::hash::Hash + Copy + std::fmt::Debug>(
         !track.is_empty(),
     );
     if outcome.label_clicked {
-        super::easing_editor::toggle(target, label);
+        super::easing_editor::toggle(target.clone(), label);
     }
 
     if let Some(v) = outcome.start_value {
@@ -68,11 +76,16 @@ pub(super) fn float_row<S: std::hash::Hash + Copy + std::fmt::Debug>(
         set_kf(world, segment.start_frame, v, e, p);
     }
     if let Some(v) = outcome.end_value {
-        let (e, p) = engine_of(track, segment.end_frame);
-        set_kf(world, segment.end_frame, v, e, p);
+        let end_frame = if track.len() < 2 && clip_end > segment.start_frame {
+            clip_end
+        } else {
+            segment.end_frame
+        };
+        let (e, p) = engine_of(track, end_frame);
+        set_kf(world, end_frame, v, e, p);
     }
 
-    let boundaries = super::segment::boundary_frames(track, clip_start, clip_end);
+    let boundaries = super::segment::boundary_frames(track);
     let t_outcome = keyframe_track(
         ui,
         id_source,
@@ -85,18 +98,20 @@ pub(super) fn float_row<S: std::hash::Hash + Copy + std::fmt::Debug>(
         |f| track.iter().any(|k| k.frame == f),
     );
     if let Some(f) = t_outcome.add_point {
-        let (e, p) = engine_of(track, f);
-        set_kf(world, f, base_value, e, p);
+        super::easing_editor::edit_track(world, &target, |t| {
+            let _ = t.insert_point(f);
+        });
     }
     if let Some(f) = t_outcome.remove_point {
         remove_kf(world, f);
     }
-    if let Some((from, to)) = t_outcome.drag_committed {
-        if let Some(k) = track.iter().find(|k| k.frame == from) {
-            let (e, p, v) = (k.engine_id.clone(), k.engine_payload.clone(), k.value);
-            remove_kf(world, from);
-            set_kf(world, to, v, e, p);
-        }
+    if let Some(commit) = t_outcome.drag_committed {
+        super::easing_editor::edit_track(world, &target, |t| commit.apply(t));
+    }
+    if t_outcome.equalize {
+        super::easing_editor::edit_track(world, &target, |t| {
+            let _ = t.equalize();
+        });
     }
 }
 
@@ -131,15 +146,23 @@ pub(super) fn color_row_ctx<S: std::hash::Hash + Copy + std::fmt::Debug>(
         button_w,
     } = ctx;
 
-    let segments: [super::segment::Segment; 4] = std::array::from_fn(|i| {
-        resolve_segment(
-            &track[i],
-            clip_start,
-            clip_end,
-            current_frame,
-            base_value[i],
-        )
-    });
+    let mut track = track;
+    for i in 0..4 {
+        if track[i].is_empty() {
+            let target = super::easing_editor::TrackTarget::Object {
+                object_id,
+                key: keys[i].to_string(),
+            };
+            track[i] = super::easing_editor::seed_start(world, &target, clip_start, base_value[i]);
+        }
+    }
+    let object_target = |i: usize| super::easing_editor::TrackTarget::Object {
+        object_id,
+        key: keys[i].to_string(),
+    };
+
+    let segments: [super::segment::Segment; 4] =
+        std::array::from_fn(|i| resolve_segment(&track[i], current_frame, base_value[i]));
     let start_color = [
         segments[0].start_value,
         segments[1].start_value,
@@ -180,14 +203,19 @@ pub(super) fn color_row_ctx<S: std::hash::Hash + Copy + std::fmt::Debug>(
     }
     if let Some(c) = outcome.end_color {
         for i in 0..4 {
-            let (e, p) = engine_of(&track[i], segments[i].end_frame);
-            world.set_keyframe(object_id, keys[i], segments[i].end_frame, c[i], e, p);
+            let end_frame = if track[i].len() < 2 && clip_end > segments[i].start_frame {
+                clip_end
+            } else {
+                segments[i].end_frame
+            };
+            let (e, p) = engine_of(&track[i], end_frame);
+            world.set_keyframe(object_id, keys[i], end_frame, c[i], e, p);
         }
     }
 
     let mut boundary_set = std::collections::BTreeSet::new();
     for channel in &track {
-        for f in super::segment::boundary_frames(channel, clip_start, clip_end) {
+        for f in super::segment::boundary_frames(channel) {
             boundary_set.insert(f);
         }
     }
@@ -228,8 +256,9 @@ pub(super) fn color_row_ctx<S: std::hash::Hash + Copy + std::fmt::Debug>(
 
     if let Some(f) = t_outcome.add_point {
         for i in 0..4 {
-            let (e, p) = engine_of(&track[i], f);
-            world.set_keyframe(object_id, keys[i], f, base_value[i], e, p);
+            super::easing_editor::edit_track(world, &object_target(i), |t| {
+                let _ = t.insert_point(f);
+            });
         }
     }
     if let Some(f) = t_outcome.remove_point {
@@ -237,13 +266,16 @@ pub(super) fn color_row_ctx<S: std::hash::Hash + Copy + std::fmt::Debug>(
             world.remove_keyframe(object_id, key, f);
         }
     }
-    if let Some((from, to)) = t_outcome.drag_committed {
+    if let Some(commit) = t_outcome.drag_committed {
         for i in 0..4 {
-            if let Some(k) = track[i].iter().find(|k| k.frame == from) {
-                let (e, p, v) = (k.engine_id.clone(), k.engine_payload.clone(), k.value);
-                world.remove_keyframe(object_id, keys[i], from);
-                world.set_keyframe(object_id, keys[i], to, v, e, p);
-            }
+            super::easing_editor::edit_track(world, &object_target(i), |t| commit.apply(t));
+        }
+    }
+    if t_outcome.equalize {
+        for i in 0..4 {
+            super::easing_editor::edit_track(world, &object_target(i), |t| {
+                let _ = t.equalize();
+            });
         }
     }
 }
@@ -849,6 +881,7 @@ pub fn time_remap_section(ui: &mut egui::Ui, world: &mut EcsWorld, id: usize) {
         });
 
     let mut remove_idx: Option<usize> = None;
+    let mut move_request: Option<(usize, i32)> = None;
     for (i, k) in remap.keyframes.iter_mut().enumerate() {
         ui.push_id(i, |ui| {
             tui(ui, ui.id().with("time_remap_keyframe_row"))
@@ -860,9 +893,7 @@ pub fn time_remap_section(ui: &mut egui::Ui, world: &mut EcsWorld, id: usize) {
                     tui.ui(|ui| {
                         let mut kf = k.frame as f32;
                         if ui.add(Slider::new(&mut kf, 0.0..=100000.0)).changed() {
-                            k.frame = kf.round() as i32;
-                            k.edit_seq = crate::ecs::types::next_edit_seq();
-                            changed = true;
+                            move_request = Some((i, kf.round() as i32));
                         }
                     });
                     tui.ui(|ui| {
@@ -884,6 +915,9 @@ pub fn time_remap_section(ui: &mut egui::Ui, world: &mut EcsWorld, id: usize) {
                 });
         });
     }
+    if let Some((i, frame)) = move_request {
+        changed |= remap.move_key(i, frame).is_some();
+    }
     if let Some(i) = remove_idx {
         remap.keyframes.remove(i);
         changed = true;
@@ -894,14 +928,12 @@ pub fn time_remap_section(ui: &mut egui::Ui, world: &mut EcsWorld, id: usize) {
             .last()
             .map(|k| (k.frame, k.value))
             .unwrap_or((0, 0.0));
-        remap.keyframes.push(crate::ecs::types::Keyframe {
-            frame: last.0 + 30,
-            value: last.1 + 30.0,
-            engine_id: "neoutl-easing-standard".to_string(),
-            engine_payload: Vec::new(),
-            edit_seq: crate::ecs::types::next_edit_seq(),
-            apply_mode: crate::ecs::types::ApplyMode::default(),
-        });
+        remap.keyframes.push(crate::ecs::types::Keyframe::new(
+            last.0 + 30,
+            last.1 + 30.0,
+            "neoutl-easing-standard".to_string(),
+            Vec::new(),
+        ));
         remap.keyframes.sort_by_key(|k| k.frame);
         changed = true;
     }

@@ -1,3 +1,4 @@
+use crate::ecs::track::Track;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -23,7 +24,20 @@ pub struct Keyframe {
     #[serde(default)]
     pub edit_seq: u64,
     #[serde(default)]
-    pub apply_mode: ApplyMode,
+    pub control_frame: Option<i32>,
+}
+
+impl Keyframe {
+    pub fn new(frame: i32, value: f32, engine_id: String, engine_payload: Vec<u8>) -> Self {
+        Self {
+            frame,
+            value,
+            engine_id,
+            engine_payload,
+            edit_seq: next_edit_seq(),
+            control_frame: None,
+        }
+    }
 }
 
 impl From<&Keyframe> for neoutl_schema::Keyframe {
@@ -34,10 +48,7 @@ impl From<&Keyframe> for neoutl_schema::Keyframe {
             engine_id: value.engine_id.clone(),
             engine_payload: value.engine_payload.clone(),
             edit_seq: value.edit_seq,
-            apply_mode: match value.apply_mode {
-                ApplyMode::Linear => neoutl_schema::ApplyMode::Linear as i32,
-                ApplyMode::Interpolate => neoutl_schema::ApplyMode::Interpolate as i32,
-            },
+            control_frame: value.control_frame,
         }
     }
 }
@@ -52,36 +63,8 @@ impl TryFrom<&neoutl_schema::Keyframe> for Keyframe {
             engine_id: value.engine_id.clone(),
             engine_payload: value.engine_payload.clone(),
             edit_seq: value.edit_seq,
-            apply_mode: match value.apply_mode() {
-                neoutl_schema::ApplyMode::Linear => ApplyMode::Linear,
-                neoutl_schema::ApplyMode::Interpolate => ApplyMode::Interpolate,
-            },
+            control_frame: value.control_frame,
         })
-    }
-}
-
-impl Keyframe {}
-
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
-pub enum ApplyMode {
-    #[default]
-    Linear,
-    Interpolate,
-}
-
-impl ApplyMode {
-    pub fn label(self) -> &'static str {
-        match self {
-            ApplyMode::Linear => "標準",
-            ApplyMode::Interpolate => "補間",
-        }
-    }
-
-    pub fn toggled(self) -> Self {
-        match self {
-            ApplyMode::Linear => ApplyMode::Interpolate,
-            ApplyMode::Interpolate => ApplyMode::Linear,
-        }
     }
 }
 
@@ -175,26 +158,16 @@ impl EffectParam {
     pub fn evaluate(&self, frame: i32) -> Value {
         match &self.static_value {
             Value::Number(base) if !self.keyframes.is_empty() => {
-                let first_engine_id = &self.keyframes[0].engine_id;
-                let engine = crate::easings::loader::by_id(first_engine_id);
-                let raw_keyframes: Vec<(i32, f32, Vec<u8>)> = self
-                    .keyframes
-                    .iter()
-                    .map(|k| (k.frame, k.value, k.engine_payload.clone()))
-                    .collect();
-
-                let val = if let Some(eng) = engine {
-                    eng.evaluate(&raw_keyframes, frame, *base)
-                } else {
-                    *base
-                };
-                Value::Number(val)
+                Value::Number(self.keyframes.evaluate(frame, *base))
             }
             other => other.clone(),
         }
     }
 
     pub fn set_static(&mut self, value: Value) {
+        if let (Value::Number(v), Some(start)) = (&value, self.keyframes.first_mut()) {
+            start.value = *v;
+        }
         self.static_value = value;
     }
 
@@ -214,142 +187,45 @@ impl EffectParam {
                 existing.edit_seq = edit_seq;
             }
             None => {
-                self.keyframes.push(Keyframe {
-                    frame,
-                    value,
-                    engine_id,
-                    engine_payload,
-                    edit_seq,
-                    apply_mode: ApplyMode::default(),
-                });
+                self.keyframes
+                    .push(Keyframe::new(frame, value, engine_id, engine_payload));
                 self.keyframes.sort_by_key(|k| k.frame);
             }
         }
     }
 
-    pub fn shift_keyframes(&mut self, delta: i32) {
-        for k in self.keyframes.iter_mut() {
-            k.frame += delta;
+    pub fn seed_start(&mut self, start: i32) {
+        if let Value::Number(base) = self.static_value {
+            self.keyframes.seed_start(start, base);
         }
+    }
+
+    pub fn shift_keyframes(&mut self, delta: i32) {
+        self.keyframes.shift(delta);
     }
 
     pub fn remove_keyframe(&mut self, frame: i32) {
-        self.keyframes.retain(|k| k.frame != frame);
+        if let Some(index) = self.keyframes.index_of(frame) {
+            let _ = self.keyframes.remove_point(index);
+        }
     }
 
     pub fn split_at(&mut self, split_frame: i32) -> EffectParam {
-        let second_value = self.evaluate(split_frame);
-        let second_keyframes: Vec<Keyframe> = self
-            .keyframes
-            .iter()
-            .filter(|k| k.frame > split_frame)
-            .cloned()
-            .collect();
-        self.keyframes.retain(|k| k.frame < split_frame);
-        EffectParam {
-            static_value: second_value,
-            keyframes: second_keyframes,
-        }
-    }
-
-    pub fn clamp_keyframes_to_range(
-        &mut self,
-        old_start: i32,
-        old_end: i32,
-        new_start: i32,
-        new_end: i32,
-    ) {
-        if self.keyframes.is_empty() {
-            return;
-        }
-        let base = match &self.static_value {
-            Value::Number(b) => *b,
+        let fallback = match self.static_value {
+            Value::Number(base) => base,
             _ => 0.0,
         };
-        clamp_and_reseed_internal(
-            &mut self.keyframes,
-            old_start,
-            old_end,
-            new_start,
-            new_end,
-            base,
-        );
-    }
-}
-
-fn clamp_and_reseed_internal(
-    keyframes: &mut Vec<Keyframe>,
-    old_start: i32,
-    old_end: i32,
-    new_start: i32,
-    new_end: i32,
-    _base: f32,
-) {
-    if keyframes.is_empty() {
-        return;
-    }
-    let old_len = (old_end - old_start).max(1) as f64;
-    let new_len = (new_end - new_start).max(1) as f64;
-    let scale = new_len / old_len;
-
-    let start_engine_id = keyframes
-        .first()
-        .map(|k| k.engine_id.clone())
-        .unwrap_or_default();
-    let start_payload = keyframes
-        .first()
-        .map(|k| k.engine_payload.clone())
-        .unwrap_or_default();
-    let end_engine_id = keyframes
-        .last()
-        .map(|k| k.engine_id.clone())
-        .unwrap_or_default();
-    let end_payload = keyframes
-        .last()
-        .map(|k| k.engine_payload.clone())
-        .unwrap_or_default();
-
-    for k in keyframes.iter_mut() {
-        let offset = (k.frame - old_start) as f64 * scale;
-        k.frame = (new_start as f64 + offset).round() as i32;
-        k.frame = k.frame.clamp(new_start, new_end);
-    }
-    keyframes.sort_by(|a, b| a.frame.cmp(&b.frame).then(a.edit_seq.cmp(&b.edit_seq)));
-
-    let mut deduped: Vec<Keyframe> = Vec::with_capacity(keyframes.len());
-    for k in keyframes.drain(..) {
-        match deduped.last_mut() {
-            Some(last) if last.frame == k.frame => {
-                if k.edit_seq >= last.edit_seq {
-                    *last = k;
-                }
-            }
-            _ => deduped.push(k),
+        let second_value = self.evaluate(split_frame);
+        let keyframes = self.keyframes.split_at_frame(split_frame, fallback);
+        EffectParam {
+            static_value: second_value,
+            keyframes,
         }
     }
 
-    deduped.retain(|k| k.frame != new_start && k.frame != new_end);
-    deduped.insert(
-        0,
-        Keyframe {
-            frame: new_start,
-            value: 0.0,
-            engine_id: start_engine_id,
-            engine_payload: start_payload,
-            edit_seq: next_edit_seq(),
-            apply_mode: ApplyMode::default(),
-        },
-    );
-    deduped.push(Keyframe {
-        frame: new_end,
-        value: 0.0,
-        engine_id: end_engine_id,
-        engine_payload: end_payload,
-        edit_seq: next_edit_seq(),
-        apply_mode: ApplyMode::default(),
-    });
-
-    *keyframes = deduped;
+    pub fn bind_range(&mut self, start: i32, end: i32) {
+        self.keyframes.bind_range(start, end);
+    }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

@@ -105,11 +105,6 @@ message MediaSource {
   int64 trim_in_frame = 3;
 }
 
-enum ApplyMode {
-  APPLY_MODE_LINEAR = 0;
-  APPLY_MODE_INTERPOLATE = 1;
-}
-
 enum BlendMode {
   BLEND_MODE_NORMAL = 0;
   BLEND_MODE_ADD = 1;
@@ -128,7 +123,9 @@ message Keyframe {
   string engine_id = 3;
   bytes engine_payload = 4;
   uint64 edit_seq = 5;
-  ApplyMode apply_mode = 6;
+  reserved 6;
+  reserved "apply_mode";
+  optional int32 control_frame = 7;
 }
 
 message Value {

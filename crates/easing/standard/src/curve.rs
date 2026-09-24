@@ -1,7 +1,8 @@
 use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub enum CurveKind {
+    #[default]
     Linear,
     Bezier {
         handle_left: [f32; 2],
@@ -27,12 +28,6 @@ pub enum CurveKind {
     Script {
         source: String,
     },
-}
-
-impl Default for CurveKind {
-    fn default() -> Self {
-        CurveKind::Linear
-    }
 }
 
 impl CurveKind {

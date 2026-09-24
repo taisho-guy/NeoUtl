@@ -9,7 +9,7 @@ pub use crash::{CRASH_THRESHOLD, block_plugin, is_blocked, record_crash};
 pub use registry::{catalog, invalidate, scan_directories};
 pub use types::{HostError, PluginCatalogEntry, PluginFormat, PluginParamInfo};
 
-use process::PluginProcess;
+use process::{PluginProcess, SpawnConfig};
 use std::collections::HashMap;
 use std::path::PathBuf;
 
@@ -50,16 +50,16 @@ impl PluginHost {
         }
         let id = self.next_id;
         let instance_id = id.to_string();
-        let process = PluginProcess::spawn(
-            &self.binary_path,
+        let process = PluginProcess::spawn(SpawnConfig {
+            binary_path: &self.binary_path,
             format,
             plugin_spec,
-            &instance_id,
-            self.sample_rate,
-            self.buffer_size,
-            2,
-            2,
-        )?;
+            instance_id: &instance_id,
+            sample_rate: self.sample_rate,
+            buffer_size: self.buffer_size,
+            num_inputs: 2,
+            num_outputs: 2,
+        })?;
         self.instances.insert(id, process);
         self.next_id += 1;
         Ok(id)
@@ -109,14 +109,14 @@ impl PluginHost {
             .get_mut(&id)
             .ok_or(HostError::UnknownInstance(id))?;
         let result = process.process_stereo(in_l, in_r, out_l, out_r, frames);
-        if matches!(result, Err(HostError::ProcessDead)) {
-            if let Some(dead) = self.instances.remove(&id) {
-                eprintln!(
-                    "[maolan-host-adapter] プラグインプロセス異常終了検知: id={} shm={}",
-                    id,
-                    dead.shm_name()
-                );
-            }
+        if matches!(result, Err(HostError::ProcessDead))
+            && let Some(dead) = self.instances.remove(&id)
+        {
+            eprintln!(
+                "[maolan-host-adapter] プラグインプロセス異常終了検知: id={} shm={}",
+                id,
+                dead.shm_name()
+            );
         }
         result
     }

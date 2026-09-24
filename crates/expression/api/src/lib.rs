@@ -47,7 +47,7 @@ unsafe impl Sync for ExpressionEngineVTable {}
 pub const ENTRY_SYMBOL: &[u8] = b"neoutl_expression_engine_entry\0";
 pub type EntryFn = unsafe extern "C" fn() -> *const ExpressionEngineVTable;
 
-pub fn bind_expression_host(engine: &ExpressionEngineVTable, host: *const ExpressionHostVTable) {
+pub fn bind_expression_host(engine: &ExpressionEngineVTable, host: &'static ExpressionHostVTable) {
     unsafe {
         (engine.bind_host)(host);
     }

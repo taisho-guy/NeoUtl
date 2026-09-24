@@ -1,8 +1,39 @@
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum DragKind {
+    Single,
+    Suffix,
+    Prefix,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct DragCommit {
+    pub from: i32,
+    pub to: i32,
+    pub kind: DragKind,
+}
+
+impl DragCommit {
+    pub fn apply(&self, track: &mut Vec<crate::ecs::types::Keyframe>) {
+        use crate::ecs::track::Track;
+        let Some(index) = track.index_of(self.from) else {
+            return;
+        };
+        let inner_last = track.len().saturating_sub(2);
+        let delta = self.to - self.from;
+        let _ = match self.kind {
+            DragKind::Single => track.move_point(index, self.to).map(|_| ()),
+            DragKind::Suffix => track.move_range(index, inner_last, delta).map(|_| ()),
+            DragKind::Prefix => track.move_range(1, index, delta).map(|_| ()),
+        };
+    }
+}
+
 pub struct TrackOutcome {
     pub point_clicked: Option<i32>,
     pub add_point: Option<i32>,
     pub remove_point: Option<i32>,
-    pub drag_committed: Option<(i32, i32)>,
+    pub drag_committed: Option<DragCommit>,
+    pub equalize: bool,
 }
 
 impl TrackOutcome {
@@ -12,6 +43,7 @@ impl TrackOutcome {
             add_point: None,
             remove_point: None,
             drag_committed: None,
+            equalize: false,
         }
     }
 }
@@ -144,7 +176,7 @@ pub fn keyframe_track_colored(
             }
         }
     }
-    let drag_locked = |idx: usize, f: i32| idx == 0 || (idx == last && !is_real(f));
+    let drag_locked = |idx: usize, _f: i32| idx == 0 || idx == last;
     let deletable = |idx: usize, f: i32| idx != 0 && is_real(f);
 
     if response.drag_started() {
@@ -160,7 +192,17 @@ pub fn keyframe_track_colored(
         {
             let to = frame_at(pos.x).clamp(clip_start, clip_end);
             if to != origin {
-                out.drag_committed = Some((origin, to));
+                let (shift, ctrl) = ui.input(|i| (i.modifiers.shift, i.modifiers.command));
+                let kind = match (shift, ctrl) {
+                    (true, true) => DragKind::Prefix,
+                    (true, false) => DragKind::Suffix,
+                    _ => DragKind::Single,
+                };
+                out.drag_committed = Some(DragCommit {
+                    from: origin,
+                    to,
+                    kind,
+                });
             }
         }
     }
@@ -173,6 +215,7 @@ pub fn keyframe_track_colored(
         }
     }
 
+    let equalize_cell = std::cell::Cell::new(false);
     let add_cell = std::cell::Cell::new(None);
     let remove_cell = std::cell::Cell::new(None);
 
@@ -210,7 +253,16 @@ pub fn keyframe_track_colored(
                 }
             }
         }
+        if boundary_frames.len() > 2
+            && ui
+                .add(elegance::Button::new(t!("中間点を時間で均等配置")))
+                .clicked()
+        {
+            equalize_cell.set(true);
+            ui.close();
+        }
     });
+    out.equalize = equalize_cell.get();
     out.add_point = add_cell.get();
     out.remove_point = remove_cell.get();
     out

@@ -15,6 +15,10 @@ use crate::project::document::{MediaSourceDoc, ObjectDoc, ObjectPayload, TimeRem
 use shipyard::{Get, IntoIter, UniqueView, UniqueViewMut, View, ViewMut};
 use std::collections::HashMap;
 
+const TRANSFORM_KEYS: [&str; 9] = [
+    "x", "y", "z", "scale_x", "scale_y", "rot_x", "rot_y", "rot_z", "opacity",
+];
+
 impl EcsWorld {
     pub fn add_object(
         &mut self,
@@ -47,6 +51,14 @@ impl EcsWorld {
         ));
         self.world
             .add_component(entity, (BlendMode::default(), TimeRemap::default()));
+        let transform = Transform::default();
+        let mut tracks = KeyframeTracks::default();
+        for key in TRANSFORM_KEYS {
+            if let Some(value) = transform.get_param(key) {
+                tracks.seed_start(key, start, value);
+            }
+        }
+        self.world.add_component(entity, tracks);
 
         let is_audio_kind = crate::objects::loader::by_kind_id(kind_id)
             .is_some_and(|p| p.stable_id == neoutl_object_api::AUDIO_STABLE_ID);

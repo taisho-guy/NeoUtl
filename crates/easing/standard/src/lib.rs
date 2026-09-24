@@ -255,7 +255,7 @@ unsafe extern "C" fn deserialize_c(
 unsafe extern "C" fn free_bytes_c(ptr: *mut u8, len: usize) {
     if !ptr.is_null() && len > 0 {
         unsafe {
-            let _ = Box::from_raw(std::slice::from_raw_parts_mut(ptr, len));
+            let _ = Box::from_raw(std::ptr::slice_from_raw_parts_mut(ptr, len));
         }
     }
 }
@@ -266,7 +266,7 @@ unsafe extern "C" fn free_keyframes_c(ptr: *mut KeyframeC, count: usize) {
             let slice = std::slice::from_raw_parts_mut(ptr, count);
             for item in &mut *slice {
                 if !item.payload_ptr.is_null() && item.payload_len > 0 {
-                    let _ = Box::from_raw(std::slice::from_raw_parts_mut(
+                    let _ = Box::from_raw(std::ptr::slice_from_raw_parts_mut(
                         item.payload_ptr as *mut u8,
                         item.payload_len,
                     ));

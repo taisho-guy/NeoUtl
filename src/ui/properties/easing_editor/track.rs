@@ -2,7 +2,8 @@ use crate::ecs::EcsWorld;
 use crate::ecs::components::{KeyframeTracks, ObjectId, ParamAccess};
 use crate::ecs::effects::EffectStack;
 use crate::ecs::history::HistoryCommand;
-use crate::ecs::types::{EffectParam, Keyframe, Value, next_edit_seq};
+use crate::ecs::track::Track;
+use crate::ecs::types::{EffectParam, Keyframe, Value};
 use neoutl_easing_standard::{EasingPayload, encode_payload};
 use shipyard::{Get, IntoIter, View, ViewMut, World};
 
@@ -125,14 +126,7 @@ pub fn push_history(
 }
 
 pub fn new_keyframe(frame: i32, value: f32, payload: &EasingPayload) -> Keyframe {
-    Keyframe {
-        frame,
-        value,
-        engine_id: ENGINE_ID.to_owned(),
-        engine_payload: encode_payload(payload),
-        edit_seq: next_edit_seq(),
-        apply_mode: Default::default(),
-    }
+    Keyframe::new(frame, value, ENGINE_ID.to_owned(), encode_payload(payload))
 }
 
 pub fn clip_bounds(world: &EcsWorld, target: &TrackTarget) -> (i32, i32) {
@@ -187,19 +181,31 @@ pub fn with_end(
     world: &EcsWorld,
     target: &TrackTarget,
     track: &[Keyframe],
-    playhead: i32,
 ) -> Option<Vec<Keyframe>> {
-    let first = track.first()?;
     let (_, clip_end) = clip_bounds(world, target);
-    let frame = if playhead > first.frame && playhead <= clip_end {
-        playhead
-    } else {
-        clip_end
-    };
-    if frame <= first.frame {
-        return None;
-    }
     let mut keys = track.to_vec();
-    keys.push(new_keyframe(frame, first.value, &EasingPayload::linear()));
+    keys.add_end(clip_end).ok()?;
     Some(keys)
+}
+
+pub fn seed_start(
+    world: &mut EcsWorld,
+    target: &TrackTarget,
+    clip_start: i32,
+    base_value: f32,
+) -> Vec<Keyframe> {
+    let mut keys = read(world, target);
+    if keys.is_empty() {
+        keys.seed_start(clip_start, base_value);
+        write(world, target, &keys);
+    }
+    keys
+}
+
+pub fn edit(world: &mut EcsWorld, target: &TrackTarget, f: impl FnOnce(&mut Vec<Keyframe>)) {
+    let before = read(world, target);
+    let mut after = before.clone();
+    f(&mut after);
+    write(world, target, &after);
+    push_history(world, target, before, after);
 }

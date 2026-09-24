@@ -130,28 +130,6 @@ impl SchemaContract for crate::ecs::types::EffectParam {
     }
 }
 
-impl SchemaContract for crate::ecs::types::ApplyMode {
-    type Schema = i32;
-
-    fn to_schema(&self) -> Self::Schema {
-        match self {
-            crate::ecs::types::ApplyMode::Linear => neoutl_schema::ApplyMode::Linear as i32,
-            crate::ecs::types::ApplyMode::Interpolate => {
-                neoutl_schema::ApplyMode::Interpolate as i32
-            }
-        }
-    }
-
-    fn from_schema(schema: &Self::Schema) -> Result<Self, String> {
-        match neoutl_schema::ApplyMode::try_from(*schema)
-            .map_err(|_| "invalid apply mode".to_string())?
-        {
-            neoutl_schema::ApplyMode::Linear => Ok(crate::ecs::types::ApplyMode::Linear),
-            neoutl_schema::ApplyMode::Interpolate => Ok(crate::ecs::types::ApplyMode::Interpolate),
-        }
-    }
-}
-
 impl SchemaContract for crate::ecs::audio_plugins::PluginInstanceRef {
     type Schema = neoutl_schema::PluginInstanceRef;
 

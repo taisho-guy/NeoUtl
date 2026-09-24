@@ -231,23 +231,20 @@ impl EcsWorld {
              mut effect_stacks: ViewMut<EffectStack>| {
                 for (entity, id) in object_ids.iter().with_id() {
                     if id.0 == object_id {
-                        let (old_start, old_end, start, end) =
-                            if let Ok(mut range) = (&mut time_ranges).get(entity) {
-                                let old_start = range.start_frame;
-                                let old_end = range.end_frame;
-                                range.start_frame = new_start.max(0);
-                                range.end_frame = new_end.max(range.start_frame + 1);
-                                (old_start, old_end, range.start_frame, range.end_frame)
-                            } else {
-                                break;
-                            };
+                        let (start, end) = if let Ok(mut range) = (&mut time_ranges).get(entity) {
+                            range.start_frame = new_start.max(0);
+                            range.end_frame = new_end.max(range.start_frame + 1);
+                            (range.start_frame, range.end_frame)
+                        } else {
+                            break;
+                        };
                         if let Ok(mut tracks) = (&mut keyframe_tracks).get(entity) {
-                            tracks.clamp_to_range(old_start, old_end, start, end);
+                            tracks.bind_range(start, end);
                         }
                         if let Ok(mut stack) = (&mut effect_stacks).get(entity) {
                             for instance in stack.0.iter_mut() {
                                 for param in instance.params.values_mut() {
-                                    param.clamp_keyframes_to_range(old_start, old_end, start, end);
+                                    param.bind_range(start, end);
                                 }
                             }
                         }

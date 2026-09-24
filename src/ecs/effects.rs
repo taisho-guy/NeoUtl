@@ -16,7 +16,7 @@ pub fn param_schema(source: &crate::effects::EffectSource) -> Vec<ParamRowOwned>
 pub struct EffectStack(pub Vec<EffectInstance>);
 
 impl EffectStack {
-    pub fn push(&mut self, effect_id: impl Into<String>) {
+    pub fn push(&mut self, effect_id: impl Into<String>, clip_start: i32) {
         let effect_id = effect_id.into();
         let mut instance = EffectInstance::new(effect_id.clone());
         if let Some(source) = find_effect(&effect_id) {
@@ -33,6 +33,9 @@ impl EffectStack {
                 };
                 instance.params.insert(p.key, EffectParam::new(value));
             }
+        }
+        for param in instance.params.values_mut() {
+            param.seed_start(clip_start);
         }
         self.0.push(instance);
     }

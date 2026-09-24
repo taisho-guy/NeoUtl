@@ -1,4 +1,5 @@
 use super::param_access::ParamAccess;
+use crate::ecs::track::Track;
 use serde::{Deserialize, Serialize};
 use shipyard::Component;
 use std::collections::HashMap;
@@ -102,34 +103,30 @@ impl KeyframeTracks {
         engine_payload: Vec<u8>,
     ) {
         let track = self.0.entry(key.to_owned()).or_default();
-        let edit_seq = crate::ecs::types::next_edit_seq();
         match track.iter_mut().find(|k| k.frame == frame) {
             Some(existing) => {
                 existing.value = value;
                 existing.engine_id = engine_id;
                 existing.engine_payload = engine_payload;
-                existing.edit_seq = edit_seq;
+                existing.edit_seq = crate::ecs::types::next_edit_seq();
             }
             None => {
-                track.push(crate::ecs::types::Keyframe {
+                track.push(crate::ecs::types::Keyframe::new(
                     frame,
                     value,
                     engine_id,
                     engine_payload,
-                    edit_seq,
-                    apply_mode: crate::ecs::types::ApplyMode::default(),
-                });
+                ));
                 track.sort_by_key(|k| k.frame);
             }
         }
     }
 
     pub fn remove_keyframe(&mut self, key: &str, frame: i32) {
-        if let Some(track) = self.0.get_mut(key) {
-            track.retain(|k| k.frame != frame);
-            if track.is_empty() {
-                self.0.remove(key);
-            }
+        if let Some(track) = self.0.get_mut(key)
+            && let Some(index) = track.index_of(frame)
+        {
+            let _ = track.remove_point(index);
         }
     }
 
@@ -137,34 +134,28 @@ impl KeyframeTracks {
         let Some(track) = self.0.get_mut(key) else {
             return false;
         };
-        if old_frame == new_frame {
-            return true;
-        }
-        if track.iter().any(|k| k.frame == new_frame) {
-            return false;
-        }
-        let Some(k) = track.iter_mut().find(|k| k.frame == old_frame) else {
+        let Some(index) = track.index_of(old_frame) else {
             return false;
         };
-        k.frame = new_frame;
-        track.sort_by_key(|k| k.frame);
-        true
+        track.move_point(index, new_frame) == Ok(new_frame)
     }
 
-    pub fn clamp_to_range(
-        &mut self,
-        _old_start: i32,
-        _old_end: i32,
-        _new_start: i32,
-        _new_end: i32,
-    ) {
+    pub fn seed_start(&mut self, key: &str, start: i32, value: f32) {
+        self.0
+            .entry(key.to_owned())
+            .or_default()
+            .seed_start(start, value);
+    }
+
+    pub fn bind_range(&mut self, start: i32, end: i32) {
+        for track in self.0.values_mut() {
+            track.bind_range(start, end);
+        }
     }
 
     pub fn shift(&mut self, delta: i32) {
         for track in self.0.values_mut() {
-            for k in track.iter_mut() {
-                k.frame += delta;
-            }
+            track.shift(delta);
         }
     }
 
@@ -175,38 +166,14 @@ impl KeyframeTracks {
     ) -> (KeyframeTracks, HashMap<String, f32>) {
         let mut second = HashMap::new();
         let mut evaluated = HashMap::new();
-
         for (key, track) in self.0.iter_mut() {
             let fallback = fallback_for(key).unwrap_or(0.0);
-            let eval_val = if track.is_empty() {
-                fallback
-            } else {
-                let first_engine = &track[0].engine_id;
-                let eng = crate::easings::loader::by_id(first_engine);
-                let raw: Vec<(i32, f32, Vec<u8>)> = track
-                    .iter()
-                    .map(|k| (k.frame, k.value, k.engine_payload.clone()))
-                    .collect();
-                if let Some(e) = eng {
-                    e.evaluate(&raw, split_frame, fallback)
-                } else {
-                    fallback
-                }
-            };
-            evaluated.insert(key.clone(), eval_val);
-
-            let second_track: Vec<_> = track
-                .iter()
-                .filter(|k| k.frame > split_frame)
-                .cloned()
-                .collect();
-            track.retain(|k| k.frame < split_frame);
-            if !second_track.is_empty() {
-                second.insert(key.clone(), second_track);
+            evaluated.insert(key.clone(), track.evaluate(split_frame, fallback));
+            let tail = track.split_at_frame(split_frame, fallback);
+            if !tail.is_empty() {
+                second.insert(key.clone(), tail);
             }
         }
-        self.0.retain(|_, track| !track.is_empty());
-
         (KeyframeTracks(second), evaluated)
     }
 
@@ -215,22 +182,7 @@ impl KeyframeTracks {
             let Some(fallback) = target.get_param(key) else {
                 continue;
             };
-            let val = if track.is_empty() {
-                fallback
-            } else {
-                let first_engine = &track[0].engine_id;
-                let eng = crate::easings::loader::by_id(first_engine);
-                let raw: Vec<(i32, f32, Vec<u8>)> = track
-                    .iter()
-                    .map(|k| (k.frame, k.value, k.engine_payload.clone()))
-                    .collect();
-                if let Some(e) = eng {
-                    e.evaluate(&raw, frame, fallback)
-                } else {
-                    fallback
-                }
-            };
-            target.set_param(key, val);
+            target.set_param(key, track.evaluate(frame, fallback));
         }
     }
 }

@@ -7,6 +7,7 @@ mod strip;
 mod track;
 
 use crate::ecs::EcsWorld;
+use crate::ecs::track::Track;
 use crate::ecs::types::{Keyframe, next_edit_seq};
 use crate::infra::localization::effect_param_label;
 use curve_view::{CurveView, fmt};
@@ -17,9 +18,9 @@ use neoutl_easing_standard::{
 };
 use params::Edit;
 use std::sync::Mutex;
-pub use track::TrackTarget;
+pub use track::{TrackTarget, edit as edit_track, seed_start};
 
-const CATEGORY_LABELS: [&str; 5] = ["標準", "振動", "バウンス", "スクリプト", "頂点"];
+const CATEGORY_LABELS: [&str; 5] = ["標準", "振動", "バウンス", "スクリプト", "多点編集"];
 const HIT_RADIUS: f32 = 12.0;
 const PREVIEW_SECONDS: f64 = 1.5;
 const SCRIPT_DEBOUNCE: f64 = 0.4;
@@ -180,8 +181,9 @@ enum Action {
     Apply(usize, usize),
     Reset,
     Pin,
-    InitStart,
     AddEnd,
+    SetTimeControl(bool),
+    MoveControl(usize, i32),
 }
 
 struct Frame<'a> {
@@ -268,31 +270,22 @@ fn run(ctx: &egui::Context, ui: &mut egui::Ui, world: &mut EcsWorld, st: &mut Ed
     let playhead = world.current_frame();
     let mut actions = Vec::new();
 
+    if track.is_empty() {
+        let keys = track::start_only(world, &st.target);
+        commit(world, st, |k| *k = keys);
+        return true;
+    }
+
     if track.len() < 2 {
-        let (clip_start, clip_end) = track::clip_bounds(world, &st.target);
+        let (_, clip_end) = track::clip_bounds(world, &st.target);
         match track.first() {
-            None => {
-                ui.label("始点キーフレームがありません。始点は必須です。");
-                if ui
-                    .button(format!(
-                        "{} 始点を追加 (f{clip_start})",
-                        <&str>::from(icons::ICON_ADD)
-                    ))
-                    .clicked()
-                {
-                    actions.push(Action::InitStart);
-                }
-            }
+            None => {}
             Some(first) => {
                 ui.label(format!(
                     "始点 f{} のみです。終点は任意で、追加すると区間が生まれます。",
                     first.frame
                 ));
-                let at = if playhead > first.frame && playhead <= clip_end {
-                    playhead
-                } else {
-                    clip_end
-                };
+                let at = clip_end;
                 if ui
                     .add_enabled(
                         at > first.frame,
@@ -301,7 +294,7 @@ fn run(ctx: &egui::Context, ui: &mut egui::Ui, world: &mut EcsWorld, st: &mut Ed
                             <&str>::from(icons::ICON_ADD)
                         )),
                     )
-                    .on_hover_text("再生位置 (範囲外はクリップ終端) に終点を追加")
+                    .on_hover_text("クリップ終端に終点を追加")
                     .on_disabled_hover_text("始点がクリップ終端以降のため追加できません")
                     .clicked()
                 {
@@ -459,11 +452,14 @@ fn run(ctx: &egui::Context, ui: &mut egui::Ui, world: &mut EcsWorld, st: &mut Ed
         st,
         track,
         sel,
-        payload,
+        mut payload,
         edit,
         actions,
         ..
     } = f;
+    if sel == 0 {
+        payload.apply_mode = ApplyMode::Normal;
+    }
     if edit.changed {
         if st.pending_before.is_none() {
             st.pending_before = Some(track.clone());
@@ -518,19 +514,16 @@ fn apply_actions(
                 });
                 st.notify(now, "現在の曲線を参照に固定しました");
             }
-            Action::InitStart => {
-                let keys = track::start_only(world, &st.target);
-                commit(world, st, |k| *k = keys);
-            }
-            Action::AddEnd => {
-                match track::with_end(world, &st.target, track, world.current_frame()) {
-                    Some(keys) => {
-                        commit(world, st, |k| *k = keys);
-                        st.notify(now, "終点を追加しました");
-                    }
-                    None => st.notify(now, "追加できません: 始点がクリップ終端以降です"),
+            Action::AddEnd => match track::with_end(world, &st.target, track) {
+                Some(keys) => {
+                    commit(world, st, |k| *k = keys);
+                    st.notify(now, "終点を追加しました");
                 }
-            }
+                None => st.notify(
+                    now,
+                    "追加できません: 終点が既に存在するか、クリップが1フレームです",
+                ),
+            },
             Action::Reset => {
                 st.script_buf = None;
                 commit(world, st, |k| {
@@ -553,7 +546,7 @@ fn apply_actions(
                 if let Some(end) = track.get(sel + 1) {
                     let removed = end.frame;
                     commit(world, st, |k| {
-                        k.remove(sel + 1);
+                        let _ = k.remove_point(sel + 1);
                     });
                     st.notify(
                         now,
@@ -561,7 +554,11 @@ fn apply_actions(
                     );
                 }
             }
-            Action::AddKeyframe => add_keyframe(world, st, track, sel, payload, now),
+            Action::SetTimeControl(on) => commit(world, st, |k| k.set_time_control(on)),
+            Action::MoveControl(index, time) => commit(world, st, |k| {
+                let _ = k.move_control(index, time);
+            }),
+            Action::AddKeyframe => add_keyframe(world, st, track, sel, now),
         }
     }
     let _ = ctx;
@@ -573,50 +570,26 @@ fn add_keyframe(
     st: &mut EditorState,
     track: &[Keyframe],
     sel: usize,
-    payload: &EasingPayload,
     now: f64,
 ) {
     let playhead = world.current_frame();
-    let last = &track[track.len() - 1];
-    let (_, clip_end) = track::clip_bounds(world, &st.target);
-    if playhead > last.frame && playhead <= clip_end {
-        let mut key = last.clone();
-        key.frame = playhead;
-        key.edit_seq = next_edit_seq();
-        commit(world, st, |k| k.push(key));
-        st.selected_frame = Some(last.frame);
-        st.notify(now, format!("終点 f{playhead} を追加しました"));
-        return;
-    }
-    let j = track
-        .windows(2)
-        .position(|w| w[0].frame < playhead && playhead < w[1].frame)
-        .unwrap_or(sel);
-    let (a, b) = (&track[j], &track[j + 1]);
-    let frame = if a.frame < playhead && playhead < b.frame {
+    let (a, b) = (track[sel].frame, track[sel + 1].frame);
+    let frame = if a < playhead && playhead < b {
         playhead
     } else {
-        (a.frame + b.frame) / 2
+        a + (b - a) / 2
     };
-    if frame <= a.frame || frame >= b.frame {
-        st.notify(now, "挿入できません: 区間が1フレーム以下です");
-        return;
-    }
-    let seg = if j == sel {
-        payload.clone()
+    let mut inserted = false;
+    commit(world, st, |k| {
+        inserted = k.insert_point(frame).is_ok();
+    });
+    if inserted {
+        st.selected_frame = Some(frame);
+        st.selected_point = None;
+        st.notify(now, format!("f{frame} にキーフレームを追加しました"));
     } else {
-        parse_payload(&a.engine_payload)
-    };
-    let t = (frame - a.frame) as f32 / (b.frame - a.frame) as f32;
-    let value = a.value + (b.value - a.value) * ease(&seg, t);
-    let mut key = a.clone();
-    key.frame = frame;
-    key.value = value;
-    key.edit_seq = next_edit_seq();
-    commit(world, st, |k| k.insert(j + 1, key));
-    st.selected_frame = Some(frame);
-    st.selected_point = None;
-    st.notify(now, format!("f{frame} にキーフレームを追加しました"));
+        st.notify(now, "挿入できません: 区間が1フレーム以下です");
+    }
 }
 
 fn toolbar(f: &mut Frame, ui: &mut egui::Ui) {
@@ -712,24 +685,58 @@ fn toolbar(f: &mut Frame, ui: &mut egui::Ui) {
             ui,
             icons::ICON_ADD,
             "再生位置に追加",
-            "再生位置にキーフレームを挿入 (最終キーフレームより後なら終点として追加)",
+            "再生位置にキーフレームを挿入 (値は現在の評価値)",
         )
         .clicked()
         {
             f.actions.push(Action::AddKeyframe);
         }
+        let is_track_tail = f.sel + 2 == f.track.len();
+        let (del_label, del_hint) = if is_track_tail {
+            (
+                "終点を削除".to_owned(),
+                "トラック末尾のキーフレームを削除します (始点は削除不可)",
+            )
+        } else {
+            (
+                format!("f{} で統合", f.track[f.sel + 1].frame),
+                "次のキーフレームを削除し、前後の区間を1つに統合します",
+            )
+        };
         if ui
             .add(
-                egui::Button::new(format!("{} 終点を削除", <&str>::from(icons::ICON_REMOVE)))
-                    .min_size(vec2(24.0, 24.0)),
+                egui::Button::new(format!(
+                    "{} {}",
+                    <&str>::from(icons::ICON_REMOVE),
+                    del_label
+                ))
+                .min_size(vec2(24.0, 24.0)),
             )
-            .on_hover_text("区間の終点キーフレームを削除 (末尾なら区間ごと消え、次の区間があれば統合。始点は削除不可)")
+            .on_hover_text(del_hint)
             .clicked()
         {
             f.actions.push(Action::DeleteEnd);
         }
         ui.checkbox(&mut f.st.follow_playhead, "再生位置に追従")
             .on_hover_text("再生ヘッドが動くと、その区間を選択");
+        let mut time_control = f.track.time_controlled();
+        if ui
+            .checkbox(&mut time_control, "時間制御")
+            .on_hover_text("中間点の時間を無視し、制御点の時間で区間を決定")
+            .changed()
+        {
+            f.actions.push(Action::SetTimeControl(time_control));
+        }
+        if time_control && f.sel + 2 < f.track.len() {
+            let index = f.sel + 1;
+            let mut time = f.track.time_of(index);
+            if ui
+                .add(egui::DragValue::new(&mut time).prefix("制御点 f"))
+                .changed()
+            {
+                f.actions.push(Action::MoveControl(index, time));
+            }
+        }
         if button(
             ui,
             icons::ICON_PLAY_ARROW,
@@ -774,13 +781,23 @@ fn toolbar(f: &mut Frame, ui: &mut egui::Ui) {
             f.edit.changed = true;
         }
         ui.separator();
-        ui.label("補間モード");
+        let target_frame = f.track[f.sel].frame;
+        let is_track_head = f.sel == 0;
+        ui.label(format!("補間モード (対象: f{target_frame})"));
         for (mode, (label, help)) in MODES.iter().zip(MODE_HELP) {
-            if ui
-                .selectable_label(f.payload.apply_mode == *mode, label)
-                .on_hover_text(help)
-                .clicked()
-            {
+            let enabled = !is_track_head || *mode == ApplyMode::Normal;
+            let selected = f.payload.apply_mode == *mode;
+            let resp = ui
+                .add_enabled_ui(enabled, |ui| ui.selectable_label(selected, label))
+                .inner;
+            let resp = if enabled {
+                resp.on_hover_text(help)
+            } else {
+                resp.on_disabled_hover_text(
+                    "トラック先頭のキーフレームは常に評価対象のため無視・補間を設定できません",
+                )
+            };
+            if resp.clicked() {
                 f.payload.apply_mode = *mode;
                 f.edit.changed = true;
             }
@@ -812,8 +829,8 @@ fn left(f: &mut Frame, ui: &mut egui::Ui) {
             fmt(k1.value)
         ));
         match f.st.selected_point.and_then(|i| pts.get(i)) {
-            Some(p) => ui.weak(format!("選択: {}", p.label)),
-            None => ui.weak("頂点未選択"),
+            Some(p) => ui.weak(format!("選択中のハンドル: {}", p.label)),
+            None => ui.weak("ハンドル未選択"),
         };
         if let Some(r) = &f.st.reference {
             ui.weak(format!("参照: {}", r.label));

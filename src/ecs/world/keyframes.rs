@@ -52,13 +52,16 @@ impl EcsWorld {
         let Some(entity) = self.find_entity(object_id) else {
             return false;
         };
-        self.world.run(|mut tracks: ViewMut<KeyframeTracks>| {
+        let moved = self.world.run(|mut tracks: ViewMut<KeyframeTracks>| {
             (&mut tracks)
                 .get(entity)
                 .ok()
-                .map(|mut t| t.move_keyframe(key, old_frame, new_frame))
-                .unwrap_or(false)
-        })
+                .is_some_and(|mut t| t.move_keyframe(key, old_frame, new_frame))
+        });
+        if moved {
+            self.touch();
+        }
+        moved
     }
 
     pub fn get_keyframes(&self, object_id: usize, key: &str) -> Vec<crate::ecs::types::Keyframe> {

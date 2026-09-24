@@ -10,9 +10,14 @@ impl EcsWorld {
         let Some(entity) = self.find_entity(object_id) else {
             return;
         };
+        let clip_start = self
+            .world
+            .run(|ranges: View<crate::ecs::components::TimeRange>| {
+                ranges.get(entity).ok().map_or(0, |r| r.start_frame)
+            });
         self.world.run(|mut stacks: ViewMut<EffectStack>| {
             if let Ok(mut stack) = (&mut stacks).get(entity) {
-                stack.push(effect_id);
+                stack.push(effect_id, clip_start);
             }
         });
         self.touch();
@@ -341,7 +346,7 @@ impl EcsWorld {
                 if let Some(instance) = stack.0.get_mut(effect_index) {
                     for (key, val) in preset.params {
                         if let Some(param) = instance.params.get_mut(&key) {
-                            param.static_value = crate::ecs::types::Value::Number(val);
+                            param.set_static(crate::ecs::types::Value::Number(val));
                         }
                     }
                 }

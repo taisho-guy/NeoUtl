@@ -6,6 +6,7 @@ pub(crate) mod object_query_views;
 pub mod object_schema;
 pub mod resources;
 pub mod systems;
+pub mod track;
 pub mod transform;
 pub mod types;
 mod world;
