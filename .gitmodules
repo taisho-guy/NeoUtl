@@ -4,3 +4,6 @@
 [submodule "sdk"]
 	path = sdk
 	url = https://codeberg.org/TeamNeoUtl/neoutl-sdk.git
+[submodule "i18n"]
+	path = i18n
+	url = https://codeberg.org/TeamNeoUtl/neoutl-locales.git
