@@ -302,6 +302,27 @@ impl eframe::App for NeoUtlApp {
                 set_dialog_open(p, id, false);
             }
         }
+
+        crate::extensions::global_extension_manager()
+            .lock()
+            .unwrap()
+            .draw_panels(&ctx, Some(&p.state));
+
+        let dropped = ctx.input(|i| i.raw.dropped_files.clone());
+        if !dropped.is_empty() {
+            let cur_frame = {
+                let world_holder = crate::app::state::active_world(&p.state);
+                world_holder.lock().unwrap().current_frame()
+            };
+            for file in dropped {
+                let path = file.path();
+                let path_str = path.to_string_lossy().to_string();
+                let _ = crate::extensions::global_extension_manager()
+                    .lock()
+                    .unwrap()
+                    .handle_file_drop(&path_str, 1, cur_frame, Some(&p.state));
+            }
+        }
     }
 }
 

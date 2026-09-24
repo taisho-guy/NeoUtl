@@ -105,6 +105,29 @@ impl TimelineWindow {
             Stroke::new(2.0, accent),
         );
 
+        let selected: Vec<usize> = self.selected_ids.iter().map(|&id| id as usize).collect();
+        let frame_to_x_fn = |f: i32| rect.min.x + self.frame_to_x(f);
+        let layer_to_y_fn = |l: i32| rect.min.y + self.layer_to_y(l);
+        let fps = {
+            let world_holder = app_state::active_world(state);
+            world_holder.lock().unwrap().get_project().fps
+        };
+        let mut overlay_ctx = neoutl_extension_api::TimelineOverlayContext {
+            painter: &painter,
+            timeline_rect: rect,
+            visible_frame_range: (self.px_to_frame(0.0), self.px_to_frame(rect.width())),
+            current_frame,
+            fps,
+            bpm: None,
+            selected_object_ids: &selected,
+            frame_to_x: &frame_to_x_fn,
+            layer_to_y: &layer_to_y_fn,
+        };
+        crate::extensions::global_extension_manager()
+            .lock()
+            .unwrap()
+            .draw_timeline_overlay(&mut overlay_ctx, Some(state));
+
         if response.hovered() {
             let scroll = ui.input(|i| i.smooth_scroll_delta.y);
             if scroll != 0.0 {

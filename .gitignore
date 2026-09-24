@@ -1,16 +1,17 @@
 # 成果物
-/target
-/NeoQtl/target
+target
+NeoQtl/target
 
 # Slang
-/slang
+slang
 
 # 参考にしているプロジェクト
-/aviutl2_sdk
-/AviQtl
-/aviutl-plugin-curve_editor
-/mlt
-/dxc
-/ffmpeg
-/NiVE3
-/wgpu-py
+aviutl2_sdk
+AviQtl
+aviutl-plugin-curve_editor
+mlt
+dxc
+ffmpeg
+NiVE3
+wgpu-py
+aviutl2_sdk_mirror

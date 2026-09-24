@@ -38,6 +38,21 @@ impl EcsWorld {
         self.selected_ids = ids;
     }
 
+    pub fn selected_ids(&self) -> &std::collections::HashSet<usize> {
+        &self.selected_ids
+    }
+
+    pub fn clear_selection(&mut self) {
+        self.selected_ids.clear();
+    }
+
+    pub fn select_id(&mut self, id: usize, clear_others: bool) {
+        if clear_others {
+            self.selected_ids.clear();
+        }
+        self.selected_ids.insert(id);
+    }
+
     pub fn is_selected(&self, id: usize) -> bool {
         self.selected_ids.contains(&id)
     }

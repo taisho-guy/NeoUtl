@@ -1,0 +1,13 @@
+[package]
+name = "neoutl-extension-api"
+version = "0.7.5"
+edition = "2024"
+description = "Plugin extension API for NeoUtl enabling deep modding, custom UI panels, menus, overlays, automation and AviUtl2 compatibility"
+
+[dependencies]
+neoutl-shared-abi = { path = "../../core/shared-abi" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+egui = "0.36"
+
+[dev-dependencies]

@@ -74,6 +74,21 @@ impl ProjectSession {
             AudioMixer::silent()
         });
 
+        crate::extensions::global_extension_manager()
+            .lock()
+            .unwrap()
+            .load_project_storage(&meta.dir);
+        crate::extensions::global_extension_manager()
+            .lock()
+            .unwrap()
+            .dispatch_event(
+                &neoutl_extension_api::ExtensionEvent::ProjectLoaded {
+                    project_name: meta.name.clone(),
+                    dir: meta.dir.to_string_lossy().to_string(),
+                },
+                None,
+            );
+
         Self {
             meta,
             world: Arc::new(Mutex::new(world)),
@@ -272,10 +287,30 @@ pub fn save_active(state: &SharedAppState) -> bool {
         report_io_error("[NeoUtl] プロジェクト保存失敗", err);
     }
     if result.is_ok() {
-        let mut s = state.lock().unwrap();
-        let active = s.active;
-        s.sessions[active].dirty = false;
-        s.sessions[active].last_autosave = Instant::now();
+        let (dir, name) = {
+            let mut s = state.lock().unwrap();
+            let active = s.active;
+            s.sessions[active].dirty = false;
+            s.sessions[active].last_autosave = Instant::now();
+            (
+                s.sessions[active].meta.dir.clone(),
+                s.sessions[active].meta.name.clone(),
+            )
+        };
+        crate::extensions::global_extension_manager()
+            .lock()
+            .unwrap()
+            .save_project_storage(&dir);
+        crate::extensions::global_extension_manager()
+            .lock()
+            .unwrap()
+            .dispatch_event(
+                &neoutl_extension_api::ExtensionEvent::ProjectSaved {
+                    project_name: name,
+                    dir: dir.to_string_lossy().to_string(),
+                },
+                Some(state),
+            );
     }
     result.is_ok()
 }

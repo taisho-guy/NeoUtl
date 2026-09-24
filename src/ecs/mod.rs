@@ -12,7 +12,7 @@ mod world;
 
 use resources::SceneMeta;
 
-fn resolve_stable_id(kind_id: u32, object_id: usize) -> String {
+pub fn resolve_stable_id(kind_id: u32, object_id: usize) -> String {
     match crate::objects::loader::by_kind_id(kind_id) {
         Some(plugin) => plugin.stable_id.clone(),
         None => {
@@ -44,7 +44,7 @@ pub struct TimelineData {
     pub clip_layer_count_up: i32,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct SceneSettings {
     pub name: String,
     pub width: u32,

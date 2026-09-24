@@ -31,6 +31,7 @@ dependencies = [
  "neoutl-effect-api",
  "neoutl-effect-lua",
  "neoutl-expression-api",
+ "neoutl-extension-api",
  "neoutl-lua-runtime",
  "neoutl-media-api",
  "neoutl-media-runtime",
@@ -3428,6 +3429,16 @@ name = "neoutl-expression-api"
 version = "0.0.0"
 dependencies = [
  "neoutl-shared-abi",
+]
+
+[[package]]
+name = "neoutl-extension-api"
+version = "0.7.5"
+dependencies = [
+ "egui",
+ "neoutl-shared-abi",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

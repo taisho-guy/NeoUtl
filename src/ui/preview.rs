@@ -284,6 +284,77 @@ impl PreviewPanel {
                                 open_properties = true;
                             }
                         });
+                        bar.menu(t!("ツール"), |ui| {
+                            let tool_items = {
+                                let mgr = crate::extensions::global_extension_manager()
+                                    .lock()
+                                    .unwrap();
+                                mgr.menus_for_location(
+                                    &neoutl_extension_api::MenuLocation::MenuBar(
+                                        neoutl_extension_api::MenuBarSection::Tools,
+                                    ),
+                                )
+                                .into_iter()
+                                .cloned()
+                                .collect::<Vec<_>>()
+                            };
+                            for item in tool_items {
+                                if ui.add(MenuItem::new(&item.label)).clicked() {
+                                    let _ = crate::extensions::global_extension_manager()
+                                        .lock()
+                                        .unwrap()
+                                        .execute_command(&item.command_id, Some(state));
+                                }
+                            }
+                        });
+                        bar.menu(t!("プラグイン"), |ui| {
+                            let (panels, plugin_items) = {
+                                let mgr = crate::extensions::global_extension_manager()
+                                    .lock()
+                                    .unwrap();
+                                let panels: Vec<_> = mgr
+                                    .registered_panels()
+                                    .iter()
+                                    .map(|(_, p)| {
+                                        (p.id.clone(), p.title.clone(), mgr.is_panel_open(&p.id))
+                                    })
+                                    .collect();
+                                let items: Vec<_> = mgr
+                                    .menus_for_location(
+                                        &neoutl_extension_api::MenuLocation::MenuBar(
+                                            neoutl_extension_api::MenuBarSection::Plugins,
+                                        ),
+                                    )
+                                    .into_iter()
+                                    .cloned()
+                                    .collect();
+                                (panels, items)
+                            };
+                            if !panels.is_empty() {
+                                for (id, title, is_open) in panels {
+                                    let label = if is_open {
+                                        format!("✓ {title}")
+                                    } else {
+                                        title
+                                    };
+                                    if ui.add(MenuItem::new(label)).clicked() {
+                                        crate::extensions::global_extension_manager()
+                                            .lock()
+                                            .unwrap()
+                                            .toggle_panel(&id);
+                                    }
+                                }
+                                ui.separator();
+                            }
+                            for item in plugin_items {
+                                if ui.add(MenuItem::new(&item.label)).clicked() {
+                                    let _ = crate::extensions::global_extension_manager()
+                                        .lock()
+                                        .unwrap()
+                                        .execute_command(&item.command_id, Some(state));
+                                }
+                            }
+                        });
                     });
                 });
 
@@ -596,9 +667,37 @@ impl PreviewPanel {
                     } else {
                         egui::vec2(avail.x, avail.x / aspect)
                     };
-                    ui.centered_and_justified(|ui| {
-                        ui.add(egui::Image::new((texture_id, size)).fit_to_exact_size(size));
+                    let response = ui.centered_and_justified(|ui| {
+                        ui.add(egui::Image::new((texture_id, size)).fit_to_exact_size(size))
                     });
+
+                    let image_rect = response.inner.rect;
+                    let painter = ui.painter_at(image_rect);
+                    let (res_w, res_h, fps, cur_frame, selected) = {
+                        let world_holder = app_state::active_world(state);
+                        let world = world_holder.lock().unwrap();
+                        let proj = world.get_project();
+                        (
+                            proj.width,
+                            proj.height,
+                            proj.fps,
+                            world.current_frame(),
+                            world.selected_ids().iter().copied().collect::<Vec<_>>(),
+                        )
+                    };
+                    let mut overlay_ctx = neoutl_extension_api::PreviewOverlayContext {
+                        painter: &painter,
+                        viewport_rect: image_rect,
+                        scene_resolution: [res_w, res_h],
+                        current_frame: cur_frame,
+                        fps,
+                        is_playing: self.is_playing,
+                        selected_object_ids: &selected,
+                    };
+                    crate::extensions::global_extension_manager()
+                        .lock()
+                        .unwrap()
+                        .draw_preview_overlay(&mut overlay_ctx, Some(state));
                 }
             });
 

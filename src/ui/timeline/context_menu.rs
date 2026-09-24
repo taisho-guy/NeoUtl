@@ -183,7 +183,7 @@ impl TimelineWindow {
                 (o.id, format!("[{}] {}", o.id, label))
             })
             .collect();
-        let items = build_context_menu(
+        let mut items = build_context_menu(
             hit_id,
             clipboard_empty,
             &kinds,
@@ -192,6 +192,44 @@ impl TimelineWindow {
             self.show_waveform,
             self.select_range,
         );
+
+        let location = if hit_id >= 0 {
+            neoutl_extension_api::MenuLocation::TimelineClipContext
+        } else {
+            neoutl_extension_api::MenuLocation::TimelineLayerContext
+        };
+        let ext_items = {
+            let mgr = crate::extensions::global_extension_manager()
+                .lock()
+                .unwrap();
+            mgr.menus_for_location(&location)
+                .into_iter()
+                .cloned()
+                .collect::<Vec<_>>()
+        };
+        if !ext_items.is_empty() {
+            items.push(ContextMenuItem {
+                label: String::new(),
+                action: 4,
+                kind: -1,
+                enabled: false,
+                icon: String::new(),
+                checked: None,
+                submenu: Vec::new(),
+            });
+            for (idx, item) in ext_items.into_iter().enumerate() {
+                items.push(ContextMenuItem {
+                    label: item.label,
+                    action: 2000 + idx as i32,
+                    kind: -1,
+                    enabled: item.enabled,
+                    icon: "circle-plus".to_owned(),
+                    checked: item.checked,
+                    submenu: Vec::new(),
+                });
+            }
+        }
+
         let _ = ui;
         self.menu = Some(MenuState {
             pos,
@@ -415,6 +453,28 @@ impl TimelineWindow {
             }
             51 => dialogs.borrow_mut().project_settings.open(state),
             52 => dialogs.borrow_mut().system_settings.open = true,
+            action if action >= 2000 => {
+                let idx = (action - 2000) as usize;
+                let location = if menu.hit_id >= 0 {
+                    neoutl_extension_api::MenuLocation::TimelineClipContext
+                } else {
+                    neoutl_extension_api::MenuLocation::TimelineLayerContext
+                };
+                let cmd = {
+                    let mgr = crate::extensions::global_extension_manager()
+                        .lock()
+                        .unwrap();
+                    mgr.menus_for_location(&location)
+                        .get(idx)
+                        .map(|m| m.command_id.clone())
+                };
+                if let Some(cmd_id) = cmd {
+                    let _ = crate::extensions::global_extension_manager()
+                        .lock()
+                        .unwrap()
+                        .execute_command(&cmd_id, Some(state));
+                }
+            }
             _ => {}
         }
     }

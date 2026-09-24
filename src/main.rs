@@ -14,6 +14,7 @@ mod audio;
 mod easings;
 mod ecs;
 mod effects;
+mod extensions;
 mod infra;
 mod objects;
 mod project;
@@ -44,6 +45,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 &neoutl_media_runtime::loader::default_decoders_dir(),
             );
             easings::loader::load_all(&easings::loader::default_easings_dir());
+            extensions::global_extension_manager()
+                .lock()
+                .unwrap()
+                .load_dir(&extensions::default_extensions_dir());
             ui::font_stack::preload_installed_fonts();
             match audio::plugin_settings::load_from_disk() {
                 Some(saved) => {
