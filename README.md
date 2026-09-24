@@ -6,7 +6,7 @@
 
 AviUtl ExEdit0ライクな動画編集ソフトウェアです。LinuxやWindowsで動作します。macOSも将来的にサポートする予定です。現在はプレアルファです。
 
-<img src="assets/screenshot.webp"/>
+<img src="assets/gallery/screenshot.webp"/>
 
 ## コミュニティに参加しましょう！
 [Zulip](https://zulip.com)は、効率的なコミュニケーションのために設計された、組織的なチームチャットアプリです。[こちら](https://taisho-guy.zulipchat.com/join/lz2ljlwmnz2xridgihuprspg/)から招待を受け取り、NeoUtlの開発者やユーザーと繋がることが出来ます。デスクトップやモバイル向けに[Zulipアプリ](https://zulip.com/apps/)も提供されております。

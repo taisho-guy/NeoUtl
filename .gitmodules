@@ -7,3 +7,6 @@
 [submodule "i18n"]
 	path = i18n
 	url = https://codeberg.org/TeamNeoUtl/neoutl-locales.git
+[submodule "assets"]
+	path = assets
+	url = https://codeberg.org/TeamNeoUtl/neoutl-branding.git
