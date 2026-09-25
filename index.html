@@ -262,7 +262,36 @@ rel="noopener" class="float-right">過去のバージョンはこちら</a></td>
 <table class="data-table">
 <tbody>
 <tr class="row-accent">
-<th colspan="3"><span class="text-link"><b>ビルド手順</b></span></th>
+<th colspan="2"><span class="text-link"><b>SDK</b></span></th>
+</tr>
+<tr>
+<td colspan="2"><span class=
+"text-small">NeoUtlを拡張するためのSDKです。Rust（ネイティブ）及びC向けに公開されています。</span></td>
+</tr>
+<tr>
+<td class="text-center"><b>Zip</b></td>
+<td><a href=
+"https://codeberg.org/TeamNeoUtl/neoutl-sdk/archive/main.zip">neoutl-sdk-main.zip</a></td>
+</tr>
+<tr>
+<td class="text-center"><b>Git</b></td>
+<td><pre><code>git clone https://codeberg.org/TeamNeoUtl/neoutl-sdk.git</code></pre></td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+</section>
+<hr class="section-hr gap-before">
+<section>
+<div class="container">
+<h2 class="section-title"><span class="accent">★</span> ビルド手順
+<span class="accent">★</span></h2>
+<div>
+<table class="data-table">
+<tbody>
+<tr class="row-accent">
+<th colspan="3"><span class="text-link"><b>NeoUtl</b></span></th>
 </tr>
 <tr>
 <td colspan="3"><span class=
@@ -280,15 +309,28 @@ cargo xtask build --release</code></pre>
 <span class="text-small">実行可能ファイルは <code>target/release</code>
 以下に生成されます。</span></td>
 </tr>
+</tbody>
+</table>
+<br>
+<table class="data-table">
+<tbody>
+<tr class="row-accent">
+<th colspan="3"><span class="text-link"><b>AviQtl</b></span></th>
+</tr>
 <tr>
-<td colspan="3">
-<details>
-<summary><b>AviQtlをビルドする場合</b></summary>
-<p>Python3およびPySide6環境が必要です。<br></p>
-<pre><code>git switch aviqtl
+<td colspan="3"><span class=
+"text-small">NeoUtlの源流となる旧プロジェクトです。ビルドには <b>Python3</b> 及び
+<b>PySide6</b> 環境が必要です。</span></td>
+</tr>
+<tr>
+<td colspan="3"><span class=
+"text-small"><b>ソースコードの取得とビルド</b></span><br>
+<pre><code>git clone "https://codeberg.org/TeamNeoUtl/NeoUtl.git"
+cd NeoUtl
+git switch aviqtl
 python3 BUILD.py</code></pre>
-実行可能ファイルは <code>build</code> 以下に生成されます。</details>
-</td>
+<span class="text-small">実行可能ファイルは <code>build</code>
+以下に生成されます。</span></td>
 </tr>
 </tbody>
 </table>

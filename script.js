@@ -4,7 +4,7 @@
 
   const PATTERNS = {
     linux: ["linux"],
-    windows: ["win", "msys2", "ucrt", "msvcrt", "mingw", "cygwin"],
+    windows: ["win", "msys2", "ucrt", "msvcrt", "msvc", "mingw", "cygwin"],
     apple: ["mac", "apple", "darwin", "xcode"],
   };
   const ARCH_PATTERNS = {
@@ -21,6 +21,18 @@
         if (!osMatch) return false;
         return ARCH_PATTERNS[arch].some((s) => name.includes(s));
     });
+  };
+
+  const formatFileSize = (bytes) => {
+    if (typeof bytes !== "number" || !Number.isFinite(bytes)) return "";
+    const units = ["B", "KB", "MB", "GB"];
+    let value = bytes;
+    let unitIndex = 0;
+    while (value >= 1024 && unitIndex < units.length - 1) {
+        value /= 1024;
+        unitIndex += 1;
+    }
+    return `${value.toFixed(unitIndex === 0 ? 0 : 1)} ${units[unitIndex]}`;
   };
 
   const fetchRelease = async (source, repo, tag) => {
@@ -52,7 +64,7 @@
         const asset = !suppressed && findAsset(latest.assets ?? [], el.dataset.platform, el.dataset.arch);
         if (asset) {
             el.href = asset.browser_download_url ?? latest.html_url;
-            el.textContent = label;
+            el.textContent = `${asset.name}（${formatFileSize(asset.size)}）`;
         } else {
             const dash = document.createElement("span");
             dash.textContent = "\u2014";
