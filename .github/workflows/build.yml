@@ -56,6 +56,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
           git submodule update --init --depth 1 -- assets i18n sdk
           sdk_version="$(sed -n 's/^version = "\([^"]*\)"/\1/p' Cargo.toml | head -n 1)"
           test -f "sdk/neoutl/${sdk_version}/rust/Cargo.toml"
