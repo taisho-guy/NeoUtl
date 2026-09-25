@@ -26,7 +26,7 @@ jobs:
             artifact_name: neoutl-linux-x86_64
             binary_name: NeoUtl
             lua_feature: luajit
-            install_cmd: pacman -Syu --noconfirm --needed base-devel clang cmake ninja mold rust pkgconf git zip wayland libxkbcommon mesa alsa-lib fontconfig freetype2 expat ffmpeg libva
+            install_cmd: pacman -Syu --noconfirm --needed base-devel clang cmake ninja mold rust pkgconf curl tar git zip wayland libxkbcommon mesa alsa-lib fontconfig freetype2 expat ffmpeg libva
           - os: windows-latest
             os_name: Windows(x86_64/MSYS2 CLANG64)
             artifact_name: neoutl-windows-x86_64
@@ -40,13 +40,29 @@ jobs:
 
     steps:
       - uses: actions/checkout@v7
-        with:
-          submodules: recursive
 
       - name: ネイティブ依存関係インストール(Linux)
         if: runner.os == 'Linux'
         shell: bash
         run: ${{ matrix.install_cmd }}
+
+      - name: ビルド用サブモジュール取得(Linux)
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          download_submodule() {
+            local path="$1"
+            local repository="$2"
+            local revision="$3"
+            mkdir -p "$path"
+            curl --fail --location --retry 3 \
+              "https://codeberg.org/${repository}/archive/${revision}.tar.gz" \
+              | tar -xz --strip-components=1 -C "$path"
+          }
+          download_submodule assets TeamNeoUtl/neoutl-branding d300708004595a48ff628e75c5327b66a4918df1
+          download_submodule i18n TeamNeoUtl/neoutl-locales 50f61041ec2bf2b863b5b879a2100ebc6db5414e
+          download_submodule sdk TeamNeoUtl/neoutl-sdk 22ce3c4eace923f936a34a28abff3608ad3400c0
 
       - name: MSYS2セットアップ(Windows)
         if: runner.os == 'Windows'
@@ -64,8 +80,27 @@ jobs:
             ${{ matrix.msys_prefix }}-vulkan-headers
             ${{ matrix.msys_prefix }}-ffmpeg
             ${{ matrix.msys_prefix }}-luajit
+            curl
             zip
             make
+
+      - name: ビルド用サブモジュール取得(Windows / MSYS2)
+        if: runner.os == 'Windows'
+        shell: msys2 {0}
+        run: |
+          set -euo pipefail
+          download_submodule() {
+            local path="$1"
+            local repository="$2"
+            local revision="$3"
+            mkdir -p "$path"
+            curl --fail --location --retry 3 \
+              "https://codeberg.org/${repository}/archive/${revision}.tar.gz" \
+              | tar -xz --strip-components=1 -C "$path"
+          }
+          download_submodule assets TeamNeoUtl/neoutl-branding d300708004595a48ff628e75c5327b66a4918df1
+          download_submodule i18n TeamNeoUtl/neoutl-locales 50f61041ec2bf2b863b5b879a2100ebc6db5414e
+          download_submodule sdk TeamNeoUtl/neoutl-sdk 22ce3c4eace923f936a34a28abff3608ad3400c0
 
       - name: ビルド(Linux)
         if: runner.os == 'Linux'
