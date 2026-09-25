@@ -127,7 +127,7 @@ jobs:
         run: |
           mkdir -p dist/package
           cp target/release/${{ matrix.binary_name }} dist/package/
-          cp assets/icon.svg dist/package/
+          cp assets/branding/icon.svg dist/package/
           cat > dist/package/NeoUtl.desktop <<'EOF'
           [Desktop Entry]
           Type=Application
@@ -149,7 +149,7 @@ jobs:
         run: |
           mkdir -p dist/package
           cp target/release/${{ matrix.binary_name }} dist/package/
-          cp assets/icon.ico dist/package/
+          cp assets/branding/icon.ico dist/package/
           [ -d target/release/objects ] && cp -r target/release/objects dist/package/
           [ -d target/release/effects ] && cp -r target/release/effects dist/package/
           ldd target/release/${{ matrix.binary_name }} | awk '{print $3}' | grep -i '/clang64/bin/' | while read -r dep; do
