@@ -1,6 +1,7 @@
 local io_open = io.open
 local string_find = string.find
 local string_sub = string.sub
+local string_byte = string.byte
 local table_concat = table.concat
 
 local EXCLUDE_DIRS = {
@@ -11,7 +12,7 @@ local EXCLUDE_DIRS = {
 
 local FAMILIES = {
     c_like = { quotes = {'"', "'"}, line = "//", block_open = "/*", block_close = "*/" },
-    rust   = { quotes = {'"'}, line = "//", block_open = "/*", block_close = "*/", raw = true },
+    rust   = { quotes = {'"'}, line = "//", block_open = "/*", block_close = "*/", raw = true, doc_comment = true },
     hash   = { quotes = {'"', "'"}, line = "#" },
     sql    = { quotes = {"'"}, line = "--", block_open = "/*", block_close = "*/" },
     html   = { quotes = {'"', "'"}, block_open = "<!--", block_close = "-->" },
@@ -79,8 +80,7 @@ local function skip_quote(content, len, i, q)
         local _, end_idx = string_find(content, q, i, true)
         if not end_idx then return len + 1 end
         local esc, chk = 0, end_idx - 1
-        while chk >= i and string_sub(content, chk, chk) == '\\' do
-            esc = esc + 1
+        while chk >= i and string_byte(content, chk) == 92 do             esc = esc + 1
             chk = chk - 1
         end
         i = end_idx + 1
@@ -90,15 +90,13 @@ local function skip_quote(content, len, i, q)
 end
 
 local function skip_raw_string(content, len, i)
-    local n2 = string_sub(content, i+1, i+1)
-    if n2 == '"' then
-        i = i + 2
+    local n2 = string_byte(content, i + 1)
+    if n2 == 34 then         i = i + 2
         local _, end_idx = string_find(content, '"', i, true)
         return end_idx and (end_idx + 1) or (len + 1)
-    elseif n2 == '#' then
-        local _, sharp_end = string_find(content, '"', i + 2, true)
+    elseif n2 == 35 then         local _, sharp_end = string_find(content, '"', i + 2, true)
         if not sharp_end then return i + 1 end
-        local sharps = string_sub(content, i+1, sharp_end-1)
+        local sharps = string_sub(content, i + 1, sharp_end - 1)
         local close = '"' .. sharps
         local _, end_idx = string_find(content, close, sharp_end, true)
         return end_idx and (end_idx + #close) or (len + 1)
@@ -114,11 +112,11 @@ local function clean_generic(content, fam)
         local next_idx = string_find(content, fam.jump, i)
         if not next_idx then break end
         i = next_idx
-        local c1 = string_sub(content, i, i)
+        local b1 = string_byte(content, i)
         local is_quote = false
 
         for _, q in ipairs(fam.quotes or {}) do
-            if c1 == q then
+            if b1 == string_byte(q, 1) then
                 is_quote = true
                 i = skip_quote(content, len, i, q)
                 break
@@ -126,8 +124,7 @@ local function clean_generic(content, fam)
         end
 
         if not is_quote then
-            if fam.raw and c1 == 'r' then
-                i = skip_raw_string(content, len, i)
+            if fam.raw and b1 == 114 then                 i = skip_raw_string(content, len, i)
             elseif fam.block_open and string_sub(content, i, i + #fam.block_open - 1) == fam.block_open then
                 result[r_idx] = string_sub(content, last_pos, i - 1)
                 r_idx = r_idx + 1
@@ -135,11 +132,23 @@ local function clean_generic(content, fam)
                 i = e and (e + 1) or (len + 1)
                 last_pos = i
             elseif fam.line and string_sub(content, i, i + #fam.line - 1) == fam.line then
-                result[r_idx] = string_sub(content, last_pos, i - 1)
-                r_idx = r_idx + 1
-                local _, e = string_find(content, "\n", i + #fam.line, true)
-                i = e and (e + 1) or (len + 1)
-                last_pos = i
+                local is_doc = false
+                if fam.doc_comment then
+                    local next_b = string_byte(content, i + 2)
+                    if next_b == 47 or next_b == 33 then                         is_doc = true
+                    end
+                end
+
+                if is_doc then
+                                        local _, e = string_find(content, "\n", i + #fam.line, true)
+                    i = e and (e + 1) or (len + 1)
+                else
+                    result[r_idx] = string_sub(content, last_pos, i - 1)
+                    r_idx = r_idx + 1
+                    local _, e = string_find(content, "\n", i + #fam.line, true)
+                    i = e and (e + 1) or (len + 1)
+                    last_pos = i
+                end
             else
                 i = i + 1
             end
@@ -163,22 +172,19 @@ local function clean_lua(content)
         local next_idx = string_find(content, LUA_JUMP, i)
         if not next_idx then break end
         i = next_idx
-        local b1 = string_sub(content, i, i)
+        local b1 = string_byte(content, i)
 
-        if b1 == '"' or b1 == "'" then
-            i = skip_quote(content, len, i, b1)
-        elseif b1 == '[' then
-            if string_sub(content, i+1, i+1) == '[' then
+        if b1 == 34 or b1 == 39 then             i = skip_quote(content, len, i, string_sub(content, i, i))
+        elseif b1 == 91 then             if string_byte(content, i + 1) == 91 then
                 local _, end_idx = string_find(content, ']]', i + 2, true)
                 i = end_idx and (end_idx + 2) or (len + 1)
             else
                 i = i + 1
             end
-        elseif b1 == '-' then
-            if string_sub(content, i+1, i+1) == '-' then
+        elseif b1 == 45 then             if string_byte(content, i + 1) == 45 then
                 result[r_idx] = string_sub(content, last_pos, i - 1)
                 r_idx = r_idx + 1
-                if string_sub(content, i+2, i+3) == '[[' then
+                if string_sub(content, i + 2, i + 3) == '[[' then
                     local _, e = string_find(content, "]]", i + 4, true)
                     i = e and (e + 2) or (len + 1)
                 else
@@ -215,7 +221,7 @@ local function remove_comments_from_file(filepath, ext)
     file:close()
 
     local cleaned = clean_comments(content, ext)
-    if cleaned then
+        if cleaned and cleaned ~= content then
         local wfile = io_open(filepath, "wb")
         if wfile then
             wfile:write(cleaned)
@@ -247,7 +253,11 @@ local function target_extensions()
 end
 
 local function build_find_cmd()
-    local parts = { "find . -type f \\(" }
+    local parts = { "find . " }
+        for _, dir in ipairs(EXCLUDE_DIRS) do
+        parts[#parts+1] = '-name "' .. dir .. '" -prune -o '
+    end
+    parts[#parts+1] = "-type f \\("
     local first = true
     for ext, _ in pairs(target_extensions()) do
         if not first then parts[#parts+1] = "-o" end
