@@ -191,7 +191,7 @@
       const date = new Date(item.commit.author.date).toLocaleDateString("ja-JP", {
         year: "numeric", month: "2-digit", day: "2-digit"
       });
-      const url = `https://codeberg.org/taisho-guy/NeoUtl/commit/${item.sha}`;
+      const url = `https://codeberg.org/TeamNeoUtl/NeoUtl/commit/${item.sha}`;
 
       const tr = document.createElement("tr");
       tr.style.cursor = "pointer";
@@ -206,7 +206,7 @@
 
   const fetchLatestCommits = async () => {
     try {
-      const res = await fetch("https://codeberg.org/api/v1/repos/taisho-guy/NeoUtl/commits?sha=main&limit=3");
+      const res = await fetch("https://codeberg.org/api/v1/repos/TeamNeoUtl/NeoUtl/commits?sha=main&limit=3");
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const commits = await res.json();
       localStorage.setItem(CACHE_KEY_COMMITS, JSON.stringify({ commits, timestamp: Date.now() }));
