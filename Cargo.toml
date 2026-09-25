@@ -1,6 +1,6 @@
 [package]
 name = "NeoUtl"
-version = "0.8.0"
+version = "0.8.3"
 edition = "2024"
 
 [workspace]
@@ -32,7 +32,7 @@ members = [
     "crates/object/shader-build",
     "xtask",
     "crates/host-adapter",
-    "sdk/neoutl/0.8.0/rust",
+    "sdk/neoutl/0.8.3/rust",
 ]
 resolver = "2"
 
@@ -58,7 +58,7 @@ neo-media-support = { path = "crates/media/support" }
 neo-media-swscale = { path = "crates/media/swscale" }
 neo-media-ffmpeg = { path = "crates/media/ffmpeg" }
 neoutl-schema = { path = "crates/core/schema" }
-neoutl-sdk = { path = "sdk/neoutl/0.8.0/rust" }
+neoutl-sdk = { path = "sdk/neoutl/0.8.3/rust" }
 bytemuck = "1"
 half = "2"
 serde = "1"
