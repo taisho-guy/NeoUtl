@@ -85,18 +85,30 @@ impl Default for GlobalMatrix {
 }
 
 pub fn translation_of(m: &GlobalMatrix) -> (f32, f32, f32) {
-    (m.0[12], m.0[13], m.0[14])
+    let mut translation = m.0.iter().skip(12).take(3).copied();
+    (
+        translation.next().unwrap_or_default(),
+        translation.next().unwrap_or_default(),
+        translation.next().unwrap_or_default(),
+    )
 }
 
 pub fn mat4_mul(a: &[f32; 16], b: &[f32; 16]) -> [f32; 16] {
     let mut r = [0.0f32; 16];
-    for col in 0..4 {
-        for row in 0..4 {
-            let mut sum = 0.0;
-            for k in 0..4 {
-                sum += a[k * 4 + row] * b[col * 4 + k];
-            }
-            r[col * 4 + row] = sum;
+    for (b_column, output_column) in b
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .zip(r.as_chunks_mut::<4>().0.iter_mut())
+    {
+        for (row, slot) in output_column.iter_mut().enumerate() {
+            *slot = a
+                .as_chunks::<4>()
+                .0
+                .iter()
+                .zip(b_column.iter())
+                .map(|(a_column, b_value)| a_column.get(row).copied().unwrap_or_default() * b_value)
+                .sum();
         }
     }
     r
@@ -260,7 +272,7 @@ pub fn compute_relative_matrix(t: &Transform) -> GlobalMatrix {
 }
 
 /// 4x4逆行列 (余因子展開によるアジュゲート法)。
-/// 添字は mat4_mul と同じ列優先 (col*4+row)。
+/// 添字は `mat4_mul` と同じ列優先 (`col * 4 + row`)。
 /// 行列式が0に近い場合 (特異行列: 非可逆な射影設定等) は None を返す。
 /// 呼び出し側は None を「逆投影不能」として扱い、既定カメラ前提の近似へフォールバックする。
 pub fn mat4_inverse(m: &[f32; 16]) -> Option<[f32; 16]> {
@@ -356,18 +368,22 @@ pub fn rescale_for_source(global: &GlobalMatrix, source_w: f32, source_h: f32) -
     let mut m = global.0;
     let ratio_w = source_w / UNIT_SIZE_PX;
     let ratio_h = source_h / UNIT_SIZE_PX;
-    for i in 0..4 {
-        m[i] *= ratio_w;
-        m[4 + i] *= ratio_h;
+    for value in m.iter_mut().take(4) {
+        *value *= ratio_w;
+    }
+    for value in m.iter_mut().skip(4).take(4) {
+        *value *= ratio_h;
     }
     GlobalMatrix(m)
 }
 
 pub fn scale_to_pixels(global: &GlobalMatrix, width_px: f32, height_px: f32) -> GlobalMatrix {
     let mut m = global.0;
-    for i in 0..4 {
-        m[i] *= width_px;
-        m[4 + i] *= height_px;
+    for value in m.iter_mut().take(4) {
+        *value *= width_px;
+    }
+    for value in m.iter_mut().skip(4).take(4) {
+        *value *= height_px;
     }
     GlobalMatrix(m)
 }
@@ -430,10 +446,14 @@ impl Camera {
 impl Default for Camera {
     fn default() -> Self {
         Self::for_resolution(
-            crate::ecs::resources::ProjectResource::DEFAULT_WIDTH as f32,
-            crate::ecs::resources::ProjectResource::DEFAULT_HEIGHT as f32,
+            u32_to_f32(crate::ecs::resources::ProjectResource::DEFAULT_WIDTH),
+            u32_to_f32(crate::ecs::resources::ProjectResource::DEFAULT_HEIGHT),
         )
     }
+}
+
+fn u32_to_f32(value: u32) -> f32 {
+    value.to_string().parse().unwrap_or(f32::MAX)
 }
 
 fn normalize(v: [f32; 3]) -> [f32; 3] {
