@@ -112,8 +112,8 @@ impl ParamAccess for GroupControl {
             .camera
             .unwrap_or_else(|| Camera::for_resolution(1920.0, 1080.0));
         Some(match key {
-            "layer_count_down" => self.layer_count_down as f32,
-            "layer_count_up" => self.layer_count_up as f32,
+            "layer_count_down" => u32_param_to_f32(self.layer_count_down),
+            "layer_count_up" => u32_param_to_f32(self.layer_count_up),
             "generate_framebuffer" => bool_to_f32(self.generate_framebuffer),
             "hide_captured" => bool_to_f32(self.hide_captured),
             "camera_enabled" => bool_to_f32(self.camera.is_some()),
@@ -125,8 +125,12 @@ impl ParamAccess for GroupControl {
             "camera_target_z" => cam.target_z,
             "camera_tilt_deg" => cam.tilt_deg,
             "camera_fov_deg" => cam.fov_deg,
-            "camera_target_layer_mode" => target_layer_mode_to_i32(cam.target_layer_mode).0 as f32,
-            "camera_target_layer" => target_layer_mode_to_i32(cam.target_layer_mode).1 as f32,
+            "camera_target_layer_mode" => {
+                i32_param_to_f32(target_layer_mode_to_i32(cam.target_layer_mode).0)
+            }
+            "camera_target_layer" => {
+                i32_param_to_f32(target_layer_mode_to_i32(cam.target_layer_mode).1)
+            }
             "camera_zbuffer_enabled" => bool_to_f32(cam.zbuffer_enabled),
             "camera_focus_distance" => cam.focus_distance,
             "camera_depth_blur_strength" => cam.depth_blur_strength,
@@ -147,11 +151,11 @@ impl ParamAccess for GroupControl {
         }
         match key {
             "layer_count_down" => {
-                self.layer_count_down = value.max(0.0) as u32;
+                self.layer_count_down = f32_to_u32_param(value);
                 return true;
             }
             "layer_count_up" => {
-                self.layer_count_up = value.max(0.0) as u32;
+                self.layer_count_up = f32_to_u32_param(value);
                 return true;
             }
             "generate_framebuffer" => {
@@ -178,10 +182,10 @@ impl ParamAccess for GroupControl {
             "camera_fov_deg" => cam.fov_deg = value.clamp(1.0, 179.0),
             "camera_target_layer_mode" => {
                 let (_, layer) = target_layer_mode_to_i32(cam.target_layer_mode);
-                cam.target_layer_mode = target_layer_mode_from_i32(value as i32, layer);
+                cam.target_layer_mode = target_layer_mode_from_i32(f32_to_i32_param(value), layer);
             }
             "camera_target_layer" => {
-                cam.target_layer_mode = target_layer_mode_from_i32(2, value as i32);
+                cam.target_layer_mode = target_layer_mode_from_i32(2, f32_to_i32_param(value));
             }
             "camera_zbuffer_enabled" => cam.zbuffer_enabled = value > 0.5,
             "camera_focus_distance" => cam.focus_distance = value,
@@ -194,4 +198,38 @@ impl ParamAccess for GroupControl {
 
 pub(super) fn bool_to_f32(b: bool) -> f32 {
     if b { 1.0 } else { 0.0 }
+}
+
+fn u32_param_to_f32(value: u32) -> f32 {
+    f32::from(u16::try_from(value).unwrap_or(u16::MAX))
+}
+
+fn i32_param_to_f32(value: i32) -> f32 {
+    value.to_string().parse().unwrap_or_else(|_| {
+        if value.is_negative() {
+            f32::MIN
+        } else {
+            f32::MAX
+        }
+    })
+}
+
+fn f32_to_u32_param(value: f32) -> u32 {
+    if !value.is_finite() || value <= 0.0 {
+        return 0;
+    }
+    value.round().to_string().parse().unwrap_or(u32::MAX)
+}
+
+fn f32_to_i32_param(value: f32) -> i32 {
+    if !value.is_finite() {
+        return 0;
+    }
+    value.round().to_string().parse().unwrap_or_else(|_| {
+        if value.is_sign_negative() {
+            i32::MIN
+        } else {
+            i32::MAX
+        }
+    })
 }

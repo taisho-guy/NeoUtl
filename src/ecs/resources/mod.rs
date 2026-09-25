@@ -61,7 +61,7 @@ impl TimelineResource {
             total_frames: config::DEFAULT_TOTAL_FRAMES,
             next_id: 1,
             zoom_scale: 1.0,
-            layer_count: DEFAULT_LAYER_COUNT as i32,
+            layer_count: usize_to_i32(DEFAULT_LAYER_COUNT),
         }
     }
 }
@@ -141,16 +141,16 @@ impl SceneMeta {
     }
 
     pub fn effective_grid_interval(&self) -> i32 {
-        let fps = self.fps.max(1) as f32;
+        let fps = u32_to_f32(self.fps.max(1));
         let interval = match self.grid_mode {
             1 => {
                 let beats_per_minute = self.grid_bpm.max(1.0);
                 let beat_frames = (fps * 60.0 / beats_per_minute).max(1.0);
-                let subdivision = self.grid_subdivision.max(1) as f32;
-                (beat_frames / subdivision).round().max(1.0) as i32
+                let subdivision = i32_to_f32(self.grid_subdivision.max(1));
+                f32_to_i32((beat_frames / subdivision).round().max(1.0))
             }
             2 => self.grid_interval.max(1),
-            _ => fps.round().max(1.0) as i32,
+            _ => f32_to_i32(fps.round().max(1.0)),
         };
         interval.max(1)
     }
@@ -163,16 +163,52 @@ impl SceneMeta {
         if interval <= 0 {
             return frame;
         }
-        let offset_frames = (self.grid_offset * self.fps.max(1) as f32).round() as i32;
-        let relative = frame - offset_frames;
-        let nearest =
-            ((relative as f32 / interval as f32).round() as i32) * interval + offset_frames;
-        if (nearest - frame).abs() <= self.magnetic_snap_range {
+        let offset_frames = f32_to_i32(self.grid_offset * u32_to_f32(self.fps.max(1)));
+        let relative = frame.saturating_sub(offset_frames);
+        let nearest = f32_to_i32((i32_to_f32(relative) / i32_to_f32(interval)).round())
+            .saturating_mul(interval)
+            .saturating_add(offset_frames);
+        if nearest.saturating_sub(frame).abs() <= self.magnetic_snap_range {
             nearest
         } else {
             frame
         }
     }
+}
+
+fn usize_to_i32(value: usize) -> i32 {
+    i32::try_from(value).unwrap_or(i32::MAX)
+}
+
+fn u32_to_f32(value: u32) -> f32 {
+    value.to_string().parse().unwrap_or(f32::MAX)
+}
+
+fn i32_to_f32(value: i32) -> f32 {
+    value.to_string().parse().unwrap_or_else(|_| {
+        if value.is_negative() {
+            f32::MIN
+        } else {
+            f32::MAX
+        }
+    })
+}
+
+fn f32_to_i32(value: f32) -> i32 {
+    if !value.is_finite() {
+        return if value.is_sign_negative() {
+            i32::MIN
+        } else {
+            i32::MAX
+        };
+    }
+    value.round().to_string().parse().unwrap_or_else(|_| {
+        if value.is_sign_negative() {
+            i32::MIN
+        } else {
+            i32::MAX
+        }
+    })
 }
 
 #[derive(Unique)]

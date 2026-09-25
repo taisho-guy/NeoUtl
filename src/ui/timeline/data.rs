@@ -4,14 +4,16 @@ use crate::ui::types::TimelineObject;
 use egui::Color32;
 
 impl TimelineWindow {
-    pub(super) fn to_egui(
+    pub(super) fn as_egui(
         &mut self,
         ctx: &egui::Context,
         data: &crate::ecs::TimelineData,
         fps: f64,
     ) -> TimelineObject {
         let registry_snapshot = registry();
-        let plugin = registry_snapshot.get(data.kind as usize);
+        let plugin = usize::try_from(data.kind)
+            .ok()
+            .and_then(|kind| registry_snapshot.get(kind));
         let is_audio = plugin.is_some_and(|p| p.name == "Audio");
         let waveform = data
             .media_path
@@ -27,7 +29,17 @@ impl TimelineWindow {
                     .load_audio(path)
                     .ok()
                     .map(|audio| {
-                        (audio.frame_count() as f64 / audio.sample_rate as f64 * fps).ceil() as i32
+                        let frame_count = audio
+                            .frame_count()
+                            .to_string()
+                            .parse::<f64>()
+                            .unwrap_or(f64::MAX);
+                        let sample_rate = f64::from(audio.sample_rate.max(1));
+                        (frame_count / sample_rate * fps)
+                            .ceil()
+                            .to_string()
+                            .parse::<i32>()
+                            .unwrap_or(i32::MAX)
                     })
             })
             .unwrap_or(0);
@@ -46,7 +58,7 @@ impl TimelineWindow {
             keyframe_frames: Vec::new(),
             waveform: waveform.map(|h| h.id()),
             has_waveform: waveform_duration_frames > 0,
-            waveform_origin_frame: -data.media_trim_in_frame as i32,
+            waveform_origin_frame: i64_to_i32(data.media_trim_in_frame).saturating_neg(),
             waveform_duration_frames,
             group_layer_count_down: data.group_layer_count_down,
             group_layer_count_up: data.group_layer_count_up,
@@ -79,21 +91,32 @@ impl TimelineWindow {
         let wave_color = ctx.style_of(ctx.theme()).visuals.selection.bg_fill;
         let mut pixels = vec![Color32::TRANSPARENT; width * height];
         for x in 0..width {
-            let Some(peak) = visible_peaks.get(x * visible_peaks.len() / width) else {
+            let peak_index = x
+                .saturating_mul(visible_peaks.len())
+                .checked_div(width)
+                .unwrap_or(0);
+            let Some(peak) = visible_peaks.get(peak_index) else {
                 continue;
             };
-            let center = height as i32 / 2;
-            let top = ((1.0 - peak.max.clamp(-1.0, 1.0)) * center as f32).round() as i32;
-            let bottom = ((1.0 - peak.min.clamp(-1.0, 1.0)) * center as f32).round() as i32;
-            for y in top.max(0)..bottom.min(height as i32) {
-                if let Some(px) = pixels.get_mut(y as usize * width + x) {
+            let center = 24.0;
+            let top = f32_to_i32((1.0 - peak.max.clamp(-1.0, 1.0)) * center);
+            let bottom = f32_to_i32((1.0 - peak.min.clamp(-1.0, 1.0)) * center);
+            for y in top.max(0)..bottom.min(48) {
+                let pixel_index = usize::try_from(y)
+                    .unwrap_or(0)
+                    .saturating_mul(width)
+                    .saturating_add(x);
+                if let Some(px) = pixels.get_mut(pixel_index) {
                     *px = wave_color.gamma_multiply(0.82);
                 }
             }
         }
         let image = egui::ColorImage {
             size: [width, height],
-            source_size: egui::vec2(width as f32, height as f32),
+            source_size: egui::vec2(
+                f32::from(u16::try_from(width).unwrap_or(u16::MAX)),
+                f32::from(u16::try_from(height).unwrap_or(u16::MAX)),
+            ),
             pixels,
         };
         let handle = ctx.load_texture(
@@ -104,4 +127,27 @@ impl TimelineWindow {
         self.waveform_cache.insert(key, handle.clone());
         Some(handle)
     }
+}
+
+fn i64_to_i32(value: i64) -> i32 {
+    i32::try_from(value).unwrap_or_else(|_| {
+        if value.is_negative() {
+            i32::MIN
+        } else {
+            i32::MAX
+        }
+    })
+}
+
+fn f32_to_i32(value: f32) -> i32 {
+    if !value.is_finite() {
+        return 0;
+    }
+    value.round().to_string().parse().unwrap_or_else(|_| {
+        if value.is_sign_negative() {
+            i32::MIN
+        } else {
+            i32::MAX
+        }
+    })
 }

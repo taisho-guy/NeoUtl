@@ -205,7 +205,7 @@ impl TimelineWindow {
                 .get_timeline_objects()
                 .iter()
                 .map(|data| {
-                    let mut o = self.to_egui(ui.ctx(), data, fps);
+                    let mut o = self.as_egui(ui.ctx(), data, fps);
                     o.selected = selected.contains(&o.id);
                     o
                 })

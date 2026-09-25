@@ -3,19 +3,14 @@ use serde::{Deserialize, Serialize};
 use shipyard::Component;
 
 #[repr(u8)]
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ClipMode {
+    #[default]
     Alpha = 0,
     AlphaInvert = 1,
     Luminance = 2,
     LuminanceInvert = 3,
     Chroma = 4,
-}
-
-impl Default for ClipMode {
-    fn default() -> Self {
-        ClipMode::Alpha
-    }
 }
 
 #[derive(Clone, Copy, Debug, Component, Serialize, Deserialize)]
@@ -99,9 +94,15 @@ impl ParamAccess for ClipTarget {
                     0.0
                 }
             }
-            "layer_count_down" => self.layer_count_down as f32,
-            "layer_count_up" => self.layer_count_up as f32,
-            "mode" => self.mode as u8 as f32,
+            "layer_count_down" => u32_param_to_f32(self.layer_count_down),
+            "layer_count_up" => u32_param_to_f32(self.layer_count_up),
+            "mode" => u8_param_to_f32(match self.mode {
+                ClipMode::Alpha => 0,
+                ClipMode::AlphaInvert => 1,
+                ClipMode::Luminance => 2,
+                ClipMode::LuminanceInvert => 3,
+                ClipMode::Chroma => 4,
+            }),
             "chroma_hue" => self.chroma_hue,
             "chroma_tolerance" => self.chroma_tolerance,
             "blend_edge" => {
@@ -124,10 +125,14 @@ impl ParamAccess for ClipTarget {
     fn set_param(&mut self, key: &str, value: f32) -> bool {
         match key {
             "enabled" => self.enabled = value > 0.5,
-            "layer_count_down" => self.layer_count_down = value.max(0.0) as u32,
-            "layer_count_up" => self.layer_count_up = value.max(0.0) as u32,
+            "layer_count_down" => {
+                self.layer_count_down = f32_to_u32_param(value);
+            }
+            "layer_count_up" => {
+                self.layer_count_up = f32_to_u32_param(value);
+            }
             "mode" => {
-                self.mode = match value.round() as u8 {
+                self.mode = match f32_to_u8_param(value) {
                     0 => ClipMode::Alpha,
                     1 => ClipMode::AlphaInvert,
                     2 => ClipMode::Luminance,
@@ -143,4 +148,26 @@ impl ParamAccess for ClipTarget {
         }
         true
     }
+}
+
+fn u32_param_to_f32(value: u32) -> f32 {
+    f32::from(u16::try_from(value).unwrap_or(u16::MAX))
+}
+
+fn u8_param_to_f32(value: u8) -> f32 {
+    f32::from(value)
+}
+
+fn f32_to_u32_param(value: f32) -> u32 {
+    if !value.is_finite() || value <= 0.0 {
+        return 0;
+    }
+    value.round().to_string().parse().unwrap_or(u32::MAX)
+}
+
+fn f32_to_u8_param(value: f32) -> u8 {
+    if !value.is_finite() || value <= 0.0 {
+        return 0;
+    }
+    value.round().to_string().parse().unwrap_or(u8::MAX)
 }
