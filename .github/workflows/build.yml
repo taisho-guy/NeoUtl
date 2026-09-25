@@ -40,6 +40,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@v7
+        with:
+          submodules: recursive
 
       - name: ネイティブ依存関係インストール(Linux)
         if: runner.os == 'Linux'
