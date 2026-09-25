@@ -33,7 +33,7 @@ impl TimelineWindow {
 
         let header_rect = Rect::from_min_size(rect.min, Vec2::new(HEADER_WIDTH, RULER_HEIGHT));
         painter.rect_filled(header_rect, 0.0, header_bg);
-        let mut zoom_percent = (self.zoom_scale * 100.0).round() as i32;
+        let mut zoom_percent = f32_to_i32(self.zoom_scale * 100.0);
         let mut child = ui.new_child(egui::UiBuilder::new().max_rect(header_rect));
         let inner = child.add_sized(
             header_rect.size(),
@@ -42,7 +42,7 @@ impl TimelineWindow {
                 .suffix("%"),
         );
         if inner.changed() {
-            let new_scale = (zoom_percent as f32 / 100.0).clamp(0.1, 4.0);
+            let new_scale = (i32_to_f32(zoom_percent) / 100.0).clamp(0.1, 4.0);
             self.zoom_scale = new_scale;
             app_state::active_world(state)
                 .lock()
@@ -63,16 +63,18 @@ impl TimelineWindow {
                 .map_or(30, |scene| scene.effective_grid_interval())
         };
         let start_tick =
-            (self.scroll_x / self.zoom_scale / grid_interval as f32).floor() as i32 * grid_interval;
+            f32_to_i32((self.scroll_x / self.zoom_scale / i32_to_f32(grid_interval)).floor())
+                .saturating_mul(grid_interval);
         let tick_count =
-            (body_rect.width() / self.zoom_scale / grid_interval as f32).ceil() as i32 + 2;
+            f32_to_i32((body_rect.width() / self.zoom_scale / i32_to_f32(grid_interval)).ceil())
+                .saturating_add(2);
         for i in 0..tick_count {
-            let frame = start_tick + i * grid_interval;
+            let frame = start_tick.saturating_add(i.saturating_mul(grid_interval));
             let x = body_rect.min.x + self.frame_to_x(frame);
             if x < body_rect.min.x || x > body_rect.max.x {
                 continue;
             }
-            let is_second = frame % 30.max(1) == 0;
+            let is_second = frame % 30 == 0;
             let h = if is_second {
                 rect.height()
             } else {
@@ -83,7 +85,7 @@ impl TimelineWindow {
                 Stroke::new(1.0, if is_second { tick_major } else { tick_minor }),
             );
             let label = if is_second {
-                format!("{}s", frame / 30.max(1))
+                format!("{}s", frame / 30)
             } else {
                 frame.to_string()
             };
@@ -104,48 +106,97 @@ impl TimelineWindow {
             Stroke::new(2.0, accent),
         );
 
-        if response.drag_started() {
-            if let Some(pos) = response.interact_pointer_pos() {
-                self.select_range_anchor = Some(self.px_to_frame(pos.x - body_rect.min.x).max(0));
-            }
+        self.handle_ruler_pointer(&response, body_rect, state, preview_panel);
+
+        self.handle_ruler_zoom(ui, body_rect, state);
+    }
+
+    fn handle_ruler_pointer(
+        &mut self,
+        response: &egui::Response,
+        body_rect: Rect,
+        state: &SharedAppState,
+        preview_panel: &Rc<RefCell<PreviewPanel>>,
+    ) {
+        if response.drag_started()
+            && let Some(pos) = response.interact_pointer_pos()
+        {
+            self.select_range_anchor = Some(self.px_to_frame(pos.x - body_rect.min.x).max(0));
         }
-        if response.dragged() {
-            if let (Some(anchor_frame), Some(pos)) =
+        if response.dragged()
+            && let (Some(anchor_frame), Some(pos)) =
                 (self.select_range_anchor, response.interact_pointer_pos())
-            {
-                let cur_frame = self.px_to_frame(pos.x - body_rect.min.x).max(0);
-                self.select_range =
-                    Some((anchor_frame.min(cur_frame), anchor_frame.max(cur_frame)));
-            }
+        {
+            let current_frame = self.px_to_frame(pos.x - body_rect.min.x).max(0);
+            self.select_range = Some((
+                anchor_frame.min(current_frame),
+                anchor_frame.max(current_frame),
+            ));
         } else if response.double_clicked() {
             self.select_range = None;
             self.select_range_anchor = None;
-        } else if response.hovered() && response.clicked() {
-            if let Some(pos) = response.interact_pointer_pos() {
-                let frame = self.px_to_frame(pos.x - body_rect.min.x);
-                self.seek(state, preview_panel, frame);
-            }
-        }
-
-        if response.hovered() {
-            let scroll = ui.input(|i| i.smooth_scroll_delta.y);
-            if scroll != 0.0 {
-                let anchor_pos = ui.input(|i| i.pointer.hover_pos()).unwrap_or(body_rect.min);
-                let anchor_frame = self.px_to_frame(anchor_pos.x - body_rect.min.x);
-                let new_scale = if scroll > 0.0 {
-                    self.zoom_scale * 1.1
-                } else {
-                    self.zoom_scale * 0.9
-                }
-                .clamp(0.1, 10.0);
-                self.scroll_x =
-                    (self.scroll_x + (new_scale - self.zoom_scale) * anchor_frame as f32).max(0.0);
-                self.zoom_scale = new_scale;
-                app_state::active_world(state)
-                    .lock()
-                    .unwrap()
-                    .set_zoom(new_scale);
-            }
+        } else if response.hovered()
+            && response.clicked()
+            && let Some(pos) = response.interact_pointer_pos()
+        {
+            self.seek(
+                state,
+                preview_panel,
+                self.px_to_frame(pos.x - body_rect.min.x),
+            );
         }
     }
+
+    fn handle_ruler_zoom(&mut self, ui: &egui::Ui, body_rect: Rect, state: &SharedAppState) {
+        if !ui
+            .input(|input| input.pointer.hover_pos())
+            .is_some_and(|pos| body_rect.contains(pos))
+        {
+            return;
+        }
+        let scroll = ui.input(|input| input.smooth_scroll_delta.y);
+        if scroll == 0.0 {
+            return;
+        }
+        let anchor_pos = ui
+            .input(|input| input.pointer.hover_pos())
+            .unwrap_or(body_rect.min);
+        let anchor_frame = self.px_to_frame(anchor_pos.x - body_rect.min.x);
+        let new_scale = if scroll > 0.0 {
+            self.zoom_scale * 1.1
+        } else {
+            self.zoom_scale * 0.9
+        }
+        .clamp(0.1, 10.0);
+        self.scroll_x =
+            (self.scroll_x + (new_scale - self.zoom_scale) * i32_to_f32(anchor_frame)).max(0.0);
+        self.zoom_scale = new_scale;
+        app_state::active_world(state)
+            .lock()
+            .unwrap()
+            .set_zoom(new_scale);
+    }
+}
+
+fn i32_to_f32(value: i32) -> f32 {
+    value.to_string().parse().unwrap_or_else(|_| {
+        if value.is_negative() {
+            f32::MIN
+        } else {
+            f32::MAX
+        }
+    })
+}
+
+fn f32_to_i32(value: f32) -> i32 {
+    if !value.is_finite() {
+        return 0;
+    }
+    value.round().to_string().parse().unwrap_or_else(|_| {
+        if value.is_sign_negative() {
+            i32::MIN
+        } else {
+            i32::MAX
+        }
+    })
 }

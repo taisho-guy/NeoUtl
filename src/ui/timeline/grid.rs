@@ -32,14 +32,17 @@ impl TimelineWindow {
         }
 
         let line_count = if self.zoom_scale > 0.0 {
-            (rect.width() / (self.zoom_scale * frame_interval.max(1) as f32)).ceil() as i32 + 1
+            f32_to_i32((rect.width() / (self.zoom_scale * i32_to_f32(frame_interval))).ceil())
+                .saturating_add(1)
         } else {
             0
         };
         let first_visible =
-            (self.scroll_x / self.zoom_scale / frame_interval.max(1) as f32).floor() as i32;
+            f32_to_i32((self.scroll_x / self.zoom_scale / i32_to_f32(frame_interval)).floor());
         for i in 0..line_count {
-            let frame = (first_visible + i) * frame_interval;
+            let frame = first_visible
+                .saturating_add(i)
+                .saturating_mul(frame_interval);
             let x = rect.min.x + self.frame_to_x(frame);
             painter.line_segment(
                 [Pos2::new(x, rect.min.y), Pos2::new(x, rect.max.y)],
@@ -47,4 +50,27 @@ impl TimelineWindow {
             );
         }
     }
+}
+
+fn i32_to_f32(value: i32) -> f32 {
+    value.to_string().parse().unwrap_or_else(|_| {
+        if value.is_negative() {
+            f32::MIN
+        } else {
+            f32::MAX
+        }
+    })
+}
+
+fn f32_to_i32(value: f32) -> i32 {
+    if !value.is_finite() {
+        return 0;
+    }
+    value.round().to_string().parse().unwrap_or_else(|_| {
+        if value.is_sign_negative() {
+            i32::MIN
+        } else {
+            i32::MAX
+        }
+    })
 }
