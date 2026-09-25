@@ -23,13 +23,19 @@ impl EffectStack {
             for p in param_schema(&source) {
                 let value = match p.kind {
                     ParamKind::Bool => Value::Bool(p.default_float != 0.0),
-                    ParamKind::Enum => Value::Enum(p.default_float as u32),
+                    ParamKind::Enum => Value::Enum(
+                        p.default_float
+                            .max(0.0)
+                            .round()
+                            .to_string()
+                            .parse()
+                            .unwrap_or(u32::MAX),
+                    ),
                     ParamKind::Text => Value::Text(String::new()),
-                    ParamKind::FilePath => Value::FilePath(String::new()),
+                    ParamKind::FilePath | ParamKind::Folder => Value::FilePath(String::new()),
                     ParamKind::Track => Value::TrackRef(-1),
                     ParamKind::Float | ParamKind::Color => Value::Number(p.default_float),
                     ParamKind::Separator | ParamKind::Group => continue,
-                    ParamKind::Folder => Value::FilePath(String::new()),
                 };
                 instance.params.insert(p.key, EffectParam::new(value));
             }
@@ -118,7 +124,7 @@ impl EffectStack {
             .iter_mut()
             .map(|e| {
                 let mut second_params = std::collections::HashMap::new();
-                for (key, param) in e.params.iter_mut() {
+                for (key, param) in &mut e.params {
                     second_params.insert(key.clone(), param.split_at(split_frame));
                 }
                 EffectInstance {
