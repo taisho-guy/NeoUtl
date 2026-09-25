@@ -42,7 +42,9 @@ impl Track for Vec<Keyframe> {
     }
 
     fn time_of(&self, index: usize) -> i32 {
-        let k = &self[index];
+        let Some(k) = self.get(index) else {
+            return 0;
+        };
         if self.time_controlled() {
             k.control_frame.unwrap_or(k.frame)
         } else {
@@ -61,13 +63,16 @@ impl Track for Vec<Keyframe> {
         let Some(engine) = crate::easings::loader::by_id(&first.engine_id) else {
             return fallback;
         };
-        let raw: Vec<(i32, f32, Vec<u8>)> = (0..self.len())
-            .map(|i| {
-                (
-                    self.time_of(i),
-                    self[i].value,
-                    self[i].engine_payload.clone(),
-                )
+        let controlled = self.time_controlled();
+        let raw: Vec<(i32, f32, Vec<u8>)> = self
+            .iter()
+            .map(|key| {
+                let time = if controlled {
+                    key.control_frame.unwrap_or(key.frame)
+                } else {
+                    key.frame
+                };
+                (time, key.value, key.engine_payload.clone())
             })
             .collect();
         engine.evaluate(&raw, frame, fallback)
@@ -116,7 +121,7 @@ impl Track for Vec<Keyframe> {
         if self.len() >= 2 {
             return Err(TrackError::Occupied);
         }
-        if end <= self[0].frame {
+        if end <= self.first().map_or(end, |key| key.frame) {
             return Err(TrackError::NoRoom);
         }
         let mut key = last.clone();
@@ -132,7 +137,10 @@ impl Track for Vec<Keyframe> {
         if n == 0 {
             return Err(TrackError::Empty);
         }
-        if n < 2 || frame <= self[0].frame || frame >= self[n - 1].frame {
+        if n < 2
+            || frame <= self.first().map_or(frame, |key| key.frame)
+            || frame >= self.last().map_or(frame, |key| key.frame)
+        {
             return Err(TrackError::OutOfRange);
         }
         if self.index_of(frame).is_some() {
@@ -170,19 +178,24 @@ impl Track for Vec<Keyframe> {
         let lo = if index == 0 {
             i32::MIN
         } else {
-            self[index - 1].frame + 1
+            self.get(index - 1)
+                .map_or(i32::MIN, |key| key.frame.saturating_add(1))
         };
         let hi = if index + 1 == self.len() {
             i32::MAX
         } else {
-            self[index + 1].frame - 1
+            self.get(index + 1)
+                .map_or(i32::MAX, |key| key.frame.saturating_sub(1))
         };
         if lo > hi {
             return Err(TrackError::NoRoom);
         }
         let moved = frame.clamp(lo, hi);
-        self[index].frame = moved;
-        self[index].edit_seq = next_edit_seq();
+        let Some(key) = self.get_mut(index) else {
+            return Err(TrackError::OutOfRange);
+        };
+        key.frame = moved;
+        key.edit_seq = next_edit_seq();
         Ok(moved)
     }
 
@@ -195,15 +208,30 @@ impl Track for Vec<Keyframe> {
 
     fn move_range(&mut self, first: usize, last: usize, delta: i32) -> Result<i32, TrackError> {
         let n = self.len();
-        if first == 0 || last + 1 >= n {
+        if first == 0 || last >= n.saturating_sub(1) {
             return Err(TrackError::Locked);
         }
         if first > last {
             return Err(TrackError::OutOfRange);
         }
         let controlled = self.time_controlled();
-        let mut lo = self[first - 1].frame + 1 - self[first].frame;
-        let mut hi = self[last + 1].frame - 1 - self[last].frame;
+        let Some(previous) = self.get(first - 1) else {
+            return Err(TrackError::OutOfRange);
+        };
+        let Some(first_key) = self.get(first) else {
+            return Err(TrackError::OutOfRange);
+        };
+        let Some(last_key) = self.get(last) else {
+            return Err(TrackError::OutOfRange);
+        };
+        let Some(next) = self.get(last + 1) else {
+            return Err(TrackError::OutOfRange);
+        };
+        let mut lo = previous
+            .frame
+            .saturating_add(1)
+            .saturating_sub(first_key.frame);
+        let mut hi = next.frame.saturating_sub(1).saturating_sub(last_key.frame);
         if controlled {
             lo = lo.max(self.time_of(first - 1) + 1 - self.time_of(first));
             hi = hi.min(self.time_of(last + 1) - 1 - self.time_of(last));
@@ -212,7 +240,10 @@ impl Track for Vec<Keyframe> {
             return Err(TrackError::NoRoom);
         }
         let applied = delta.clamp(lo, hi);
-        for k in &mut self[first..=last] {
+        let Some(keys) = self.get_mut(first..=last) else {
+            return Err(TrackError::OutOfRange);
+        };
+        for k in keys {
             k.frame += applied;
             k.control_frame = k.control_frame.map(|c| c + applied);
             k.edit_seq = next_edit_seq();

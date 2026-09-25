@@ -219,7 +219,7 @@ pub const GROUP_CONTROL_SCHEMA: &[ParamSchema] = &[
         1.0,
     ),
     dep(
-        float_fixed("camera_focus_distance", "深度ぼけ基準距離", 0.0, 100000.0),
+        float_fixed("camera_focus_distance", "深度ぼけ基準距離", 0.0, 100_000.0),
         "camera_enabled",
         1.0,
     ),

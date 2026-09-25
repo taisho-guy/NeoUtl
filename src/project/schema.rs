@@ -284,8 +284,8 @@ mod tests {
             name: "schema roundtrip".to_string(),
             codec: ExportCodec::H264,
             backend: EncoderBackend::GpuVideo,
-            average_bitrate: 8000000,
-            max_bitrate: 12000000,
+            average_bitrate: 8_000_000,
+            max_bitrate: 12_000_000,
             container_ext: "mp4".to_string(),
         };
         let preset_schema = SchemaContract::to_schema(&preset);

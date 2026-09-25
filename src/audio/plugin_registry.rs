@@ -30,7 +30,7 @@ fn log_entries(entries: &[PluginCatalogEntry]) {
             "{}",
             t!(
                 "[NeoUtl] audioプラグイン登録: %{arg0} (%{arg1}, %{arg2})",
-                arg0 = format!("{}", entry.name),
+                arg0 = entry.name.to_string(),
                 arg1 = format!("{:?}", entry.format),
                 arg2 = format!("{}", entry.path.display())
             )

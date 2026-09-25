@@ -154,7 +154,7 @@ impl ProjectSettingsWindow {
                             tui.ui(|ui| {
                                 ui.add(
                                     egui::DragValue::new(&mut self.audio_sample_rate)
-                                        .range(8000..=192000)
+                                        .range(8000..=192_000)
                                         .suffix(" Hz"),
                                 );
                             });

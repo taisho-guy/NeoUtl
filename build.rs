@@ -28,7 +28,7 @@ fn copy_data_themes() {
         let path = entry.path();
         let ext_ok = matches!(
             path.extension().and_then(|e| e.to_str()),
-            Some("json") | Some("toml")
+            Some("json" | "toml")
         );
         if ext_ok && let Some(name) = path.file_name() {
             let _ = fs::copy(&path, dest.join(name));

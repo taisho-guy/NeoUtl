@@ -106,7 +106,7 @@ impl AudioMixer {
                     "{}",
                     t!(
                         "[NeoUtl] audio_mixer: 出力再構築失敗: %{arg0}",
-                        arg0 = format!("{}", err)
+                        arg0 = err.to_string()
                     )
                 );
                 self.output = None;
@@ -244,7 +244,7 @@ impl AudioMixer {
                         t!(
                             "[NeoUtl] audio_mixer: デコード失敗 %{arg0}: %{arg1}",
                             arg0 = format!("{}", source.path.display()),
-                            arg1 = format!("{}", err)
+                            arg1 = err.to_string()
                         )
                     );
                     return;

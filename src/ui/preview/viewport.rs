@@ -9,13 +9,23 @@
 use crate::ecs::transform::{
     Camera, compute_perspective_matrix, compute_view_matrix, mat4_inverse, mat4_mul,
 };
+use std::ops::Add;
 
 fn transform_point(m: &[f32; 16], p: [f32; 4]) -> [f32; 4] {
     let mut out = [0.0f32; 4];
-    for row in 0..4 {
-        out[row] = m[row] * p[0] + m[4 + row] * p[1] + m[8 + row] * p[2] + m[12 + row] * p[3];
+    let first = m.iter().take(4);
+    let second = m.iter().skip(4).take(4);
+    let third = m.iter().skip(8).take(4);
+    let fourth = m.iter().skip(12).take(4);
+    for (slot, (((m0, m1), m2), m3)) in out.iter_mut().zip(first.zip(second).zip(third).zip(fourth))
+    {
+        *slot = m0.mul_add(p[0], m1.mul_add(p[1], m2.mul_add(p[2], m3 * p[3])));
     }
     out
+}
+
+fn resolution_to_f32(value: u32) -> f32 {
+    f32::from(u16::try_from(value).unwrap_or(u16::MAX))
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -33,8 +43,8 @@ impl ViewportState {
         scene_height: u32,
         camera: &Camera,
     ) -> Self {
-        let sw = scene_width.max(1) as f32;
-        let sh = scene_height.max(1) as f32;
+        let sw = resolution_to_f32(scene_width.max(1));
+        let sh = resolution_to_f32(scene_height.max(1));
         let view = compute_view_matrix(camera);
         let aspect = sw / sh;
         let proj = compute_perspective_matrix(camera.fov_deg, aspect, camera.near, camera.far);
@@ -95,7 +105,7 @@ impl ViewportState {
         let center = self.image_rect.center();
         if let (Some((x0, y0)), Some((x1, y1))) = (
             self.unproject_to_z0(center),
-            self.unproject_to_z0(center + delta),
+            self.unproject_to_z0(egui::pos2(center.x.add(delta.x), center.y.add(delta.y))),
         ) {
             return (x1 - x0, y1 - y0);
         }

@@ -78,12 +78,7 @@ fn fetch_latest_release() -> Result<UpdateInfo, String> {
         .assets
         .into_iter()
         .find(|a| a.name == asset_name)
-        .ok_or_else(|| {
-            t!(
-                "対象アセット未検出: %{arg0}",
-                arg0 = format!("{asset_name}")
-            )
-        })?;
+        .ok_or_else(|| t!("対象アセット未検出: %{arg0}", arg0 = asset_name.to_string()))?;
 
     Ok(UpdateInfo {
         version: release.tag_name.trim_start_matches('v').to_string(),

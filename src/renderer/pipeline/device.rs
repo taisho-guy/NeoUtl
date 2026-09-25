@@ -11,7 +11,7 @@ fn mark_device_lost(reason: &str) {
         "{}",
         t!(
             "[NeoUtl] GPUデバイスロスト検知: %{arg0}",
-            arg0 = format!("{reason}")
+            arg0 = reason.to_string()
         )
     );
     DEVICE_LOST.store(true, Ordering::Relaxed);

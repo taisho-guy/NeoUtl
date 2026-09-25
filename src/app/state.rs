@@ -69,7 +69,7 @@ impl ProjectSession {
         let audio_mixer = AudioMixer::new(meta.audio_sample_rate).unwrap_or_else(|err| {
             report_error(&t!(
                 "[NeoUtl] audio_mixer初期化失敗: %{arg0}",
-                arg0 = format!("{}", err)
+                arg0 = err.to_string()
             ));
             AudioMixer::silent()
         });

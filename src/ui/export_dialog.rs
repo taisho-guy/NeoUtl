@@ -316,7 +316,7 @@ impl ExportDialog {
                             ui.label(t!("平均ビットレート(kbps)"));
                         });
                         tui.ui(|ui| {
-                            ui.add(Slider::new(&mut self.average_bitrate_kbps, 500..=200000));
+                            ui.add(Slider::new(&mut self.average_bitrate_kbps, 500..=200_000));
                         });
                     });
                     tui.style(col_style(2.0)).add(|tui| {
@@ -324,7 +324,7 @@ impl ExportDialog {
                             ui.label(t!("最大ビットレート(kbps)"));
                         });
                         tui.ui(|ui| {
-                            ui.add(Slider::new(&mut self.max_bitrate_kbps, 500..=200000));
+                            ui.add(Slider::new(&mut self.max_bitrate_kbps, 500..=200_000));
                         });
                     });
                 });

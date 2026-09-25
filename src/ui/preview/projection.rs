@@ -12,10 +12,19 @@ use shipyard::UniqueView;
 
 fn transform_point(m: &[f32; 16], p: [f32; 4]) -> [f32; 4] {
     let mut out = [0.0f32; 4];
-    for row in 0..4 {
-        out[row] = m[row] * p[0] + m[4 + row] * p[1] + m[8 + row] * p[2] + m[12 + row] * p[3];
+    let first = m.iter().take(4);
+    let second = m.iter().skip(4).take(4);
+    let third = m.iter().skip(8).take(4);
+    let fourth = m.iter().skip(12).take(4);
+    for (slot, (((m0, m1), m2), m3)) in out.iter_mut().zip(first.zip(second).zip(third).zip(fourth))
+    {
+        *slot = m0.mul_add(p[0], m1.mul_add(p[1], m2.mul_add(p[2], m3 * p[3])));
     }
     out
+}
+
+fn resolution_to_f32(value: u32) -> f32 {
+    f32::from(u16::try_from(value).unwrap_or(u16::MAX))
 }
 
 pub fn project_object_origin(
@@ -27,8 +36,8 @@ pub fn project_object_origin(
     let global = compute_global_matrix(&transform);
     let cam: Camera = world.world.run(|cam: UniqueView<Camera>| *cam);
     let proj = world.get_project();
-    let proj_width = proj.width.max(1) as f32;
-    let proj_height = proj.height.max(1) as f32;
+    let proj_width = resolution_to_f32(proj.width.max(1));
+    let proj_height = resolution_to_f32(proj.height.max(1));
 
     let mvp = compute_mvp(
         &global,
@@ -70,8 +79,8 @@ pub fn project_object_corners(
     let global = compute_global_matrix(&transform);
     let cam: Camera = world.world.run(|cam: UniqueView<Camera>| *cam);
     let proj = world.get_project();
-    let proj_width = proj.width.max(1) as f32;
-    let proj_height = proj.height.max(1) as f32;
+    let proj_width = resolution_to_f32(proj.width.max(1));
+    let proj_height = resolution_to_f32(proj.height.max(1));
 
     let mvp = compute_mvp(
         &global,
@@ -94,7 +103,7 @@ pub fn project_object_corners(
 
     let mut result = [egui::Pos2::ZERO; 4];
     let scale = image_rect.width() / proj_width;
-    for (i, &[lx, ly, lz]) in corners_local.iter().enumerate() {
+    for (slot, &[lx, ly, lz]) in result.iter_mut().zip(corners_local.iter()) {
         let clip = transform_point(&mvp, [lx, ly, lz, 1.0]);
         if clip[3].abs() < 1e-6 {
             return None;
@@ -103,7 +112,7 @@ pub fn project_object_corners(
         let ndc_y = clip[1] / clip[3];
         let px = (ndc_x * 0.5 + 0.5) * proj_width;
         let py = (1.0 - (ndc_y * 0.5 + 0.5)) * proj_height;
-        result[i] = egui::pos2(
+        *slot = egui::pos2(
             image_rect.left() + px * scale,
             image_rect.top() + py * scale,
         );

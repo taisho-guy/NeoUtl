@@ -1,4 +1,4 @@
-//! ハンドル位置は hit_test::anchor_screen_pos と同一の計算を用いる。
+//! ハンドル位置は `hit_test::anchor_screen_pos` と同一の計算を用いる。
 //! 描画のみを扱い、入力判定は持たない。
 
 use super::hit_test::{AnchorKind, anchor_screen_pos};
@@ -20,14 +20,11 @@ pub fn draw(painter: &egui::Painter, world: &EcsWorld, selected: &[usize], image
         };
         painter.circle_filled(origin, ORIGIN_RADIUS, origin_color);
 
-        if let Some((sw, sh)) = source_size_cache::global().get(id) {
-            if let Some(corners) = project_object_corners(world, id, sw, sh, image_rect) {
-                for i in 0..4 {
-                    painter.line_segment(
-                        [corners[i], corners[(i + 1) % 4]],
-                        egui::Stroke::new(1.0, line_color),
-                    );
-                }
+        if let Some((sw, sh)) = source_size_cache::global().get(id)
+            && let Some(corners) = project_object_corners(world, id, sw, sh, image_rect)
+        {
+            for (from, to) in corners.iter().zip(corners.iter().cycle().skip(1)).take(4) {
+                painter.line_segment([*from, *to], egui::Stroke::new(1.0, line_color));
             }
         }
 

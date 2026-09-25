@@ -541,16 +541,18 @@ impl KeymapResource {
         DEFAULT_KEYMAP
             .iter()
             .find(|(c, _, _)| *c == command)
-            .map(|(_, s, b)| (*s, OwnedBinding::from(*b)))
-            .unwrap_or((
-                Scope::Global,
-                OwnedBinding {
-                    ctrl: false,
-                    shift: false,
-                    alt: false,
-                    key: String::new(),
-                },
-            ))
+            .map_or(
+                (
+                    Scope::Global,
+                    OwnedBinding {
+                        ctrl: false,
+                        shift: false,
+                        alt: false,
+                        key: String::new(),
+                    },
+                ),
+                |(_, s, b)| (*s, OwnedBinding::from(*b)),
+            )
     }
 
     pub fn set_binding(&mut self, command: CommandId, scope: Scope, binding: OwnedBinding) {
