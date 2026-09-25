@@ -20,30 +20,33 @@ pub(crate) fn resolve_camera(
 ) -> Option<(i32, Camera)> {
     if let Some(candidate) = active_cameras.first() {
         let mut cam = candidate.camera;
-        if let TargetLayerMode::Layer(n) = cam.target_layer_mode {
-            if let Some(&(lx, ly, lz)) = layer_positions.get(&n) {
-                cam.target_x += lx;
-                cam.target_y += ly;
-                cam.target_z += lz;
-            }
+        if let TargetLayerMode::Layer(n) = cam.target_layer_mode
+            && let Some(&(lx, ly, lz)) = layer_positions.get(&n)
+        {
+            cam.target_x += lx;
+            cam.target_y += ly;
+            cam.target_z += lz;
         }
         return Some((candidate.layer, cam));
     }
 
     for &i in chain_idx {
+        let Some(controller) = controllers.get(i) else {
+            continue;
+        };
         if let ControllerKind::Group {
             camera: Some(cam), ..
-        } = controllers[i].kind
+        } = controller.kind
         {
             let mut cam = cam;
-            if let TargetLayerMode::Layer(n) = cam.target_layer_mode {
-                if let Some(&(lx, ly, lz)) = layer_positions.get(&n) {
-                    cam.target_x += lx;
-                    cam.target_y += ly;
-                    cam.target_z += lz;
-                }
+            if let TargetLayerMode::Layer(n) = cam.target_layer_mode
+                && let Some(&(lx, ly, lz)) = layer_positions.get(&n)
+            {
+                cam.target_x += lx;
+                cam.target_y += ly;
+                cam.target_z += lz;
             }
-            return Some((controllers[i].layer, cam));
+            return Some((controller.layer, cam));
         }
     }
     None
@@ -53,5 +56,11 @@ pub(crate) fn zbuffer_sort_key(camera_layer: i32, global: &GlobalMatrix, cam: &C
     let depth = view_space_depth(global, cam);
     let span = (cam.far - cam.near).max(1e-3);
     let normalized = ((depth - cam.near) / span - 0.5).clamp(-0.5, 0.5);
-    camera_layer as f32 + normalized
+    camera_layer.to_string().parse::<f32>().unwrap_or_else(|_| {
+        if camera_layer.is_negative() {
+            f32::MIN
+        } else {
+            f32::MAX
+        }
+    }) + normalized
 }

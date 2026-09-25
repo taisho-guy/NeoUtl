@@ -51,11 +51,15 @@ impl TryFrom<&neoutl_schema::TextContent> for TextContent {
     fn try_from(value: &neoutl_schema::TextContent) -> Result<Self, Self::Error> {
         let mut color = [0.0; 4];
         for (idx, v) in value.color.iter().take(4).enumerate() {
-            color[idx] = *v;
+            if let Some(slot) = color.get_mut(idx) {
+                *slot = *v;
+            }
         }
         let mut outline_color = [0.0; 4];
         for (idx, v) in value.outline_color.iter().take(4).enumerate() {
-            outline_color[idx] = *v;
+            if let Some(slot) = outline_color.get_mut(idx) {
+                *slot = *v;
+            }
         }
         Ok(Self {
             text: value.text.clone(),
@@ -99,7 +103,11 @@ impl ParamAccess for TextContent {
             "font_size" => self.font_size,
             "bold" => bool_to_f32(self.bold),
             "italic" => bool_to_f32(self.italic),
-            "align" => self.align as u8 as f32,
+            "align" => match self.align {
+                TextAlign::Left => 0.0,
+                TextAlign::Center => 1.0,
+                TextAlign::Right => 2.0,
+            },
             "line_height" => self.line_height,
             "outline_width" => self.outline_width,
             "outline_r" => self.outline_color[0],
@@ -115,7 +123,7 @@ impl ParamAccess for TextContent {
             "bold" => self.bold = value > 0.5,
             "italic" => self.italic = value > 0.5,
             "align" => {
-                self.align = match value.round() as i32 {
+                self.align = match value.round().to_string().parse::<i32>().unwrap_or(0) {
                     1 => TextAlign::Center,
                     2 => TextAlign::Right,
                     _ => TextAlign::Left,

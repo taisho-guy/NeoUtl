@@ -31,11 +31,15 @@ impl TryFrom<&neoutl_schema::ShapeParams> for ShapeParams {
     fn try_from(value: &neoutl_schema::ShapeParams) -> Result<Self, Self::Error> {
         let mut fill_color = [0.0; 4];
         for (idx, v) in value.fill_color.iter().take(4).enumerate() {
-            fill_color[idx] = *v;
+            if let Some(slot) = fill_color.get_mut(idx) {
+                *slot = *v;
+            }
         }
         let mut stroke_color = [0.0; 4];
         for (idx, v) in value.stroke_color.iter().take(4).enumerate() {
-            stroke_color[idx] = *v;
+            if let Some(slot) = stroke_color.get_mut(idx) {
+                *slot = *v;
+            }
         }
         Ok(Self {
             sides: value.sides,
@@ -62,7 +66,7 @@ impl Default for ShapeParams {
 impl ParamAccess for ShapeParams {
     fn get_param(&self, key: &str) -> Option<f32> {
         Some(match key {
-            "sides" => self.sides as f32,
+            "sides" => self.sides.to_string().parse().unwrap_or(f32::MAX),
             "extrude_depth" => self.extrude_depth,
             "stroke_width" => self.stroke_width,
             "fill_r" => self.fill_color[0],
@@ -74,7 +78,14 @@ impl ParamAccess for ShapeParams {
     }
     fn set_param(&mut self, key: &str, value: f32) -> bool {
         match key {
-            "sides" => self.sides = value.max(3.0) as u32,
+            "sides" => {
+                self.sides = value
+                    .max(3.0)
+                    .round()
+                    .to_string()
+                    .parse()
+                    .unwrap_or(u32::MAX);
+            }
             "extrude_depth" => self.extrude_depth = value.max(0.0),
             "stroke_width" => self.stroke_width = value.max(0.0),
             "fill_r" => self.fill_color[0] = value,
@@ -103,22 +114,19 @@ impl KeyframeTracks {
         engine_payload: Vec<u8>,
     ) {
         let track = self.0.entry(key.to_owned()).or_default();
-        match track.iter_mut().find(|k| k.frame == frame) {
-            Some(existing) => {
-                existing.value = value;
-                existing.engine_id = engine_id;
-                existing.engine_payload = engine_payload;
-                existing.edit_seq = crate::ecs::types::next_edit_seq();
-            }
-            None => {
-                track.push(crate::ecs::types::Keyframe::new(
-                    frame,
-                    value,
-                    engine_id,
-                    engine_payload,
-                ));
-                track.sort_by_key(|k| k.frame);
-            }
+        if let Some(existing) = track.iter_mut().find(|k| k.frame == frame) {
+            existing.value = value;
+            existing.engine_id = engine_id;
+            existing.engine_payload = engine_payload;
+            existing.edit_seq = crate::ecs::types::next_edit_seq();
+        } else {
+            track.push(crate::ecs::types::Keyframe::new(
+                frame,
+                value,
+                engine_id,
+                engine_payload,
+            ));
+            track.sort_by_key(|k| k.frame);
         }
     }
 
@@ -166,7 +174,7 @@ impl KeyframeTracks {
     ) -> (KeyframeTracks, HashMap<String, f32>) {
         let mut second = HashMap::new();
         let mut evaluated = HashMap::new();
-        for (key, track) in self.0.iter_mut() {
+        for (key, track) in &mut self.0 {
             let fallback = fallback_for(key).unwrap_or(0.0);
             evaluated.insert(key.clone(), track.evaluate(split_frame, fallback));
             let tail = track.split_at_frame(split_frame, fallback);
