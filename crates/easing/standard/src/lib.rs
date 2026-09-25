@@ -288,6 +288,13 @@ static VTABLE: EasingEngineVTable = EasingEngineVTable {
 };
 
 #[unsafe(no_mangle)]
+/// Returns the static vtable for the standard easing engine.
+///
+/// # Safety
+///
+/// The returned pointer is valid for the lifetime of the process and must be
+/// treated as immutable. The caller must not free or mutate the pointed-to
+/// vtable.
 pub unsafe extern "C" fn neoutl_easing_engine_entry() -> *const EasingEngineVTable {
     &VTABLE
 }

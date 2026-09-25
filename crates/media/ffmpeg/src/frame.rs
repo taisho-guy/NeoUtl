@@ -4,6 +4,8 @@ use std::sync::{Arc, Mutex};
 use neo_media_cache::NeoMediaCache;
 use neo_media_core::PixelFormat;
 
+type FrameUpdateListener = Box<dyn Fn(&str) + Send + Sync>;
+
 pub struct GpuFrame {
     pub texture: wgpu::Texture,
     pub width: u32,
@@ -143,7 +145,7 @@ impl RamFrame {
 
 pub struct VideoFrameStore {
     frames: Mutex<HashMap<String, (i64, VideoFrame)>>,
-    listeners: Mutex<Vec<Box<dyn Fn(&str) + Send + Sync>>>,
+    listeners: Mutex<Vec<FrameUpdateListener>>,
     updated: std::sync::Condvar,
 }
 

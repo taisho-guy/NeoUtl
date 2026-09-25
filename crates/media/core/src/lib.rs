@@ -128,6 +128,13 @@ pub trait NeoFramePool: Send + Sync {
         height: u32,
     ) -> Result<wgpu::Texture, PoolError>;
     fn release(&self, texture: wgpu::Texture);
+    /// Finalizes a texture after an external decoder has written its pixels.
+    ///
+    /// # Safety
+    ///
+    /// The texture must contain a completed write performed according to the
+    /// pool implementation's synchronization contract. The caller must not
+    /// use or submit the texture concurrently with that external write.
     unsafe fn finalize_write(
         &self,
         device: &wgpu::Device,

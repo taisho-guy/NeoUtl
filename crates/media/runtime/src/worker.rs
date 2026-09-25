@@ -393,7 +393,7 @@ impl DecodeWorker {
                         t!(
                             "[decode-worker] speculative prefetch(frame=%{arg0}) failed: %{arg1}",
                             arg0 = format!("{}", far),
-                            arg1 = format!("{}", e)
+                            arg1 = e.to_string()
                         )
                     );
                     if decode_thread.hung {

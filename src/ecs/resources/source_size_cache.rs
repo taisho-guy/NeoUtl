@@ -4,7 +4,7 @@ use std::sync::{Mutex, OnceLock};
 /// 各オブジェクトの解決済みソースサイズ (ピクセル単位) を保持するプロセスグローバルキャッシュ。
 /// `get_active_objects_system` が毎フレーム書き込み、UI層 (`hit_test` / `gizmo`) が読み取る。
 /// `neoutl_media_runtime::cache::global()` と同一の運用方式 (プロセス内シングルトン、`OnceLock` 初期化)。
-/// EcsWorld / Shipyard Unique には登録しない: 登録には world 初期化コードの変更が必要になり、
+/// `EcsWorld` / Shipyard `Unique` には登録しない: 登録には world 初期化コードの変更が必要になり、
 /// 読み取り専用の `&EcsWorld` からも書き込みたいという要件と噛み合わないため。
 #[derive(Default)]
 pub struct SourceSizeCache {

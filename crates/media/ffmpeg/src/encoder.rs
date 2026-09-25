@@ -50,7 +50,7 @@ pub fn is_hw_encoder_name(name: &str) -> bool {
 }
 
 fn averror_eagain() -> i32 {
-    -(libc::EAGAIN as i32)
+    -libc::EAGAIN
 }
 
 pub struct VideoEncoder {
@@ -155,7 +155,7 @@ impl VideoEncoder {
             (*enc_ctx).rc_buffer_size = (config.max_bitrate * 2) as i32;
             (*enc_ctx).gop_size = config.fps.max(1) as i32 * 2;
             (*enc_ctx).pix_fmt = pick_pix_fmt(enc_ctx, codec);
-            if (*(*fmt_ctx).oformat).flags & sys::AVFMT_GLOBALHEADER as i32 != 0 {
+            if (*(*fmt_ctx).oformat).flags & sys::AVFMT_GLOBALHEADER != 0 {
                 (*enc_ctx).flags |= sys::AV_CODEC_FLAG_GLOBAL_HEADER as i32;
             }
 
@@ -182,7 +182,7 @@ impl VideoEncoder {
             (*stream).time_base = time_base;
 
             let mut output_opened = false;
-            if (*(*fmt_ctx).oformat).flags & sys::AVFMT_NOFILE as i32 == 0 {
+            if (*(*fmt_ctx).oformat).flags & sys::AVFMT_NOFILE == 0 {
                 if sys::avio_open(&mut (*fmt_ctx).pb, out_cpath.as_ptr(), sys::AVIO_FLAG_WRITE) < 0
                 {
                     sys::avcodec_free_context(&mut { enc_ctx });
@@ -275,7 +275,7 @@ impl VideoEncoder {
                 src_stride.as_ptr(),
                 0,
                 self.height as i32,
-                (*self.frame).data.as_ptr() as *const *mut u8,
+                (*self.frame).data.as_ptr(),
                 (*self.frame).linesize.as_ptr(),
             );
             (*self.frame).pts = self.next_pts;

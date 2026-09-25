@@ -51,6 +51,12 @@ impl StrRef {
         }
     }
 
+    /// Reads the referenced bytes as a UTF-8 string with static lifetime.
+    ///
+    /// # Safety
+    ///
+    /// `ptr` must point to `len` readable bytes that remain valid for the
+    /// returned string's lifetime, and those bytes must contain valid UTF-8.
     pub unsafe fn as_str(&self) -> &'static str {
         unsafe { std::str::from_utf8_unchecked(std::slice::from_raw_parts(self.ptr, self.len)) }
     }
@@ -84,6 +90,13 @@ impl<T> FfiSlice<T> {
         self.ptr.is_null() || self.len == 0
     }
 
+    /// Reads the referenced memory as a slice with static lifetime.
+    ///
+    /// # Safety
+    ///
+    /// When the slice is non-empty, `ptr` must be non-null and point to at
+    /// least `len` properly initialized values that remain valid for the
+    /// returned slice's lifetime.
     pub unsafe fn as_slice(&self) -> &'static [T] {
         if self.is_empty() {
             &[]
@@ -131,6 +144,12 @@ pub struct ParamRowOwned {
 }
 
 impl ParamSchema {
+    /// Converts the FFI schema into owned Rust data.
+    ///
+    /// # Safety
+    ///
+    /// Every string reference in the schema must satisfy the safety contract
+    /// of [`StrRef::as_str`].
     pub unsafe fn to_owned_row(&self) -> ParamRowOwned {
         unsafe {
             ParamRowOwned {

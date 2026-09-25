@@ -209,8 +209,8 @@ pub fn resolve_object_camera(world: &EcsWorld, object_id: usize) -> Camera {
     let context = build_scene_context(world, active_scene, current);
     world
         .world
-        .run(|(_object_ids, layers): (View<ObjectId>, View<Layer>)| {
-            for (entity, object) in _object_ids.iter().with_id() {
+        .run(|(object_ids, layers): (View<ObjectId>, View<Layer>)| {
+            for (entity, object) in object_ids.iter().with_id() {
                 if object.0 != object_id {
                     continue;
                 }

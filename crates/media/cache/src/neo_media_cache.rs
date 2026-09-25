@@ -76,7 +76,7 @@ impl NeoMediaCache {
 
     fn maybe_requery_budget(&self) {
         let seq = self.acquire_counter.fetch_add(1, Ordering::Relaxed);
-        if seq % REQUERY_INTERVAL_ACQUIRES != 0 {
+        if !seq.is_multiple_of(REQUERY_INTERVAL_ACQUIRES) {
             return;
         }
         let Some(provider) = self.budget_provider.as_ref() else {
@@ -114,7 +114,7 @@ impl NeoMediaCache {
 
     fn maybe_requery_ram_budget(&self) {
         let seq = self.ram_requery_counter.fetch_add(1, Ordering::Relaxed);
-        if seq % REQUERY_INTERVAL_ACQUIRES != 0 {
+        if !seq.is_multiple_of(REQUERY_INTERVAL_ACQUIRES) {
             return;
         }
         let Some(provider) = self.ram_budget_provider.as_ref() else {

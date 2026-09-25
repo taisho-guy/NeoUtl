@@ -96,6 +96,13 @@ impl FrameIndex {
     }
 }
 
+/// Builds a frame index from FFmpeg's stream index or by scanning the stream.
+///
+/// # Safety
+///
+/// `fmt_ctx` must be a valid, initialized format context whose stream array
+/// contains a valid entry at `stream_index`. The context must remain valid for
+/// the duration of this call.
 pub unsafe fn build_index(fmt_ctx: *mut sys::AVFormatContext, stream_index: i32) -> FrameIndex {
     let stream = unsafe { *(*fmt_ctx).streams.add(stream_index as usize) };
     let nb_index_entries = unsafe { sys::avformat_index_get_entries_count(stream) };

@@ -128,15 +128,7 @@ pub(crate) fn convert_frame(
                 color_matrix,
                 color_range,
             }
-        } else if src_format == av_pix_fmt_rgba() {
-            let plane = copy_plane((*src_frame).data[0], (*src_frame).linesize[0], height);
-            RamFrame::Rgba8 {
-                plane,
-                width,
-                height,
-                channel_order: ChannelOrder::Rgba,
-            }
-        } else if src_format == av_pix_fmt_rgb0() {
+        } else if src_format == av_pix_fmt_rgba() || src_format == av_pix_fmt_rgb0() {
             let plane = copy_plane((*src_frame).data[0], (*src_frame).linesize[0], height);
             RamFrame::Rgba8 {
                 plane,
@@ -196,15 +188,17 @@ pub(crate) fn compose_output_frame(
                 &device,
                 queue,
                 cache,
-                &y.bytes,
-                y.stride,
-                &uv.bytes,
-                uv.stride,
-                *width,
-                *height,
-                *bit_depth,
-                *color_matrix,
-                *color_range,
+                crate::colorconv::P0xxInput {
+                    y: &y.bytes,
+                    y_stride: y.stride,
+                    uv: &uv.bytes,
+                    uv_stride: uv.stride,
+                    width: *width,
+                    height: *height,
+                    bit_depth: *bit_depth,
+                    color_matrix: *color_matrix,
+                    color_range: *color_range,
+                },
             ) {
                 Ok(texture) => texture,
                 Err(err) => {
@@ -240,16 +234,18 @@ pub(crate) fn compose_output_frame(
                 &device,
                 queue,
                 cache,
-                &y.bytes,
-                y.stride,
-                &u.bytes,
-                u.stride,
-                &v.bytes,
-                v.stride,
-                *width,
-                *height,
-                *color_matrix,
-                *color_range,
+                crate::colorconv::Yuv420Input {
+                    y: &y.bytes,
+                    y_stride: y.stride,
+                    u: &u.bytes,
+                    u_stride: u.stride,
+                    v: &v.bytes,
+                    v_stride: v.stride,
+                    width: *width,
+                    height: *height,
+                    color_matrix: *color_matrix,
+                    color_range: *color_range,
+                },
             ) {
                 Ok(texture) => texture,
                 Err(err) => {
@@ -288,7 +284,7 @@ pub(crate) fn compose_output_frame(
                 ChannelOrder::Rgba => std::borrow::Cow::Borrowed(&plane.bytes),
                 ChannelOrder::Bgra => {
                     let mut swapped = plane.bytes.to_vec();
-                    for px in swapped.chunks_exact_mut(4) {
+                    for px in swapped.as_chunks_mut::<4>().0 {
                         px.swap(0, 2);
                     }
                     std::borrow::Cow::Owned(swapped)

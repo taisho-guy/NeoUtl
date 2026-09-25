@@ -81,8 +81,8 @@ pub fn load_all(decoders_dir: &Path) {
             "{}",
             t!(
                 "[NeoUtl] デコーダ登録: %{arg0} (%{arg1})",
-                arg0 = format!("{}", plugin.id),
-                arg1 = format!("{}", plugin.name)
+                arg0 = plugin.id.to_string(),
+                arg1 = plugin.name.to_string()
             )
         );
     }
@@ -126,7 +126,7 @@ pub fn decode_audio(path: &Path) -> Result<AudioBuffer, String> {
     let decode_fn = plugin.vtable.decode_audio.ok_or_else(|| {
         t!(
             "プラグイン%{arg0}はdecode_audio未実装",
-            arg0 = format!("{}", plugin.id)
+            arg0 = plugin.id.to_string()
         )
         .to_string()
     })?;

@@ -126,7 +126,7 @@ fn open_video_excluding(
                 t!(
                     "[media-cache] open_video候補除外（過去に連続失敗）: %{arg0} (plugin=%{arg1})",
                     arg0 = format!("{}", path.display()),
-                    arg1 = format!("{}", plugin.id)
+                    arg1 = plugin.id.to_string()
                 )
             );
             continue;
@@ -141,7 +141,7 @@ fn open_video_excluding(
                     t!(
                         "[media-cache] open_video成功: %{arg0} (plugin=%{arg1})",
                         arg0 = format!("{}", path.display()),
-                        arg1 = format!("{}", plugin.id)
+                        arg1 = plugin.id.to_string()
                     )
                 );
                 return Ok((decoder, plugin.id.clone()));
@@ -152,8 +152,8 @@ fn open_video_excluding(
                     t!(
                         "[media-cache] open_videoフォールバック: %{arg0} (plugin=%{arg1}) 理由=%{arg2}",
                         arg0 = format!("{}", path.display()),
-                        arg1 = format!("{}", plugin.id),
-                        arg2 = format!("{err}")
+                        arg1 = plugin.id.to_string(),
+                        arg2 = err.to_string()
                     )
                 );
                 failures.push(format!("{}: {err}", plugin.id));
@@ -163,7 +163,7 @@ fn open_video_excluding(
     Err(t!(
         "全デコーダで開けませんでした: %{arg0} [%{arg1}]",
         arg0 = format!("{}", path.display()),
-        arg1 = format!("{}", failures.join(" / "))
+        arg1 = failures.join(" / ").to_string()
     )
     .to_string())
 }
@@ -184,7 +184,7 @@ fn open_image(path: &Path) -> Result<Box<dyn ImageSource>, String> {
     let open_fn = plugin.vtable.open_image.ok_or_else(|| {
         t!(
             "プラグイン%{arg0}はopen_image未実装",
-            arg0 = format!("{}", plugin.id)
+            arg0 = plugin.id.to_string()
         )
         .to_string()
     })?;
@@ -203,7 +203,7 @@ fn decode_audio(path: &Path) -> Result<AudioBuffer, String> {
     let decode_fn = plugin.vtable.decode_audio.ok_or_else(|| {
         t!(
             "プラグイン%{arg0}はdecode_audio未実装",
-            arg0 = format!("{}", plugin.id)
+            arg0 = plugin.id.to_string()
         )
         .to_string()
     })?;
@@ -270,7 +270,7 @@ impl MediaCache {
                     arg0 = format!("{}", path.display())
                 )
                 .to_string();
-                eprintln!("{}", t!("[media-cache] %{arg0}", arg0 = format!("{}", err)));
+                eprintln!("{}", t!("[media-cache] %{arg0}", arg0 = err.to_string()));
                 PathEntry::Failed(err)
             }
             Some(MediaKind::Video) => match open_video(path) {
@@ -291,7 +291,7 @@ impl MediaCache {
                         t!(
                             "[media-cache] load失敗: %{arg0} 理由=%{arg1}",
                             arg0 = format!("{}", path.display()),
-                            arg1 = format!("{err}")
+                            arg1 = err.to_string()
                         )
                     );
                     PathEntry::Failed(err)
@@ -308,7 +308,7 @@ impl MediaCache {
                         t!(
                             "[media-cache] load失敗: %{arg0} 理由=%{arg1}",
                             arg0 = format!("{}", path.display()),
-                            arg1 = format!("{err}")
+                            arg1 = err.to_string()
                         )
                     );
                     PathEntry::Failed(err)
@@ -322,7 +322,7 @@ impl MediaCache {
                         t!(
                             "[media-cache] load失敗: %{arg0} 理由=%{arg1}",
                             arg0 = format!("{}", path.display()),
-                            arg1 = format!("{err}")
+                            arg1 = err.to_string()
                         )
                     );
                     PathEntry::Failed(err)
@@ -389,10 +389,10 @@ impl MediaCache {
                 t!(
                     "[media-cache] prefetch failure path=%{arg0} plugin=%{arg1} gen=%{arg2} -> gen+1 旧worker/pending無効化 watchdog由来=%{arg3} reason=%{arg4}",
                     arg0 = format!("{}", path.display()),
-                    arg1 = format!("{}", video.plugin_id),
+                    arg1 = video.plugin_id.to_string(),
                     arg2 = format!("{}", video.generation),
                     arg3 = format!("{}", is_watchdog_timeout),
-                    arg4 = format!("{}", reason)
+                    arg4 = reason.to_string()
                 )
             );
 
@@ -447,7 +447,7 @@ impl MediaCache {
                     "{}",
                     t!(
                         "[media-cache] fallback apply/open failed path=%{arg0} reason=%{arg1}",
-                        arg1 = format!("{}", err)
+                        arg1 = err.to_string()
                     )
                 );
                 *guard = PathEntry::Failed(err);
@@ -510,8 +510,8 @@ impl MediaCache {
                         let (d, _) = open_video_excluding(path, &failed_plugins).map_err(|e| {
                             t!(
                                 "追加インスタンス用デコーダを開けません: %{arg0} / plugin=%{arg1}",
-                                arg0 = format!("{e}"),
-                                arg1 = format!("{plugin_id}")
+                                arg0 = e.to_string(),
+                                arg1 = plugin_id.to_string()
                             )
                             .to_string()
                         })?;

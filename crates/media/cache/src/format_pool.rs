@@ -220,15 +220,15 @@ impl FormatPool {
             .find(|q| q.kind_id == kind_id)
             .map(|q| q.min_reserved.load(Ordering::Relaxed))
             .unwrap_or(0);
-        if self.kind_usage_count(kind_id) < reserved_for_kind {
-            if let Some(idx) = self.find_over_quota_victim(kind_id, quotas) {
-                let slot = &mut self.slots[idx];
-                slot.state = SlotState::Writing;
-                slot.kind_id = kind_id;
-                slot.last_used = acquire_seq;
-                slot.write_started_at = Some(write_started);
-                return Ok(slot.texture.clone());
-            }
+        if self.kind_usage_count(kind_id) < reserved_for_kind
+            && let Some(idx) = self.find_over_quota_victim(kind_id, quotas)
+        {
+            let slot = &mut self.slots[idx];
+            slot.state = SlotState::Writing;
+            slot.kind_id = kind_id;
+            slot.last_used = acquire_seq;
+            slot.write_started_at = Some(write_started);
+            return Ok(slot.texture.clone());
         }
 
         self.detect_stalled_writers(clip_key_hint);

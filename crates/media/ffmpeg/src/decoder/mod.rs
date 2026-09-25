@@ -140,12 +140,12 @@ impl VideoDecoder {
         self.last_requested_frame.store(frame, Ordering::Release);
         let (lock, cvar) = &*self.shared;
         let mut mailbox = lock.lock().expect("mailbox mutex poisoned");
-        if let Some(overwritten) = mailbox.target_frame.replace(frame) {
-            if overwritten != frame {
-                eprintln!(
-                    "[neoutl-video-decoder][診断][seek上書き] overwritten={overwritten} new={frame}"
-                );
-            }
+        if let Some(overwritten) = mailbox.target_frame.replace(frame)
+            && overwritten != frame
+        {
+            eprintln!(
+                "[neoutl-video-decoder][診断][seek上書き] overwritten={overwritten} new={frame}"
+            );
         }
         cvar.notify_one();
     }

@@ -170,37 +170,35 @@ fn decode_task(
     let target = requested_target.clamp(0, ctx.index.len() - 1);
     let media_cache = shared_media_cache();
 
-    if let Some(ram_frame) = gop_cache.get(target, ram_cache) {
-        if let (Some(_), Some(queue), Some(cache)) = (
+    if let Some(ram_frame) = gop_cache.get(target, ram_cache)
+        && let (Some(_), Some(queue), Some(cache)) = (
             ctx.gpu_device.as_ref(),
             ctx.gpu_queue.as_ref(),
             media_cache.as_ref(),
-        ) {
-            if let Some(frame) = compose_output_frame(&ram_frame, queue, cache, p0xx_resources) {
-                store.set_frame(clip_key, target, frame.clone());
-                ctx.last_good_frame = Some(frame);
-                eprintln!(
-                    "[neoutl-video-decoder][診断][decode_task終了][gop_cache即応] requested_target={requested_target} target={target}"
-                );
-                return;
-            }
-        }
+        )
+        && let Some(frame) = compose_output_frame(&ram_frame, queue, cache, p0xx_resources)
+    {
+        store.set_frame(clip_key, target, frame.clone());
+        ctx.last_good_frame = Some(frame);
+        eprintln!(
+            "[neoutl-video-decoder][診断][decode_task終了][gop_cache即応] requested_target={requested_target} target={target}"
+        );
+        return;
     }
-    if let Some(ram_frame) = ram_cache.get(target) {
-        if let (Some(_), Some(queue), Some(cache)) = (
+    if let Some(ram_frame) = ram_cache.get(target)
+        && let (Some(_), Some(queue), Some(cache)) = (
             ctx.gpu_device.as_ref(),
             ctx.gpu_queue.as_ref(),
             media_cache.as_ref(),
-        ) {
-            if let Some(frame) = compose_output_frame(&ram_frame, queue, cache, p0xx_resources) {
-                store.set_frame(clip_key, target, frame.clone());
-                ctx.last_good_frame = Some(frame);
-                eprintln!(
-                    "[neoutl-video-decoder][診断][decode_task終了][ram_cache即応] requested_target={requested_target} target={target}"
-                );
-                return;
-            }
-        }
+        )
+        && let Some(frame) = compose_output_frame(&ram_frame, queue, cache, p0xx_resources)
+    {
+        store.set_frame(clip_key, target, frame.clone());
+        ctx.last_good_frame = Some(frame);
+        eprintln!(
+            "[neoutl-video-decoder][診断][decode_task終了][ram_cache即応] requested_target={requested_target} target={target}"
+        );
+        return;
     }
 
     let key_index = ctx.index.preceding_keyframe(target);
@@ -292,47 +290,42 @@ fn decode_task(
             *last_decoded_frame = decoded_index;
 
             if !ram_cache.contains(decoded_index) {
-                match convert_frame(ctx, av_frame) {
-                    Some(ram_frame) => {
-                        ram_cache.insert(decoded_index, ram_frame.clone());
-                        new_gop_block.frame_indices.push(decoded_index);
+                if let Some(ram_frame) = convert_frame(ctx, av_frame) {
+                    ram_cache.insert(decoded_index, ram_frame.clone());
+                    new_gop_block.frame_indices.push(decoded_index);
 
-                        if decoded_index == target && !target_dispatched {
-                            if let (Some(_), Some(queue), Some(cache)) = (
-                                ctx.gpu_device.as_ref(),
-                                ctx.gpu_queue.as_ref(),
-                                media_cache.as_ref(),
-                            ) {
-                                if let Some(frame) =
-                                    compose_output_frame(&ram_frame, queue, cache, p0xx_resources)
-                                {
-                                    ctx.last_good_frame = Some(frame.clone());
-                                    store.set_frame(clip_key, decoded_index, frame);
-                                    target_dispatched = true;
-                                }
-                            } else {
-                                eprintln!(
-                                    "[neoutl-video-decoder][非対応] wgpuデバイス未取得、昇格スキップ"
-                                );
+                    if decoded_index == target && !target_dispatched {
+                        if let (Some(_), Some(queue), Some(cache)) = (
+                            ctx.gpu_device.as_ref(),
+                            ctx.gpu_queue.as_ref(),
+                            media_cache.as_ref(),
+                        ) {
+                            if let Some(frame) =
+                                compose_output_frame(&ram_frame, queue, cache, p0xx_resources)
+                            {
+                                ctx.last_good_frame = Some(frame.clone());
+                                store.set_frame(clip_key, decoded_index, frame);
+                                target_dispatched = true;
                             }
+                        } else {
+                            eprintln!(
+                                "[neoutl-video-decoder][非対応] wgpuデバイス未取得、昇格スキップ"
+                            );
                         }
                     }
-                    None => {}
                 }
             } else if decoded_index == target && !target_dispatched {
-                if let Some(ram_frame) = ram_cache.get(decoded_index) {
-                    if let (Some(_), Some(queue), Some(cache)) = (
+                if let Some(ram_frame) = ram_cache.get(decoded_index)
+                    && let (Some(_), Some(queue), Some(cache)) = (
                         ctx.gpu_device.as_ref(),
                         ctx.gpu_queue.as_ref(),
                         media_cache.as_ref(),
-                    ) {
-                        if let Some(frame) =
-                            compose_output_frame(&ram_frame, queue, cache, p0xx_resources)
-                        {
-                            ctx.last_good_frame = Some(frame.clone());
-                            store.set_frame(clip_key, decoded_index, frame);
-                        }
-                    }
+                    )
+                    && let Some(frame) =
+                        compose_output_frame(&ram_frame, queue, cache, p0xx_resources)
+                {
+                    ctx.last_good_frame = Some(frame.clone());
+                    store.set_frame(clip_key, decoded_index, frame);
                 }
                 target_dispatched = true;
             }
@@ -399,12 +392,10 @@ decoded_frame_count={decoded_count} boundary={boundary_dump}",
         );
     }
 
-    if !target_dispatched {
-        if let Some(frame) = ctx.last_good_frame.clone() {
-            eprintln!(
-                "[neoutl-video-decoder][診断][近似フレーム配信] requested_target={requested_target} target={target}"
-            );
-            store.set_frame(clip_key, requested_target, frame);
-        }
+    if !target_dispatched && let Some(frame) = ctx.last_good_frame.clone() {
+        eprintln!(
+            "[neoutl-video-decoder][診断][近似フレーム配信] requested_target={requested_target} target={target}"
+        );
+        store.set_frame(clip_key, requested_target, frame);
     }
 }

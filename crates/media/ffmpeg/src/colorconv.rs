@@ -130,16 +130,28 @@ impl P0xxGpuResources {
     }
 }
 
-fn upload_plane_texture(
-    device: &wgpu::Device,
-    queue: &wgpu::Queue,
-    bytes: &[u8],
+struct PlaneUpload<'a> {
+    bytes: &'a [u8],
     stride: u32,
     width: u32,
     height: u32,
     format: wgpu::TextureFormat,
-    label: &str,
+    label: &'a str,
+}
+
+fn upload_plane_texture(
+    device: &wgpu::Device,
+    queue: &wgpu::Queue,
+    upload: PlaneUpload<'_>,
 ) -> wgpu::Texture {
+    let PlaneUpload {
+        bytes,
+        stride,
+        width,
+        height,
+        format,
+        label,
+    } = upload;
     let texture = device.create_texture(&wgpu::TextureDescriptor {
         label: Some(label),
         size: wgpu::Extent3d {
@@ -176,22 +188,36 @@ fn upload_plane_texture(
     texture
 }
 
-#[allow(clippy::too_many_arguments)]
+pub(crate) struct P0xxInput<'a> {
+    pub(crate) y: &'a [u8],
+    pub(crate) y_stride: u32,
+    pub(crate) uv: &'a [u8],
+    pub(crate) uv_stride: u32,
+    pub(crate) width: u32,
+    pub(crate) height: u32,
+    pub(crate) bit_depth: u32,
+    pub(crate) color_matrix: u32,
+    pub(crate) color_range: u32,
+}
+
 pub fn composite_p0xx_to_rgba(
     res: &mut P0xxGpuResources,
     device: &wgpu::Device,
     queue: &wgpu::Queue,
     cache: &neo_media_cache::NeoMediaCache,
-    y_bytes: &[u8],
-    y_stride: u32,
-    uv_bytes: &[u8],
-    uv_stride: u32,
-    width: u32,
-    height: u32,
-    bit_depth: u32,
-    color_matrix: u32,
-    color_range: u32,
+    input: P0xxInput<'_>,
 ) -> Result<wgpu::Texture, String> {
+    let P0xxInput {
+        y: y_bytes,
+        y_stride,
+        uv: uv_bytes,
+        uv_stride,
+        width,
+        height,
+        bit_depth,
+        color_matrix,
+        color_range,
+    } = input;
     let storage_format = if bit_depth == 8 {
         wgpu::TextureFormat::R8Uint
     } else {
@@ -206,22 +232,26 @@ pub fn composite_p0xx_to_rgba(
     let plane_y = upload_plane_texture(
         device,
         queue,
-        y_bytes,
-        y_stride,
-        width,
-        height,
-        storage_format,
-        "swscale_plane_y",
+        PlaneUpload {
+            bytes: y_bytes,
+            stride: y_stride,
+            width,
+            height,
+            format: storage_format,
+            label: "swscale_plane_y",
+        },
     );
     let plane_uv = upload_plane_texture(
         device,
         queue,
-        uv_bytes,
-        uv_stride,
-        width.div_ceil(2),
-        height.div_ceil(2),
-        uv_format,
-        "swscale_plane_uv",
+        PlaneUpload {
+            bytes: uv_bytes,
+            stride: uv_stride,
+            width: width.div_ceil(2),
+            height: height.div_ceil(2),
+            format: uv_format,
+            label: "swscale_plane_uv",
+        },
     );
 
     let uniforms = SwscaleUniforms {
@@ -305,23 +335,38 @@ pub fn composite_p0xx_to_rgba(
     Ok(dst_texture)
 }
 
-#[allow(clippy::too_many_arguments)]
+pub(crate) struct Yuv420Input<'a> {
+    pub(crate) y: &'a [u8],
+    pub(crate) y_stride: u32,
+    pub(crate) u: &'a [u8],
+    pub(crate) u_stride: u32,
+    pub(crate) v: &'a [u8],
+    pub(crate) v_stride: u32,
+    pub(crate) width: u32,
+    pub(crate) height: u32,
+    pub(crate) color_matrix: u32,
+    pub(crate) color_range: u32,
+}
+
 pub fn composite_yuv420p_to_rgba(
     res: &mut P0xxGpuResources,
     device: &wgpu::Device,
     queue: &wgpu::Queue,
     cache: &neo_media_cache::NeoMediaCache,
-    y_bytes: &[u8],
-    y_stride: u32,
-    u_bytes: &[u8],
-    u_stride: u32,
-    v_bytes: &[u8],
-    v_stride: u32,
-    width: u32,
-    height: u32,
-    color_matrix: u32,
-    color_range: u32,
+    input: Yuv420Input<'_>,
 ) -> Result<wgpu::Texture, String> {
+    let Yuv420Input {
+        y: y_bytes,
+        y_stride,
+        u: u_bytes,
+        u_stride,
+        v: v_bytes,
+        v_stride,
+        width,
+        height,
+        color_matrix,
+        color_range,
+    } = input;
     let chroma_w = width.div_ceil(2);
     let chroma_h = height.div_ceil(2);
     let mut uv_interleaved = vec![0u8; (chroma_w * chroma_h * 2) as usize];
@@ -340,14 +385,16 @@ pub fn composite_yuv420p_to_rgba(
         device,
         queue,
         cache,
-        y_bytes,
-        width,
-        &uv_interleaved,
-        chroma_w * 2,
-        width,
-        height,
-        8,
-        color_matrix,
-        color_range,
+        P0xxInput {
+            y: y_bytes,
+            y_stride,
+            uv: &uv_interleaved,
+            uv_stride: chroma_w * 2,
+            width,
+            height,
+            bit_depth: 8,
+            color_matrix,
+            color_range,
+        },
     )
 }

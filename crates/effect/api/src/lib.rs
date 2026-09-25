@@ -69,6 +69,14 @@ pub const fn uniform_size_std(count: u32) -> u32 {
     count.div_ceil(4) * 16
 }
 
+/// Packs scalar parameters into the standard 16-byte uniform layout.
+///
+/// # Safety
+///
+/// `params_ptr` must point to at least `count` initialized `f32` values, and
+/// `out_ptr` must point to a writable buffer of at least
+/// `uniform_size_std(count)` bytes. The source and destination must be valid
+/// for the duration of this call and must not overlap.
 pub unsafe fn pack_uniform_std(params_ptr: *const f32, count: u32, out_ptr: *mut u8) {
     let total = uniform_size_std(count) as usize;
     unsafe {
