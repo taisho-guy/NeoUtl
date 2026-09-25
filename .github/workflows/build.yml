@@ -173,7 +173,7 @@ jobs:
         with:
           server_url: https://codeberg.org
           token: ${{ secrets.CODEBERG_TOKEN }}
-          repository: taisho-guy/NeoUtl
+          repository: TeamNeoUtl/NeoUtl
           draft: false
           prerelease: ${{ contains(github.ref_name, 'Unstable') }}
           tag_name: ${{ github.ref_name }}
