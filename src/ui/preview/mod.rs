@@ -1,3 +1,9 @@
+mod gizmo;
+mod hit_test;
+mod interaction;
+mod projection;
+mod viewport;
+
 use crate::app::shortcuts::{self, CommandId, Scope};
 use crate::app::state::{self as app_state, SharedAppState};
 use crate::ecs::resources::ProjectResource;
@@ -10,10 +16,12 @@ use egui_taffy::{TuiBuilderLogic, tui};
 use egui_wgpu::Renderer as EguiRenderer;
 use egui_wgpu::wgpu;
 use elegance::{BrowserTab, BrowserTabs, BrowserTabsEvent};
+use interaction::InteractionState;
 use std::cell::RefCell;
 use std::rc::Rc;
 use std::sync::Arc;
 use std::time::Instant;
+use viewport::ViewportState;
 
 pub struct LegacyWindows {}
 
@@ -35,6 +43,7 @@ pub struct PreviewPanel {
     fps: i32,
     session_generation: u64,
     last_rendered_key: Option<(u64, u64, i32, u64)>,
+    interaction: InteractionState,
     pub open_system_settings: bool,
     pub open_project_settings: bool,
     pub open_keybindings: bool,
@@ -58,6 +67,7 @@ impl PreviewPanel {
             fps: 30,
             session_generation: 0,
             last_rendered_key: None,
+            interaction: InteractionState::new(),
             open_system_settings: false,
             open_project_settings: false,
             open_keybindings: false,
@@ -668,7 +678,11 @@ impl PreviewPanel {
                         egui::vec2(avail.x, avail.x / aspect)
                     };
                     let response = ui.centered_and_justified(|ui| {
-                        ui.add(egui::Image::new((texture_id, size)).fit_to_exact_size(size))
+                        ui.add(
+                            egui::Image::new((texture_id, size))
+                                .fit_to_exact_size(size)
+                                .sense(egui::Sense::click_and_drag()),
+                        )
                     });
 
                     let image_rect = response.inner.rect;
@@ -685,6 +699,17 @@ impl PreviewPanel {
                             world.selected_ids().iter().copied().collect::<Vec<_>>(),
                         )
                     };
+
+                    let viewport = ViewportState::new(image_rect, res_w, res_h);
+                    self.interaction
+                        .handle(&response.inner, &viewport, image_rect, state);
+
+                    {
+                        let world_holder = app_state::active_world(state);
+                        let world = world_holder.lock().unwrap();
+                        gizmo::draw(&painter, &world, &selected, image_rect);
+                    }
+
                     let mut overlay_ctx = neoutl_sdk::extension::PreviewOverlayContext {
                         painter: &painter,
                         viewport_rect: image_rect,

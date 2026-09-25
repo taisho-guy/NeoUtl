@@ -1,0 +1,55 @@
+//! Transform の原点 (ローカル座標 0,0,0) を、レンダラが実際に使用する
+//! View×Projection (`compute_mvp`) と同じ式でスクリーン座標へ投影する。
+//! 対応範囲: グローバルカメラユニーク1つのみ。レイヤー別カメラ・グループ内カメラ等、
+//! `resolve_camera` が解決するカメラ差し替えは対象外
+//! (差し替えの解決にはカーテンチェーン全体の再構築が必要なため)。
+//! 対応範囲外: オブジェクトの外形（描画サイズ）。原点1点のみを扱う。
+
+use crate::ecs::EcsWorld;
+use crate::ecs::transform::{Camera, Projection, compute_global_matrix, compute_mvp};
+use shipyard::UniqueView;
+
+fn transform_point(m: &[f32; 16], p: [f32; 4]) -> [f32; 4] {
+    let mut out = [0.0f32; 4];
+    for row in 0..4 {
+        out[row] = m[row] * p[0] + m[4 + row] * p[1] + m[8 + row] * p[2] + m[12 + row] * p[3];
+    }
+    out
+}
+
+pub fn project_object_origin(
+    world: &EcsWorld,
+    object_id: usize,
+    image_rect: egui::Rect,
+) -> Option<egui::Pos2> {
+    let transform = world.get_transform(object_id)?;
+    let global = compute_global_matrix(&transform);
+    let cam: Camera = world.world.run(|cam: UniqueView<Camera>| *cam);
+    let proj = world.get_project();
+    let proj_width = proj.width.max(1) as f32;
+    let proj_height = proj.height.max(1) as f32;
+
+    let mvp = compute_mvp(
+        &global,
+        &cam,
+        proj_width,
+        proj_height,
+        Projection::Perspective {
+            fov_deg: cam.fov_deg,
+        },
+    );
+    let clip = transform_point(&mvp, [0.0, 0.0, 0.0, 1.0]);
+    if clip[3].abs() < 1e-6 {
+        return None;
+    }
+    let ndc_x = clip[0] / clip[3];
+    let ndc_y = clip[1] / clip[3];
+    let px = (ndc_x * 0.5 + 0.5) * proj_width;
+    let py = (1.0 - (ndc_y * 0.5 + 0.5)) * proj_height;
+
+    let scale = image_rect.width() / proj_width;
+    Some(egui::pos2(
+        image_rect.left() + px * scale,
+        image_rect.top() + py * scale,
+    ))
+}
