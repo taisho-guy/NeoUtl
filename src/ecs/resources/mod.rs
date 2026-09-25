@@ -5,6 +5,7 @@ use shipyard::Unique;
 
 pub mod preset_store;
 pub use preset_store::{PresetData, PresetStore};
+pub mod source_size_cache;
 
 #[derive(Clone, Debug, Unique)]
 pub struct ProjectResource {

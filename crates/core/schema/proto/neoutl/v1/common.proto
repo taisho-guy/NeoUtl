@@ -11,6 +11,9 @@ message Transform {
   float rot_y = 7;
   float rot_z = 8;
   float opacity = 9;
+  float center_x = 10;
+  float center_y = 11;
+  float center_z = 12;
 }
 
 message AudioParams {

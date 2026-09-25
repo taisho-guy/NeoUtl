@@ -7,6 +7,7 @@ use crate::ecs::components::{
     ObjectId, SceneId, SceneObject, ShapeParams, TextContent, TimeRange, TimeRemap,
 };
 use crate::ecs::effects::{EffectStack, compute_effect_params_at};
+use crate::ecs::resources::source_size_cache;
 use crate::ecs::resources::{
     ProjectResource, SceneResource, SystemSettingsResource, TimelineResource,
 };
@@ -57,62 +58,44 @@ pub(crate) fn is_light_kind(kind_id: u32) -> bool {
         .is_some_and(|p| p.stable_id == neoutl_object_api::LIGHT_STABLE_ID)
 }
 
-pub(crate) fn is_active_at(
-    range: &TimeRange,
-    scene: &SceneId,
-    active_scene: i32,
-    frame: i32,
-) -> bool {
-    scene.0 == active_scene && frame >= range.start_frame && frame < range.end_frame
+pub(crate) struct SceneContext {
+    pub controllers: Vec<CurtainInfo>,
+    pub layer_positions: HashMap<i32, (f32, f32, f32)>,
+    pub active_cameras: Vec<ActiveCameraCandidate>,
+    pub max_depth: i32,
+    pub global_camera: Camera,
 }
 
-pub fn get_active_objects_system(world: &EcsWorld) -> (Vec<ActiveObject>, CapturedObjects) {
-    let active_scene = world.active_scene();
-    let current = world.current_frame();
-    get_active_objects_system_at(world, active_scene, current)
-}
-
-pub fn get_active_objects_system_at(
+pub(crate) fn build_scene_context(
     world: &EcsWorld,
     active_scene: i32,
     current: i32,
-) -> (Vec<ActiveObject>, CapturedObjects) {
+) -> SceneContext {
     world.world.run(
-        |(_timeline, scenes, project, camera, system_settings): UniqueGroupViews,
+        |(_timeline, _scenes, project, camera, system_settings): UniqueGroupViews,
          (
             time_ranges,
             kind_ids,
             scene_ids,
             layers,
-            text_contents,
-            shape_params,
-            media_sources,
-            object_ids,
-            scene_objects,
+            _text_contents,
+            _shape_params,
+            _media_sources,
+            _object_ids,
+            _scene_objects,
             clip_targets,
         ): SelectorGroupViews,
-         (
-            transforms,
-            keyframe_tracks,
-            _audio_params,
-            effect_stacks,
-            group_controls,
-        ): PayloadGroupViews,
-         (time_remaps, blend_modes, cameras_view): TimingGroupViews| {
+         (transforms, keyframe_tracks, _audio_params, effect_stacks, group_controls): PayloadGroupViews,
+         (_time_remaps, _blend_modes, cameras_view): TimingGroupViews| {
             let project_width = project.width.max(1) as f32;
             let project_height = project.height.max(1) as f32;
             let max_depth = system_settings.max_group_chain_depth;
+            let mut controllers = Vec::new();
 
-            let mut controllers: Vec<CurtainInfo> = Vec::new();
             for (id, (range, scene, layer, gc)) in
-                (&time_ranges, &scene_ids, &layers, &group_controls)
-                    .iter()
-                    .with_id()
+                (&time_ranges, &scene_ids, &layers, &group_controls).iter().with_id()
             {
-                if scene.0 != active_scene
-                    || current < range.start_frame
-                    || current >= range.end_frame
-                {
+                if !is_active_at(range, scene, active_scene, current) {
                     continue;
                 }
                 let mut transform = transforms.get(id).copied().unwrap_or_default();
@@ -138,16 +121,11 @@ pub fn get_active_objects_system_at(
                     render_self: true,
                 });
             }
+
             for (id, (range, scene, layer, ct)) in
-                (&time_ranges, &scene_ids, &layers, &clip_targets)
-                    .iter()
-                    .with_id()
+                (&time_ranges, &scene_ids, &layers, &clip_targets).iter().with_id()
             {
-                if !ct.enabled
-                    || scene.0 != active_scene
-                    || current < range.start_frame
-                    || current >= range.end_frame
-                {
+                if !ct.enabled || !is_active_at(range, scene, active_scene, current) {
                     continue;
                 }
                 let mut transform = transforms.get(id).copied().unwrap_or_default();
@@ -175,13 +153,11 @@ pub fn get_active_objects_system_at(
                 });
             }
 
-                                    let mut layer_positions: HashMap<i32, (f32, f32, f32)> = HashMap::new();
-            for (id, (range, scene, layer)) in (&time_ranges, &scene_ids, &layers).iter().with_id()
+            let mut layer_positions = HashMap::new();
+            for (id, (range, scene, layer)) in
+                (&time_ranges, &scene_ids, &layers).iter().with_id()
             {
-                if scene.0 != active_scene
-                    || current < range.start_frame
-                    || current >= range.end_frame
-                {
+                if !is_active_at(range, scene, active_scene, current) {
                     continue;
                 }
                 let mut transform = transforms.get(id).copied().unwrap_or_default();
@@ -191,35 +167,119 @@ pub fn get_active_objects_system_at(
                 layer_positions.insert(layer.0, (transform.x, transform.y, transform.z));
             }
 
-            let mut active_cameras: Vec<ActiveCameraCandidate> = Vec::new();
+            let mut active_cameras = Vec::new();
             for (id, (range, kind, scene, layer)) in
                 (&time_ranges, &kind_ids, &scene_ids, &layers).iter().with_id()
             {
-                if !is_active_at(range, scene, active_scene, current) {
+                if !is_active_at(range, scene, active_scene, current) || !is_camera_kind(kind.0) {
                     continue;
                 }
-                if is_camera_kind(kind.0) {
-                    let mut cam = cameras_view
-                        .get(id)
-                        .ok()
-                        .copied()
-                        .unwrap_or_else(|| Camera::for_resolution(project_width, project_height));
-                    if let Ok(transform) = transforms.get(id) {
-                        let mut t = *transform;
-                        if let Ok(kt) = keyframe_tracks.get(id) {
-                            kt.apply(&mut t, current);
-                        }
-                        cam.pos_x += t.x;
-                        cam.pos_y += t.y;
-                        cam.pos_z += t.z;
+                let mut cam = cameras_view
+                    .get(id)
+                    .ok()
+                    .copied()
+                    .unwrap_or_else(|| Camera::for_resolution(project_width, project_height));
+                if let Ok(transform) = transforms.get(id) {
+                    let mut t = *transform;
+                    if let Ok(kt) = keyframe_tracks.get(id) {
+                        kt.apply(&mut t, current);
                     }
-                    active_cameras.push(ActiveCameraCandidate {
-                        layer: layer.0,
-                        camera: cam,
-                    });
+                    cam.pos_x += t.x;
+                    cam.pos_y += t.y;
+                    cam.pos_z += t.z;
                 }
+                active_cameras.push(ActiveCameraCandidate { layer: layer.0, camera: cam });
             }
-            active_cameras.sort_by_key(|c| c.layer);
+            active_cameras.sort_by_key(|candidate| candidate.layer);
+
+            SceneContext {
+                controllers,
+                layer_positions,
+                active_cameras,
+                max_depth,
+                global_camera: *camera,
+            }
+        },
+    )
+}
+
+pub fn resolve_object_camera(world: &EcsWorld, object_id: usize) -> Camera {
+    let active_scene = world.active_scene();
+    let current = world.current_frame();
+    let context = build_scene_context(world, active_scene, current);
+    world
+        .world
+        .run(|(_object_ids, layers): (View<ObjectId>, View<Layer>)| {
+            for (entity, object) in _object_ids.iter().with_id() {
+                if object.0 != object_id {
+                    continue;
+                }
+                let layer = layers.get(entity).map_or(0, |value| value.0);
+                let chain = resolve_group_chain(layer, &context.controllers, context.max_depth);
+                return resolve_camera(
+                    &context.active_cameras,
+                    &chain,
+                    &context.controllers,
+                    &context.layer_positions,
+                )
+                .map_or(context.global_camera, |(_, camera)| camera);
+            }
+            context.global_camera
+        })
+}
+
+pub(crate) fn is_active_at(
+    range: &TimeRange,
+    scene: &SceneId,
+    active_scene: i32,
+    frame: i32,
+) -> bool {
+    scene.0 == active_scene && frame >= range.start_frame && frame < range.end_frame
+}
+
+pub fn get_active_objects_system(world: &EcsWorld) -> (Vec<ActiveObject>, CapturedObjects) {
+    let active_scene = world.active_scene();
+    let current = world.current_frame();
+    get_active_objects_system_at(world, active_scene, current)
+}
+
+pub fn get_active_objects_system_at(
+    world: &EcsWorld,
+    active_scene: i32,
+    current: i32,
+) -> (Vec<ActiveObject>, CapturedObjects) {
+    let scene_context = build_scene_context(world, active_scene, current);
+    world.world.run(
+        move |(_timeline, scenes, project, _camera, _system_settings): UniqueGroupViews,
+         (
+            time_ranges,
+            kind_ids,
+            scene_ids,
+            layers,
+            text_contents,
+            shape_params,
+            media_sources,
+            object_ids,
+            scene_objects,
+            clip_targets,
+        ): SelectorGroupViews,
+         (
+            transforms,
+            keyframe_tracks,
+            _audio_params,
+            effect_stacks,
+            group_controls,
+        ): PayloadGroupViews,
+         (time_remaps, blend_modes, _cameras_view): TimingGroupViews| {
+            let SceneContext {
+                controllers,
+                layer_positions,
+                active_cameras,
+                max_depth,
+                global_camera,
+            } = scene_context;
+            let project_width = project.width.max(1) as f32;
+            let project_height = project.height.max(1) as f32;
 
             let mut active = Vec::new();
             let mut captured: CapturedObjects = HashMap::new();
@@ -282,27 +342,28 @@ pub fn get_active_objects_system_at(
                         });
 
                 let matrix = compute_global_matrix(&transform);
-                let local_matrix = match &media_source {
+                                                let source_size: Option<(f32, f32)> = match &media_source {
                     Some(src) if matches!(src.kind, MediaKind::Video | MediaKind::Image) => {
-                        match neoutl_media_runtime::cache::global().dimensions(&src.path) {
-                            Ok((w, h)) => rescale_for_source(&matrix, w as f32, h as f32),
-                            Err(_) => matrix,
-                        }
+                        neoutl_media_runtime::cache::global()
+                            .dimensions(&src.path)
+                            .ok()
+                            .map(|(w, h)| (w as f32, h as f32))
                     }
                     _ => match compose_source {
-                        Some(ComposeSource::NestedScene { target_scene, .. }) => {
-                            match scenes.find(target_scene) {
-                                Some(scene) => rescale_for_source(
-                                    &matrix,
-                                    scene.width as f32,
-                                    scene.height as f32,
-                                ),
-                                None => matrix,
-                            }
-                        }
-                        _ => matrix,
+                        Some(ComposeSource::NestedScene { target_scene, .. }) => scenes
+                            .find(target_scene)
+                            .map(|scene| (scene.width as f32, scene.height as f32)),
+                        _ => None,
                     },
                 };
+                let local_matrix = match source_size {
+                    Some((w, h)) => rescale_for_source(&matrix, w, h),
+                    None => matrix,
+                };
+                if let Some((w, h)) = source_size {
+                    let object_id = object_ids.get(id).map_or(0, |o| o.0);
+                    source_size_cache::global().insert(object_id, w, h);
+                }
 
                 let obj_layer = layers.get(id).map_or(0, |l| l.0);
                 let chain_idx = resolve_group_chain(obj_layer, &controllers, max_depth);
@@ -312,7 +373,7 @@ pub fn get_active_objects_system_at(
                 let matrix = compute_chained_matrix(&chain_matrices, &local_matrix);
 
                 let active_camera = resolve_camera(&active_cameras, &chain_idx, &controllers, &layer_positions);
-                let effective_camera = active_camera.map_or(*camera, |(_, c)| c);
+                let effective_camera = active_camera.map_or(global_camera, |(_, c)| c);
                 let mvp = compute_mvp(
                     &matrix,
                     &effective_camera,
@@ -395,7 +456,7 @@ pub fn get_active_objects_system_at(
                         .collect();
                     let inner_matrix = compute_chained_matrix(&inner_matrices, &local_matrix);
                     let inner_camera = resolve_camera(&active_cameras, inner_chain, &controllers, &layer_positions);
-                    let inner_effective_camera = inner_camera.map_or(*camera, |(_, c)| c);
+                    let inner_effective_camera = inner_camera.map_or(global_camera, |(_, c)| c);
                     let inner_mvp = compute_mvp(
                         &inner_matrix,
                         &inner_effective_camera,
@@ -467,7 +528,7 @@ pub fn get_active_objects_system_at(
                         let stationary_camera =
                             resolve_camera(&active_cameras, &stationary_chain, &controllers, &layer_positions);
                         let stationary_effective_camera =
-                            stationary_camera.map_or(*camera, |(_, c)| c);
+                            stationary_camera.map_or(global_camera, |(_, c)| c);
                         let stationary_mvp = compute_mvp(
                             &stationary_matrix,
                             &stationary_effective_camera,
@@ -528,7 +589,7 @@ pub fn get_active_objects_system_at(
                 };
                 let matrix = compute_chained_matrix(&chain_matrices, &own_matrix);
                 let self_camera = resolve_camera(&active_cameras, &chain_idx, &controllers, &layer_positions);
-                let self_effective_camera = self_camera.map_or(*camera, |(_, cam)| cam);
+                let self_effective_camera = self_camera.map_or(global_camera, |(_, cam)| cam);
                 let mvp = compute_mvp(
                     &matrix,
                     &self_effective_camera,
@@ -558,6 +619,9 @@ pub fn get_active_objects_system_at(
                         if !c.render_self {
                             continue;
                         }
+                        let object_id = object_ids.get(c.entity).map_or(0, |o| o.0);
+                        source_size_cache::global()
+                            .insert(object_id, project_width, project_height);
                         active.push(ActiveObject {
                             kind_id: kind.0,
                             clip_instance: object_ids.get(c.entity).map_or(0, |o| o.0 as u64),

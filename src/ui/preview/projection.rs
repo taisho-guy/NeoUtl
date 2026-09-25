@@ -7,6 +7,7 @@
 
 use crate::ecs::EcsWorld;
 use crate::ecs::transform::{Camera, Projection, compute_global_matrix, compute_mvp};
+use neoutl_object_api::UNIT_SIZE_PX;
 use shipyard::UniqueView;
 
 fn transform_point(m: &[f32; 16], p: [f32; 4]) -> [f32; 4] {
@@ -52,4 +53,60 @@ pub fn project_object_origin(
         image_rect.left() + px * scale,
         image_rect.top() + py * scale,
     ))
+}
+
+/// オブジェクトのソースサイズに基づく4隅をスクリーン座標へ投影する。
+/// `project_object_origin` と同じ MVP (`compute_mvp`) を用いるため、
+/// 原点投影・4隅投影は常に同一のカメラ・射影設定と整合する。
+/// `source_w`/`source_h` は `SourceSizeCache` から取得したピクセル単位のサイズ。
+pub fn project_object_corners(
+    world: &EcsWorld,
+    object_id: usize,
+    source_w: f32,
+    source_h: f32,
+    image_rect: egui::Rect,
+) -> Option<[egui::Pos2; 4]> {
+    let transform = world.get_transform(object_id)?;
+    let global = compute_global_matrix(&transform);
+    let cam: Camera = world.world.run(|cam: UniqueView<Camera>| *cam);
+    let proj = world.get_project();
+    let proj_width = proj.width.max(1) as f32;
+    let proj_height = proj.height.max(1) as f32;
+
+    let mvp = compute_mvp(
+        &global,
+        &cam,
+        proj_width,
+        proj_height,
+        Projection::Perspective {
+            fov_deg: cam.fov_deg,
+        },
+    );
+
+    let hw = source_w * 0.5 / UNIT_SIZE_PX;
+    let hh = source_h * 0.5 / UNIT_SIZE_PX;
+    let corners_local = [
+        [-hw, hh, 0.0],
+        [hw, hh, 0.0],
+        [hw, -hh, 0.0],
+        [-hw, -hh, 0.0],
+    ];
+
+    let mut result = [egui::Pos2::ZERO; 4];
+    let scale = image_rect.width() / proj_width;
+    for (i, &[lx, ly, lz]) in corners_local.iter().enumerate() {
+        let clip = transform_point(&mvp, [lx, ly, lz, 1.0]);
+        if clip[3].abs() < 1e-6 {
+            return None;
+        }
+        let ndc_x = clip[0] / clip[3];
+        let ndc_y = clip[1] / clip[3];
+        let px = (ndc_x * 0.5 + 0.5) * proj_width;
+        let py = (1.0 - (ndc_y * 0.5 + 0.5)) * proj_height;
+        result[i] = egui::pos2(
+            image_rect.left() + px * scale,
+            image_rect.top() + py * scale,
+        );
+    }
+    Some(result)
 }

@@ -13,6 +13,9 @@ pub struct Transform {
     pub rot_y: f32,
     pub rot_z: f32,
     pub opacity: f32,
+    pub center_x: f32,
+    pub center_y: f32,
+    pub center_z: f32,
 }
 
 impl Default for Transform {
@@ -27,6 +30,9 @@ impl Default for Transform {
             rot_y: 0.0,
             rot_z: 0.0,
             opacity: 1.0,
+            center_x: 0.0,
+            center_y: 0.0,
+            center_z: 0.0,
         }
     }
 }
@@ -43,6 +49,9 @@ impl ParamAccess for Transform {
             "rot_y" => self.rot_y,
             "rot_z" => self.rot_z,
             "opacity" => self.opacity,
+            "center_x" => self.center_x,
+            "center_y" => self.center_y,
+            "center_z" => self.center_z,
             _ => return None,
         })
     }
@@ -57,6 +66,9 @@ impl ParamAccess for Transform {
             "rot_y" => self.rot_y = value,
             "rot_z" => self.rot_z = value,
             "opacity" => self.opacity = value,
+            "center_x" => self.center_x = value,
+            "center_y" => self.center_y = value,
+            "center_z" => self.center_z = value,
             _ => return false,
         }
         true
@@ -125,7 +137,35 @@ pub fn compute_global_matrix(t: &Transform) -> GlobalMatrix {
         1.0,
     ];
     let rotation = mat4_mul(&rot_z, &mat4_mul(&rot_y, &rot_x));
-    GlobalMatrix(mat4_mul(&translation, &mat4_mul(&rotation, &scale)))
+    let center_to: [f32; 16] = [
+        1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, t.center_x, t.center_y,
+        t.center_z, 1.0,
+    ];
+    let center_from: [f32; 16] = [
+        1.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        1.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        1.0,
+        0.0,
+        -t.center_x,
+        -t.center_y,
+        -t.center_z,
+        1.0,
+    ];
+    GlobalMatrix(mat4_mul(
+        &translation,
+        &mat4_mul(
+            &center_to,
+            &mat4_mul(&rotation, &mat4_mul(&scale, &center_from)),
+        ),
+    ))
 }
 
 impl From<&Transform> for neoutl_schema::Transform {
@@ -140,6 +180,9 @@ impl From<&Transform> for neoutl_schema::Transform {
             rot_y: value.rot_y,
             rot_z: value.rot_z,
             opacity: value.opacity,
+            center_x: value.center_x,
+            center_y: value.center_y,
+            center_z: value.center_z,
         }
     }
 }
@@ -158,6 +201,9 @@ impl TryFrom<&neoutl_schema::Transform> for Transform {
             rot_y: value.rot_y,
             rot_z: value.rot_z,
             opacity: value.opacity,
+            center_x: value.center_x,
+            center_y: value.center_y,
+            center_z: value.center_z,
         })
     }
 }
@@ -182,7 +228,122 @@ pub fn compute_relative_matrix(t: &Transform) -> GlobalMatrix {
         t.scale_x, 0.0, 0.0, 0.0, 0.0, t.scale_y, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0,
     ];
     let rotation = mat4_mul(&rot_z, &mat4_mul(&rot_y, &rot_x));
-    GlobalMatrix(mat4_mul(&translation, &mat4_mul(&rotation, &scale)))
+    let center_to: [f32; 16] = [
+        1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, t.center_x, t.center_y,
+        t.center_z, 1.0,
+    ];
+    let center_from: [f32; 16] = [
+        1.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        1.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        1.0,
+        0.0,
+        -t.center_x,
+        -t.center_y,
+        -t.center_z,
+        1.0,
+    ];
+    GlobalMatrix(mat4_mul(
+        &translation,
+        &mat4_mul(
+            &center_to,
+            &mat4_mul(&rotation, &mat4_mul(&scale, &center_from)),
+        ),
+    ))
+}
+
+/// 4x4逆行列 (余因子展開によるアジュゲート法)。
+/// 添字は mat4_mul と同じ列優先 (col*4+row)。
+/// 行列式が0に近い場合 (特異行列: 非可逆な射影設定等) は None を返す。
+/// 呼び出し側は None を「逆投影不能」として扱い、既定カメラ前提の近似へフォールバックする。
+pub fn mat4_inverse(m: &[f32; 16]) -> Option<[f32; 16]> {
+    let mut inv = [0.0f32; 16];
+
+    inv[0] = m[5] * m[10] * m[15] - m[5] * m[11] * m[14] - m[9] * m[6] * m[15]
+        + m[9] * m[7] * m[14]
+        + m[13] * m[6] * m[11]
+        - m[13] * m[7] * m[10];
+    inv[4] = -m[4] * m[10] * m[15] + m[4] * m[11] * m[14] + m[8] * m[6] * m[15]
+        - m[8] * m[7] * m[14]
+        - m[12] * m[6] * m[11]
+        + m[12] * m[7] * m[10];
+    inv[8] = m[4] * m[9] * m[15] - m[4] * m[11] * m[13] - m[8] * m[5] * m[15]
+        + m[8] * m[7] * m[13]
+        + m[12] * m[5] * m[11]
+        - m[12] * m[7] * m[9];
+    inv[12] = -m[4] * m[9] * m[14] + m[4] * m[10] * m[13] + m[8] * m[5] * m[14]
+        - m[8] * m[6] * m[13]
+        - m[12] * m[5] * m[10]
+        + m[12] * m[6] * m[9];
+
+    inv[1] = -m[1] * m[10] * m[15] + m[1] * m[11] * m[14] + m[9] * m[2] * m[15]
+        - m[9] * m[3] * m[14]
+        - m[13] * m[2] * m[11]
+        + m[13] * m[3] * m[10];
+    inv[5] = m[0] * m[10] * m[15] - m[0] * m[11] * m[14] - m[8] * m[2] * m[15]
+        + m[8] * m[3] * m[14]
+        + m[12] * m[2] * m[11]
+        - m[12] * m[3] * m[10];
+    inv[9] = -m[0] * m[9] * m[15] + m[0] * m[11] * m[13] + m[8] * m[1] * m[15]
+        - m[8] * m[3] * m[13]
+        - m[12] * m[1] * m[11]
+        + m[12] * m[3] * m[9];
+    inv[13] = m[0] * m[9] * m[14] - m[0] * m[10] * m[13] - m[8] * m[1] * m[14]
+        + m[8] * m[2] * m[13]
+        + m[12] * m[1] * m[10]
+        - m[12] * m[2] * m[9];
+
+    inv[2] = m[1] * m[6] * m[15] - m[1] * m[7] * m[14] - m[5] * m[2] * m[15]
+        + m[5] * m[3] * m[14]
+        + m[13] * m[2] * m[7]
+        - m[13] * m[3] * m[6];
+    inv[6] = -m[0] * m[6] * m[15] + m[0] * m[7] * m[14] + m[4] * m[2] * m[15]
+        - m[4] * m[3] * m[14]
+        - m[12] * m[2] * m[7]
+        + m[12] * m[3] * m[6];
+    inv[10] = m[0] * m[5] * m[15] - m[0] * m[7] * m[13] - m[4] * m[1] * m[15]
+        + m[4] * m[3] * m[13]
+        + m[12] * m[1] * m[7]
+        - m[12] * m[3] * m[5];
+    inv[14] = -m[0] * m[5] * m[14] + m[0] * m[6] * m[13] + m[4] * m[1] * m[14]
+        - m[4] * m[2] * m[13]
+        - m[12] * m[1] * m[6]
+        + m[12] * m[2] * m[5];
+
+    inv[3] = -m[1] * m[6] * m[11] + m[1] * m[7] * m[10] + m[5] * m[2] * m[11]
+        - m[5] * m[3] * m[10]
+        - m[9] * m[2] * m[7]
+        + m[9] * m[3] * m[6];
+    inv[7] = m[0] * m[6] * m[11] - m[0] * m[7] * m[10] - m[4] * m[2] * m[11]
+        + m[4] * m[3] * m[10]
+        + m[8] * m[2] * m[7]
+        - m[8] * m[3] * m[6];
+    inv[11] = -m[0] * m[5] * m[11] + m[0] * m[7] * m[9] + m[4] * m[1] * m[11]
+        - m[4] * m[3] * m[9]
+        - m[8] * m[1] * m[7]
+        + m[8] * m[3] * m[5];
+    inv[15] = m[0] * m[5] * m[10] - m[0] * m[6] * m[9] - m[4] * m[1] * m[10]
+        + m[4] * m[2] * m[9]
+        + m[8] * m[1] * m[6]
+        - m[8] * m[2] * m[5];
+
+    let det = m[0] * inv[0] + m[1] * inv[4] + m[2] * inv[8] + m[3] * inv[12];
+    if det.abs() < 1e-6 {
+        return None;
+    }
+    let inv_det = 1.0 / det;
+    let mut out = [0.0f32; 16];
+    for (o, i) in out.iter_mut().zip(inv.iter()) {
+        *o = i * inv_det;
+    }
+    Some(out)
 }
 
 pub fn compute_chained_matrix(curtains: &[GlobalMatrix], leaf: &GlobalMatrix) -> GlobalMatrix {
@@ -374,5 +535,58 @@ pub fn compute_mvp(
             let proj = compute_perspective_matrix(fov_deg, aspect, cam.near, cam.far);
             mat4_mul(&proj, &mat4_mul(&view, &global.0))
         }
+    }
+}
+
+#[cfg(test)]
+mod mat4_inverse_tests {
+    use super::*;
+
+    fn mat4_identity() -> [f32; 16] {
+        let mut m = [0.0f32; 16];
+        m[0] = 1.0;
+        m[5] = 1.0;
+        m[10] = 1.0;
+        m[15] = 1.0;
+        m
+    }
+
+    fn approx_eq_mat4(a: &[f32; 16], b: &[f32; 16], eps: f32) -> bool {
+        a.iter().zip(b.iter()).all(|(x, y)| (x - y).abs() < eps)
+    }
+
+    #[test]
+    fn inverse_of_identity_is_identity() {
+        let id = mat4_identity();
+        let inv = mat4_inverse(&id).expect("identity must be invertible");
+        assert!(approx_eq_mat4(&inv, &id, 1e-6));
+    }
+
+    #[test]
+    fn inverse_round_trip_on_general_matrix() {
+        let t = Transform {
+            x: 3.0,
+            y: -2.0,
+            z: 5.0,
+            scale_x: 1.5,
+            scale_y: 0.8,
+            rot_x: 12.0,
+            rot_y: 33.0,
+            rot_z: 7.0,
+            opacity: 1.0,
+            center_x: 0.4,
+            center_y: -0.6,
+            center_z: 0.0,
+        };
+        let m = compute_global_matrix(&t).0;
+        let inv = mat4_inverse(&m).expect("non-degenerate transform must be invertible");
+        let round_trip = mat4_mul(&m, &inv);
+        assert!(approx_eq_mat4(&round_trip, &mat4_identity(), 1e-3));
+    }
+
+    #[test]
+    fn singular_matrix_returns_none() {
+        let zero = [0.0f32; 16];
+        assert!(mat4_inverse(&zero).is_none());
     }
 }

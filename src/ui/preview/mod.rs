@@ -1,3 +1,4 @@
+mod camera_view;
 mod gizmo;
 mod hit_test;
 mod interaction;
@@ -12,6 +13,7 @@ use crate::renderer::RenderEngine;
 use crate::ui::dialogs::DialogSet;
 use crate::ui::timeline::util::egui_key_name;
 use crate::ui::ui_ext::row_style;
+use camera_view::CameraViewMode;
 use egui_taffy::{TuiBuilderLogic, tui};
 use egui_wgpu::Renderer as EguiRenderer;
 use egui_wgpu::wgpu;
@@ -21,7 +23,6 @@ use std::cell::RefCell;
 use std::rc::Rc;
 use std::sync::Arc;
 use std::time::Instant;
-use viewport::ViewportState;
 
 pub struct LegacyWindows {}
 
@@ -50,6 +51,8 @@ pub struct PreviewPanel {
     pub open_timeline: bool,
     pub open_export: bool,
     pub open_properties: bool,
+    pub open_camera_view: bool,
+    camera_view_mode: CameraViewMode,
 }
 
 impl PreviewPanel {
@@ -74,6 +77,8 @@ impl PreviewPanel {
             open_timeline: false,
             open_export: false,
             open_properties: false,
+            open_camera_view: false,
+            camera_view_mode: CameraViewMode::Camera,
         }
     }
 
@@ -292,6 +297,9 @@ impl PreviewPanel {
                             }
                             if ui.add(MenuItem::new(t!("プロパティ"))).clicked() {
                                 open_properties = true;
+                            }
+                            if ui.add(MenuItem::new("カメラ視点")).clicked() {
+                                self.open_camera_view = true;
                             }
                         });
                         bar.menu(t!("ツール"), |ui| {
@@ -700,9 +708,7 @@ impl PreviewPanel {
                         )
                     };
 
-                    let viewport = ViewportState::new(image_rect, res_w, res_h);
-                    self.interaction
-                        .handle(&response.inner, &viewport, image_rect, state);
+                    self.interaction.handle(&response.inner, image_rect, state);
 
                     {
                         let world_holder = app_state::active_world(state);
@@ -725,6 +731,20 @@ impl PreviewPanel {
                         .draw_preview_overlay(&mut overlay_ctx, Some(state));
                 }
             });
+
+        if self.open_camera_view {
+            let world_holder = app_state::active_world(state);
+            let world = world_holder.lock().unwrap();
+            camera_view::show(
+                ui.ctx(),
+                &mut self.open_camera_view,
+                &mut self.camera_view_mode,
+                self.texture_id,
+                &world,
+                &mut self.interaction,
+                state,
+            );
+        }
 
         if self.is_playing {
             self.advance_playback(state);
