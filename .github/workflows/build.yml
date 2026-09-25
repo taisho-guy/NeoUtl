@@ -54,15 +54,16 @@ jobs:
           download_submodule() {
             local path="$1"
             local repository="$2"
-            local revision="$3"
             mkdir -p "$path"
             curl --fail --location --retry 3 \
-              "https://codeberg.org/${repository}/archive/${revision}.tar.gz" \
+              "https://codeberg.org/${repository}/archive/main.tar.gz" \
               | tar -xz --strip-components=1 -C "$path"
           }
-          download_submodule assets TeamNeoUtl/neoutl-branding d300708004595a48ff628e75c5327b66a4918df1
-          download_submodule i18n TeamNeoUtl/neoutl-locales 50f61041ec2bf2b863b5b879a2100ebc6db5414e
-          download_submodule sdk TeamNeoUtl/neoutl-sdk 22ce3c4eace923f936a34a28abff3608ad3400c0
+          download_submodule assets TeamNeoUtl/neoutl-branding
+          download_submodule i18n TeamNeoUtl/neoutl-locales
+          download_submodule sdk TeamNeoUtl/neoutl-sdk
+          sdk_version="$(sed -n 's/^version = "\([^"]*\)"/\1/p' Cargo.toml | head -n 1)"
+          test -f "sdk/neoutl/${sdk_version}/rust/Cargo.toml"
 
       - name: MSYS2セットアップ(Windows)
         if: runner.os == 'Windows'
@@ -92,15 +93,16 @@ jobs:
           download_submodule() {
             local path="$1"
             local repository="$2"
-            local revision="$3"
             mkdir -p "$path"
             curl --fail --location --retry 3 \
-              "https://codeberg.org/${repository}/archive/${revision}.tar.gz" \
+              "https://codeberg.org/${repository}/archive/main.tar.gz" \
               | tar -xz --strip-components=1 -C "$path"
           }
-          download_submodule assets TeamNeoUtl/neoutl-branding d300708004595a48ff628e75c5327b66a4918df1
-          download_submodule i18n TeamNeoUtl/neoutl-locales 50f61041ec2bf2b863b5b879a2100ebc6db5414e
-          download_submodule sdk TeamNeoUtl/neoutl-sdk 22ce3c4eace923f936a34a28abff3608ad3400c0
+          download_submodule assets TeamNeoUtl/neoutl-branding
+          download_submodule i18n TeamNeoUtl/neoutl-locales
+          download_submodule sdk TeamNeoUtl/neoutl-sdk
+          sdk_version="$(sed -n 's/^version = "\([^"]*\)"/\1/p' Cargo.toml | head -n 1)"
+          test -f "sdk/neoutl/${sdk_version}/rust/Cargo.toml"
 
       - name: ビルド(Linux)
         if: runner.os == 'Linux'
