@@ -39,6 +39,11 @@ jobs:
     container: ${{ matrix.container }}
 
     steps:
+      - name: git事前導入(Linux/コンテナ)
+        if: runner.os == 'Linux'
+        shell: sh
+        run: pacman -Sy --noconfirm git
+
       - uses: actions/checkout@v7
 
       - name: ネイティブ依存関係インストール(Linux)
