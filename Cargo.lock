@@ -3415,6 +3415,7 @@ version = "0.0.0"
 dependencies = [
  "mlua",
  "neoutl-effect-lua",
+ "neoutl-sdk",
  "neoutl-shared-abi",
  "rust-i18n",
 ]

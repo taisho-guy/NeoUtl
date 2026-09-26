@@ -20,6 +20,7 @@ pub struct ExtensionManager {
     registered_menus: Vec<(String, MenuItemDescriptor)>,
     registered_commands: Vec<(String, CommandDescriptor)>,
     registered_file_drops: Vec<(String, FileDropDescriptor)>,
+    registered_script_functions: HashMap<String, (String, ScriptFn)>,
     plugin_storages: HashMap<String, ProjectStorage>,
     pub toasts: Vec<String>,
 }
@@ -33,6 +34,7 @@ impl ExtensionManager {
             registered_menus: Vec::new(),
             registered_commands: Vec::new(),
             registered_file_drops: Vec::new(),
+            registered_script_functions: HashMap::new(),
             plugin_storages: HashMap::new(),
             toasts: Vec::new(),
         };
@@ -52,6 +54,7 @@ impl ExtensionManager {
         let mut menus = Vec::new();
         let mut commands = Vec::new();
         let mut file_drops = Vec::new();
+        let mut script_functions = Vec::new();
         let mut toasts = Vec::new();
         let mut outgoing = Vec::new();
 
@@ -63,6 +66,7 @@ impl ExtensionManager {
             registered_menus: &mut menus,
             registered_commands: &mut commands,
             registered_file_drops: &mut file_drops,
+            registered_script_functions: &mut script_functions,
             toast_messages: &mut toasts,
             outgoing_events: &mut outgoing,
         };
@@ -84,6 +88,17 @@ impl ExtensionManager {
         }
         for f in file_drops {
             self.registered_file_drops.push((plugin_id.clone(), f));
+        }
+        for s in script_functions {
+            if let Some((owner, _)) = self.registered_script_functions.get(s.name) {
+                eprintln!(
+                    "[NeoUtl] スクリプト関数 '{}' は '{}' により登録済みのため '{}' の登録を拒否",
+                    s.name, owner, plugin_id
+                );
+                continue;
+            }
+            self.registered_script_functions
+                .insert(s.name.to_owned(), (plugin_id.clone(), s.func));
         }
 
         self.plugins.push(LoadedPlugin {
@@ -164,6 +179,20 @@ impl ExtensionManager {
         &self.registered_panels
     }
 
+    /// スクリプト(Lua)側から呼び出し可能な登録関数を実行する。
+    /// `name`未登録時は`Err`を返す。呼び出し自体の橋渡し(引数/戻り値の型変換)は
+    /// crates/lua-runtime側でこの関数をラップして行う。
+    pub fn call_script_function(
+        &self,
+        name: &str,
+        args: &ScriptArgs,
+    ) -> Result<Vec<ScriptValue>, String> {
+        match self.registered_script_functions.get(name) {
+            Some((_, func)) => func(args),
+            None => Err(format!("未登録のスクリプト関数: {name}")),
+        }
+    }
+
     pub fn execute_command(
         &mut self,
         command_id: &str,
@@ -191,6 +220,7 @@ impl ExtensionManager {
             let mut menus = Vec::new();
             let mut commands = Vec::new();
             let mut file_drops = Vec::new();
+            let mut script_functions = Vec::new();
             let mut toasts = Vec::new();
             let mut outgoing = Vec::new();
 
@@ -202,6 +232,7 @@ impl ExtensionManager {
                 registered_menus: &mut menus,
                 registered_commands: &mut commands,
                 registered_file_drops: &mut file_drops,
+                registered_script_functions: &mut script_functions,
                 toast_messages: &mut toasts,
                 outgoing_events: &mut outgoing,
             };
@@ -229,6 +260,7 @@ impl ExtensionManager {
             let mut menus = Vec::new();
             let mut commands = Vec::new();
             let mut file_drops = Vec::new();
+            let mut script_functions = Vec::new();
             let mut toasts = Vec::new();
             let mut outgoing = Vec::new();
 
@@ -240,6 +272,7 @@ impl ExtensionManager {
                 registered_menus: &mut menus,
                 registered_commands: &mut commands,
                 registered_file_drops: &mut file_drops,
+                registered_script_functions: &mut script_functions,
                 toast_messages: &mut toasts,
                 outgoing_events: &mut outgoing,
             };
@@ -271,6 +304,7 @@ impl ExtensionManager {
                 let mut menus = Vec::new();
                 let mut commands = Vec::new();
                 let mut file_drops = Vec::new();
+                let mut script_functions = Vec::new();
                 let mut toasts = Vec::new();
                 let mut outgoing = Vec::new();
 
@@ -282,6 +316,7 @@ impl ExtensionManager {
                     registered_menus: &mut menus,
                     registered_commands: &mut commands,
                     registered_file_drops: &mut file_drops,
+                    registered_script_functions: &mut script_functions,
                     toast_messages: &mut toasts,
                     outgoing_events: &mut outgoing,
                 };
@@ -320,6 +355,7 @@ impl ExtensionManager {
             let mut menus = Vec::new();
             let mut commands = Vec::new();
             let mut file_drops = Vec::new();
+            let mut script_functions = Vec::new();
             let mut toasts = Vec::new();
             let mut outgoing = Vec::new();
 
@@ -331,6 +367,7 @@ impl ExtensionManager {
                 registered_menus: &mut menus,
                 registered_commands: &mut commands,
                 registered_file_drops: &mut file_drops,
+                registered_script_functions: &mut script_functions,
                 toast_messages: &mut toasts,
                 outgoing_events: &mut outgoing,
             };
@@ -354,6 +391,7 @@ impl ExtensionManager {
             let mut menus = Vec::new();
             let mut commands = Vec::new();
             let mut file_drops = Vec::new();
+            let mut script_functions = Vec::new();
             let mut toasts = Vec::new();
             let mut outgoing = Vec::new();
 
@@ -365,6 +403,7 @@ impl ExtensionManager {
                 registered_menus: &mut menus,
                 registered_commands: &mut commands,
                 registered_file_drops: &mut file_drops,
+                registered_script_functions: &mut script_functions,
                 toast_messages: &mut toasts,
                 outgoing_events: &mut outgoing,
             };
@@ -406,6 +445,7 @@ impl ExtensionManager {
                     let mut menus = Vec::new();
                     let mut commands = Vec::new();
                     let mut file_drops = Vec::new();
+                    let mut script_functions = Vec::new();
                     let mut toasts = Vec::new();
                     let mut outgoing = Vec::new();
 
@@ -417,6 +457,7 @@ impl ExtensionManager {
                         registered_menus: &mut menus,
                         registered_commands: &mut commands,
                         registered_file_drops: &mut file_drops,
+                        registered_script_functions: &mut script_functions,
                         toast_messages: &mut toasts,
                         outgoing_events: &mut outgoing,
                     };

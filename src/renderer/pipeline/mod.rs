@@ -270,6 +270,12 @@ impl RenderEngine {
 
         let lua_system = match neoutl_lua_runtime::LuaSystem::new() {
             Ok(sys) => {
+                sys.set_script_bridge(Arc::new(|name: &str, args| {
+                    crate::extensions::global_extension_manager()
+                        .lock()
+                        .unwrap()
+                        .call_script_function(name, args)
+                }));
                 sys.load_dir(&scripts_dir);
                 Some(sys)
             }

@@ -22,7 +22,9 @@ impl EffectStack {
         if let Some(source) = find_effect(&effect_id) {
             for p in param_schema(&source) {
                 let value = match p.kind {
-                    ParamKind::Bool => Value::Bool(p.default_float != 0.0),
+                    ParamKind::Bool | ParamKind::CheckSection => {
+                        Value::Bool(p.default_float != 0.0)
+                    }
                     ParamKind::Enum => Value::Enum(
                         p.default_float
                             .max(0.0)
@@ -35,7 +37,11 @@ impl EffectStack {
                     ParamKind::FilePath | ParamKind::Folder => Value::FilePath(String::new()),
                     ParamKind::Track => Value::TrackRef(-1),
                     ParamKind::Float | ParamKind::Color => Value::Number(p.default_float),
-                    ParamKind::Separator | ParamKind::Group => continue,
+                    ParamKind::Separator
+                    | ParamKind::Group
+                    | ParamKind::Button
+                    | ParamKind::Data
+                    | ParamKind::TrackGroup => continue,
                 };
                 instance.params.insert(p.key, EffectParam::new(value));
             }

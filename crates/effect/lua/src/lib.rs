@@ -125,13 +125,17 @@ fn build_param_row(row: &Table) -> Result<ParamRowOwned, PluginError> {
             }
             (0.0, (options.len() - 1) as f32, 1.0, 0.0, options)
         }
+        ParamKind::CheckSection => (0.0, 1.0, 1.0, row.get("default").unwrap_or(0.0), Vec::new()),
         ParamKind::Text
         | ParamKind::FilePath
         | ParamKind::Track
         | ParamKind::Separator
         | ParamKind::Group
         | ParamKind::Folder
-        | ParamKind::Color => (0.0, 0.0, 0.0, 0.0, Vec::new()),
+        | ParamKind::Color
+        | ParamKind::Button
+        | ParamKind::Data
+        | ParamKind::TrackGroup => (0.0, 0.0, 0.0, 0.0, Vec::new()),
     };
 
     Ok(ParamRowOwned {
@@ -158,6 +162,10 @@ fn parse_param_kind(s: &str) -> Result<ParamKind, PluginError> {
         "separator" => ParamKind::Separator,
         "group" => ParamKind::Group,
         "folder" => ParamKind::Folder,
+        "button" => ParamKind::Button,
+        "checksection" => ParamKind::CheckSection,
+        "data" => ParamKind::Data,
+        "trackgroup" => ParamKind::TrackGroup,
         other => return Err(PluginError::Unknown(other.to_owned())),
     })
 }

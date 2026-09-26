@@ -117,6 +117,10 @@ pub unsafe extern "C" fn neoutl_effect_entry() -> *const EffectVTable {
         on_property_edited: None,
         on_property_restored: None,
         poll_writeback: None,
+        vertex_wgsl: None,
+        compute_wgsl: None,
+        compute_dispatch: None,
+        custom_render: None,
         setup_accelerator: Some(setup_accelerator),
     })
 }

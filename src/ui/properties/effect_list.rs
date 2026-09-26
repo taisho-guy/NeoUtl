@@ -419,7 +419,7 @@ fn param_widget(
             ui.label(effect_param_label(&s.label));
         });
         tui.ui(|ui| match s.kind {
-            ParamKind::Bool => {
+            ParamKind::Bool | ParamKind::CheckSection => {
                 let mut b = match current {
                     Some(Value::Bool(b)) => *b,
                     _ => s.default_float != 0.0,
@@ -497,7 +497,13 @@ fn param_widget(
                 );
                 resp.changed().then_some(Value::TrackRef(track_ref))
             }
-            ParamKind::Group | ParamKind::Separator | ParamKind::Float | ParamKind::Color => None,
+            ParamKind::Group
+            | ParamKind::Separator
+            | ParamKind::Float
+            | ParamKind::Color
+            | ParamKind::Button
+            | ParamKind::Data
+            | ParamKind::TrackGroup => None,
         })
     })
 }

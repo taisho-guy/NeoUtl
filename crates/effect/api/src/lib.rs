@@ -1,6 +1,6 @@
 pub use neoutl_shared_abi::{
-    AcceleratorBackend, AcceleratorHandle, EffectKind, FfiSlice, ParamKind, PropertyWriteback, Roi,
-    StrRef, WgslSource,
+    AcceleratorBackend, AcceleratorHandle, CacheHandle, CacheImageRef, ComputeDispatch, EffectKind,
+    FfiSlice, ParamKind, PropertyWriteback, ResourceKind, ResourceRef, Roi, StrRef, WgslSource,
 };
 pub type EffectParamSchema = neoutl_shared_abi::ParamSchema;
 
@@ -20,6 +20,65 @@ pub struct EffectMeta {
 unsafe impl Send for EffectMeta {}
 unsafe impl Sync for EffectMeta {}
 
+/// フィルタ処理中に呼び出せるGPUリソースアクセス関数群。
+/// AviUtl2の `exec_pixelshader_data` / `exec_computeshader_data` / `get_image_resource_*` /
+/// `set_image_resource_data` に相当する。すべて戻り値は成功時0、失敗時非0。
+#[repr(C)]
+pub struct EffectRenderContext {
+    /// フレーム間キャッシュ。`cache_identifier` は呼び出し元エフェクトの識別に使う任意の静的ポインタ。
+    pub cache: *const CacheHandle,
+    pub cache_identifier: *const (),
+
+    /// コンパイル済みピクセルシェーダーを実行する。
+    /// `data` はホストのシェーダーコンパイラ形式(WGSL相当のバイトコード)。
+    pub exec_pixelshader: unsafe extern "C" fn(
+        data: *const u8,
+        data_len: usize,
+        target: ResourceRef,
+        resources: *const ResourceRef,
+        resource_count: u32,
+        constant: *const u8,
+        constant_len: usize,
+    ) -> u32,
+
+    /// コンパイル済みコンピュートシェーダーを実行する。
+    pub exec_computeshader: unsafe extern "C" fn(
+        data: *const u8,
+        data_len: usize,
+        targets: *const ResourceRef,
+        target_count: u32,
+        resources: *const ResourceRef,
+        resource_count: u32,
+        constant: *const u8,
+        constant_len: usize,
+        dispatch: ComputeDispatch,
+    ) -> u32,
+
+    pub get_resource_size:
+        unsafe extern "C" fn(resource: ResourceRef, width: *mut u32, height: *mut u32) -> u32,
+
+    pub get_resource_data: unsafe extern "C" fn(
+        resource: ResourceRef,
+        buffer: *mut u8,
+        width: u32,
+        height: u32,
+        pitch: u32,
+    ) -> u32,
+
+    pub set_resource_data: unsafe extern "C" fn(
+        resource: ResourceRef,
+        buffer: *const u8,
+        width: u32,
+        height: u32,
+        pitch: u32,
+    ) -> u32,
+
+    /// `Named` 種別のリソースを明示的に解放する。
+    pub release_resource: unsafe extern "C" fn(resource: ResourceRef) -> u32,
+}
+unsafe impl Send for EffectRenderContext {}
+unsafe impl Sync for EffectRenderContext {}
+
 #[repr(C)]
 pub struct EffectVTable {
     pub meta: unsafe extern "C" fn() -> *const EffectMeta,
@@ -27,6 +86,33 @@ pub struct EffectVTable {
     pub uniform_size: unsafe extern "C" fn() -> u32,
     pub pack_uniform: unsafe extern "C" fn(params_ptr: *const f32, count: u32, out_ptr: *mut u8),
     pub requires_texture_param: Option<unsafe extern "C" fn() -> u32>,
+
+    /// 頂点シェーダーソース。`None` の場合ホスト標準の全画面矩形頂点シェーダーを使う。
+    pub vertex_wgsl: Option<unsafe extern "C" fn() -> WgslSource>,
+
+    /// コンピュートシェーダーソース。指定時は `compute_dispatch` も併せて指定する。
+    pub compute_wgsl: Option<unsafe extern "C" fn() -> WgslSource>,
+
+    /// `compute_wgsl` 実行時のスレッドグループ数を算出する。
+    pub compute_dispatch: Option<
+        unsafe extern "C" fn(
+            params_ptr: *const f32,
+            count: u32,
+            width: u32,
+            height: u32,
+        ) -> ComputeDispatch,
+    >,
+
+    /// 固定パイプライン(`wgsl`/`uniform_size`/`pack_uniform`)を介さず、
+    /// `EffectRenderContext` を通じて任意のリソースアクセスとシェーダー実行を行う。
+    /// `Some` の場合、ホストは `wgsl` の代わりにこちらを呼び出す。
+    pub custom_render: Option<
+        unsafe extern "C" fn(
+            ctx: *const EffectRenderContext,
+            params_ptr: *const f32,
+            count: u32,
+        ) -> u32,
+    >,
 
     pub calc_roi: Option<
         unsafe extern "C" fn(
@@ -123,6 +209,10 @@ mod tests {
             uniform_size: dummy_uniform_size,
             pack_uniform: dummy_pack_uniform,
             requires_texture_param: None,
+            vertex_wgsl: None,
+            compute_wgsl: None,
+            compute_dispatch: None,
+            custom_render: None,
             calc_roi: None,
             is_need_render_frame: None,
             process_audio: None,

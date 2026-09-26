@@ -1,8 +1,35 @@
-use mlua::{Lua, RegistryKey, StdLib, Table, Value as LuaValue};
+use mlua::{Lua, MultiValue, RegistryKey, StdLib, Table, Value as LuaValue, Variadic};
 use neoutl_effect_lua::LuaEffectSource;
+use neoutl_sdk::extension::{ScriptArgs, ScriptValue};
 use neoutl_shared_abi::PluginError;
 use std::path::Path;
 use std::sync::{Arc, Mutex};
+
+/// `system.call_script_function` からホスト側(`ExtensionManager::call_script_function`)へ
+/// 橋渡しする関数。第1引数は関数名、第2引数はLuaから渡された引数列。
+pub type ScriptBridgeFn =
+    Arc<dyn Fn(&str, &ScriptArgs) -> Result<Vec<ScriptValue>, String> + Send + Sync>;
+
+fn lua_value_to_script_value(value: &LuaValue) -> ScriptValue {
+    match value {
+        LuaValue::Nil => ScriptValue::Nil,
+        LuaValue::Boolean(b) => ScriptValue::Boolean(*b),
+        LuaValue::Integer(i) => ScriptValue::Integer(*i),
+        LuaValue::Number(n) => ScriptValue::Number(*n),
+        LuaValue::String(s) => ScriptValue::String(s.to_string_lossy()),
+        _ => ScriptValue::Nil,
+    }
+}
+
+fn script_value_to_lua_value(lua: &Lua, value: &ScriptValue) -> mlua::Result<LuaValue> {
+    Ok(match value {
+        ScriptValue::Nil => LuaValue::Nil,
+        ScriptValue::Boolean(b) => LuaValue::Boolean(*b),
+        ScriptValue::Integer(i) => LuaValue::Integer(*i),
+        ScriptValue::Number(n) => LuaValue::Number(*n),
+        ScriptValue::String(s) => LuaValue::String(lua.create_string(s)?),
+    })
+}
 
 fn mlua_err(err: mlua::Error) -> PluginError {
     PluginError::Runtime(err.to_string())
@@ -26,6 +53,7 @@ struct Registrations {
 pub struct LuaSystem {
     lua: Lua,
     regs: Arc<Mutex<Registrations>>,
+    bridge: Arc<Mutex<Option<ScriptBridgeFn>>>,
 }
 
 impl LuaSystem {
@@ -36,8 +64,15 @@ impl LuaSystem {
         )
         .map_err(mlua_err)?;
         let regs = Arc::new(Mutex::new(Registrations::default()));
-        install_system_table(&lua, &regs).map_err(mlua_err)?;
-        Ok(Self { lua, regs })
+        let bridge: Arc<Mutex<Option<ScriptBridgeFn>>> = Arc::new(Mutex::new(None));
+        install_system_table(&lua, &regs, &bridge).map_err(mlua_err)?;
+        Ok(Self { lua, regs, bridge })
+    }
+
+    /// ホスト側の`ExtensionManager::call_script_function`を`system.call_script_function`
+    /// として公開する。Lua側からの呼び出しはこの関数を経由してホストへ橋渡しされる。
+    pub fn set_script_bridge(&self, bridge: ScriptBridgeFn) {
+        *self.bridge.lock().unwrap() = Some(bridge);
     }
 
     pub fn load_script(&self, src: &str, chunk_name: &str) -> Result<(), PluginError> {
@@ -148,7 +183,11 @@ impl LuaSystem {
     }
 }
 
-fn install_system_table(lua: &Lua, regs: &Arc<Mutex<Registrations>>) -> mlua::Result<()> {
+fn install_system_table(
+    lua: &Lua,
+    regs: &Arc<Mutex<Registrations>>,
+    bridge: &Arc<Mutex<Option<ScriptBridgeFn>>>,
+) -> mlua::Result<()> {
     let system = lua.create_table()?;
 
     {
@@ -210,6 +249,50 @@ fn install_system_table(lua: &Lua, regs: &Arc<Mutex<Registrations>>) -> mlua::Re
             }
         })?;
         system.set("reduce_result", reduce_result)?;
+    }
+
+    {
+        let bridge = bridge.clone();
+        let call_script_function = lua.create_function(
+            move |lua, mut args: Variadic<LuaValue>| -> mlua::Result<MultiValue> {
+                if args.is_empty() {
+                    return Err(mlua::Error::RuntimeError(
+                        "call_script_function: 関数名が必要".to_owned(),
+                    ));
+                }
+                let name_value = args.remove(0);
+                let name = match &name_value {
+                    LuaValue::String(s) => s.to_string_lossy(),
+                    _ => {
+                        return Err(mlua::Error::RuntimeError(
+                            "call_script_function: 第1引数は文字列であること".to_owned(),
+                        ));
+                    }
+                };
+                let script_args: Vec<ScriptValue> =
+                    args.iter().map(lua_value_to_script_value).collect();
+
+                let result = {
+                    let guard = bridge.lock().unwrap();
+                    match guard.as_ref() {
+                        Some(f) => f(&name, &ScriptArgs::new(&script_args)),
+                        None => Err("スクリプトブリッジ未接続".to_owned()),
+                    }
+                };
+
+                match result {
+                    Ok(values) => {
+                        let mut out = MultiValue::new();
+                        for v in &values {
+                            out.push_back(script_value_to_lua_value(lua, v)?);
+                        }
+                        Ok(out)
+                    }
+                    Err(err) => Err(mlua::Error::RuntimeError(err)),
+                }
+            },
+        )?;
+        system.set("call_script_function", call_script_function)?;
     }
 
     lua.globals().set("system", system)?;
