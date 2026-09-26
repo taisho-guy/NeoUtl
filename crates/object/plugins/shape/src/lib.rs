@@ -54,8 +54,8 @@ static PROPERTY_GROUPS: &[neoutl_object_api::PropertyGroup] = &[neoutl_object_ap
     schema: neoutl_object_api::FfiSlice::from_static(PARAM_SCHEMA),
 }];
 static META: ObjectMeta = ObjectMeta {
-    stable_id: "neoutl.object.shape",
-    name: "Shape",
+    stable_id: neoutl_object_api::StrRef::from_str("neoutl.object.shape"),
+    name: neoutl_object_api::StrRef::from_str("Shape"),
     dimensionality: Dimensionality::Both,
     property_groups: neoutl_object_api::FfiSlice::from_static(PROPERTY_GROUPS),
 };
@@ -88,7 +88,7 @@ unsafe extern "C" fn setup_accelerator(
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn neoutl_object_entry() -> *const ObjectVTable {
+pub unsafe extern "C" fn neoutl_object_entry_v2() -> *const ObjectVTable {
     VTABLE.get_or_init(|| ObjectVTable {
         meta,
         vertex_count,
@@ -99,6 +99,6 @@ pub unsafe extern "C" fn neoutl_object_entry() -> *const ObjectVTable {
     })
 }
 
-const _: EntryFn = neoutl_object_entry;
+const _: EntryFn = neoutl_object_entry_v2;
 rust_i18n::i18n!("../../../../i18n");
 extern crate rust_i18n;

@@ -279,7 +279,8 @@ impl RenderEngine {
                     continue;
                 };
                 let meta = unsafe { &*((plugin.vtable.meta)()) };
-                if meta.stable_id != neoutl_object_api::TEXT_STABLE_ID {
+                if unsafe { meta.stable_id.try_as_str() } != Some(neoutl_object_api::TEXT_STABLE_ID)
+                {
                     continue;
                 }
                 let Some(tc) = obj.text_content.as_ref() else {
@@ -439,60 +440,12 @@ impl RenderEngine {
                 };
 
                 let pool_tex = self.ensure_effect_object_target(pool_idx).clone();
-                let mut effect_roi = neoutl_shared_abi::Roi {
+                let effect_roi = neoutl_shared_abi::Roi {
                     x: 0.0,
                     y: 0.0,
                     w: self.render_width as f32,
                     h: self.render_height as f32,
                 };
-                for (effect_id, params) in &obj.effects {
-                    let Some(source) = effects::loader::by_id(effect_id) else {
-                        continue;
-                    };
-                    let native = match source.as_ref() {
-                        effects::loader::EffectSource::Native(plugin) => Some(plugin.vtable),
-                        effects::loader::EffectSource::Lua(_) => None,
-                    };
-                    if matches!(source.kind(), neoutl_effect_api::EffectKind::Audio) {
-                        continue;
-                    }
-                    let values = effect_params_as_f32(source.as_ref(), params);
-                    if let Some(needs_frame) = native.and_then(|v| v.is_need_render_frame)
-                        && unsafe {
-                            needs_frame(
-                                values.as_ptr(),
-                                values.len() as u32,
-                                i64::from(timeline_frame) * 1_000_000
-                                    / i64::from(project.fps.max(1)),
-                            )
-                        } == 0
-                    {
-                        continue;
-                    }
-                    let Some(calc_roi) = native.and_then(|v| v.calc_roi) else {
-                        continue;
-                    };
-                    let roi = unsafe {
-                        calc_roi(
-                            effect_roi,
-                            values.as_ptr(),
-                            values.len() as u32,
-                            i64::from(timeline_frame) * 1_000_000 / i64::from(project.fps.max(1)),
-                            self.render_width as f32,
-                            self.render_height as f32,
-                        )
-                    };
-                    if ![roi.x, roi.y, roi.w, roi.h].iter().all(|v| v.is_finite())
-                        || roi.w <= 0.0
-                        || roi.h <= 0.0
-                    {
-                        eprintln!(
-                            "[NeoUtl] effect calc_roi returned invalid region: id={effect_id}"
-                        );
-                    } else {
-                        effect_roi = roi;
-                    }
-                }
                 self.render_effect_object_offscreen(&pool_tex, draw_kind, obj);
                 if !obj.effects.is_empty() {
                     self.apply_effect_chain(
@@ -658,24 +611,4 @@ impl RenderEngine {
             crate::infra::gpu_shared::locked_submit(&self.queue, [encoder.finish()]);
         }
     }
-}
-
-fn effect_params_as_f32(
-    source: &effects::loader::EffectSource,
-    params: &HashMap<String, Value>,
-) -> Vec<f32> {
-    source
-        .param_schema()
-        .iter()
-        .map(|s| {
-            params
-                .get(s.key.as_str())
-                .map_or(s.default_float, |v| match v {
-                    Value::Number(n) => *n,
-                    Value::Bool(b) => u8::from(*b) as f32,
-                    Value::Enum(idx) => *idx as f32,
-                    Value::Text(_) | Value::FilePath(_) | Value::TrackRef(_) => s.default_float,
-                })
-        })
-        .collect()
 }

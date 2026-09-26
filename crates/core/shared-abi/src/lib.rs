@@ -66,7 +66,23 @@ impl StrRef {
     /// `ptr` must point to `len` readable bytes that remain valid for the
     /// returned string's lifetime, and those bytes must contain valid UTF-8.
     pub unsafe fn as_str(&self) -> &'static str {
-        unsafe { std::str::from_utf8_unchecked(std::slice::from_raw_parts(self.ptr, self.len)) }
+        unsafe { self.try_as_str() }.expect("invalid foreign UTF-8 StrRef")
+    }
+
+    /// Validates a foreign string reference and returns UTF-8 when valid.
+    ///
+    /// # Safety
+    /// For nonzero length, `ptr` must point to `len` readable bytes that remain valid
+    /// for the returned lifetime.
+    pub unsafe fn try_as_str(&self) -> Option<&'static str> {
+        if self.len == 0 {
+            return Some("");
+        }
+        if self.ptr.is_null() {
+            return None;
+        }
+        let bytes = unsafe { std::slice::from_raw_parts(self.ptr, self.len) };
+        std::str::from_utf8(bytes).ok()
     }
 }
 unsafe impl Send for StrRef {}

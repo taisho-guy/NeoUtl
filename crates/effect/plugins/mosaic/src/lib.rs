@@ -18,9 +18,9 @@ static PARAM_SCHEMA: &[EffectParamSchema] = &[EffectParamSchema {
 }];
 
 static META: EffectMeta = EffectMeta {
-    id: "mosaic",
-    name: "Mosaic",
-    category: "Blur",
+    id: StrRef::from_str("mosaic"),
+    name: StrRef::from_str("Mosaic"),
+    category: StrRef::from_str("Blur"),
     param_schema: neoutl_effect_api::FfiSlice::from_static(PARAM_SCHEMA),
     kind: EffectKind::Image,
     author: StrRef::from_str("NeoUtl"),
@@ -61,7 +61,7 @@ unsafe extern "C" fn setup_accelerator(
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn neoutl_effect_entry() -> *const EffectVTable {
+pub unsafe extern "C" fn neoutl_effect_entry_v2() -> *const EffectVTable {
     VTABLE.get_or_init(|| EffectVTable {
         meta,
         wgsl,
@@ -82,6 +82,6 @@ pub unsafe extern "C" fn neoutl_effect_entry() -> *const EffectVTable {
     })
 }
 
-const _: neoutl_effect_api::EntryFn = neoutl_effect_entry;
+const _: neoutl_effect_api::EntryFn = neoutl_effect_entry_v2;
 rust_i18n::i18n!("../../../../i18n");
 extern crate rust_i18n;

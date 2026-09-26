@@ -15,8 +15,8 @@ pub const DEFAULT_PROPERTY_GROUP_ID: &str = "default";
 
 #[repr(C)]
 pub struct ObjectMeta {
-    pub stable_id: &'static str,
-    pub name: &'static str,
+    pub stable_id: StrRef,
+    pub name: StrRef,
     pub dimensionality: Dimensionality,
     pub property_groups: FfiSlice<PropertyGroup>,
 }
@@ -56,7 +56,7 @@ pub struct ObjectVTable {
 
 pub const UNIT_SIZE_PX: f32 = 200.0;
 
-pub const ENTRY_SYMBOL: &[u8] = b"neoutl_object_entry\0";
+pub const ENTRY_SYMBOL: &[u8] = b"neoutl_object_entry_v2\0";
 pub type EntryFn = unsafe extern "C" fn() -> *const ObjectVTable;
 
 pub const TEXT_STABLE_ID: &str = "neoutl.object.text";

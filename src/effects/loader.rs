@@ -331,16 +331,26 @@ fn load_one(path: &Path) -> Result<EffectPlugin, PluginError> {
         unsafe { lib.get(ENTRY_SYMBOL) }.map_err(|e| PluginError::Load(e.to_string()))?;
     let vtable: &'static EffectVTable = unsafe { &*entry() };
     let meta = unsafe { &*((vtable.meta)()) };
-    let uuid_str = unsafe { meta.uuid.as_str() };
+    let id = unsafe { meta.id.try_as_str() }
+        .ok_or(PluginError::InvalidField("meta.id"))?
+        .to_owned();
+    let name = unsafe { meta.name.try_as_str() }
+        .ok_or(PluginError::InvalidField("meta.name"))?
+        .to_owned();
+    let category = unsafe { meta.category.try_as_str() }
+        .ok_or(PluginError::InvalidField("meta.category"))?
+        .to_owned();
+    let uuid_str =
+        unsafe { meta.uuid.try_as_str() }.ok_or(PluginError::InvalidField("meta.uuid"))?;
     let uuid = if uuid_str.is_empty() {
-        meta.id.to_owned()
+        id.clone()
     } else {
         uuid_str.to_owned()
     };
     Ok(EffectPlugin {
-        id: meta.id.to_owned(),
-        name: meta.name.to_owned(),
-        category: meta.category.to_owned(),
+        id,
+        name,
+        category,
         uuid,
         vtable,
         _lib: lib,

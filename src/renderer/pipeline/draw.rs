@@ -23,6 +23,9 @@ impl RenderEngine {
         };
 
         if chain.is_empty() {
+            if std::ptr::eq(src, dst) {
+                return;
+            }
             let mut encoder = self
                 .device
                 .create_command_encoder(&wgpu::CommandEncoderDescriptor {
@@ -98,8 +101,8 @@ impl RenderEngine {
                         values.as_ptr(),
                         values.len() as u32,
                         i64::from(timeline_frame) * 1_000_000 / i64::from(fps.max(1)),
-                        self.render_width as f32,
-                        self.render_height as f32,
+                        1.0,
+                        1.0,
                     )
                 };
                 if [next.x, next.y, next.w, next.h]
@@ -191,6 +194,13 @@ impl RenderEngine {
                 )
             };
             if let Some(render) = native_vtable.and_then(|v| v.custom_render) {
+                let mut preserve = self.device.create_command_encoder(&Default::default());
+                preserve.copy_texture_to_texture(
+                    src_tex.as_image_copy(),
+                    dst_tex.as_image_copy(),
+                    extent,
+                );
+                crate::infra::gpu_shared::locked_submit(&self.queue, [preserve.finish()]);
                 let status = super::effect_gpu::run_custom(bridge(), |ctx| unsafe {
                     render(ctx as *const _, values.as_ptr(), values.len() as u32)
                 });

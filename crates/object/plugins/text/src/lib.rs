@@ -62,8 +62,8 @@ static PROPERTY_GROUPS: &[neoutl_object_api::PropertyGroup] = &[neoutl_object_ap
     schema: neoutl_object_api::FfiSlice::from_static(PARAM_SCHEMA),
 }];
 static META: ObjectMeta = ObjectMeta {
-    stable_id: TEXT_STABLE_ID,
-    name: "Text",
+    stable_id: neoutl_object_api::StrRef::from_str(TEXT_STABLE_ID),
+    name: neoutl_object_api::StrRef::from_str("Text"),
     dimensionality: Dimensionality::TwoD,
     property_groups: neoutl_object_api::FfiSlice::from_static(PROPERTY_GROUPS),
 };
@@ -96,7 +96,7 @@ unsafe extern "C" fn setup_accelerator(
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn neoutl_object_entry() -> *const ObjectVTable {
+pub unsafe extern "C" fn neoutl_object_entry_v2() -> *const ObjectVTable {
     VTABLE.get_or_init(|| ObjectVTable {
         meta,
         vertex_count,
@@ -107,4 +107,4 @@ pub unsafe extern "C" fn neoutl_object_entry() -> *const ObjectVTable {
     })
 }
 
-const _: EntryFn = neoutl_object_entry;
+const _: EntryFn = neoutl_object_entry_v2;

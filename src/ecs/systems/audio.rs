@@ -54,6 +54,7 @@ pub fn get_active_audio_system(
                     audio,
                     media_source: Some(media_source.clone()),
                     source_frame,
+                    timeline_frame: i64::from(frame),
                     fps,
                     plugin_chain: plugin_chains
                         .get(id)

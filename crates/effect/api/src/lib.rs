@@ -6,9 +6,9 @@ pub type EffectParamSchema = neoutl_shared_abi::ParamSchema;
 
 #[repr(C)]
 pub struct EffectMeta {
-    pub id: &'static str,
-    pub name: &'static str,
-    pub category: &'static str,
+    pub id: StrRef,
+    pub name: StrRef,
+    pub category: StrRef,
     pub param_schema: FfiSlice<EffectParamSchema>,
     pub kind: EffectKind,
     pub author: StrRef,
@@ -30,7 +30,7 @@ pub struct EffectRenderContext {
     pub cache_identifier: *const (),
 
     /// コンパイル済みピクセルシェーダーを実行する。
-    /// `data` はWGSLテキスト。ホストはvs_main/fs_mainとbinding 0/1 source+sampler、2 uniform、3/4 auxiliary+samplerを使う。targetはNamed/Temp/CacheのRGBA8Unormに限る。
+    /// `data` はWGSLテキスト。ホストはvs_main/fs_mainとbinding 0/1 source+sampler、2 uniform、3/4 auxiliary+samplerを使う。targetはNamed/Temp/CacheのRGBA8UnormまたはFramebuffer(現在のRGBA16F出力)です。
     pub exec_pixelshader: unsafe extern "C" fn(
         data: *const u8,
         data_len: usize,
@@ -150,7 +150,7 @@ pub struct EffectVTable {
         Option<unsafe extern "C" fn(accelerator: *const AcceleratorHandle) -> u32>,
 }
 
-pub const ENTRY_SYMBOL: &[u8] = b"neoutl_effect_entry\0";
+pub const ENTRY_SYMBOL: &[u8] = b"neoutl_effect_entry_v2\0";
 pub type EntryFn = unsafe extern "C" fn() -> *const EffectVTable;
 
 pub const fn uniform_size_std(count: u32) -> u32 {
@@ -167,6 +167,9 @@ pub const fn uniform_size_std(count: u32) -> u32 {
 /// for the duration of this call and must not overlap.
 pub unsafe fn pack_uniform_std(params_ptr: *const f32, count: u32, out_ptr: *mut u8) {
     let total = uniform_size_std(count) as usize;
+    if total == 0 {
+        return;
+    }
     unsafe {
         std::ptr::write_bytes(out_ptr, 0, total);
         let params = std::slice::from_raw_parts(params_ptr, count as usize);

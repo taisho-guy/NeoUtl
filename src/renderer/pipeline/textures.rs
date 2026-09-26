@@ -134,5 +134,8 @@ pub(super) fn create_dummy_map_texture_view(
 }
 
 pub(super) fn stable_id_of(kind_id: u32) -> Option<&'static str> {
-    by_kind_id(kind_id).map(|p| unsafe { &*((p.vtable.meta)()) }.stable_id)
+    by_kind_id(kind_id).and_then(|p| {
+        let meta = unsafe { &*((p.vtable.meta)()) };
+        unsafe { meta.stable_id.try_as_str() }
+    })
 }

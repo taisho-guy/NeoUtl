@@ -292,14 +292,9 @@ impl AudioMixer {
         self.apply_plugin_chain(entity.id, &entity.plugin_chain, &mut chan_l, &mut chan_r);
         process_audio_effects(
             &entity.effects,
-            entity.source_frame,
+            entity.timeline_frame,
             entity.fps,
             &mut chan_l,
-        );
-        process_audio_effects(
-            &entity.effects,
-            entity.source_frame,
-            entity.fps,
             &mut chan_r,
         );
 
@@ -412,9 +407,10 @@ impl AudioMixer {
 
 fn process_audio_effects(
     effects: &[(String, HashMap<String, crate::ecs::types::Value>)],
-    source_frame: i64,
+    timeline_frame: i64,
     fps: f64,
-    samples: &mut [f32],
+    left: &mut [f32],
+    right: &mut [f32],
 ) {
     for (id, params) in effects {
         let Some(source) = crate::effects::loader::by_id(id) else {
@@ -423,48 +419,44 @@ fn process_audio_effects(
         let crate::effects::loader::EffectSource::Native(plugin) = source.as_ref() else {
             continue;
         };
-        if matches!(
-            unsafe { &*((plugin.vtable.meta)()) }.kind,
-            neoutl_effect_api::EffectKind::Image
-        ) {
+        if matches!(source.kind(), neoutl_effect_api::EffectKind::Image) {
             continue;
         }
         let Some(process) = plugin.vtable.process_audio else {
             continue;
         };
-        let schema = source.param_schema();
-        let values: Vec<f32> = schema
+        let values: Vec<f32> = source
+            .param_schema()
             .iter()
-            .map(|s| {
-                params.get(&s.key).map_or(s.default_float, |v| match v {
-                    crate::ecs::types::Value::Number(n) => *n,
-                    crate::ecs::types::Value::Bool(b) => u8::from(*b) as f32,
-                    crate::ecs::types::Value::Enum(e) => *e as f32,
-                    _ => s.default_float,
-                })
+            .map(|schema| {
+                params
+                    .get(&schema.key)
+                    .map_or(schema.default_float, |value| match value {
+                        crate::ecs::types::Value::Number(n) => *n,
+                        crate::ecs::types::Value::Bool(b) => u8::from(*b) as f32,
+                        crate::ecs::types::Value::Enum(e) => *e as f32,
+                        _ => schema.default_float,
+                    })
             })
             .collect();
+        let layer_time_us = (timeline_frame as f64 * 1_000_000.0 / fps.max(1.0)) as i64;
         if let Some(needs_frame) = plugin.vtable.is_need_render_frame
-            && unsafe {
-                needs_frame(
-                    values.as_ptr(),
-                    values.len() as u32,
-                    (source_frame as f64 * 1_000_000.0 / fps.max(1.0)) as i64,
-                )
-            } == 0
+            && unsafe { needs_frame(values.as_ptr(), values.len() as u32, layer_time_us) } == 0
         {
             continue;
         }
-        let status = unsafe {
-            process(
-                samples.as_mut_ptr(),
-                samples.len().min(u32::MAX as usize) as u32,
-                values.as_ptr(),
-                values.len() as u32,
-            )
-        };
-        if status != 0 {
-            eprintln!("[NeoUtl] effect process_audio failed: id={id}, code={status}");
+        for samples in [&mut *left, &mut *right] {
+            let status = unsafe {
+                process(
+                    samples.as_mut_ptr(),
+                    samples.len().min(u32::MAX as usize) as u32,
+                    values.as_ptr(),
+                    values.len() as u32,
+                )
+            };
+            if status != 0 {
+                eprintln!("[NeoUtl] effect process_audio failed: id={id}, code={status}");
+            }
         }
     }
 }
@@ -567,6 +559,7 @@ pub struct ActiveAudioEntity {
     pub audio: AudioParams,
     pub media_source: Option<MediaSource>,
     pub source_frame: i64,
+    pub timeline_frame: i64,
     pub fps: f64,
     pub plugin_chain: Vec<PluginInstanceRef>,
     pub effects: Vec<(String, HashMap<String, crate::ecs::types::Value>)>,

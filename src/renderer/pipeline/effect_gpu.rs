@@ -105,7 +105,7 @@ impl Bridge {
     }
 
     fn create_storage_texture(&self, label: &str, width: u32, height: u32) -> wgpu::Texture {
-        self.device.create_texture(&wgpu::TextureDescriptor {
+        let texture = self.device.create_texture(&wgpu::TextureDescriptor {
             label: Some(label),
             size: wgpu::Extent3d {
                 width: width.max(1),
@@ -122,11 +122,32 @@ impl Bridge {
                 | wgpu::TextureUsages::COPY_SRC
                 | wgpu::TextureUsages::COPY_DST,
             view_formats: &[],
-        })
+        });
+        let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
+        let mut encoder = self.device.create_command_encoder(&Default::default());
+        let _pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            label: Some("Initialize Effect Storage Texture"),
+            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                view: &view,
+                resolve_target: None,
+                ops: wgpu::Operations {
+                    load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
+                    store: wgpu::StoreOp::Store,
+                },
+                depth_slice: None,
+            })],
+            depth_stencil_attachment: None,
+            timestamp_writes: None,
+            occlusion_query_set: None,
+            multiview_mask: None,
+        });
+        drop(_pass);
+        crate::infra::gpu_shared::locked_submit(&self.queue, [encoder.finish()]);
+        texture
     }
 
     fn resolve(&mut self, resource: ResourceRef, create: bool) -> Option<wgpu::Texture> {
-        let name = unsafe { ref_name(resource.name) }.unwrap_or_default();
+        let name = unsafe { ref_name(resource.name) }?;
         match resource.kind {
             ResourceKind::Object => Some(self.object.clone()),
             ResourceKind::Framebuffer => Some(self.framebuffer.clone()),
@@ -269,21 +290,31 @@ unsafe extern "C" fn cache_create(
         return CacheImageRef::empty();
     };
     with_active(|bridge| {
-        let texture = bridge.create_storage_texture("Effect VRAM Cache", width, height);
         let key = (
             bridge.device.as_ref() as *const _ as usize,
             identifier as usize,
             name.clone(),
         );
-        CACHES
+        let mut caches = CACHES
             .get_or_init(Default::default)
             .lock()
-            .map_err(|_| 1u32)?
-            .insert(key, texture);
+            .map_err(|_| 1u32)?;
+        let texture = match caches.get(&key) {
+            Some(texture)
+                if texture.width() == width.max(1) && texture.height() == height.max(1) =>
+            {
+                texture.clone()
+            }
+            _ => {
+                let texture = bridge.create_storage_texture("Effect VRAM Cache", width, height);
+                caches.insert(key, texture.clone());
+                texture
+            }
+        };
         Ok(CacheImageRef {
             resource: ResourceRef::cache(original_name),
-            width,
-            height,
+            width: texture.width(),
+            height: texture.height(),
             valid: 1,
         })
     })
@@ -348,10 +379,7 @@ fn render_pixel(
     constants: &[u8],
 ) -> Result<(), u32> {
     let target_tex = bridge.resolve(target, true).ok_or(2u32)?;
-    if matches!(
-        target.kind,
-        ResourceKind::Object | ResourceKind::Framebuffer
-    ) {
+    if matches!(target.kind, ResourceKind::Object) {
         return Err(3);
     }
     let first = if let Some(r) = resources.first() {
@@ -457,7 +485,12 @@ fn render_pixel(
         ],
     });
     let mut encoder = bridge.device.create_command_encoder(&Default::default());
-    if target_tex.width() == first.width() && target_tex.height() == first.height() {
+    if target.kind == ResourceKind::Framebuffer {
+        copy_input_to_framebuffer(bridge, &mut encoder)?;
+    } else if target_tex.width() == first.width()
+        && target_tex.height() == first.height()
+        && target_tex.format() == first.format()
+    {
         encoder.copy_texture_to_texture(
             first.as_image_copy(),
             target_tex.as_image_copy(),
@@ -504,7 +537,134 @@ fn render_pixel(
         pass.set_bind_group(0, &bind, &[]);
         pass.draw(0..3, 0..1);
     }
-    bridge.queue.submit([encoder.finish()]);
+    crate::infra::gpu_shared::locked_submit(&bridge.queue, [encoder.finish()]);
+    Ok(())
+}
+
+fn copy_input_to_framebuffer(
+    bridge: &Bridge,
+    encoder: &mut wgpu::CommandEncoder,
+) -> Result<(), u32> {
+    if bridge.object.format() == bridge.framebuffer.format() {
+        encoder.copy_texture_to_texture(
+            bridge.object.as_image_copy(),
+            bridge.framebuffer.as_image_copy(),
+            bridge.object.size(),
+        );
+        return Ok(());
+    }
+    const WGSL: &str = r#"
+struct VOut { @builtin(position) position: vec4<f32>, @location(0) uv: vec2<f32> };
+@vertex fn vs_main(@builtin(vertex_index) i:u32)->VOut { var p=array<vec2<f32>,3>(vec2<f32>(-1.0,1.0),vec2<f32>(3.0,1.0),vec2<f32>(-1.0,-3.0)); var o:VOut; o.position=vec4<f32>(p[i],0.0,1.0); o.uv=vec2<f32>((p[i].x+1.0)*0.5,(1.0-p[i].y)*0.5); return o; }
+@group(0) @binding(0) var src:texture_2d<f32>; @group(0) @binding(1) var smp:sampler;
+@fragment fn fs_main(in:VOut)->@location(0) vec4<f32> { return textureSample(src,smp,in.uv); }
+"#;
+    let module = bridge
+        .device
+        .create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("Effect Framebuffer Preserve"),
+            source: wgpu::ShaderSource::Wgsl(WGSL.into()),
+        });
+    let bgl = bridge
+        .device
+        .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("Effect Framebuffer Preserve BGL"),
+            entries: &[
+                wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Texture {
+                        sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                        view_dimension: wgpu::TextureViewDimension::D2,
+                        multisampled: false,
+                    },
+                    count: None,
+                },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 1,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                    count: None,
+                },
+            ],
+        });
+    let layout = bridge
+        .device
+        .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("Effect Framebuffer Preserve Layout"),
+            bind_group_layouts: &[Some(&bgl)],
+            immediate_size: 0,
+        });
+    let pipeline = bridge
+        .device
+        .create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("Effect Framebuffer Preserve"),
+            layout: Some(&layout),
+            vertex: wgpu::VertexState {
+                module: &module,
+                entry_point: Some("vs_main"),
+                buffers: &[],
+                compilation_options: Default::default(),
+            },
+            fragment: Some(wgpu::FragmentState {
+                module: &module,
+                entry_point: Some("fs_main"),
+                targets: &[Some(wgpu::ColorTargetState {
+                    format: bridge.framebuffer.format(),
+                    blend: None,
+                    write_mask: wgpu::ColorWrites::ALL,
+                })],
+                compilation_options: Default::default(),
+            }),
+            primitive: wgpu::PrimitiveState {
+                topology: wgpu::PrimitiveTopology::TriangleList,
+                cull_mode: None,
+                ..Default::default()
+            },
+            depth_stencil: None,
+            multisample: Default::default(),
+            multiview_mask: None,
+            cache: None,
+        });
+    let src_view = bridge.object.create_view(&Default::default());
+    let dst_view = bridge.framebuffer.create_view(&Default::default());
+    let sampler = bridge
+        .device
+        .create_sampler(&wgpu::SamplerDescriptor::default());
+    let bind = bridge.device.create_bind_group(&wgpu::BindGroupDescriptor {
+        label: Some("Effect Framebuffer Preserve BG"),
+        layout: &bgl,
+        entries: &[
+            wgpu::BindGroupEntry {
+                binding: 0,
+                resource: wgpu::BindingResource::TextureView(&src_view),
+            },
+            wgpu::BindGroupEntry {
+                binding: 1,
+                resource: wgpu::BindingResource::Sampler(&sampler),
+            },
+        ],
+    });
+    let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+        label: Some("Effect Framebuffer Preserve Pass"),
+        color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+            view: &dst_view,
+            resolve_target: None,
+            ops: wgpu::Operations {
+                load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
+                store: wgpu::StoreOp::Store,
+            },
+            depth_slice: None,
+        })],
+        depth_stencil_attachment: None,
+        timestamp_writes: None,
+        occlusion_query_set: None,
+        multiview_mask: None,
+    });
+    pass.set_pipeline(&pipeline);
+    pass.set_bind_group(0, &bind, &[]);
+    pass.draw(0..3, 0..1);
+    drop(pass);
     Ok(())
 }
 
@@ -622,6 +782,14 @@ fn dispatch_compute(
         .iter()
         .any(|t| t.format() != wgpu::TextureFormat::Rgba8Unorm)
     {
+        return Err(3);
+    }
+    if targets.iter().any(|target| {
+        resources.iter().any(|resource| {
+            target.kind == resource.kind
+                && unsafe { ref_name(target.name) } == unsafe { ref_name(resource.name) }
+        })
+    }) {
         return Err(3);
     }
     let resource_textures: Vec<_> = resources
@@ -751,7 +919,7 @@ fn dispatch_compute(
             dispatch.group_count_z,
         );
     }
-    bridge.queue.submit([encoder.finish()]);
+    crate::infra::gpu_shared::locked_submit(&bridge.queue, [encoder.finish()]);
     Ok(())
 }
 
@@ -825,7 +993,7 @@ fn read_texture(
             depth_or_array_layers: 1,
         },
     );
-    bridge.queue.submit([enc.finish()]);
+    crate::infra::gpu_shared::locked_submit(&bridge.queue, [enc.finish()]);
     let slice = buf.slice(..);
     let (tx, rx) = std::sync::mpsc::channel();
     slice.map_async(wgpu::MapMode::Read, move |r| {
@@ -978,7 +1146,7 @@ pub(super) fn run_compute(
         if status != 0 { return Err(status); }
         const BLIT: &[u8] = br"
 struct VOut { @builtin(position) position: vec4<f32>, @location(0) uv: vec2<f32> };
-@vertex fn vs_main(@builtin(vertex_index) i: u32) -> VOut { var p = array<vec2<f32>,3>(vec2(-1.0,-1.0),vec2(3.0,-1.0),vec2(-1.0,3.0)); var o: VOut; o.position=vec4(p[i],0.0,1.0); o.uv=(p[i]+vec2(1.0))*0.5; return o; }
+@vertex fn vs_main(@builtin(vertex_index) i: u32) -> VOut { var p = array<vec2<f32>,3>(vec2(-1.0,1.0),vec2(3.0,1.0),vec2(-1.0,-3.0)); var o: VOut; o.position=vec4(p[i],0.0,1.0); o.uv=vec2((p[i].x+1.0)*0.5,(1.0-p[i].y)*0.5); return o; }
 @group(0) @binding(0) var image: texture_2d<f32>; @group(0) @binding(1) var image_sampler: sampler; @group(0) @binding(2) var<uniform> unused: vec4<f32>; @group(0) @binding(3) var map: texture_2d<f32>; @group(0) @binding(4) var map_sampler: sampler;
 @fragment fn fs_main(in: VOut) -> @location(0) vec4<f32> { return textureSample(image,image_sampler,in.uv); }
 ";

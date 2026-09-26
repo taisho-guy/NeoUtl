@@ -235,9 +235,15 @@ fn load_one(path: &Path) -> Result<ObjectPlugin, PluginError> {
         unsafe { lib.get(ENTRY_SYMBOL) }.map_err(|e| PluginError::Load(e.to_string()))?;
     let vtable: &'static ObjectVTable = unsafe { &*entry() };
     let meta = unsafe { &*((vtable.meta)()) };
+    let stable_id = unsafe { meta.stable_id.try_as_str() }
+        .ok_or(PluginError::InvalidField("meta.stable_id"))?
+        .to_owned();
+    let name = unsafe { meta.name.try_as_str() }
+        .ok_or(PluginError::InvalidField("meta.name"))?
+        .to_owned();
     Ok(ObjectPlugin {
-        stable_id: meta.stable_id.to_owned(),
-        name: meta.name.to_owned(),
+        stable_id,
+        name,
         kind_id: 0,
         vtable,
         _lib: Some(lib),
