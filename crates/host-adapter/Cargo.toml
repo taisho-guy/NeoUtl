@@ -6,10 +6,10 @@ description = "NeoUtl adapter over maolan-plugin-host out-of-process CLAP/VST3/L
 license = "BSD-2-Clause"
 
 [dependencies]
-maolan-plugin-host = "0.0.7"
+maolan-plugin-host = "0.0.8"
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
-dirs = "5"
+dirs = "7"
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"

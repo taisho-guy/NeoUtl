@@ -68,6 +68,8 @@ local function escape_pattern(value)
     return value:gsub("([%(%)%.%%%+%-%*%?%[%]%^%$])", "%%%1")
 end
 
+-- SDKディレクトリ配下の生成ファイル専用。バージョン文字列がプロジェクト全体の
+-- 依存関係バージョンと衝突する経路(Cargo.toml/Cargo.lock)には使用しない。
 local function replace_version_in_file(path, current_version, target_version)
     local data = read_file(path)
         if data:find("%z") then return false end
@@ -77,6 +79,38 @@ local function replace_version_in_file(path, current_version, target_version)
         return true
     end
     return false
+end
+
+-- [package]セクション内のversion行1箇所のみを置換する。
+-- 全文字列置換(replace_version_in_file)は`[workspace.dependencies]`配下の
+-- 無関係なクレートバージョンがプロジェクトバージョンと偶然一致した場合に
+-- 誤って書き換える欠陥を持つため、Cargo.tomlには使用しない。
+local function replace_cargo_package_version(path, current_version, target_version)
+    local data = read_file(path)
+    local package_start = data:find("%[package%]")
+    assert(package_start, "missing [package] section: " .. path)
+    local section_end = data:find("\n%[", package_start + 1) or (#data + 1)
+    local header = data:sub(1, package_start - 1)
+    local section = data:sub(package_start, section_end - 1)
+    local tail = data:sub(section_end)
+
+    local pattern = '(version%s*=%s*)"' .. escape_pattern(current_version) .. '"'
+    local updated_section, count = section:gsub(pattern, '%1"' .. target_version .. '"', 1)
+    assert(count == 1, "[package] version not found or already updated: " .. path)
+
+    write_file(path, header .. updated_section .. tail)
+end
+
+-- `sdk/neoutl/<version>/`パス参照のみを置換する。パス区切り文字で挟むため、
+-- 依存クレートのバージョン文字列との衝突は構造的に発生しない。
+local function replace_sdk_path_references(path, current_version, target_version)
+    local data = read_file(path)
+    local pattern = "sdk/neoutl/" .. escape_pattern(current_version) .. "/"
+    local replacement = "sdk/neoutl/" .. target_version .. "/"
+    local updated, count = data:gsub(pattern, replacement)
+    if count > 0 then
+        write_file(path, updated)
+    end
 end
 
 local function copy_dir(source, target)
@@ -198,11 +232,11 @@ local files = recursive_find_files(target_dir)
 for _, file in ipairs(files) do
     replace_version_in_file(file, current_version, target_version)
 end
-replace_version_in_file(cargo_path, current_version, target_version)
-local cargo_lock = path_join(script_dir, "Cargo.lock")
-if exists(cargo_lock) then
-    replace_version_in_file(cargo_lock, current_version, target_version)
-end
+replace_cargo_package_version(cargo_path, current_version, target_version)
+replace_sdk_path_references(cargo_path, current_version, target_version)
+-- Cargo.lockは意図的に触らない。cargoが次回ビルド時にCargo.tomlから
+-- 決定論的に再生成する。手動文字列置換は無関係なロック済みクレートの
+-- バージョンとの偶然の一致により破損する(本修正の対象バグそのもの)。
 replace_version_in_file(sdk_index, current_version, target_version)
 set_c_header_version(c_master_header, major, minor, patch, target_version)
 
