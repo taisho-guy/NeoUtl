@@ -12,6 +12,9 @@ impl RenderEngine {
         src: &wgpu::Texture,
         dst: &wgpu::Texture,
         chain: &[(String, HashMap<String, Value>)],
+        timeline_frame: i32,
+        fps: u32,
+        initial_roi: neoutl_shared_abi::Roi,
     ) {
         let extent = wgpu::Extent3d {
             width: self.render_width,
@@ -43,13 +46,14 @@ impl RenderEngine {
         crate::infra::gpu_shared::locked_submit(&self.queue, [encoder.finish()]);
 
         let mut src_is_ping = true;
+        let mut roi = initial_roi;
         for (effect_id, params) in chain {
             let Some(source) = effects::loader::by_id(effect_id) else {
                 continue;
             };
-            let Some(pipeline) = self.effect_pipelines.get(effect_id).cloned() else {
+            if matches!(source.kind(), neoutl_effect_api::EffectKind::Audio) {
                 continue;
-            };
+            }
             let schema = source.param_schema();
             let values: Vec<f32> = schema
                 .iter()
@@ -72,20 +76,46 @@ impl RenderEngine {
                         })
                 })
                 .collect();
+            if let effects::loader::EffectSource::Native(plugin) = source.as_ref()
+                && let Some(needs_frame) = plugin.vtable.is_need_render_frame
+                && unsafe {
+                    needs_frame(
+                        values.as_ptr(),
+                        values.len() as u32,
+                        i64::from(timeline_frame) * 1_000_000 / i64::from(fps.max(1)),
+                    )
+                } == 0
+            {
+                continue;
+            }
 
+            if let effects::loader::EffectSource::Native(plugin) = source.as_ref()
+                && let Some(calc_roi) = plugin.vtable.calc_roi
+            {
+                let next = unsafe {
+                    calc_roi(
+                        roi,
+                        values.as_ptr(),
+                        values.len() as u32,
+                        i64::from(timeline_frame) * 1_000_000 / i64::from(fps.max(1)),
+                        self.render_width as f32,
+                        self.render_height as f32,
+                    )
+                };
+                if [next.x, next.y, next.w, next.h]
+                    .iter()
+                    .all(|v| v.is_finite())
+                    && next.w > 0.0
+                    && next.h > 0.0
+                {
+                    roi = next;
+                }
+            }
             let uniform_size = (source.uniform_size() as usize).max(16);
             let mut bytes = vec![0u8; uniform_size];
             source.pack_uniform(&values, &mut bytes);
             self.queue
                 .write_buffer(&self.effect_uniform_buffer, 0, &bytes);
-
-            let (src_tex, dst_tex) = if src_is_ping {
-                (&self.effect_ping, &self.effect_pong)
-            } else {
-                (&self.effect_pong, &self.effect_ping)
-            };
-            let src_view = src_tex.create_view(&wgpu::TextureViewDescriptor::default());
-            let dst_view = dst_tex.create_view(&wgpu::TextureViewDescriptor::default());
 
             let requires_tex_idx = source.requires_texture_param_index();
             let resolved_scene_tex: Option<wgpu::Texture> = if let Some(idx) = requires_tex_idx {
@@ -105,6 +135,7 @@ impl RenderEngine {
                         ComposeCacheKey::EffectMapScene(scene_id),
                         depth + 1,
                         None,
+                        timeline_frame,
                     )
                 } else {
                     None
@@ -132,6 +163,83 @@ impl RenderEngine {
             } else {
                 self.dummy_map_texture_view.clone()
             };
+
+            let (src_tex, dst_tex) = if src_is_ping {
+                (&self.effect_ping, &self.effect_pong)
+            } else {
+                (&self.effect_pong, &self.effect_ping)
+            };
+            let native_vtable = match source.as_ref() {
+                effects::loader::EffectSource::Native(plugin) => Some(plugin.vtable),
+                effects::loader::EffectSource::Lua(_) => None,
+            };
+            let namespace = native_vtable.map_or_else(
+                || effect_id.as_ptr() as usize,
+                |v| unsafe { (v.meta)() as usize },
+            );
+            let bridge = || {
+                super::effect_gpu::Bridge::new(
+                    self.device.clone(),
+                    self.queue.clone(),
+                    src_tex,
+                    dst_tex,
+                    self.map_texture_cache.clone(),
+                    namespace,
+                    self.render_width,
+                    self.render_height,
+                    roi,
+                )
+            };
+            if let Some(render) = native_vtable.and_then(|v| v.custom_render) {
+                let status = super::effect_gpu::run_custom(bridge(), |ctx| unsafe {
+                    render(ctx as *const _, values.as_ptr(), values.len() as u32)
+                });
+                if status != 0 {
+                    eprintln!(
+                        "[NeoUtl] effect custom_render failed: id={effect_id}, code={status}"
+                    );
+                    continue;
+                }
+                src_is_ping = !src_is_ping;
+                continue;
+            }
+            if let Some(vtable) = native_vtable
+                && let Some(get_shader) = vtable.compute_wgsl
+            {
+                let shader = unsafe { get_shader() };
+                let shader = unsafe { shader.as_slice() };
+                if !shader.is_empty() {
+                    let dispatch = vtable.compute_dispatch.map_or(
+                        neoutl_shared_abi::ComputeDispatch {
+                            group_count_x: self.render_width.div_ceil(8),
+                            group_count_y: self.render_height.div_ceil(8),
+                            group_count_z: 1,
+                        },
+                        |f| unsafe {
+                            f(
+                                values.as_ptr(),
+                                values.len() as u32,
+                                self.render_width,
+                                self.render_height,
+                            )
+                        },
+                    );
+                    match super::effect_gpu::run_compute(bridge(), shader, &bytes, dispatch) {
+                        Ok(()) => src_is_ping = !src_is_ping,
+                        Err(code) => eprintln!(
+                            "[NeoUtl] effect compute_wgsl failed: id={effect_id}, code={code}"
+                        ),
+                    }
+                    continue;
+                }
+            }
+            let Some((pipeline, vertex_pipeline)) = self.effect_pipelines.get(effect_id).cloned()
+            else {
+                continue;
+            };
+            let pipeline = vertex_pipeline.unwrap_or(pipeline);
+            let src_view = src_tex.create_view(&wgpu::TextureViewDescriptor::default());
+            let dst_view = dst_tex.create_view(&wgpu::TextureViewDescriptor::default());
 
             let bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
                 label: Some("Effect Pass BG"),
@@ -165,6 +273,11 @@ impl RenderEngine {
                 .create_command_encoder(&wgpu::CommandEncoderDescriptor {
                     label: Some("Effect Pass Encoder"),
                 });
+            encoder.copy_texture_to_texture(
+                src_tex.as_image_copy(),
+                dst_tex.as_image_copy(),
+                extent,
+            );
             {
                 let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                     label: Some("Effect Pass"),
@@ -172,7 +285,7 @@ impl RenderEngine {
                         view: &dst_view,
                         resolve_target: None,
                         ops: wgpu::Operations {
-                            load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
+                            load: wgpu::LoadOp::Load,
                             store: wgpu::StoreOp::Store,
                         },
                         depth_slice: None,
@@ -182,6 +295,20 @@ impl RenderEngine {
                     occlusion_query_set: None,
                     multiview_mask: None,
                 });
+                let sx = roi.x.floor().max(0.0).min(self.render_width as f32) as u32;
+                let sy = roi.y.floor().max(0.0).min(self.render_height as f32) as u32;
+                let ex = (roi.x + roi.w)
+                    .ceil()
+                    .max(0.0)
+                    .min(self.render_width as f32) as u32;
+                let ey = (roi.y + roi.h)
+                    .ceil()
+                    .max(0.0)
+                    .min(self.render_height as f32) as u32;
+                if ex <= sx || ey <= sy {
+                    continue;
+                }
+                rpass.set_scissor_rect(sx, sy, ex - sx, ey - sy);
                 rpass.set_pipeline(&pipeline);
                 rpass.set_bind_group(0, &bind_group, &[]);
                 rpass.draw(0..3, 0..1);
@@ -217,12 +344,41 @@ impl RenderEngine {
         }
     }
 
-    pub(super) fn draw_media_pass(
+    pub(super) fn draw_object_hook(
+        &self,
+        rpass: &mut wgpu::RenderPass,
+        obj: &ActiveObject,
+        bind_group: &wgpu::BindGroup,
+        depth_enabled: bool,
+        vertex_count_override: Option<u32>,
+    ) {
+        let Some(plugin) = by_kind_id(obj.kind_id) else {
+            return;
+        };
+        let vertex_count =
+            vertex_count_override.unwrap_or_else(|| unsafe { (plugin.vtable.vertex_count)() });
+        let context = neoutl_object_api::RenderContext {
+            version: 1,
+            render_pass_ptr: (rpass as *mut wgpu::RenderPass<'_>).cast(),
+            bind_group_ptr: (bind_group as *const wgpu::BindGroup).cast(),
+            vertex_count,
+            mvp_matrix: obj.mvp,
+            opacity: obj.opacity,
+            depth_enabled,
+            ref_layer_texture_ptr: std::ptr::null(),
+            ref_layer_texture_count: 0,
+        };
+        unsafe { (plugin.vtable.render)(&context) };
+    }
+
+    pub(super) fn draw_media_pass_with_hook(
         &self,
         rpass: &mut wgpu::RenderPass,
         texture: &wgpu::Texture,
         offset: u32,
         blend_mode: BlendMode,
+        obj: &ActiveObject,
+        depth_enabled: bool,
     ) {
         let variant = blend_mode.pipeline_index() as usize;
         let is_planar = matches!(texture.format(), wgpu::TextureFormat::NV12);
@@ -264,6 +420,7 @@ impl RenderEngine {
             rpass.set_pipeline(&self.video_pipeline[variant]);
             rpass.set_bind_group(0, &bind_group, &[offset]);
             rpass.draw(0..6, 0..1);
+            self.draw_object_hook(rpass, obj, &bind_group, depth_enabled, Some(6));
         } else {
             let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
             let bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
@@ -291,15 +448,18 @@ impl RenderEngine {
             rpass.set_pipeline(&self.media_pipeline[variant]);
             rpass.set_bind_group(0, &bind_group, &[offset]);
             rpass.draw(0..6, 0..1);
+            self.draw_object_hook(rpass, obj, &bind_group, depth_enabled, Some(6));
         }
     }
 
-    pub(super) fn draw_text_pass(
+    pub(super) fn draw_text_pass_with_hook(
         &self,
         rpass: &mut wgpu::RenderPass,
         clip_instance: u64,
         offset: u32,
         blend_mode: BlendMode,
+        obj: &ActiveObject,
+        depth_enabled: bool,
     ) {
         let Some(target) = self.text_targets.get(&clip_instance) else {
             return;
@@ -332,12 +492,14 @@ impl RenderEngine {
         rpass.set_pipeline(&self.media_pipeline[blend_mode.pipeline_index() as usize]);
         rpass.set_bind_group(0, &bind_group, &[offset]);
         rpass.draw(0..6, 0..1);
+        self.draw_object_hook(rpass, obj, &bind_group, depth_enabled, Some(6));
     }
 
     pub(super) fn render_effect_object_offscreen(
         &self,
         pool_tex: &wgpu::Texture,
         draw_kind: EffectObjectDrawKind,
+        obj: &ActiveObject,
     ) {
         let view = pool_tex.create_view(&wgpu::TextureViewDescriptor::default());
         let depth_view = self
@@ -375,20 +537,30 @@ impl RenderEngine {
             match draw_kind {
                 EffectObjectDrawKind::Standard { obj, offset } => {
                     self.draw_standard_pass(&mut rpass, obj, offset);
+                    self.draw_object_hook(&mut rpass, obj, &self.bind_group, false, None);
                 }
                 EffectObjectDrawKind::Media {
                     texture,
                     offset,
                     blend_mode,
                 } => {
-                    self.draw_media_pass(&mut rpass, texture, offset, blend_mode);
+                    self.draw_media_pass_with_hook(
+                        &mut rpass, texture, offset, blend_mode, obj, false,
+                    );
                 }
                 EffectObjectDrawKind::Text {
                     clip_instance,
                     offset,
                     blend_mode,
                 } => {
-                    self.draw_text_pass(&mut rpass, clip_instance, offset, blend_mode);
+                    self.draw_text_pass_with_hook(
+                        &mut rpass,
+                        clip_instance,
+                        offset,
+                        blend_mode,
+                        obj,
+                        false,
+                    );
                 }
             }
         }

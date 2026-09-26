@@ -124,15 +124,15 @@ pub type WgslSource = FfiSlice<u8>;
 pub enum ResourceKind {
     /// 現在処理対象のオブジェクト。
     Object = 0,
-    /// `name` で識別される標準リソース。処理完了後に破棄される。
+    /// `name` で識別されるRGBA8Unormリソース。効果呼び出しスコープに属する。
     Named = 1,
     /// フレームバッファ。
     Framebuffer = 2,
     /// 仮想バッファ。
     TempBuffer = 3,
-    /// `name` で識別されるキャッシュバッファ(VRAM常駐)。
+    /// `name` で識別されるRGBA8Unormキャッシュ画像(VRAM常駐)。
     Cache = 4,
-    /// `name` が指す画像ファイル。読み込み結果はVRAMにキャッシュされる。
+    /// `name` が指す画像ファイル。メディアデコーダ経由で読み込み、VRAMに保持される。CPU read/write APIはRGBA8を使う。
     Image = 5,
     /// 0.0〜1.0の乱数値を格納する256x256領域(読み取り専用)。
     Random = 6,

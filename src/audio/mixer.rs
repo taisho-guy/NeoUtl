@@ -290,6 +290,18 @@ impl AudioMixer {
         }
 
         self.apply_plugin_chain(entity.id, &entity.plugin_chain, &mut chan_l, &mut chan_r);
+        process_audio_effects(
+            &entity.effects,
+            entity.source_frame,
+            entity.fps,
+            &mut chan_l,
+        );
+        process_audio_effects(
+            &entity.effects,
+            entity.source_frame,
+            entity.fps,
+            &mut chan_r,
+        );
 
         for frame_idx in 0..samples_per_tick {
             master[frame_idx * 2] += chan_l[frame_idx];
@@ -398,6 +410,65 @@ impl AudioMixer {
     }
 }
 
+fn process_audio_effects(
+    effects: &[(String, HashMap<String, crate::ecs::types::Value>)],
+    source_frame: i64,
+    fps: f64,
+    samples: &mut [f32],
+) {
+    for (id, params) in effects {
+        let Some(source) = crate::effects::loader::by_id(id) else {
+            continue;
+        };
+        let crate::effects::loader::EffectSource::Native(plugin) = source.as_ref() else {
+            continue;
+        };
+        if matches!(
+            unsafe { &*((plugin.vtable.meta)()) }.kind,
+            neoutl_effect_api::EffectKind::Image
+        ) {
+            continue;
+        }
+        let Some(process) = plugin.vtable.process_audio else {
+            continue;
+        };
+        let schema = source.param_schema();
+        let values: Vec<f32> = schema
+            .iter()
+            .map(|s| {
+                params.get(&s.key).map_or(s.default_float, |v| match v {
+                    crate::ecs::types::Value::Number(n) => *n,
+                    crate::ecs::types::Value::Bool(b) => u8::from(*b) as f32,
+                    crate::ecs::types::Value::Enum(e) => *e as f32,
+                    _ => s.default_float,
+                })
+            })
+            .collect();
+        if let Some(needs_frame) = plugin.vtable.is_need_render_frame
+            && unsafe {
+                needs_frame(
+                    values.as_ptr(),
+                    values.len() as u32,
+                    (source_frame as f64 * 1_000_000.0 / fps.max(1.0)) as i64,
+                )
+            } == 0
+        {
+            continue;
+        }
+        let status = unsafe {
+            process(
+                samples.as_mut_ptr(),
+                samples.len().min(u32::MAX as usize) as u32,
+                values.as_ptr(),
+                values.len() as u32,
+            )
+        };
+        if status != 0 {
+            eprintln!("[NeoUtl] effect process_audio failed: id={id}, code={status}");
+        }
+    }
+}
+
 fn handle_plugin_failure_impl(spec: &str, err: &HostError) {
     if spec.is_empty() {
         return;
@@ -498,4 +569,5 @@ pub struct ActiveAudioEntity {
     pub source_frame: i64,
     pub fps: f64,
     pub plugin_chain: Vec<PluginInstanceRef>,
+    pub effects: Vec<(String, HashMap<String, crate::ecs::types::Value>)>,
 }

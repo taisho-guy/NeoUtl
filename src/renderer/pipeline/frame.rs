@@ -9,6 +9,7 @@ impl RenderEngine {
         captured: &CapturedObjects,
         project: &ProjectResource,
     ) {
+        let timeline_frame = world.current_frame();
         self.scene_texture_cache.clear();
         self.drain_hot_reload_events();
         if let Some(sys) = &self.lua_system
@@ -22,7 +23,15 @@ impl RenderEngine {
                 )
             );
         }
-        self.render_at(world, active_objects, captured, project, 0, None);
+        self.render_at(
+            world,
+            active_objects,
+            captured,
+            project,
+            0,
+            None,
+            timeline_frame,
+        );
         self.run_lua_reduce_hooks();
     }
 
@@ -100,9 +109,10 @@ impl RenderEngine {
         world: &crate::ecs::EcsWorld,
         active_objects: &[ActiveObject],
         captured: &CapturedObjects,
-        _project: &ProjectResource,
+        project: &ProjectResource,
         depth: u32,
         clear_override: Option<wgpu::Color>,
+        timeline_frame: i32,
     ) {
         if is_device_lost() {
             return;
@@ -169,6 +179,7 @@ impl RenderEngine {
                                 ComposeCacheKey::Scene(target_scene),
                                 depth + 1,
                                 None,
+                                timeline_frame,
                             )
                         }),
                         Some(crate::ecs::systems::ComposeSource::FrameBuffer {
@@ -186,6 +197,7 @@ impl RenderEngine {
                                 ComposeCacheKey::FrameBuffer(controller),
                                 depth + 1,
                                 None,
+                                timeline_frame,
                             )
                         }
                         None => None,
@@ -209,6 +221,7 @@ impl RenderEngine {
                         ComposeCacheKey::FrameBuffer(info.controller),
                         depth + 1,
                         None,
+                        timeline_frame,
                     )
                 }
                 None => None,
@@ -426,7 +439,61 @@ impl RenderEngine {
                 };
 
                 let pool_tex = self.ensure_effect_object_target(pool_idx).clone();
-                self.render_effect_object_offscreen(&pool_tex, draw_kind);
+                let mut effect_roi = neoutl_shared_abi::Roi {
+                    x: 0.0,
+                    y: 0.0,
+                    w: self.render_width as f32,
+                    h: self.render_height as f32,
+                };
+                for (effect_id, params) in &obj.effects {
+                    let Some(source) = effects::loader::by_id(effect_id) else {
+                        continue;
+                    };
+                    let native = match source.as_ref() {
+                        effects::loader::EffectSource::Native(plugin) => Some(plugin.vtable),
+                        effects::loader::EffectSource::Lua(_) => None,
+                    };
+                    if matches!(source.kind(), neoutl_effect_api::EffectKind::Audio) {
+                        continue;
+                    }
+                    let values = effect_params_as_f32(source.as_ref(), params);
+                    if let Some(needs_frame) = native.and_then(|v| v.is_need_render_frame)
+                        && unsafe {
+                            needs_frame(
+                                values.as_ptr(),
+                                values.len() as u32,
+                                i64::from(timeline_frame) * 1_000_000
+                                    / i64::from(project.fps.max(1)),
+                            )
+                        } == 0
+                    {
+                        continue;
+                    }
+                    let Some(calc_roi) = native.and_then(|v| v.calc_roi) else {
+                        continue;
+                    };
+                    let roi = unsafe {
+                        calc_roi(
+                            effect_roi,
+                            values.as_ptr(),
+                            values.len() as u32,
+                            i64::from(timeline_frame) * 1_000_000 / i64::from(project.fps.max(1)),
+                            self.render_width as f32,
+                            self.render_height as f32,
+                        )
+                    };
+                    if ![roi.x, roi.y, roi.w, roi.h].iter().all(|v| v.is_finite())
+                        || roi.w <= 0.0
+                        || roi.h <= 0.0
+                    {
+                        eprintln!(
+                            "[NeoUtl] effect calc_roi returned invalid region: id={effect_id}"
+                        );
+                    } else {
+                        effect_roi = roi;
+                    }
+                }
+                self.render_effect_object_offscreen(&pool_tex, draw_kind, obj);
                 if !obj.effects.is_empty() {
                     self.apply_effect_chain(
                         world,
@@ -436,6 +503,9 @@ impl RenderEngine {
                         &pool_tex,
                         &pool_tex,
                         &obj.effects,
+                        timeline_frame,
+                        project.fps,
+                        effect_roi,
                     );
                 }
                 match obj.clip_target {
@@ -518,22 +588,28 @@ impl RenderEngine {
 
                 for i in start..idx {
                     if let Some(offset) = offsets[i] {
-                        self.draw_standard_pass(&mut rpass, &active_objects[i], offset);
+                        let object = &active_objects[i];
+                        self.draw_standard_pass(&mut rpass, object, offset);
+                        self.draw_object_hook(&mut rpass, object, &self.bind_group, true, None);
                     }
                     if let (Some(texture), Some(offset)) = (&media_frames[i], media_offsets[i]) {
-                        self.draw_media_pass(
+                        self.draw_media_pass_with_hook(
                             &mut rpass,
                             texture,
                             offset,
                             active_objects[i].blend_mode,
+                            &active_objects[i],
+                            true,
                         );
                     }
                     if let Some((clip_instance, offset)) = text_draw_by_index.get(&i) {
-                        self.draw_text_pass(
+                        self.draw_text_pass_with_hook(
                             &mut rpass,
                             *clip_instance,
                             *offset,
                             active_objects[i].blend_mode,
+                            &active_objects[i],
+                            true,
                         );
                     }
                 }
@@ -582,4 +658,24 @@ impl RenderEngine {
             crate::infra::gpu_shared::locked_submit(&self.queue, [encoder.finish()]);
         }
     }
+}
+
+fn effect_params_as_f32(
+    source: &effects::loader::EffectSource,
+    params: &HashMap<String, Value>,
+) -> Vec<f32> {
+    source
+        .param_schema()
+        .iter()
+        .map(|s| {
+            params
+                .get(s.key.as_str())
+                .map_or(s.default_float, |v| match v {
+                    Value::Number(n) => *n,
+                    Value::Bool(b) => u8::from(*b) as f32,
+                    Value::Enum(idx) => *idx as f32,
+                    Value::Text(_) | Value::FilePath(_) | Value::TrackRef(_) => s.default_float,
+                })
+        })
+        .collect()
 }

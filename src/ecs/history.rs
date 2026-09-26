@@ -152,6 +152,7 @@ impl HistoryCommand for PropertyChangeCommand {
             &self.key,
             self.new_value,
         );
+        notify_object_effect(world, self.object_id, self.effect_index, false);
     }
 
     fn revert(&mut self, world: &mut World) {
@@ -162,6 +163,7 @@ impl HistoryCommand for PropertyChangeCommand {
             &self.key,
             self.old_value,
         );
+        notify_object_effect(world, self.object_id, self.effect_index, true);
     }
 }
 
@@ -190,6 +192,70 @@ fn set_param_internal(
             }
         },
     );
+}
+
+fn effect_params_f32(
+    effect_id: &str,
+    params: &std::collections::HashMap<String, crate::ecs::types::EffectParam>,
+) -> Vec<f32> {
+    let Some(source) = crate::effects::loader::by_id(effect_id) else {
+        return Vec::new();
+    };
+    source
+        .param_schema()
+        .iter()
+        .map(|schema| {
+            params
+                .get(&schema.key)
+                .map_or(schema.default_float, |p| match &p.static_value {
+                    crate::ecs::types::Value::Number(v) => *v,
+                    crate::ecs::types::Value::Bool(v) => u8::from(*v) as f32,
+                    crate::ecs::types::Value::Enum(v) => *v as f32,
+                    _ => schema.default_float,
+                })
+        })
+        .collect()
+}
+
+fn notify_object_effect(world: &World, object_id: usize, effect_index: usize, restored: bool) {
+    let effect = world.run(
+        |ids: View<ObjectId>, stacks: View<crate::ecs::effects::EffectStack>| {
+            for (entity, id) in ids.iter().with_id() {
+                if id.0 == object_id {
+                    return stacks.get(entity).ok().and_then(|s| {
+                        s.0.get(effect_index).map(|e| {
+                            (
+                                e.effect_id.clone(),
+                                effect_params_f32(&e.effect_id, &e.params),
+                            )
+                        })
+                    });
+                }
+            }
+            None
+        },
+    );
+    if let Some((id, values)) = effect {
+        notify_effect_params(&id, &values, restored);
+    }
+}
+
+pub(crate) fn notify_effect_params(effect_id: &str, values: &[f32], restored: bool) {
+    let Some(source) = crate::effects::loader::by_id(effect_id) else {
+        return;
+    };
+    let crate::effects::loader::EffectSource::Native(plugin) = source.as_ref() else {
+        return;
+    };
+    unsafe {
+        if restored {
+            if let Some(f) = plugin.vtable.on_property_restored {
+                f(values.as_ptr(), values.len() as u32);
+            }
+        } else if let Some(f) = plugin.vtable.on_property_edited {
+            f(values.as_ptr(), values.len() as u32);
+        }
+    }
 }
 
 #[allow(dead_code)]
@@ -238,6 +304,7 @@ pub fn process_writeback_items(
         }
 
         set_param_internal(world, object_id, effect_index, key_str, item.value);
+        notify_object_effect(world, object_id, effect_index, false);
 
         if item.is_user_action != 0 {
             let cmd = Box::new(PropertyChangeCommand::new(

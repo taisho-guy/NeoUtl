@@ -69,9 +69,10 @@ impl RenderEngine {
         let Some(source) = effects::loader::by_id("text_outline") else {
             return;
         };
-        let Some(pipeline) = self.effect_pipelines.get("text_outline") else {
+        let Some((pipeline, vertex_pipeline)) = self.effect_pipelines.get("text_outline") else {
             return;
         };
+        let pipeline = vertex_pipeline.as_ref().unwrap_or(pipeline);
         let values = [
             tc.outline_width,
             tc.outline_color[0],

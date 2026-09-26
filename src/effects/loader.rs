@@ -55,6 +55,13 @@ impl EffectSource {
         }
     }
 
+    pub fn kind(&self) -> neoutl_effect_api::EffectKind {
+        match self {
+            Self::Native(plugin) => unsafe { &*((plugin.vtable.meta)()) }.kind,
+            Self::Lua(_) => neoutl_effect_api::EffectKind::Image,
+        }
+    }
+
     pub fn wgsl_bytes(&self) -> &[u8] {
         match self {
             Self::Native(p) => {

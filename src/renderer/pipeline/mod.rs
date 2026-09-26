@@ -18,6 +18,7 @@ use wgpu_text::{BrushBuilder, TextBrush};
 mod bind_layouts;
 mod device;
 mod draw;
+mod effect_gpu;
 mod frame;
 mod hot_reload;
 mod shaders;
@@ -71,7 +72,7 @@ pub struct RenderEngine {
     pub render_width: u32,
     pub render_height: u32,
     pipelines: HashMap<u32, ([wgpu::RenderPipeline; shaders::BLEND_VARIANT_COUNT], u32)>,
-    effect_pipelines: HashMap<String, wgpu::RenderPipeline>,
+    effect_pipelines: HashMap<String, (wgpu::RenderPipeline, Option<wgpu::RenderPipeline>)>,
     effect_bind_group_layout: wgpu::BindGroupLayout,
     effect_sampler: wgpu::Sampler,
     effect_uniform_buffer: wgpu::Buffer,
@@ -667,6 +668,7 @@ impl RenderEngine {
         cache_key: ComposeCacheKey,
         depth: u32,
         clear_override: Option<wgpu::Color>,
+        timeline_frame: i32,
     ) -> Option<wgpu::Texture> {
         if depth >= config::MAX_SCENE_NESTING_DEPTH {
             eprintln!(
@@ -700,7 +702,15 @@ impl RenderEngine {
         self.effect_object_depth = create_depth_texture(&self.device, width, height);
 
         let project = world.get_project();
-        self.render_at(world, objects, captured, &project, depth, clear_override);
+        self.render_at(
+            world,
+            objects,
+            captured,
+            &project,
+            depth,
+            clear_override,
+            timeline_frame,
+        );
         let texture = self.texture.clone();
 
         self.render_width = saved_width;

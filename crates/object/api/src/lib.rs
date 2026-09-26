@@ -23,6 +23,10 @@ pub struct ObjectMeta {
 unsafe impl Send for ObjectMeta {}
 unsafe impl Sync for ObjectMeta {}
 
+/// Render hook context. The host calls this immediately after standard drawing,
+/// including the video, image, and text paths. Use the supplied render pass and
+/// bind group to issue additional draws. Pointer fields are valid only during the
+/// callback and are backend opaque; `vertex_count` is the plugin draw count.
 #[repr(C)]
 pub struct RenderContext {
     pub version: u32,

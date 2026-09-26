@@ -90,12 +90,32 @@ impl EffectStack {
 
     pub fn set_param_value(&mut self, index: usize, key: &str, value: Value) {
         if let Some(e) = self.0.get_mut(index) {
+            let effect_id = e.effect_id.clone();
             match e.params.get_mut(key) {
                 Some(p) => p.set_static(value),
                 None => {
                     e.params.insert(key.to_owned(), EffectParam::new(value));
                 }
             }
+            let values: Vec<f32> = crate::effects::loader::by_id(&effect_id)
+                .map(|source| {
+                    source
+                        .param_schema()
+                        .iter()
+                        .map(|schema| {
+                            e.params.get(&schema.key).map_or(schema.default_float, |p| {
+                                match &p.static_value {
+                                    Value::Number(v) => *v,
+                                    Value::Bool(v) => u8::from(*v) as f32,
+                                    Value::Enum(v) => *v as f32,
+                                    _ => schema.default_float,
+                                }
+                            })
+                        })
+                        .collect()
+                })
+                .unwrap_or_default();
+            crate::ecs::history::notify_effect_params(&effect_id, &values, false);
         }
     }
 

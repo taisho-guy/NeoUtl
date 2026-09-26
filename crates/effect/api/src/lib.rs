@@ -22,7 +22,7 @@ unsafe impl Sync for EffectMeta {}
 
 /// フィルタ処理中に呼び出せるGPUリソースアクセス関数群。
 /// AviUtl2の `exec_pixelshader_data` / `exec_computeshader_data` / `get_image_resource_*` /
-/// `set_image_resource_data` に相当する。すべて戻り値は成功時0、失敗時非0。
+/// `set_image_resource_data` に相当する。CPU転送はRGBA8、GPU target/storageはNamed/Temp/CacheのRGBA8Unormに限定。すべて戻り値は成功時0、失敗時非0。
 #[repr(C)]
 pub struct EffectRenderContext {
     /// フレーム間キャッシュ。`cache_identifier` は呼び出し元エフェクトの識別に使う任意の静的ポインタ。
@@ -30,7 +30,7 @@ pub struct EffectRenderContext {
     pub cache_identifier: *const (),
 
     /// コンパイル済みピクセルシェーダーを実行する。
-    /// `data` はホストのシェーダーコンパイラ形式(WGSL相当のバイトコード)。
+    /// `data` はWGSLテキスト。ホストはvs_main/fs_mainとbinding 0/1 source+sampler、2 uniform、3/4 auxiliary+samplerを使う。targetはNamed/Temp/CacheのRGBA8Unormに限る。
     pub exec_pixelshader: unsafe extern "C" fn(
         data: *const u8,
         data_len: usize,
@@ -73,7 +73,7 @@ pub struct EffectRenderContext {
         pitch: u32,
     ) -> u32,
 
-    /// `Named` 種別のリソースを明示的に解放する。
+    /// `Named`/`TempBuffer`/`Cache` 種別のリソースを明示的に解放する。
     pub release_resource: unsafe extern "C" fn(resource: ResourceRef) -> u32,
 }
 unsafe impl Send for EffectRenderContext {}
@@ -90,10 +90,10 @@ pub struct EffectVTable {
     /// 頂点シェーダーソース。`None` の場合ホスト標準の全画面矩形頂点シェーダーを使う。
     pub vertex_wgsl: Option<unsafe extern "C" fn() -> WgslSource>,
 
-    /// コンピュートシェーダーソース。指定時は `compute_dispatch` も併せて指定する。
+    /// コンピュートシェーダーソース。指定時は `compute_dispatch` も併せて指定する。ホストはcs_mainを使い、RGBA8Unorm storage targetsをbinding 0..N、sampled texture群を次のbinding、uniformを最後のbindingに置く。
     pub compute_wgsl: Option<unsafe extern "C" fn() -> WgslSource>,
 
-    /// `compute_wgsl` 実行時のスレッドグループ数を算出する。
+    /// `compute_wgsl` 実行時のスレッドグループ数を算出する。現行ホストではcs_main、RGBA8Unorm storage targets、sampled resources、最後にuniformのbinding順。
     pub compute_dispatch: Option<
         unsafe extern "C" fn(
             params_ptr: *const f32,
@@ -104,7 +104,7 @@ pub struct EffectVTable {
     >,
 
     /// 固定パイプライン(`wgsl`/`uniform_size`/`pack_uniform`)を介さず、
-    /// `EffectRenderContext` を通じて任意のリソースアクセスとシェーダー実行を行う。
+    /// `EffectRenderContext` を通じてホスト対応範囲のリソースアクセスとシェーダー実行を行う。pixel shaderはvs_main/fs_main、binding 0/1入力画像とsampler、2 uniform、3/4補助画像とsampler。
     /// `Some` の場合、ホストは `wgsl` の代わりにこちらを呼び出す。
     pub custom_render: Option<
         unsafe extern "C" fn(
@@ -114,6 +114,7 @@ pub struct EffectVTable {
         ) -> u32,
     >,
 
+    /// ROIを計算する。戻り値の領域は後続の画像効果に累積され、ホストのフラグメント描画範囲に反映される。
     pub calc_roi: Option<
         unsafe extern "C" fn(
             base: Roi,
@@ -125,6 +126,7 @@ pub struct EffectVTable {
         ) -> Roi,
     >,
 
+    /// 0を返すフレームでは画像/音声処理を省略する。
     pub is_need_render_frame:
         Option<unsafe extern "C" fn(params_ptr: *const f32, count: u32, layer_time_us: i64) -> u32>,
 

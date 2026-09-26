@@ -17,6 +17,7 @@ type AudioPayloadViews<'v> = (
     View<'v, AudioParams>,
     View<'v, KeyframeTracks>,
     View<'v, crate::ecs::audio_plugins::PluginChain>,
+    View<'v, crate::ecs::effects::EffectStack>,
 );
 
 pub fn get_active_audio_system(
@@ -26,7 +27,7 @@ pub fn get_active_audio_system(
     world.world.run(
         |(scenes, project): (UniqueView<SceneResource>, UniqueView<ProjectResource>),
          (time_ranges, scene_ids, media_sources, object_ids): AudioSelectorViews,
-         (audio_params, keyframe_tracks, plugin_chains): AudioPayloadViews| {
+         (audio_params, keyframe_tracks, plugin_chains, effect_stacks): AudioPayloadViews| {
             let active_scene = scenes.active_scene;
             let fps = f64::from(project.fps.max(1));
             let mut active = Vec::new();
@@ -57,6 +58,12 @@ pub fn get_active_audio_system(
                     plugin_chain: plugin_chains
                         .get(id)
                         .map(|c| c.0.clone())
+                        .unwrap_or_default(),
+                    effects: effect_stacks
+                        .get(id)
+                        .map(|stack| {
+                            crate::ecs::effects::compute_effect_params_at(stack, frame, world)
+                        })
                         .unwrap_or_default(),
                 });
             }

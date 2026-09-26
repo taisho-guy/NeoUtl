@@ -222,7 +222,7 @@ pub(super) fn build_effect_pipeline(
 pub(super) fn build_effect_pipelines_from_registry(
     device: &wgpu::Device,
     layout: &wgpu::PipelineLayout,
-) -> HashMap<String, wgpu::RenderPipeline> {
+) -> HashMap<String, (wgpu::RenderPipeline, Option<wgpu::RenderPipeline>)> {
     effects::registry()
         .iter()
         .filter_map(|source| {
@@ -231,7 +231,24 @@ pub(super) fn build_effect_pipelines_from_registry(
                 return None;
             }
             match build_effect_pipeline(device, layout, wgsl, source.name()) {
-                Ok(pipeline) => Some((source.id().to_owned(), pipeline)),
+                Ok(pipeline) => {
+                    let vertex = match source.as_ref() {
+                        effects::loader::EffectSource::Native(plugin) => plugin.vtable.vertex_wgsl.map(|f| unsafe { f().as_slice() }),
+                        effects::loader::EffectSource::Lua(_) => None,
+                    };
+                    let custom_vertex = vertex.and_then(|bytes| {
+                        if bytes.is_empty() { return None; }
+                        let shader = try_create_shader_module(device, bytes, source.name()).ok()?;
+                        Some(device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                            label: Some(source.name()), layout: Some(layout),
+                            vertex: wgpu::VertexState { module: &shader, entry_point: Some("vs_main"), buffers: &[], compilation_options: Default::default() },
+                            fragment: Some(wgpu::FragmentState { module: &shader, entry_point: Some("fs_main"), targets: &[Some(wgpu::ColorTargetState { format: wgpu::TextureFormat::Rgba16Float, blend: None, write_mask: wgpu::ColorWrites::ALL })], compilation_options: Default::default() }),
+                            primitive: wgpu::PrimitiveState { topology: wgpu::PrimitiveTopology::TriangleList, cull_mode: None, ..Default::default() },
+                            depth_stencil: None, multisample: Default::default(), multiview_mask: None, cache: None,
+                        }))
+                    });
+                    Some((source.id().to_owned(), (pipeline, custom_vertex)))
+                },
                 Err(err) => {
                     eprintln!("{}", t!("[NeoUtl] エフェクトのシェーダコンパイル失敗、除外して継続: id=%{arg0} name=%{arg1} 理由=%{arg2}", arg0 = format!("{}", source.id()), arg1 = format!("{}", source.name()), arg2 = format!("{err}")));
                     None
