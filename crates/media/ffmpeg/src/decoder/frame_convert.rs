@@ -15,7 +15,9 @@ use super::pixfmt::{
     av_pix_fmt_p012le, av_pix_fmt_p016le, av_pix_fmt_rgb0, av_pix_fmt_rgba, av_pix_fmt_yuv420p,
     av_pix_fmt_yuvj420p,
 };
-use super::shared_wgpu_device;
+use super::{shared_staging_pool, shared_wgpu_device};
+
+const RGBA8_BYTES_PER_PIXEL: u32 = 4;
 
 pub(crate) fn copy_plane(data_ptr: *const u8, stride: i32, height: u32) -> PlaneBuffer {
     let stride = stride.max(0) as u32;
@@ -182,11 +184,16 @@ pub(crate) fn compose_output_frame(
                 eprintln!("[neoutl-video-decoder][診断] P0xx合成失敗: 共有wgpuデバイス未初期化");
                 return None;
             };
+            let Some(pool) = shared_staging_pool() else {
+                eprintln!("[neoutl-video-decoder][診断] P0xx合成失敗: StagingPool未初期化");
+                return None;
+            };
             let resources = p0xx_resources.get_or_insert_with(|| P0xxGpuResources::new(&device));
             let texture = match crate::colorconv::composite_p0xx_to_rgba(
                 resources,
                 &device,
                 queue,
+                &pool,
                 cache,
                 crate::colorconv::P0xxInput {
                     y: &y.bytes,
@@ -228,11 +235,16 @@ pub(crate) fn compose_output_frame(
                 eprintln!("[neoutl-video-decoder][診断] Yuv420p合成失敗: 共有wgpuデバイス未初期化");
                 return None;
             };
+            let Some(pool) = shared_staging_pool() else {
+                eprintln!("[neoutl-video-decoder][診断] Yuv420p合成失敗: StagingPool未初期化");
+                return None;
+            };
             let resources = p0xx_resources.get_or_insert_with(|| P0xxGpuResources::new(&device));
             let texture = match crate::colorconv::composite_yuv420p_to_rgba(
                 resources,
                 &device,
                 queue,
+                &pool,
                 cache,
                 crate::colorconv::Yuv420Input {
                     y: &y.bytes,
@@ -268,6 +280,10 @@ pub(crate) fn compose_output_frame(
             height,
             channel_order,
         } => {
+            let Some(pool) = shared_staging_pool() else {
+                eprintln!("[neoutl-video-decoder][診断] Rgba8転送失敗: StagingPool未初期化");
+                return None;
+            };
             let texture = match cache.acquire_for_write_as(
                 neo_media_cache::KIND_PLAYBACK,
                 PixelFormat::Rgba8,
@@ -290,26 +306,15 @@ pub(crate) fn compose_output_frame(
                     std::borrow::Cow::Owned(swapped)
                 }
             };
-            queue.write_texture(
-                wgpu::TexelCopyTextureInfo {
-                    texture: &texture,
-                    mip_level: 0,
-                    origin: wgpu::Origin3d::ZERO,
-                    aspect: wgpu::TextureAspect::All,
-                },
+            let submission_index = pool.upload_plane(
+                queue,
+                &texture,
+                *width,
+                *height,
+                *width * RGBA8_BYTES_PER_PIXEL,
                 upload_bytes.as_ref(),
-                wgpu::TexelCopyBufferLayout {
-                    offset: 0,
-                    bytes_per_row: Some(plane.stride),
-                    rows_per_image: Some(*height),
-                },
-                wgpu::Extent3d {
-                    width: *width,
-                    height: *height,
-                    depth_or_array_layers: 1,
-                },
+                plane.stride,
             );
-            let submission_index = queue.submit(std::iter::empty());
             cache.mark_ready(
                 PixelFormat::Rgba8,
                 *width,

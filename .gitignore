@@ -11,7 +11,7 @@ AviQtl
 aviutl-plugin-curve_editor
 mlt
 dxc
-ffmpeg
+/ffmpeg
 NiVE3
 wgpu-py
 aviutl2_sdk_mirror

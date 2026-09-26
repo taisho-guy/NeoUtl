@@ -212,26 +212,10 @@ local function scan_directory(root_dir, ignore_patterns)
         end
 
         if not should_exclude then
-            local rel_path = path
+                                                                        local rel_path = path
             for _, pattern in ipairs(ignore_patterns) do
-                local anchored = pattern:match("^/(.+)$")
-                local target = anchored or pattern
-                local match = false
-                if anchored then
-                    match = rel_path == target or rel_path:sub(1, #target + 1) == target .. "/"
-                else
-                    for _, segment in ipairs((function()
-                        local segs = {}
-                        for s in rel_path:gmatch("[^/]+") do table.insert(segs, s) end
-                        return segs
-                    end)()) do
-                        if segment == target then match = true break end
-                    end
-                    if rel_path == target or rel_path:sub(1, #target + 1) == target .. "/" then
-                        match = true
-                    end
-                end
-                if match then
+                local target = pattern:match("^/(.+)$") or pattern
+                if rel_path == target or rel_path:sub(1, #target + 1) == target .. "/" then
                     should_exclude = true
                     break
                 end

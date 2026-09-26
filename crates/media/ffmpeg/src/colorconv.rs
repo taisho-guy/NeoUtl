@@ -1,5 +1,9 @@
+use std::sync::Arc;
+
 use neo_media_core::PixelFormat;
 use neo_media_swscale::SwscaleUniforms;
+
+use crate::decoder::staging_pool::StagingPool;
 
 const OPS_DISPATCH_WGSL: &str = include_str!("shaders/ops_dispatch.wgsl");
 const OPS_DISPATCH_ENTRY: &str = "cs_main";
@@ -135,6 +139,7 @@ struct PlaneUpload<'a> {
     stride: u32,
     width: u32,
     height: u32,
+    bytes_per_pixel: u32,
     format: wgpu::TextureFormat,
     label: &'a str,
 }
@@ -142,6 +147,7 @@ struct PlaneUpload<'a> {
 fn upload_plane_texture(
     device: &wgpu::Device,
     queue: &wgpu::Queue,
+    pool: &Arc<StagingPool>,
     upload: PlaneUpload<'_>,
 ) -> wgpu::Texture {
     let PlaneUpload {
@@ -149,6 +155,7 @@ fn upload_plane_texture(
         stride,
         width,
         height,
+        bytes_per_pixel,
         format,
         label,
     } = upload;
@@ -166,24 +173,14 @@ fn upload_plane_texture(
         usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
         view_formats: &[],
     });
-    queue.write_texture(
-        wgpu::TexelCopyTextureInfo {
-            texture: &texture,
-            mip_level: 0,
-            origin: wgpu::Origin3d::ZERO,
-            aspect: wgpu::TextureAspect::All,
-        },
+    pool.upload_plane(
+        queue,
+        &texture,
+        width,
+        height,
+        width * bytes_per_pixel,
         bytes,
-        wgpu::TexelCopyBufferLayout {
-            offset: 0,
-            bytes_per_row: Some(stride),
-            rows_per_image: Some(height),
-        },
-        wgpu::Extent3d {
-            width,
-            height,
-            depth_or_array_layers: 1,
-        },
+        stride,
     );
     texture
 }
@@ -204,6 +201,7 @@ pub fn composite_p0xx_to_rgba(
     res: &mut P0xxGpuResources,
     device: &wgpu::Device,
     queue: &wgpu::Queue,
+    pool: &Arc<StagingPool>,
     cache: &neo_media_cache::NeoMediaCache,
     input: P0xxInput<'_>,
 ) -> Result<wgpu::Texture, String> {
@@ -228,15 +226,18 @@ pub fn composite_p0xx_to_rgba(
     } else {
         wgpu::TextureFormat::Rg16Uint
     };
+    let sample_bytes: u32 = if bit_depth == 8 { 1 } else { 2 };
 
     let plane_y = upload_plane_texture(
         device,
         queue,
+        pool,
         PlaneUpload {
             bytes: y_bytes,
             stride: y_stride,
             width,
             height,
+            bytes_per_pixel: sample_bytes,
             format: storage_format,
             label: "swscale_plane_y",
         },
@@ -244,11 +245,13 @@ pub fn composite_p0xx_to_rgba(
     let plane_uv = upload_plane_texture(
         device,
         queue,
+        pool,
         PlaneUpload {
             bytes: uv_bytes,
             stride: uv_stride,
             width: width.div_ceil(2),
             height: height.div_ceil(2),
+            bytes_per_pixel: sample_bytes * 2,
             format: uv_format,
             label: "swscale_plane_uv",
         },
@@ -352,6 +355,7 @@ pub fn composite_yuv420p_to_rgba(
     res: &mut P0xxGpuResources,
     device: &wgpu::Device,
     queue: &wgpu::Queue,
+    pool: &Arc<StagingPool>,
     cache: &neo_media_cache::NeoMediaCache,
     input: Yuv420Input<'_>,
 ) -> Result<wgpu::Texture, String> {
@@ -384,6 +388,7 @@ pub fn composite_yuv420p_to_rgba(
         res,
         device,
         queue,
+        pool,
         cache,
         P0xxInput {
             y: y_bytes,

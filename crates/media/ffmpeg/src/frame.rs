@@ -57,6 +57,9 @@ impl VideoFrame {
 
 #[derive(Clone)]
 pub struct PlaneBuffer {
+    /// デコーダ出力プレーンのCPUヒープコピー。GPUへは
+    /// `StagingPool::upload_plane`が都度mappedバッファへコピーするため、
+    /// ここではOS固有のページ固定を行わない。
     pub bytes: Arc<[u8]>,
     pub stride: u32,
 }

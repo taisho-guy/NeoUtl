@@ -14,12 +14,16 @@ mod hw_device;
 mod open;
 mod packet_queue;
 mod pixfmt;
+pub(crate) mod staging_pool;
 mod worker;
 
 pub use hw_device::{default_hw_device_type_priority, set_hw_device_type_priority};
 
+use staging_pool::StagingPool;
+
 static SHARED_WGPU: OnceLock<(Arc<wgpu::Device>, Arc<wgpu::Queue>)> = OnceLock::new();
 static SHARED_CACHE: OnceLock<Arc<NeoMediaCache>> = OnceLock::new();
+static SHARED_STAGING: OnceLock<Arc<StagingPool>> = OnceLock::new();
 static SHARED_QUEUE_SUBMIT_LOCK: OnceLock<Arc<Mutex<()>>> = OnceLock::new();
 static HW_DECODE_EXTRA_FRAMES: std::sync::atomic::AtomicI32 = std::sync::atomic::AtomicI32::new(16);
 
@@ -50,6 +54,7 @@ pub fn set_shared_wgpu_device(device: Arc<wgpu::Device>, queue: Arc<wgpu::Queue>
         cache.register_consumer(neo_media_cache::KIND_THUMBNAIL, 1);
         cache.register_consumer(neo_media_cache::KIND_LUA_SAMPLE, 1);
     }
+    let _ = SHARED_STAGING.set(StagingPool::new(device.clone()));
     let _ = SHARED_WGPU.set((device, queue));
 }
 
@@ -63,6 +68,10 @@ pub fn shared_wgpu_queue() -> Option<Arc<wgpu::Queue>> {
 
 pub(crate) fn shared_media_cache() -> Option<Arc<NeoMediaCache>> {
     SHARED_CACHE.get().cloned()
+}
+
+pub(crate) fn shared_staging_pool() -> Option<Arc<StagingPool>> {
+    SHARED_STAGING.get().cloned()
 }
 
 pub struct VideoMeta {
