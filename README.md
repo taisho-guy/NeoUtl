@@ -19,6 +19,10 @@ AviUtl ExEdit0ライクな動画編集ソフトウェアです。LinuxやWindows
 
 [NeoUtlのお部屋](https://neoutl.taisho-guy.org)をご確認下さい。
 
+## SDK
+
+プラグインのABI・GPU resource・callback・ビルドと配置手順は[SDK仕様書](sdk/README.md)をご覧ください。
+
 ## ビルド方法
 
 [CONTRIBUTING.md](https://codeberg.org/taisho-guy/NeoUtl/src/branch/main/CONTRIBUTING.md)をご確認下さい。
