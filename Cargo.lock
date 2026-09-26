@@ -4,7 +4,7 @@ version = 4
 
 [[package]]
 name = "NeoUtl"
-version = "0.8.9"
+version = "0.8.10"
 dependencies = [
  "arc-swap",
  "ash",
@@ -334,7 +334,7 @@ version = "0.38.0+1.3.281"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0bb44936d800fea8f016d7f2311c6a4f97aebd5dc86f09906139ec848cf3a46f"
 dependencies = [
- "libloading 0.8.9",
+ "libloading 0.8.10",
 ]
 
 [[package]]
@@ -385,7 +385,7 @@ dependencies = [
 
 [[package]]
 name = "avif-serialize"
-version = "0.8.9"
+version = "0.8.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e7178fe5f7d460b13895ebb9dcb28a3a6216d2df2574a0806cb51b555d297f38"
 dependencies = [
@@ -401,7 +401,7 @@ dependencies = [
  "addr2line",
  "cfg-if",
  "libc",
- "miniz_oxide 0.8.9",
+ "miniz_oxide 0.8.10",
  "object",
  "rustc-demangle",
  "windows-link",
@@ -711,7 +711,7 @@ checksum = "157a8ba7b480713b56f4c09fd13fc3e0a22a5dfab8097ba61cbc5feef950788a"
 dependencies = [
  "glob",
  "libc",
- "libloading 0.8.9",
+ "libloading 0.8.10",
 ]
 
 [[package]]
@@ -1232,7 +1232,7 @@ version = "0.5.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ab8ecd87370524b461f8557c119c405552c396ed91fc0a8eec68679eab26f94a"
 dependencies = [
- "libloading 0.8.9",
+ "libloading 0.8.10",
 ]
 
 [[package]]
@@ -1620,7 +1620,7 @@ dependencies = [
  "bit_field",
  "half",
  "lebe",
- "miniz_oxide 0.8.9",
+ "miniz_oxide 0.8.10",
  "num-complex",
  "pulp",
  "rayon-core",
@@ -2004,7 +2004,7 @@ dependencies = [
  "glutin_egl_sys",
  "glutin_glx_sys",
  "glutin_wgl_sys",
- "libloading 0.8.9",
+ "libloading 0.8.10",
  "objc2 0.6.4",
  "objc2-app-kit 0.3.2",
  "objc2-core-foundation",
@@ -2612,7 +2612,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6aae1df220ece3c0ada96b8153459b67eebe9ae9212258bb0134ae60416fdf76"
 dependencies = [
  "libc",
- "libloading 0.8.9",
+ "libloading 0.8.10",
  "pkg-config",
 ]
 
@@ -2701,7 +2701,7 @@ dependencies = [
 
 [[package]]
 name = "libloading"
-version = "0.8.9"
+version = "0.8.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d7c4b02199fee7c5d21a5ae7d8cfa79a6ef5bb2fc834d6e9058e89c825efdc55"
 dependencies = [
@@ -2950,7 +2950,7 @@ checksum = "68354c5c6bd36d73ff3feceb05efa59b6acb7626617f4962be322a825e61f79a"
 
 [[package]]
 name = "miniz_oxide"
-version = "0.8.9"
+version = "0.8.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1fa76a2c86f704bdb222d66965fb3d63269ce38518b83cb0575fca855ebb6316"
 dependencies = [
@@ -3558,7 +3558,7 @@ dependencies = [
 
 [[package]]
 name = "neoutl-sdk"
-version = "0.8.9"
+version = "0.8.10"
 dependencies = [
  "egui",
  "neoutl-easing-api",
@@ -4518,7 +4518,7 @@ dependencies = [
  "crc32fast",
  "fdeflate",
  "flate2",
- "miniz_oxide 0.8.9",
+ "miniz_oxide 0.8.10",
 ]
 
 [[package]]
@@ -4531,7 +4531,7 @@ dependencies = [
  "crc32fast",
  "fdeflate",
  "flate2",
- "miniz_oxide 0.8.9",
+ "miniz_oxide 0.8.10",
 ]
 
 [[package]]
@@ -7237,7 +7237,7 @@ dependencies = [
  "js-sys",
  "khronos-egl",
  "libc",
- "libloading 0.8.9",
+ "libloading 0.8.10",
  "log",
  "naga",
  "naga-types",
@@ -7866,7 +7866,7 @@ dependencies = [
  "as-raw-xcb-connection",
  "gethostname",
  "libc",
- "libloading 0.8.9",
+ "libloading 0.8.10",
  "once_cell",
  "rustix 1.1.5",
  "x11rb-protocol",
